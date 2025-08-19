@@ -65,14 +65,23 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Party authorized to manage and allocate minting rights from the Development Fund.
     externalPartyConfigStateTickDuration : Optional RelTime
       -- ^ Half the lifetime of an `ExternalPartyConfigState` contract and the overlap between two successive contracts. Default: 24h.
+    transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
   deriving (Eq, Show)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
 getExternalPartyConfigStateTickDuration config = fromOptional (hours 24) config.externalPartyConfigStateTickDuration
 
--- $1/year specified as a daily rate
+-- | $1/year specified as a daily rate
 defaultTransferPreapprovalFee : Decimal
 defaultTransferPreapprovalFee = 0.00274
+
+defaultTransferPreapprovalBaseDuration : RelTime
+defaultTransferPreapprovalBaseDuration = days 90
+
+-- | Retrieve the base transfer pre-approval duration from the config.
+getTransferPreapprovalBaseDuration : AmuletConfig unit -> RelTime
+getTransferPreapprovalBaseDuration config =
+  fromOptional defaultTransferPreapprovalBaseDuration config.transferPreapprovalBaseDuration
 
 -- Check constraints on config params on which the implementation of the choices rely.
 validAmuletConfig : AmuletConfig unit -> Bool
@@ -149,6 +158,7 @@ instance Patchable (AmuletConfig USD) where
     featuredAppActivityMarkerAmount = patch new.featuredAppActivityMarkerAmount base.featuredAppActivityMarkerAmount current.featuredAppActivityMarkerAmount
     optDevelopmentFundManager = patch new.optDevelopmentFundManager base.optDevelopmentFundManager current.optDevelopmentFundManager
     externalPartyConfigStateTickDuration = patch new.externalPartyConfigStateTickDuration base.externalPartyConfigStateTickDuration current.externalPartyConfigStateTickDuration
+    transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
 
 instance Patchable (TransferConfig USD) where
   patch new base current = TransferConfig with

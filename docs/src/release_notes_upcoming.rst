@@ -5,4 +5,13 @@
 
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
-.. .. release-notes:: Upcoming
+.. release-notes:: Upcoming
+    - Daml
+
+      - Add a ``transferPreapprovalBaseDuration`` configuration parameter which defines the duration of a ``TransferPreapproval`` that can be requested or renewed for free
+        as the traffic costs already cover the costs sufficiently. This parameter defaults to 90 days. This allows creating a preapproval just using the free traffic rate
+        which allows bootstrapping a new validator by creating a preapproval and then purchasing CC from an exchange.
+
+        See CIP FIXME for more details.
+
+        This requires a Daml upgrade to FIXME: Add the right versions.

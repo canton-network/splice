@@ -91,6 +91,8 @@ defaultAmuletConfig = AmuletConfig with
 
   optDevelopmentFundManager = None
 
+  transferPreapprovalBaseDuration = None
+
 -- | Default configuration schedule with single current amulet config
 defaultAmuletConfigSchedule : Schedule Time (AmuletConfig USD)
 defaultAmuletConfigSchedule = Schedule with
