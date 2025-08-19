@@ -7,6 +7,7 @@
 
 .. release-notes:: Upcoming
 
+
   - Deployment
 
       - Helm Charts
@@ -19,3 +20,13 @@
 
           - All Splice web UI Docker images have been updated to use the latest nginx-unprivileged base image,
             and switched to the version based on alpine-slim, to improve security and reduce image size.
+
+    - Daml
+
+      - Add a ``transferPreapprovalBaseDuration`` configuration parameter which defines the duration of a ``TransferPreapproval`` that can be requested or renewed for free
+        as the traffic costs already cover the costs sufficiently. This parameter defaults to 90 days. This allows creating a preapproval just using the free traffic rate
+        which allows bootstrapping a new validator by creating a preapproval and then purchasing CC from an exchange.
+
+        See [CIP 119](https://github.com/canton-foundation/cips/blob/main/cip-0119/cip-0119.md) for more details.
+
+        This requires a Daml upgrade to FIXME: Add the right versions.
