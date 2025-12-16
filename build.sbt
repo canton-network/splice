@@ -258,6 +258,7 @@ lazy val docs = project
           (`splice-wallet-payments-daml` / Compile / damlBuild).value ++
           (`splice-util-featured-app-proxies-daml` / Compile / damlBuild).value ++
           (`splice-util-token-standard-wallet-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
@@ -339,6 +340,17 @@ lazy val docs = project
     cleanFiles += sourceDirectory.value / "app_dev" / "api",
     Headers.ApacheDAHeaderSettings,
   )
+
+lazy val `splice-api-credential-registry-v1-daml` =
+  project
+    .in(file("daml/splice-api-credential-registry-v1"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-util-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
+    )
 
 // Shared token standard code
 lazy val `splice-api-token-metadata-v1-daml`: Project =
@@ -922,6 +934,7 @@ lazy val `splice-amulet-daml` =
           (`splice-token-standard-utils-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
     )
 
