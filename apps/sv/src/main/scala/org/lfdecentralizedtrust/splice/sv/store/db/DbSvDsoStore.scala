@@ -691,6 +691,31 @@ class DbSvDsoStore(
       limited = applyLimit("listOldestSummarizingMiningRounds", limit, result)
     } yield limited.map(assignedContractFromRow(SummarizingMiningRound.COMPANION)(_))
 
+  override def listCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
+            orderLimit = sql"""order by reward_round limit ${sqlLimit(limit)}""",
+          ),
+          "listCalculateRewardsV2",
+        )
+      limited = applyLimit("listCalculateRewardsV2", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(_)
+    )
+
   override def lookupConfirmationByActionWithOffset(
       confirmer: PartyId,
       action: ActionRequiringConfirmation,
