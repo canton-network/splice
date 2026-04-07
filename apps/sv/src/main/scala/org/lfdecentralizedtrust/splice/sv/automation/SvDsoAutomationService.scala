@@ -364,6 +364,26 @@ class SvDsoAutomationService(
         )
       )
 
+    registerTrigger(
+      new CalculateRewardsTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        config.scan,
+        upgradesConfig,
+      )
+    )
+
+    registerTrigger(
+      new CalculateRewardsDryRunTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        config.scan,
+        upgradesConfig,
+      )
+    )
+
     registerTrigger(restartDsoDelegateBasedAutomationTrigger)
 
     registerTrigger(
@@ -553,6 +573,8 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[SvOnboardingRequestTrigger],
       aTrigger[ReceiveSvRewardCouponTrigger],
       aTrigger[ArchiveClosedMiningRoundsTrigger],
+      aTrigger[CalculateRewardsTrigger],
+      aTrigger[CalculateRewardsDryRunTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],
