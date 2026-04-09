@@ -1,0 +1,607 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Account authorization configuration and functions to make use of it.
+module Splice.Testing.Tokens.TestTokenV2.AccountConfig where
+
+import DA.Map qualified as Map
+
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.TokenStandard.Utils (checkActors, allocationAdmin, requireMatchExpected, isMemberR, require', accountParties)
+import Splice.Api.Token.MetadataV1 (AnyValue(..), ExtraArgs)
+import DA.List (dedupSort, dedup, (\\))
+import DA.Assert ((===))
+import DA.Optional (whenSome, fromSomeNote, isSome, isNone, fromOptional)
+import qualified DA.TextMap as TextMap
+import DA.Action (foldlA)
+import DA.Foldable (forA_)
+import qualified DA.Traversable as Traversable
+
+
+-- | Authorization configuration for one party in an account.
+data PartyConfig = PartyConfig with
+    canInitiate : Bool
+      -- ^ Whether the party can initiate token standard actions on the account.
+    mustApprove : Bool
+      -- ^ Whether the party must approve token standard actions on the account for them to be executed.
+  deriving (Eq, Show)
+
+-- | A configuration of the authorization rules for an account.
+--
+-- Note: this is but one possible way to configure account authorization rules.
+-- It was built to demonstrate a non-trivial rule-set and test that the `V2.TransferInstruction` APIs
+-- are sufficient for wallets to interact with the assets.
+--
+-- This AccountConfig allows for around twenty different authorization flows just for a simple transfer.
+-- It is intended to test all the possibilities the CIP-0112 account model offers. For actual implementaions,
+-- consider a simpler option.
+template AccountConfig
+  with
+    admin : Party
+    account : V2.Account
+    ownerConfig : PartyConfig
+    providerConfig : PartyConfig
+  where
+    signatory account.owner, account.provider
+    -- In this example, the admin accepts any Account configs agreed between owner and
+    -- provider. The admin is an observer in order to be able to serve account
+    -- configs as choice context.
+    observer admin
+    ensure isValidAccountConfig this && isSome account.provider
+
+    nonconsuming choice AuthorizeTransferInstructionAction : V2.TransferInstructionResult
+     -- ^ This choice allows one of the two account parties to get authority from the other
+     -- if their mustApprove flag is False.
+      with
+        actor : Party
+        authorizer : Party
+        action : V2.TransferInstructionAction
+        instrCid : ContractId V2.TransferInstruction
+        extraArgs : ExtraArgs
+      controller actor, admin
+      do
+        require' ("(actor, authorizer)", (actor, authorizer)) isMemberR ("authorizationTransfers", authorizationTransfers this)
+
+        transferInstructionView <- view <$> fetch instrCid
+        requireMatchExpected ("trasferInstruction.transfer.instrumentId.admin", transferInstructionView.transfer.instrumentId.admin) admin
+
+        case action of
+          V2.TIA_Accept -> exercise instrCid (V2.TransferInstruction_Accept [authorizer] extraArgs)
+          V2.TIA_Reject -> exercise instrCid (V2.TransferInstruction_Reject [authorizer] extraArgs)
+          V2.TIA_Withdraw -> exercise instrCid (V2.TransferInstruction_Withdraw [authorizer] extraArgs)
+          V2.TIA_Custom {} -> abort "Custom actions are not supported."
+
+    nonconsuming choice AuthorizeAllocationAction : V2.AllocationResult
+     -- ^ This choice allows one of the two account parties to get authority from the other
+     -- if their mustApprove flag is False.
+      with
+        actor : Party
+        authorizer : Party
+        action : V2.AllocationAction
+        allocationCid : ContractId V2.Allocation
+        extraArgs : ExtraArgs
+      controller actor, admin
+      do
+        assertMsg ("Authorization transfer from " <> show actor <> " to " <> show authorizer <> " is not allowed.")
+          ((actor, authorizer) `elem` authorizationTransfers this)
+
+        allocation <- view <$> fetch allocationCid
+        forA_ allocation.allocation.transferLegs (\leg -> admin === leg.instrumentId.admin)
+
+        case action of
+          V2.AA_Withdraw -> exercise allocationCid (V2.Allocation_Withdraw [authorizer] extraArgs)
+          V2.AA_Settle -> abort "Only withdraw is supported."
+          V2.AA_Custom {} -> abort "Only withdraw is supported."
+          V2.AA_Cancel -> abort "Only withdraw is supported."
+
+    nonconsuming choice AuthorizeAllocationInstructionAction : V2.AllocationInstructionResult
+     -- ^ This choice allows one of the two account parties to get authority from the other
+     -- if their mustApprove flag is False.
+      with
+        actor : Party
+        authorizer : Party
+        action : V2.AllocationInstructionAction
+        instrCid : ContractId V2.AllocationInstruction
+        extraArgs : ExtraArgs
+      controller actor, admin
+      do
+        assertMsg ("Authorization transfer from " <> show actor <> " to " <> show authorizer <> " is not allowed.")
+          ((actor, authorizer) `elem` authorizationTransfers this)
+
+        instr <- view <$> fetch instrCid
+        forA_ instr.allocation.transferLegs (\leg -> admin === leg.instrumentId.admin)
+
+        case action of
+          V2.AIA_Accept -> exercise instrCid (V2.AllocationInstruction_Accept [authorizer] extraArgs)
+          V2.AIA_Withdraw -> exercise instrCid (V2.AllocationInstruction_Withdraw [authorizer] extraArgs)
+          V2.AIA_Custom {} -> abort "Custom actions are not supported."
+
+data AccountProposal_Accept_Result = AccountProposal_Accept_Result with
+    accountConfig : ContractId AccountConfig
+  deriving (Eq, Show)
+
+data AccountProposal_Reject_Result = AccountProposal_Reject_Result with
+  deriving (Eq, Show)
+
+data AccountProposal_Withdraw_Result = AccountProposal_Withdraw_Result with
+  deriving (Eq, Show)
+
+template AccountProposal
+  with
+    config : AccountConfig
+  where
+    signatory (config.account.provider)
+    observer config.account.owner
+
+    choice AccountProposal_Accept : AccountProposal_Accept_Result
+      controller config.account.owner
+      do AccountProposal_Accept_Result <$> create config
+
+    choice AccountProposal_Reject : AccountProposal_Reject_Result
+      controller config.account.owner
+      do return AccountProposal_Reject_Result
+
+    choice AccountProposal_Withdraw : AccountProposal_Withdraw_Result
+      controller (signatory this)
+      do return AccountProposal_Withdraw_Result
+
+-- | Valid accounts must have at least one party that can initiate an action and
+-- at least one party that must approve an action.
+isValidAccountConfig : AccountConfig -> Bool
+isValidAccountConfig config =
+  (config.ownerConfig.canInitiate || config.providerConfig.canInitiate) &&
+  (config.ownerConfig.mustApprove || config.providerConfig.mustApprove)
+
+
+-- TransferInstruction State Machine Specification
+--------------------------------------------------
+
+-- State of an TransferInstruction
+data TransferInstructionState
+  = TIS_Init
+  | TIS_Authorized
+  | TIS_Withdrawn
+  | TIS_Rejected
+  | TIS_Accepted
+    deriving (Eq, Ord, Enum, Show)
+
+transferInstructionStateMachineSpec :
+  V2.Account -> V2.Account -> AuthStateMachine V2.TransferInstructionAction TransferInstructionState
+transferInstructionStateMachineSpec sender receiver = toAuthStateMachine [
+    (TIS_Init, V2.TIA_Accept, TIS_Authorized, STAS_Account sender),
+    (TIS_Init, V2.TIA_Withdraw, TIS_Withdrawn, STAS_Action V2.TIA_Accept),
+    (TIS_Authorized, V2.TIA_Accept, TIS_Accepted, STAS_Account receiver),
+    (TIS_Authorized, V2.TIA_Withdraw, TIS_Withdrawn, STAS_Account sender),
+    (TIS_Authorized, V2.TIA_Reject, TIS_Rejected, STAS_Account receiver)
+  ]
+
+
+-- AllocationInstruction State Machine Specification
+----------------------------------------------------
+
+-- State of an AllocationInstruction
+data AllocationInstructionState
+  = AIS_Init
+  | AIS_Withdrawn
+  | AIS_Accepted
+    deriving (Eq, Ord, Enum, Show)
+
+allocationInstructionStateMachineSpec :
+  V2.Account -> AuthStateMachine V2.AllocationInstructionAction AllocationInstructionState
+allocationInstructionStateMachineSpec authorizer = toAuthStateMachine [
+    (AIS_Init, V2.AIA_Accept, AIS_Accepted, STAS_Account authorizer),
+    (AIS_Init, V2.AIA_Withdraw, AIS_Withdrawn, STAS_Action V2.AIA_Accept)
+  ]
+
+
+-- Allocation State Machine Specification
+-----------------------------------------
+
+-- State of an Allocation
+data AllocationState
+  = AS_Init
+  | AS_Withdrawn
+  | AS_Cancelled
+  | AS_Settled
+    deriving (Eq, Ord, Enum, Show)
+
+allocationStateMachineSpec :
+  V2.Account -> [Party] -> Party -> AuthStateMachine V2.AllocationAction AllocationState
+allocationStateMachineSpec authorizer executors admin = toAuthStateMachine [
+    (AS_Init, V2.AA_Withdraw, AS_Withdrawn, STAS_Account authorizer),
+    (AS_Init, V2.AA_Cancel, AS_Cancelled, STAS_Parties executors),
+    (AS_Init, V2.AA_Settle, AS_Settled, STAS_Parties (admin::executors))
+  ]
+
+
+-- Authorization Transfers Logic
+--------------------------------
+
+-- A function to determine whether an AccountConfig makes it possible to transfer authority
+-- in general. A pair (from, to) in the result means that `from` is one of owner and provider,
+-- and has `canInitiate` set to True, and `to` is the other and has `mustApprove` set to False.
+authorizationTransfers : AccountConfig -> [(Party, Party)]
+authorizationTransfers config = case config.account.provider of
+  None -> []
+  Some provider ->
+    let cs = [(config.account.owner, config.ownerConfig), (provider, config.providerConfig)]
+     in [(p, q) | (p, pConfig) <- cs, (q, qConfig) <- cs, q /= p, not qConfig.mustApprove, pConfig.canInitiate]
+
+-- A function to determine whether an AccountConfig makes it possible to transfer authority
+-- from actor to the other party on the account.
+authorizationTransferFrom : Party -> AccountConfig -> Optional Party
+authorizationTransferFrom actor ac
+  | actor == ac.account.owner && ac.ownerConfig.canInitiate && not ac.providerConfig.mustApprove = ac.account.provider
+  | Some actor == ac.account.provider && ac.providerConfig.canInitiate && not ac.ownerConfig.mustApprove = Some ac.account.owner
+  | otherwise = None
+
+-- Utility to determine what transitions are valid from a given state, for a given action.
+-- The authState given must have the actors incorporated as authorizers of the given action.
+authorizationTransferFromState : (Show actionType, Ord actionType, Ord stateType, Show stateType) =>
+  [Party] -> actionType -> stateType
+  -> AuthStateMachine actionType stateType -> AuthState actionType
+  -> AccountConfigMap -> Optional (Party, Party, ContractId AccountConfig)
+authorizationTransferFromState actors action state spec authState accountMap =
+    fmap (\(actor, authorizer, cid, _) -> (actor, authorizer, cid)) res
+  where
+    possibleTransition = Map.lookup action <$> Map.lookup state spec
+    -- First determine whether the transition could be authorized.
+    oTransitionAuth = case possibleTransition of
+      Some (Some (nextState, authSpec@(STAS_Account acc))) ->
+        case Map.lookup acc accountMap of
+          None -> None
+          Some (_, None) -> None
+          Some (ac, Some cid) ->
+            let
+              nextActors = getNextActors action authSpec authState accountMap
+              ts = filter (\(actor, authorizer) -> actor `elem` actors && [authorizer] `elem` nextActors)
+                (authorizationTransfers ac)
+              in case ts of
+                [] -> None
+                [(actor, authorizer)] ->
+                  -- The check against missingAuth here is just a sanity check / safeguard against bugs.
+                  if getMissingAuthorizers action authSpec authState == [authorizer]
+                    then Some (actor, authorizer, cid, nextState)
+                    else error $ "Unexpected: the authority transfer form " <> show actor <> " to " <> show authorizer <> " does not fully authorizer action " <> show action
+                _ -> error $ "Unexpected: multiple authority transfers possible for action " <> show action <> " : " <> show ts
+      _ -> None
+    -- Now check whether we also authorize the next state transition.
+    res = case oTransitionAuth of
+      Some (_actor, authorizer, _cid, nextState) ->
+        case Map.lookup action <$> Map.lookup nextState spec of
+          Some (Some (_, STAS_Account acc)) ->
+            if authorizer `elem` accountParties acc
+              then
+                -- Here we need to check that the actors can also initiate
+                -- and transfer authority for the next state transition.
+                let nextTs = authorizationTransferFromState actors action nextState spec authState accountMap
+                in if fmap (._2) nextTs == Some authorizer
+                  then oTransitionAuth
+                  else None
+              else oTransitionAuth
+          _ -> oTransitionAuth
+      None -> None
+
+-- Apply authorizationTransferFromState to try to authorize an action for a TransferInstruction
+tryUseAccountAuthorityForTIA' :
+  [Party]
+  -> V2.TransferInstructionAction
+  -> ContractId V2.TransferInstruction
+  -> AuthState V2.TransferInstructionAction
+  -> AccountConfigMap
+  -> ExtraArgs
+  -> Update (Optional V2.TransferInstructionResult)
+tryUseAccountAuthorityForTIA' actors action instrCid authState accountMap extraArgs = do
+  instr <- view <$> fetch instrCid
+  let
+    spec = transferInstructionStateMachineSpec instr.transfer.sender instr.transfer.receiver
+    state = getState spec authState
+    oTransition = authorizationTransferFromState actors action state spec authState accountMap
+
+  Traversable.forA oTransition (\(actor, authorizer, cid) ->
+    exercise cid AuthorizeTransferInstructionAction with ..)
+
+-- Apply authorizationTransferFromState to try to authorize an action for a AllocationInstruction
+tryUseAccountAuthorityForAIA' :
+  [Party]
+  -> V2.AllocationInstructionAction
+  -> ContractId V2.AllocationInstruction
+  -> AuthState V2.AllocationInstructionAction
+  -> AccountConfigMap
+  -> ExtraArgs
+  -> Update (Optional V2.AllocationInstructionResult)
+tryUseAccountAuthorityForAIA' actors action instrCid authState accountMap extraArgs = do
+  instr <- view <$> fetch instrCid
+  let
+    spec = allocationInstructionStateMachineSpec instr.allocation.authorizer
+    state = getState spec authState
+    oTransition = authorizationTransferFromState actors action state spec authState accountMap
+
+  Traversable.forA oTransition (\(actor, authorizer, cid) ->
+    exercise cid AuthorizeAllocationInstructionAction with ..)
+
+-- Apply authorizationTransferFromState to try to authorize an action for a Allocation
+tryUseAccountAuthorityForAA' :
+  [Party]
+  -> V2.AllocationAction
+  -> ContractId V2.Allocation
+  -> AuthState V2.AllocationAction
+  -> AccountConfigMap
+  -> ExtraArgs
+  -> Update (Optional V2.AllocationResult)
+tryUseAccountAuthorityForAA' actors action allocationCid authState accountMap extraArgs = do
+  alloc <- view <$> fetch allocationCid
+  let
+    spec = allocationStateMachineSpec alloc.allocation.authorizer alloc.allocation.settlement.executors (allocationAdmin alloc.allocation)
+    state = getState spec authState
+    oTransition = authorizationTransferFromState actors action state spec authState accountMap
+
+  Traversable.forA oTransition (\(actor, authorizer, cid) ->
+    exercise cid AuthorizeAllocationAction with ..)
+
+
+-- Authorization State Machines
+-------------------------------
+
+-- Captures who needs to authorize a state transition
+data AuthSpec actionType
+  = STAS_Account V2.Account
+    -- ^ A specific account needs to authorize
+  | STAS_Action actionType
+    -- ^ The authorizers of another action need to authorize
+  | STAS_Parties [Party]
+    -- ^ A specific set of parties needs to authorize
+    deriving (Show)
+
+-- The specification of an authorization state machine
+-- The outer map is the current state
+-- The inner map key are the actions that can be used to advance the
+-- state machine. The value is the resulting state if the specified
+-- authorization specification is reached.
+type AuthStateMachine actionType stateType
+  = Map.Map stateType
+    (Map.Map actionType (stateType, AuthSpec actionType))
+
+-- Utility function to get an AuthStateMachine from a list of tuples
+toAuthStateMachine : (Eq stateType, Eq actionType, Ord stateType, Ord actionType) =>
+  [(stateType, actionType, stateType, AuthSpec actionType)]
+  -> AuthStateMachine actionType stateType
+toAuthStateMachine specs = fmap Map.fromList bySourceState
+  where
+    bySourceState = Map.fromListWithR (++)
+      (map (\(sourceState, action, targetStat, auth)
+        -> (sourceState, [(action, (targetStat, auth))])) specs)
+
+-- Captures the current state of an authorization state machine
+-- in a map `authorizations` from action to the set of parties that
+-- has authorized it.
+type AuthState actionType = Map.Map actionType [Party]
+
+
+-- State Machine Utility Functions
+----------------------------------
+
+-- Helper to get the auth state for a specific action
+getActionAuth : (Ord actionType) => actionType -> AuthState actionType -> [Party]
+getActionAuth action authState = fromOptional [] (Map.lookup action authState)
+
+-- Get the authorizations needed for a transition
+getNeededAuthorizers : (Ord actionType) =>
+  AuthSpec actionType -> AuthState actionType -> [Party]
+getNeededAuthorizers transitionAuth authState =
+  case transitionAuth of
+    STAS_Account acc -> accountParties acc
+    STAS_Action action -> getActionAuth action authState
+    STAS_Parties ps -> ps
+
+-- Get the missing authorizers needed for a transition
+getMissingAuthorizers : (Ord actionType) =>
+  actionType -> AuthSpec actionType -> AuthState actionType -> [Party]
+getMissingAuthorizers action transitionAuth authState =
+  getNeededAuthorizers transitionAuth authState \\ getActionAuth action authState
+
+-- Calculate the next possible actors for a partially authorized action that needs
+-- to be authorized by an account.
+nextActors' : [Party] -> AccountConfig -> [[Party]]
+nextActors' missingAuthorizers config = dedupSort $
+  [[config.account.owner] | canAct config.account.owner config.ownerConfig] <>
+  [[provider] | Some provider <- [config.account.provider], provider `elem` missingAuthorizers && (isInitialized || config.providerConfig.canInitiate)] <>
+  if null missingAuthorizers then [] else [missingAuthorizers]
+  where
+    canAct p c = p `elem` missingAuthorizers && (isInitialized || c.canInitiate)
+    isInitialized = missingAuthorizers /= (accountParties config.account)
+
+-- Get the next actors for an action based on existing auth and
+-- authorization spec.
+getNextActors : (Ord actionType) =>
+  actionType -> AuthSpec actionType -> AuthState actionType
+   -> AccountConfigMap -> [[Party]]
+getNextActors action authSpec authState accountMap = case authSpec of
+  STAS_Parties ps -> [dedupSort $ ps]
+  -- In the case of STAS_Action the result should really be the powerset (minus empty set)
+  -- of the existing authorizers. But because in practice it's only ever
+  -- empty or a single element, the below has the same effect.
+  STAS_Action action' -> [dedupSort $ getActionAuth action' authState] \\ [[]]
+  STAS_Account acc -> case Map.lookup acc accountMap of
+    None -> error $ "Cannot compute next actors. No account config found for Account " <> show acc
+    Some (ac, _) -> nextActors' (getMissingAuthorizers action authSpec authState) ac
+
+-- Get the state of an auth state machine.
+-- This assumes that the stateType is an enum
+-- and that the first element is the initial state.
+-- It also assumes that all authorization is linear and
+-- never gets withdrawn. So the state machine moves only
+-- forwards.
+getState : (Ord actionType, Show actionType, Ord stateType, Enum stateType, Show stateType) =>
+  AuthStateMachine actionType stateType
+  -> AuthState actionType
+  -> stateType
+getState spec authState = tryAdvanceState spec authState initState
+  where initState = toEnum 0
+
+tryAdvanceState : (Ord actionType, Show actionType, Ord stateType, Show stateType) =>
+  AuthStateMachine actionType stateType
+  -> AuthState actionType
+  -> stateType
+  -> stateType
+tryAdvanceState spec authState fromState = resultState
+  where
+    possibleTransitions = Map.lookup fromState spec
+
+    isTransitionAuthorized (action, (_, transitionAuth)) =
+      not (null (getActionAuth action authState)) -- The action is authorized at all.
+      && null (getMissingAuthorizers action transitionAuth authState) -- Fully authorized.
+
+    authorizedTransitions = case possibleTransitions of
+      None -> []
+      Some transitions -> filter isTransitionAuthorized (Map.toList transitions)
+
+    resultState = case authorizedTransitions of
+      [] -> fromState
+      -- The only case where there's more than one element is if a basic account
+      -- Withdraws. The ambiguity is whether the transition goes
+      -- Init -> Withdrawn or Init -> Accepted -> Withdrawn.
+      (_,(authed, _))::_ -> tryAdvanceState spec authState authed
+
+-- Utility function to reverse a map action->[[Party]] to [Party]->[Action]
+-- and vice versa
+invertMap : (Ord a, Ord b) => Map.Map a [b] -> Map.Map b [a]
+invertMap m =
+  Map.fromListWithR (++) $
+  concatMap (\(x, ys) -> map (, [x]) ys) $
+  Map.toList m
+
+-- Creates the available actions map for an auth state machine
+mkAvailableActions : (Ord actionType, Show actionType, Ord stateType, Enum stateType , Show stateType) =>
+  AuthStateMachine actionType stateType
+  -> AuthState actionType
+  -> AccountConfigMap
+  -> Map.Map [Party] [actionType]
+mkAvailableActions spec authState accountMap = invertMap (Map.fromList nextActors)
+  where
+    state = getState spec authState
+    oPossibleTransitions = Map.toList <$> Map.lookup state spec
+    nextActors = case oPossibleTransitions of
+      None -> []
+      Some possibleTransitions ->
+        map (\(action, (_, authSpec)) ->
+          (action, getNextActors action authSpec authState accountMap))
+        possibleTransitions
+
+-- Set theoretic union for sets represented as sorted deduplicated lists.
+union : (Ord a) => [a] -> [a] -> [a]
+union x y = dedupSort (x ++ y)
+
+-- Insert into a map with values that are sets represented as sorted deduplicated lists.
+insertWithUnion : (Ord k, Ord v) => k -> [v] -> Map.Map k [v] -> Map.Map k [v]
+insertWithUnion = Map.insertWith union
+
+-- Advances an on-ledger state machine by calling transition functions.
+applyStateMachineTransitions
+  : forall actionType stateType templateTp interfaceTp viewTp resType .
+    (Ord actionType, Show actionType, Ord stateType, Enum stateType, Show stateType
+    , HasArchive interfaceTp, HasInterfaceView interfaceTp viewTp
+    , HasToInterface templateTp interfaceTp
+    , GetField "actionAuthorizers" templateTp (AuthState actionType)) =>
+  templateTp
+  -> Optional (ContractId interfaceTp)
+  -> [Party]
+  -> actionType
+  -> (viewTp -> AuthStateMachine actionType stateType)
+  -> AccountConfigMap
+  -> (stateType -> stateType -> Update resType)
+  -> (AuthState actionType -> Map.Map [Party] [actionType] -> Update resType)
+  -> ([Party] -> actionType -> resType -> AuthState actionType -> AccountConfigMap -> ExtraArgs -> Update (Optional resType))
+  -> ExtraArgs
+  -> Update resType
+applyStateMachineTransitions this oSelf actors action mkStateMachine accountMap transition mkPending tryUseAccountAuth extraArgs = do
+  -- Make the state machine
+  let
+    iThis = toInterface @interfaceTp this
+    vThis = view iThis
+    spec = mkStateMachine vThis
+    authState = this.actionAuthorizers
+    stateBefore = getState spec authState
+
+    -- Apply the account authorization rules
+    -- First check the actors are allowed to authorize the action.
+  let
+    availableActions = mkAvailableActions spec authState accountMap
+    invertedAvailableActions = invertMap availableActions
+    possibleActors = fromSomeNote
+      ("Unexpected: applyStateMachineTransitions called with unavailable action " <> show action)
+      $ Map.lookup action invertedAvailableActions
+
+  checkActors actors possibleActors
+
+  -- Second apply the new authorization.
+  let
+    -- Compute the new available actions after adding the actors.
+    newAuthState = insertWithUnion action actors authState
+    stateAfter = getState spec newAuthState
+    newAvailableActions = mkAvailableActions spec newAuthState accountMap
+
+    -- Did the state change?
+    stateChange = stateBefore /= stateAfter
+
+  res <- if stateChange
+    then transition stateBefore stateAfter
+    else do mkPending newAuthState newAvailableActions
+  oRes <- tryUseAccountAuth actors action res newAuthState accountMap extraArgs
+
+  whenSome oSelf archive
+  return $ fromOptional res oRes
+
+
+-- Parsing Choice Context
+-------------------------
+
+type AccountConfigMap = Map.Map V2.Account (AccountConfig, Optional (ContractId AccountConfig))
+
+extractAccountConfigMap
+  : Party -> ExtraArgs -> [V2.Account] -> Update AccountConfigMap
+extractAccountConfigMap admin extraArgs as = do
+  let
+    val = TextMap.lookup accountConfigsContextKey extraArgs.context.values
+    cids = case val of
+      Some (AV_List cs) -> map (\(AV_ContractId cid) -> cid) cs
+      None -> []
+      _ -> error ("unexpected value " <> show val <> " in " <> accountConfigsContextKey)
+
+  suppliedMap <- Map.fromList <$>
+    mapA (\cid -> do
+        config <- fetch @AccountConfig (coerceContractId cid)
+        requireMatchExpected ("admin on supplied AccountConfig", config.admin) admin
+        return (config.account, (config, Some (coerceContractId cid)))
+      )
+      cids
+
+  let
+    basicConfig account = AccountConfig with
+      admin
+      account
+      ownerConfig = PartyConfig True True
+      providerConfig = PartyConfig False False
+    addBasicValidated accountMap account = do
+      case account.provider of
+        None -> do
+          assertMsg "Not expecting account contract for self-custodial account" (isNone (Map.lookup account accountMap))
+          return (Map.insert account (basicConfig account, None) accountMap)
+        Some _ -> do
+          assertMsg ("No account config supplied for account " <> (show account)) (isSome (Map.lookup account accountMap))
+          return accountMap
+
+  foldlA addBasicValidated suppliedMap (dedup as)
+
+-- Convenience to get account configs as a list.
+extractAccountConfigs
+  : Party -> ExtraArgs -> [V2.Account] -> Update [(AccountConfig, Optional (ContractId AccountConfig))]
+extractAccountConfigs admin extraArgs as = do
+  accountConfigsMap <- extractAccountConfigMap admin extraArgs as
+  return $ map (\a -> fromSomeNote ("No account config supplied for account " <> show a) (Map.lookup a accountConfigsMap)) as
+
+accountConfigsContextKey : Text
+accountConfigsContextKey = "testTokenV2/accountConfigs"

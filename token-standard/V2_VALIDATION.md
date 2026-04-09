@@ -132,3 +132,14 @@ Cleanup performed so far:
   This was done as a backwards-compatible change to `token-metadata-v1.yaml` to
   allow both V1 and V2 clients to benefit from this information without needing
   to upgrade to a new version of the metadata API.
+- Add support for managing jointly controlled accounts via a token standard wallet
+  - the general approach is that the other party must use the same action
+    to confirm their agreement to an action. The state of pending actions is tracked
+    in the `TransferInstruction`, `AllocationInstruction`, or `Allocation` contracts.
+  - generalize `TransferInstruction_Accept` to accept the transfer as someone that needs
+    to authorize it; e.g., the account provider of the sender might can use this
+    choice to confirm that they agree to the transfer being offered to the recipient
+  - add `AllocationInstruction_Accept` choice to confirm the creation of an allocation
+  - validate the API on `TestTokenV2` by adding support for a rich variety of
+    authorization configurations
+- Use a uniform `AllocationResult` for `Allocation` choices to simplify working with them
