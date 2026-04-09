@@ -17,11 +17,14 @@ import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
 }
+import org.lfdecentralizedtrust.splice.config.UpgradesConfig
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
-import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
+import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvScanConfig}
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContextExecutor
 
 class DsoDelegateBasedAutomationService(
     clock: Clock,
@@ -29,12 +32,16 @@ class DsoDelegateBasedAutomationService(
     domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
+    scanConfig: SvScanConfig,
+    upgradesConfig: UpgradesConfig,
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
-    ec: ExecutionContext,
+    ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
+    httpClient: HttpClient,
+    templateJsonDecoder: TemplateJsonDecoder,
 ) extends AutomationService(
       config.automation,
       clock,
@@ -140,6 +147,13 @@ class DsoDelegateBasedAutomationService(
         svTaskContext,
       )
     )
+
+    registerTrigger(
+      new ProcessRewardsTrigger(triggerContext, svTaskContext, scanConfig, upgradesConfig)
+    )
+    registerTrigger(
+      new ProcessRewardsDryRunTrigger(triggerContext, svTaskContext, scanConfig, upgradesConfig)
+    )
   }
 
 }
@@ -179,5 +193,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
+    aTrigger[ProcessRewardsTrigger],
+    aTrigger[ProcessRewardsDryRunTrigger],
   )
 }
