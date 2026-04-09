@@ -543,7 +543,8 @@ checkHoldings env description expectedHoldings = do
         TestHolding{..} <- expectedHoldings
         pure (owner, [(amount, locked, mkInstrumentId env instrumentId)])
   forA_ env.allParties $ \owner -> do
-    actualHoldings <- WalletClientV2.listHoldings' owner
+    visibleHoldings <- WalletClientV2.listVisibleHoldings owner
+    let actualHoldings = filter (\(_, h) -> h.account.owner == owner) visibleHoldings
     case Map.lookup owner holdingsByOwner of
       None -> unless (Prelude.null actualHoldings) $
         fail $ T.unlines $
@@ -566,12 +567,3 @@ checkEqual description expected actual =
       , "expected: " <> show expected
       , "actual: " <> show actual
       ]
-
-expectOneElement : Text -> (a -> Text) -> [a] -> Script a
-expectOneElement description pretty xs =
-  case xs of
-    [x] -> pure x
-    [] -> fail $ "Expected exactly one " <> description <> ", but got none."
-    xs -> fail $ T.unlines $ "Expected exactly one " <> description <> ", but got: " :: map pretty xs
-
-
