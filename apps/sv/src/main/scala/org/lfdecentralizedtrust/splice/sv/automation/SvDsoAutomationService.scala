@@ -128,6 +128,7 @@ class SvDsoAutomationService(
       retryProvider,
       packageVersionSupport,
       packageVettingService,
+      upgradesConfig,
     )
 
   // required for triggers that must run in sim time as well

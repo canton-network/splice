@@ -11,12 +11,15 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{
   PackageVersionSupport,
   PackageVettingLookupService,
   RetryProvider,
   SpliceLedgerConnection,
 }
+import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
@@ -30,7 +33,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import com.digitalasset.canton.lifecycle.RunOnClosing
 import com.digitalasset.canton.lifecycle.AsyncOrSyncCloseable
 import com.digitalasset.canton.lifecycle.SyncCloseable
@@ -50,10 +53,13 @@ class RestartDsoDelegateBasedAutomationTrigger(
     appLevelRetryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
     packageVettingService: PackageVettingLookupService,
+    upgradesConfig: UpgradesConfig,
 )(implicit
-    override val ec: ExecutionContext,
+    override val ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
+    httpClient: HttpClient,
+    templateJsonDecoder: TemplateJsonDecoder,
 ) extends OnAssignedContractTrigger.Template[
       splice.dsorules.DsoRules.ContractId,
       splice.dsorules.DsoRules,
@@ -129,9 +135,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
     }
   }
 
-  private def restartAutomation(epoch: Long)(implicit
-      ec: ExecutionContext
-  ): TaskOutcome = {
+  private def restartAutomation(epoch: Long): TaskOutcome = {
     val svTaskContext =
       SvTaskBasedTrigger.Context(
         store,
@@ -164,6 +168,8 @@ class RestartDsoDelegateBasedAutomationTrigger(
          domainUnpausedSync,
          config,
          svTaskContext,
+         config.scan,
+         upgradesConfig,
          retryProvider,
          loggerFactory,
        )
