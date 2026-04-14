@@ -739,6 +739,14 @@ trait SvDsoStore
       splice.amulet.DevelopmentFundCoupon.COMPANION
     )
 
+  def listExpiredRewardCouponsV2: ListExpiredContracts[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.amulet.RewardCouponV2.COMPANION
+    )
+
   def listSvOnboardingConfirmed(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[
