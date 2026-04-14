@@ -36,6 +36,8 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.{Set as DamlSet}
+import com.daml.ledger.javaapi.data.Unit as DamlUnit
+import com.digitalasset.canton.topology.PartyId
 
 import java.math.BigDecimal
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -84,10 +86,10 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       batch <- batchF
       dsoRules <- dsoRulesF
       damlBatch = convertBatch(batch)
+      providersWithWrongVettingState <- determineProvidersWithWrongVettingState(batch)
       choiceArg = new ProcessRewardsV2_ProcessBatch(
         damlBatch,
-        // TODO (#5715) determine 'providersWithWrongVettingState'
-        new DamlSet(java.util.Collections.emptyMap()),
+        providersWithWrongVettingState,
       )
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ProcessRewardsV2_ProcessBatch(
@@ -138,6 +140,34 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
           .asJava
         new BatchOfMintingAllowances(allowances)
     }
+
+  private def determineProvidersWithWrongVettingState(
+      batch: GetRewardAccountingBatchResponse
+  )(implicit tc: TraceContext): Future[DamlSet[String]] = {
+    val providers = batch match {
+      case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfMintingAllowances(
+            value
+          ) =>
+        value.mintingAllowances.map(_.provider)
+      case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfBatches(_) =>
+        Vector.empty[String]
+    }
+    val now = context.clock.now
+    Future
+      .traverse(providers) { provider =>
+        val partyId = PartyId.tryFromProtoPrimitive(provider)
+        svTaskContext.packageVersionSupport
+          .supportsTrafficBasedAppRewards(Seq(partyId), now)
+          .map(support => provider -> support.supported)
+      }
+      .map { supportByProvider =>
+        val withWrongVettingState = supportByProvider.collect { case (provider, false) => provider }
+        damlSetOf(withWrongVettingState)
+      }
+  }
+
+  private def damlSetOf(values: Seq[String]): DamlSet[String] =
+    new DamlSet(values.map(_ -> DamlUnit.getInstance).toMap.asJava)
 
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
