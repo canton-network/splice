@@ -747,6 +747,20 @@ trait SvDsoStore
       splice.amulet.RewardCouponV2.COMPANION
     )
 
+  /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
+    * Returns only the parties, not the coupons, to keep the query index-only.
+    */
+  def listNonObserverRewardCouponsV2ProvidersSample(
+      limit: Limit
+  )(implicit tc: TraceContext): Future[Seq[PartyId]]
+
+  def listNonObserverRewardCouponsV2ForProvider(
+      rewardParty: PartyId,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[
+    Seq[Contract[splice.amulet.RewardCouponV2.ContractId, splice.amulet.RewardCouponV2]]
+  ]
+
   def listSvOnboardingConfirmed(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[
@@ -1331,6 +1345,7 @@ object SvDsoStore {
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
           rewardAmount = Some(contract.payload.amount),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          rewardBeneficiaryIsObserver = Some(contract.payload.providerIsObserver),
         )
       },
       mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
