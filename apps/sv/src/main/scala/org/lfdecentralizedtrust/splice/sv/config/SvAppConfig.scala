@@ -408,6 +408,8 @@ case class SvAppBackendConfig(
     delegatelessAutomationExpiredAmuletTransferInstructionBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletAllocationBatchSize: Int = 100,
     delegatelessAutomationExpiredRewardCouponV2BatchSize: Int = 100,
+    delegatelessAutomationUnhideRewardCouponV2SampleSize: Int = 100,
+    delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 100,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,
