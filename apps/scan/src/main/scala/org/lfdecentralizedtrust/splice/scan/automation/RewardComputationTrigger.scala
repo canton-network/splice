@@ -59,17 +59,41 @@ class RewardComputationTrigger(
         earliestCompleteO <- appActivityStore.earliestRoundWithCompleteAppActivity()
         latestCompleteO <- appActivityStore.latestRoundWithCompleteAppActivity()
         latestComputedO <- appRewardsStore.lookupLatestRoundWithRewardComputation()
-
-        // TODO(#4383): obtain inputs and batchSize from the appropriate Contracts
-        inputs <- Future.successful(RewardComputationTrigger.placeholderInputs)
-        batchSize <- Future.successful(RewardComputationTrigger.placeholderBatchSize)
-      } yield RewardComputationTrigger.nextTask(
-        earliestCompleteO,
-        latestCompleteO,
-        latestComputedO,
-        batchSize,
-        inputs,
-      )
+        candidateRoundO = RewardComputationTrigger.nextRound(
+          earliestCompleteO,
+          latestCompleteO,
+          latestComputedO,
+        )
+        // Returns Seq.empty (no task created) when data is unavailable.
+        // This skips the round for this poll cycle — the trigger will poll
+        // again on its next interval. Unlike a failing task, this does not
+        // consume one of the trigger's limited task retries (which, once
+        // exhausted, cause the task to be abandoned with a log warning).
+        // Two cases:
+        //   - The reference store hasn't ingested the round yet (scan catching up)
+        //   - The round is pre-CIP-104 (rewardConfig/trafficPrice absent)
+        task <- candidateRoundO match {
+          case None => Future.successful(Seq.empty)
+          case Some(roundNumber) =>
+            rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
+              case None =>
+                logger.debug(
+                  s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
+                )
+                Seq.empty
+              case Some(contract) =>
+                RewardComputationInputs.fromOpenMiningRound(contract.payload) match {
+                  case None =>
+                    logger.debug(
+                      s"Round $roundNumber is a pre-CIP-104 round (missing rewardConfig or trafficPrice), skipping."
+                    )
+                    Seq.empty
+                  case Some((inputs, batchSize)) =>
+                    Seq(RewardComputationTrigger.Task(roundNumber, batchSize, inputs))
+                }
+            }
+        }
+      } yield task
   }
 
   override protected def completeTask(
@@ -113,24 +137,20 @@ object RewardComputationTrigger {
 
   /** Compute the next round to process, given the bounds of complete activity data
     * and the latest round for which rewards have already been computed.
-    * Returns at most one task.
     *
     * TODO(#4570): Support parallel execution
     */
-  def nextTask(
+  def nextRound(
       earliestCompleteO: Option[Long],
       latestCompleteO: Option[Long],
       latestComputedO: Option[Long],
-      batchSize: Int,
-      inputs: RewardComputationInputs,
-  ): Seq[Task] =
+  ): Option[Long] =
     (earliestCompleteO, latestCompleteO) match {
-      case (Some(earliestComplete), Some(latestComplete)) =>
+      case (Some(earliestComplete), Some(latestComplete)) if earliestComplete <= latestComplete =>
         val start = math.max(earliestComplete, latestComputedO.fold(0L)(_ + 1))
-        if (start <= latestComplete)
-          Seq(Task(start, batchSize, inputs))
-        else Seq.empty
-      case _ => Seq.empty
+        if (start <= latestComplete) Some(start)
+        else None
+      case _ => None
     }
 
   // TODO(#4383): Remove this once it is obtained from the appropriate Contract
