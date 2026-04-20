@@ -5,7 +5,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
@@ -526,10 +525,13 @@ class DbScanAppRewardsStoreTest
           Seq("bob::provider"),
           Seq(500000L),
         )
+        zeroThresholdInputs = testInputs.copy(
+          appRewardCouponThreshold = RewardComputationInputs.zero
+        )
         summary <- store.computeAndStoreRewards(
           roundNumber,
           batchSize = 100,
-          RewardComputationTrigger.placeholderInputs,
+          zeroThresholdInputs,
         )
       } yield {
         summary.activePartiesCount shouldBe 2L
@@ -546,7 +548,7 @@ class DbScanAppRewardsStoreTest
         summary <- store.computeAndStoreRewards(
           roundNumber,
           batchSize = 100,
-          RewardComputationTrigger.placeholderInputs,
+          testInputs,
         )
       } yield {
         summary.activePartiesCount shouldBe 0L
@@ -1199,7 +1201,7 @@ object DbScanAppRewardsStoreTest {
       tickDurationMicros = tickDurationMicros,
       amuletPrice = n(BigDecimal("1.0")),
       trafficPrice = n(BigDecimal("1.0")),
-      appRewardCouponThreshold = n(BigDecimal("0.5")),
+      appRewardCouponThreshold = n(BigDecimal("0.0")),
     )
   }
 
