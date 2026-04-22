@@ -551,6 +551,24 @@ trait SvDsoStore
     splice.amulet.rewardaccountingv2.CalculateRewardsV2,
   ]]]
 
+  /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
+    * round number is in the given set.
+    */
+  def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+        ]],
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+        ]],
+    )
+  ]
+
   /** All `ClosedMiningRound` contracts that should be confirmed to be archived.
     *
     * These are all `ClosedMiningRound` contracts for which
