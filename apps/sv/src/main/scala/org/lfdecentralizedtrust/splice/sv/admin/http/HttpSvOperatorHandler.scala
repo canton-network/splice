@@ -348,6 +348,24 @@ class HttpSvOperatorHandler(
       .map(r0.LookupDsoRulesVoteRequestResponse.OK)
   }
 
+  override def archiveDryRunRewardAccountingContracts(
+      respond: r0.ArchiveDryRunRewardAccountingContractsResponse.type
+  )(
+      body: definitions.ArchiveDryRunRewardAccountingContractsRequest
+  )(extracted: ActAsKnownUserRequest): Future[r0.ArchiveDryRunRewardAccountingContractsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.archiveDryRunRewardAccountingContracts") { _ => _ =>
+      SvApp
+        .archiveDryRunRewardAccountingContracts(
+          body.rounds.toSeq,
+          dsoStoreWithIngestion,
+          retryProvider,
+          logger,
+        )
+        .map(_ => r0.ArchiveDryRunRewardAccountingContractsResponseOK)
+    }
+  }
+
   override def castVote(respond: r0.CastVoteResponse.type)(
       body: definitions.CastVoteRequest
   )(extracted: ActAsKnownUserRequest): Future[r0.CastVoteResponse] = {

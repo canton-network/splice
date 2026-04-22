@@ -992,6 +992,55 @@ object SvApp {
       }
   }
 
+  def archiveDryRunRewardAccountingContracts(
+      rounds: Seq[Long],
+      dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
+      retryProvider: RetryProvider,
+      logger: TracedLogger,
+  )(implicit
+      ec: ExecutionContext,
+      traceContext: TraceContext,
+  ): Future[Unit] = {
+    val store = dsoStoreWithIngestion.store
+    store.listDryRunRewardAccountingContractsByRounds(rounds).flatMap {
+      case (calculateRewards, processRewards) =>
+        if (calculateRewards.isEmpty && processRewards.isEmpty) {
+          Future.unit
+        } else {
+          retryProvider.retryForClientCalls(
+            "archiveDryRunRewardAccountingContracts",
+            "archiveDryRunRewardAccountingContracts",
+            for {
+              dsoRules <- store.getDsoRules()
+              amuletRules <- store.getAmuletRules()
+              choiceArg =
+                new splice.amuletrules.AmuletRules_ArchiveDryRunRewardAccountingV2(
+                  calculateRewards.map(_.contractId).asJava,
+                  processRewards.map(_.contractId).asJava,
+                )
+              cmd = dsoRules.exercise(
+                _.exerciseDsoRules_ArchiveDryRunRewardAccountingV2(
+                  amuletRules.contractId,
+                  choiceArg,
+                  store.key.svParty.toProtoPrimitive,
+                )
+              )
+              _ <- dsoStoreWithIngestion
+                .connection(SpliceLedgerConnectionPriority.Low)
+                .submit(
+                  actAs = Seq(store.key.svParty),
+                  readAs = Seq(store.key.dsoParty),
+                  update = cmd,
+                )
+                .noDedup
+                .yieldUnit()
+            } yield (),
+            logger,
+          )
+        }
+    }
+  }
+
   def castVote(
       trackingCid: splice.dsorules.VoteRequest.ContractId,
       isAccepted: Boolean,
