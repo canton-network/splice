@@ -716,6 +716,65 @@ class DbSvDsoStore(
       assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(_)
     )
 
+  override def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+        ]],
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+        ]],
+    )
+  ] = {
+    if (rounds.isEmpty)
+      Future.successful((Seq.empty, Seq.empty))
+    else {
+      val roundsClause = inClause("reward_round", rounds)
+      val calculateRewardsF = storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
+            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+          ),
+          "listDryRunCalculateRewardsV2ByRounds",
+        )
+        .map(
+          _.map(
+            assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
+              _
+            )
+          ).filter(_.payload.dryRun)
+        )
+      val processRewardsF = storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
+            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+          ),
+          "listDryRunProcessRewardsV2ByRounds",
+        )
+        .map(
+          _.map(
+            assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+          ).filter(_.payload.dryRun)
+        )
+      for {
+        calculateRewards <- calculateRewardsF
+        processRewards <- processRewardsF
+      } yield (calculateRewards, processRewards)
+    }
+  }
+
   override def lookupConfirmationByActionWithOffset(
       confirmer: PartyId,
       action: ActionRequiringConfirmation,
