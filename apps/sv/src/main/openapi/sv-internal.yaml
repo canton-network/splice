@@ -687,6 +687,26 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v0/admin/reward-accounting-process/archive-dry-runs:
+    post:
+      tags: [ sv ]
+      x-jvm-package: sv_operator
+      operationId: "archiveDryRunRewardAccountingContracts"
+      description: |
+        Archive active `CalculateRewardsV2` and `ProcessRewardsV2` contracts
+        for the specified rounds if they have `dryRun` as `True`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveDryRunRewardAccountingContractsRequest"
+      responses:
+        "200":
+          description: ok
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+
 components:
   schemas:
     ListOngoingValidatorOnboardingsResponse:
@@ -1261,3 +1281,17 @@ components:
           type: array
           items:
             $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
+
+    ArchiveDryRunRewardAccountingContractsRequest:
+      type: object
+      required:
+        - rounds
+      properties:
+        rounds:
+          description: |
+            Round numbers whose dry-run `CalculateRewardsV2` and `ProcessRewardsV2`
+            contracts should be archived.
+          type: array
+          items:
+            type: integer
+            format: int64
