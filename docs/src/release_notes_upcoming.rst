@@ -15,6 +15,22 @@
 
       - Bring back the governance page that was removed in release 0.5.18.
 
+    - Scan app
+
+        - Added an optional ``activity-ingestion-user-version`` configuration field.
+          Incrementing this value forces the Scan app to restart activity record
+          ingestion from the current point in time, resetting the completeness
+          window. This is useful for recovering from ingestion errors without
+          reprocessing historical data.
+
+        - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
+          This required clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
+          This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
+          Specifically the ``app_activity_records`` field will not contain the
+          data which has been provided for the events which happened between the ``0.5.18`` and this release.
+          Note that the ``app_activity_records`` data already provided for events during this period is correct
+          and the network explorers who have ingested this data should keep a copy of it.
+
     - Wallet UI
 
       - Fix a corner case in the wallet Allocations UI where invalid values would be passed to ``/v0/allocations`` when creating allocations from allocation requests.
