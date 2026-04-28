@@ -6,3 +6,19 @@
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
 .. release-notes:: Upcoming
+
+    - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting
+      has been added to control the activity record ingestion version
+      for the purpose of recovering from unexpected operational issues.
+      Incrementing this value causes the Scan app to record a new app activity record completeness lower bound.
+      Reward accounting excludes rounds
+      before this boundary, even though their activity records are retained.
+      Thus bumping the user version has the same effect as reinitializing the
+      app activity record computation from the time of the bump onwards.
+      See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.
+
+    - Scan app
+
+        - The ``app_activity_record_store`` table has been modified to improve DB performance.
+          The corresponding DB migration truncates the existing data in this table which has been ingested since the ``0.5.18`` release, which is OK as we are still in the preview phase of CIP-104.
+          The downstream reward-accounting tables are also cleared as part of this change.
