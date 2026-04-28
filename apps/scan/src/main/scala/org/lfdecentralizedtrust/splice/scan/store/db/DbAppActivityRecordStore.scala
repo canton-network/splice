@@ -96,47 +96,33 @@ class DbAppActivityRecordStore(
   }
 
   /** Find the earliest round with complete app activity.
-    *
-    * Assumes that ledger ingestion order for app activity is sequential,
-    * i.e.,
-    * - app activity for round N always precedes round N + 1, and
-    * - if activity for N + 1 is present now, N has all its activity.
-    *
-    * Returns None if fewer than two consecutive rounds have been ingested.
+    * The first ingested round may be partial, so the earliest complete round
+    * is `earliest_ingested_round + 1`.
+    * Returns None if no meta row exists or if that round hasn't been ingested yet.
     */
   def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
 
-    // `order by ... limit 1` is used instead of min/max to force the query planner
-    // to use the (history_id, round_number) index.
     runQuerySingle(
-      sql"""select min_round + 1
-            from (
-              select a.round_number as min_round
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              order by a.round_number asc
-              limit 1
-            ) sub
-            where exists (
-              select 1
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              and a.round_number = sub.min_round + 1
-              order by a.round_number asc
-              limit 1
-            )
+      sql"""select m.earliest_ingested_round + 1
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and exists (
+                select 1
+                from #${Tables.appActivityRecords} a
+                where a.history_id = $historyId
+                  and a.round_number = m.earliest_ingested_round + 1
+              )
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
     )
   }
 
   /** Find the latest round with complete app activity.
-    * A round is complete when ingestion has moved past it, i.e., the next
-    * round also has records. We return max_round - 1 because max_round
-    * itself may still be receiving records.
-    * Returns None if fewer than two consecutive rounds have been ingested.
+    * The most recent round may still be receiving records, so the latest
+    * complete round is `max_round - 1`.
+    * Returns None if no meta row exists or if fewer than two rounds have been ingested.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
