@@ -131,7 +131,7 @@ function installParticipantChart(
     resources: participant?.resources,
     pvc: spliceConfig.configuration.persistentHeapDumps
       ? {
-          size: '10Gi',
+          size: '35Gi',
           volumeStorageClass: standardStorageClassName,
         }
       : undefined,
