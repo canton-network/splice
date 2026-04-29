@@ -159,7 +159,7 @@ class RewardComputationTrigger(
       from: Long,
       candidate: Long,
   )(implicit tc: TraceContext): Future[Long] =
-    if (candidate <= from) Future.successful(candidate)
+    if (candidate <= from) Future.successful(from)
     else
       rewardsReferenceStore.lookupOpenMiningRoundByNumber(candidate - 1).flatMap {
         case Some(c) if c.payload.rewardConfig.isPresent =>
