@@ -82,7 +82,6 @@ jobs:
         id: perf_check
         if: ${{ success() && github.event_name == 'schedule' }}
         run: |
-          pip install --quiet --user pyyaml
           python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics
 
       # sanity check
