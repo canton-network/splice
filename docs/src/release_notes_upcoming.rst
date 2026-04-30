@@ -15,13 +15,12 @@
 
       - Bring back the governance page that was removed in release 0.5.18.
 
-    - Scan app
-
-        - Added an optional ``activity-ingestion-user-version`` configuration field.
-          Incrementing this value forces the Scan app to restart activity record
-          ingestion from the current point in time, resetting the completeness
-          window. This is useful for recovering from ingestion errors without
-          reprocessing historical data.
+    - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting
+      has been added to control the activity record ingestion version.
+      Incrementing this value causes the Scan app to record a new completeness
+      boundary; reward accounting excludes rounds before it, while existing
+      activity records are retained.
+      See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.
 
         - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
           This required clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
