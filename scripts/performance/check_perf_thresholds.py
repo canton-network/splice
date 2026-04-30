@@ -2,15 +2,24 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compare perf metrics against the thresholds and write the result to GITHUB_OUTPUT:
-  - reads every metrics.json in the given dirs
-  - compares each metric to its thresholds in `.github/store-perf-thresholds.json`
-  - writes information of the breaches to GITHUB_OUTPUT so downstream steps can branch on them
-  - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY for visibility in GHA UI which is linked from GH issue
+"""Compare perf metrics against absolute thresholds. Exit non-zero on breach.
+
+This script *only detects* breaches; reporting is delegated to the existing
+`failure_notifications` GH action at the bottom of each job, which fires on
+`if: failure()`. So this script:
+  - read every metrics.json in the given dirs,
+  - compare each metric to its `max:` rule in `.github/perf-thresholds.yaml`,
+  - print a per-(test, metric) result to stdout,
+  - append a Markdown summary of breaches to GITHUB_STEP_SUMMARY (visible in
+    the GHA UI and linked to from the failure notification),
+  - exit 1 if any breach occurred.
 
 Usage:
-  python3 check_perf_thresholds.py <metrics_dir>
+  python3 check_perf_thresholds.py <metrics_dir> [<metrics_dir> ...]
 
+Exit codes:
+  0  no breaches
+  1  one or more breaches
 """
 
 from __future__ import annotations
@@ -32,7 +41,6 @@ def load_thresholds(path: Path) -> dict:
     if not isinstance(data, dict):
         raise ValueError(f"thresholds file {path} must be a JSON object")
     return {k: v for k, v in data.items() }
-
 
 def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
     for d in dirs:

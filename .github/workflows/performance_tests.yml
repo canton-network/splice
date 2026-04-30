@@ -75,7 +75,6 @@ jobs:
         with:
           name: store-ingestion-perf-metrics-${{ github.run_id }}
           path: /tmp/store-ingestion-perf-metrics
-
       - name: Check ingestion thresholds
         id: perf_check
         if: ${{ success() && github.event_name == 'schedule' }}
@@ -168,7 +167,6 @@ jobs:
         with:
           name: store-read-perf-metrics-${{ github.run_id }}
           path: /tmp/store-read-perf-metrics
-
       - name: Check read thresholds
         id: perf_check
         if: ${{ success() && github.event_name == 'schedule' }}
