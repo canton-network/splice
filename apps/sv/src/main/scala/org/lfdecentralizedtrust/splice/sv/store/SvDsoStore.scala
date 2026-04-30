@@ -551,6 +551,20 @@ trait SvDsoStore
     splice.amulet.rewardaccountingv2.CalculateRewardsV2,
   ]]]
 
+  def listProcessRewardsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+  ]]]
+
+  def listRewardCouponsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ]]]
+
   /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
     * round number is in the given set.
     */
