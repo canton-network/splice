@@ -10,7 +10,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv
   TransferLeg as TransferLegV2,
   Reference as SettlementReference,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2.InstrumentId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -61,43 +60,44 @@ class AllocationsFrontendIntegrationTest
       webDriver: WebDriverType,
   ) = {
     val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
-    val receiver = validatorPartyId
     val now = LocalDateTime
       .now()
       .truncatedTo(ChronoUnit.MICROS)
       .toInstant(ZoneOffset.UTC)
     val requestedAt = now.minusSeconds(1800)
-    val allocateBefore = now.plusSeconds(3600)
     val settleBefore = now.plusSeconds(3600 * 2)
+    val wantedTransferLegs = Seq(
+      new TransferLegV2(
+        "oneway",
+        basicAccount(sender),
+        basicAccount(validatorPartyId),
+        BigDecimal(12).bigDecimal.setScale(10),
+        amuletInstrumentIdV2,
+        new Metadata(java.util.Map.of("k3", "v3")),
+      ),
+      new TransferLegV2(
+        "waybackbutless",
+        basicAccount(validatorPartyId),
+        basicAccount(sender),
+        BigDecimal(6).bigDecimal.setScale(10),
+        amuletInstrumentIdV2,
+        new Metadata(java.util.Map.of("k3", "v3")),
+      ),
+    )
 
     val wantedAllocation = new AllocationSpecification(
       new SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
         new SettlementReference("some_reference", Optional.empty),
-        requestedAt,
-        allocateBefore,
         java.util.Optional.of(settleBefore),
         new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
-      java.util.List.of(
-        new TransferLegV2(
-          "oneway",
-          basicAccount(sender),
-          basicAccount(receiver),
-          BigDecimal(12).bigDecimal.setScale(10),
-          new InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
-          new Metadata(java.util.Map.of("k3", "v3")),
-        ),
-        new TransferLegV2(
-          "waybackbutless",
-          basicAccount(receiver),
-          basicAccount(sender),
-          BigDecimal(6).bigDecimal.setScale(10),
-          new InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
-          new Metadata(java.util.Map.of("k3", "v3")),
-        ),
-      ),
+      dsoParty.toProtoPrimitive,
       basicAccount(sender),
+      wantedTransferLegs.map(transferLegSideForAuthorizer(sender, _)).asJava,
+      Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+      false,
+      new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
     )
 
     browseToAllocationsPage()
@@ -113,10 +113,10 @@ class AllocationsFrontendIntegrationTest
           validatorPartyId.toProtoPrimitive,
         )
         // Add n (-1 because one is already there) forms for transfer legs
-        wantedAllocation.transferLegs.asScala.drop(1).foreach { _ =>
+        wantedTransferLegs.drop(1).foreach { _ =>
           eventuallyClickOn(id("add-transfer-leg"))
         }
-        wantedAllocation.transferLegs.asScala.zipWithIndex.foreach { case (transferLeg, index) =>
+        wantedTransferLegs.zipWithIndex.foreach { case (transferLeg, index) =>
           textField(s"create-allocation-transfer-leg-id-$index").underlying
             .sendKeys(transferLeg.transferLegId)
           eventuallyClickOn(id(s"create-allocation-transfer-leg-sender-$index"))
@@ -143,13 +143,13 @@ class AllocationsFrontendIntegrationTest
         textField("create-allocation-settlement-requested-at").underlying
           .sendKeys(
             allocationTimestampFormat.format(
-              wantedAllocation.settlement.requestedAt.atOffset(ZoneOffset.UTC)
+              requestedAt.atOffset(ZoneOffset.UTC)
             )
           )
         textField("create-allocation-settlement-settle-at").underlying
           .sendKeys(
             allocationTimestampFormat.format(
-              wantedAllocation.settlement.settleAt.atOffset(ZoneOffset.UTC)
+              settleBefore.atOffset(ZoneOffset.UTC)
             )
           )
 
@@ -169,7 +169,7 @@ class AllocationsFrontendIntegrationTest
 
         checkTransferLegsV2(
           allocation,
-          wantedAllocation.transferLegs.asScala.toSeq,
+          wantedTransferLegs,
         )
       },
     )
@@ -221,7 +221,7 @@ class AllocationsFrontendIntegrationTest
               Seq(venueParty.toProtoPrimitive),
             )
 
-            checkTransferLegsV2(allocationRequest, otcTrade.data.transferLegs.asScala.toSeq)
+            checkTransferLegsV2(allocationRequest, otcTrade.data.tradeLegs.asScala.map(_.leg).toSeq)
 
             allocationRequest
           }
@@ -250,7 +250,7 @@ class AllocationsFrontendIntegrationTest
               Seq(venueParty.toProtoPrimitive),
             )
 
-            checkTransferLegsV2(allocation, otcTrade.data.transferLegs.asScala.toSeq)
+            checkTransferLegsV2(allocation, otcTrade.data.tradeLegs.asScala.map(_.leg).toSeq)
 
             allocation
           },
@@ -480,7 +480,7 @@ class AllocationsFrontendIntegrationTest
       checkTransferLeg(
         row = row,
         legId = transferLeg.transferLegId,
-        instrumentId = transferLeg.instrumentId.id,
+        instrumentId = transferLeg.instrumentId,
         amount = transferLeg.amount,
         sender = transferLeg.sender.owner,
         receiver = transferLeg.receiver.owner,

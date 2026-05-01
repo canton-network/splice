@@ -163,10 +163,10 @@ template TokenAllocationV2 with
     lockedTokens : TextMap.TextMap [ContractId V2.Holding]
       -- ^ Map from instrumentId to holdings.
     allocation : V2.AllocationSpecification
-    admin : Party
+    createdAt : Time
   where
-    ensure isValidAllocationSpecificationV2 (\instrumentId -> instrumentId.admin == admin) allocation
-    signatory accountParties allocation.authorizer, allocationAdmin allocation
+    ensure isValidAllocationSpecificationV2 (const True) allocation
+    signatory accountParties allocation.authorizer, allocation.admin
     observer allocation.settlement.executors
 
     interface instance V2.Allocation for TokenAllocationV2 where
@@ -178,6 +178,8 @@ template TokenAllocationV2 with
         allocation
         holdingCids = Foldable.concat lockedTokens
         availableActions = allocationV2_availableActionsDefault allocation
+        createdAt
+        numIterations = 0  -- TODO(#5464): support iterated settlement in V2 token
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -234,6 +236,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
     transition fromState toState =  case (fromState, toState) of
 
       (AS_Init, AS_Withdrawn) -> do
+        -- FIXME: ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockTokenAllocationV2 "allocation withdrawn" this extraArgs
         pure V2.AllocationResult
           with
@@ -260,12 +263,13 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
           let holding = view token
           archive cid
           require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
-          pure (holding.instrumentId, holding.amount)
+          require' ("lockedToken.instrumentId.admin", holding.instrumentId.admin) isEqualR ("allocation.admin", allocation.admin)
+          pure (holding.instrumentId.id, holding.amount)
 
         -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
-        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
+        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
         let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
-        authorizerHoldingCids0 <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
+        authorizerHoldingCids0 <- forA (TextMap.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
           require'
             ("archived lockedAmulet.amount for " <> show instrumentId, debitAmount)
             isEqualR
@@ -277,13 +281,15 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
                 holding = V2.HoldingView with
                   account = allocation.authorizer
                   amount = creditAmount
-                  instrumentId
+                  instrumentId = V2.InstrumentId with
+                    id = instrumentId
+                    admin = allocation.admin
                   lock = None
                   meta = emptyMetadata
-              pure (instrumentId.id, [toInterfaceContractId newHoldingCid])
+              pure (instrumentId, [toInterfaceContractId newHoldingCid])
             else
               -- No credit of Token ==> no holding change
-              pure (instrumentId.id, [])
+              pure (instrumentId, [])
 
         -- log v2 transfer events
         tokenRulesCid <- getEventLogFromContext extraArgs.context
@@ -296,6 +302,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
         pure V2.AllocationResult with
           output = V2.AllocationResult_Settled
           authorizerHoldingCids = authorizerHoldingCids
+        -- TODO(#5464): support iterated settlement in V2 token
           meta = emptyMetadata
             -- Note: for V1 tx history we would need create extra choices for
             -- the creation, as this choice here cannot express the creation and
@@ -690,7 +697,9 @@ splitAndLock eventLogCid allocation inputTokenCids = do
           holding = V2.HoldingView with
             account = allocation.authorizer
             amount = negate creditAmount
-            instrumentId
+            instrumentId = V2.InstrumentId with
+              id = instrumentId
+              admin = tokenRules.admin
             lock = Some $ V2.Lock with
               holders = instrumentId.admin :: accountParties allocation.authorizer
               expiresAt = Some allocation.settlement.settleAt
@@ -704,10 +713,12 @@ splitAndLock eventLogCid allocation inputTokenCids = do
           holding = V2.HoldingView with
             account = allocation.authorizer
             amount = netAmount
-            instrumentId
+            instrumentId = V2.InstrumentId with
+              id = instrumentId
+              admin = tokenRules.admin
             lock = None
             meta = emptyMetadata
-        pure [(instrumentId.id, [toInterfaceContractId cid])]
+        pure [(instrumentId, [toInterfaceContractId cid])]
     pure (lockedTokens, changeTokens)
 
   let
@@ -801,8 +812,9 @@ unlockTokenTransferOffer reason offer extraArgs = do
         meta = reasonToMeta reason emptyMetadata
     return [tokenCid]
 
-mergeAmountMaps : Ord k => Map.Map k Decimal -> Map.Map k Decimal -> Map.Map k (Decimal, Decimal)
-mergeAmountMaps = Map.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
+
+mergeAmountMaps : TextMap.TextMap Decimal -> TextMap.TextMap Decimal -> TextMap.TextMap (Decimal, Decimal)
+mergeAmountMaps = TextMap.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
 
 senderHoldingFromTransfer : V2.Transfer -> V2.HoldingView
 senderHoldingFromTransfer transfer = V2.HoldingView with

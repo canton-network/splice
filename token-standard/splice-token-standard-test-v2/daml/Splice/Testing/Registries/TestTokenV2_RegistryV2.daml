@@ -158,8 +158,8 @@ registryApi_getSettlementFactory
 registryApi_getSettlementFactory registry arg = do
   let accounts = dedup $ concatMap (\leg -> [leg.sender, leg.receiver]) arg.transferLegs
   (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry accounts
-  lockedDs <- forA arg.allocationCids $ \allocCid -> do
-    getLockedTokensForAllocationsD registry allocCid
+  lockedDs <- forA arg.allocationCids $ \alloc -> do
+    getLockedTokensForAllocationsD registry alloc.allocCid
   let
     arg' =
       arg with
