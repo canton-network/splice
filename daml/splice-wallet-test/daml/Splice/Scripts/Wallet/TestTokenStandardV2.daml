@@ -169,7 +169,7 @@ testTokenStandardAllocateV2 = script do
         sender = basicAccount sender
         receiver = basicAccount receiver
         amount
-        instrumentId = amuletId
+        instrumentId = amuletId.id
         meta = emptyMetadata
   let aliceLeg = mkTransfer alice bob 100.0
 
@@ -177,7 +177,7 @@ testTokenStandardAllocateV2 = script do
   now <- getTime
   otcTradeCid <- submit venue $ createCmd TradingAppV2.OTCTrade with
     venue = venue
-    transferLegs = [aliceLeg]
+    transferLegs = [TradingAppV2.Tradeleg registry.dso aliceLeg]
     createdAt = now
     settleAt = now `addRelTime` hours 1
     settlementDeadline = Some (now `addRelTime` hours 2)
@@ -191,7 +191,8 @@ testTokenStandardAllocateV2 = script do
     reqs <- WalletClientV2.listAllocationRequestsV2 authorizer actor
     [(installCid, _)] <- query @WalletAppInstall actor
     forA_ reqs $ \(reqCid, req) -> do
-      let fundingAmount = negate $ netAmuletCreditAmount registry.dso authorizer req.transferLegs
+      let [amuletAlloc] = req.allocations
+      let fundingAmount = negate $ netAmuletCreditAmount authorizer amuletAlloc.transferLegSides
       inputHoldingCids <- if fundingAmount > 0.0
         then WalletClientV2.listUnlockedHoldingCidsFor authorizer actor amuletId
         else pure []
@@ -199,7 +200,11 @@ testTokenStandardAllocateV2 = script do
         allocation = Api.Token.AllocationV2.AllocationSpecification with
           authorizer
           settlement = req.settlement
-          transferLegs = req.transferLegs  -- no filter in this example, as the test trade affects only amulet
+          admin = registry.dso
+          transferLegSides = amuletAlloc.transferLegSides  -- no filter in this example, as the test trade affects only amulet
+          nextIterationFunding = None
+          committed = False
+          meta = emptyMetadata
         inputHoldingCids
         requestedAt = now
         extraArgs = emptyExtraArgs

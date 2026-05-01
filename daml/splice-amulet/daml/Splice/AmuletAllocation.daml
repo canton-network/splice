@@ -81,10 +81,15 @@ template AmuletAllocation
 
       -- executors are required actors on the settle choice, and thus do not have to be added as extra observers for settle
       allocation_settleExtraObservers _arg = []
+      allocation_refreshExpiryExtraObservers _arg = []
 
       -- add the executor as an extra observer on the choices below, as they otherwise only see the V1 choice by default
       allocation_cancelExtraObservers _arg = [allocation.settlement.executor]
       allocation_withdrawExtraObservers _arg = [allocation.settlement.executor]
+
+      allocation_refreshExpiryImpl _self _arg = do
+        -- TODO(#4665): implement refreshing expiry for V1 allocations once we limit their max lock duration
+        abort "cannot refresh allocation that does not expire"
 
       allocation_withdrawImpl = allocationV2_withdrawDefaultImplUsingV1 (toInterface this)
       allocation_cancelImpl = allocationV2_cancelDefaultImplUsingV1 (toInterface this)
@@ -108,6 +113,7 @@ template AmuletAllocation
         -- set of transfer legs is very difficult to do using the V1 metadata.
         pure V2.Allocation_SettleResult with
           authorizerHoldingCids = mempty
+          nextIterationAllocationCid = None -- no iterative settlement for V1 allocations
           meta = v1HistoryMeta
 
 

@@ -69,8 +69,4 @@ instance HasCheckedFetch V2.TransferInstructionView ForDso where
 
 instance HasCheckedFetch V2.AllocationView ForDso where
   contractGroupId V2.AllocationView {..} = ForDso with
-    dso =
-      let legs = allocation.transferLegs
-      in case legs of
-        [] -> error "HasCheckedFetch: V2.AllocationView with empty transfer legs"
-        (leg :: _) -> leg.instrumentId.admin
+    dso = allocation.admin

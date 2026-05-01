@@ -132,3 +132,33 @@ Cleanup performed so far:
   This was done as a backwards-compatible change to `token-metadata-v1.yaml` to
   allow both V1 and V2 clients to benefit from this information without needing
   to upgrade to a new version of the metadata API.
+
+- Add iterated settlement support across the V2 API packages so the allocation authorizer
+  can allow the executors to finalize the concrete transfers at settlement time
+  and optionally carry reserved funding forward into later settlement
+  iterations.
+  - this enables use cases such as prefunding RFQ trades, and funding liquidity pools across multiple settlement iterations.
+  - `splice-api-token-allocation-request-v2`:
+    - add `RequestedAllocation`
+    - change `AllocationRequestView.transferLegs` to `AllocationRequestView.allocations : [RequestedAllocation]`
+    - move `requestedAt` and `settleAt` onto `AllocationRequestView`
+  - `splice-api-token-allocation-v2`:
+    - remove `requestedAt` and `settleAt` from `SettlementInfo`
+    - extend `AllocationSpecification` with `admin`, `nextIterationFunding`, and `meta`
+    - extend `AllocationView` with `createdAt`, and `numIterations`
+    - add `FinalizedAllocation`
+    - extend `Allocation_Settle` with `extraTransferLegs`, and `nextIterationFunding`
+  - `splice-api-token-allocation-v2` and `splice-api-token-transfer-events-v2`:
+    - change `TransferLeg.instrumentId` from `HoldingV2.InstrumentId` to plain `Text`, to avoid redundancy
+      with the `AllocationSpecification.admin` field
+    - Remove `TokenStandardUtils.allocationAdmin` function as it is has become trivial
+- Introduce committed allocations that lock the funds until settlement time.
+  - `RequestedAllocation.committed` lets an app request creation of a committed allocation.
+  - `AllocationSpecification.committed` records that commitment on the created allocation.
+  - if `committed = True`, the authorizer cannot withdraw the allocation before the
+    settlement deadline; executors or the admin still conclude it by settlement,
+    cancellation, expiry, or deadline passing.
+- Remove the `defaultAllocation_*Controllers` helper functions, as they have become trivial
+
+
+-- FIXME: explain refresh choice

@@ -91,6 +91,7 @@ instance RegistryApi AmuletRegistry where
   getAllocation_WithdrawContext app cid _meta =
     registryApi_getAllocation_abortTwoStepTransferContext app cid
   getAllocation_CancelContext app cid _meta = registryApi_getAllocation_abortTwoStepTransferContext app cid
+  getAllocation_RefreshExpiryContext app cid _meta = registryApi_getAllocation_refreshExpiryContext app cid
   getTransferInstruction_AcceptContext app cid _meta = registryApi_getTransferInstruction_AcceptContext app cid
   getTransferInstruction_RejectContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
   getTransferInstruction_WithdrawContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
@@ -267,8 +268,8 @@ registryApi_getSettlementFactory registry arg = do
   -- Option 2 seems preferable from given an architecture where the backend does not
   -- ingest interfaces, but only works with the concrete templates.
   --
-  lockedDs <- forA arg.allocationCids $ \allocCid -> do
-    getLockedAmuletForAllocationsD registry allocCid
+  lockedDs <- forA arg.allocations $ \alloc -> do
+    getLockedAmuletForAllocationsD registry alloc.allocationCid
   let fullContext = withExtraDisclosures (extAmuletRulesD <> mconcat lockedDs) transferC
   pure EnrichedFactoryChoice with
     factoryCid = toInterfaceContractId @SettlementFactory extAmuletRulesCid
@@ -330,6 +331,14 @@ registryApi_getAllocation_abortTwoStepTransferContext registry instrCid = do
         else
           pure expireLockC
 
+registryApi_getAllocation_refreshExpiryContext
+  : AmuletRegistry -> ContractId Allocation -> Script OpenApiChoiceContext
+registryApi_getAllocation_refreshExpiryContext registry _instrCid = do
+  transferC <- getExternalPartyConfigStateContext registry
+  lockedAmuletD <- getLockedAmuletForAllocationsD registry _instrCid
+  pure $ transferC <> OpenApiChoiceContext with
+    disclosures = lockedAmuletD
+    choiceContext = emptyOpenApiChoiceContext.choiceContext
 
 -- Internal functions
 ---------------------

@@ -680,7 +680,7 @@ template WalletAppInstall
       controller validatorParty
       do
         TokenStandard.Utils.checkActors allocateArg.actors [[endUserParty]]
-        checkAllocationSpecificationV2 dsoParty allocateArg.allocation endUserParty
+        checkAllocationSpecificationV2 allocateArg.allocation endUserParty
         forA_ allocationReqCid $ \reqCid -> do
           req <- fetchUncheckedButArchiveLater reqCid
           TokenStandard.Utils.requireMatchExpected
@@ -698,7 +698,7 @@ template WalletAppInstall
       do
         TokenStandard.Utils.checkActors withdrawArg.actors [[endUserParty]]
         allocation <- fetchCheckedInterface (ForDso dsoParty) allocationCid
-        checkAllocationSpecificationV2 dsoParty (view allocation).allocation endUserParty
+        checkAllocationSpecificationV2 (view allocation).allocation endUserParty
         exercise allocationCid withdrawArg
 
 
@@ -709,12 +709,11 @@ checkTransferInstructionV2 dsoParty transferInstructionCid actors endUserParty =
   TokenStandard.Utils.requireMatchExpected
     ("instruction.transfer.instrumentId", (view instruction).transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
 
-checkAllocationSpecificationV2 : Party -> Splice.Api.Token.AllocationV2.AllocationSpecification -> Party -> Update ()
-checkAllocationSpecificationV2 dsoParty allocation endUserParty = do
+checkAllocationSpecificationV2 : Splice.Api.Token.AllocationV2.AllocationSpecification -> Party -> Update ()
+checkAllocationSpecificationV2 allocation endUserParty = do
   TokenStandard.Utils.requireMatchExpected ("allocation.authorizer", allocation.authorizer) (TokenStandard.Utils.basicAccount endUserParty)
-  let amuletId = amuletInstrumentIdV2 dsoParty
-  forA_ allocation.transferLegs $ \leg -> do
-    TokenStandard.Utils.requireMatchExpected (leg.transferLegId <> ".instrumentId", leg.instrumentId) amuletId
+  forA_ allocation.transferLegSides $ \leg -> do
+    TokenStandard.Utils.requireMatchExpected (leg.transferLegId <> ".instrumentId", leg.instrumentId) amuletInstrumentIdName
 
 unpackCid : AnyValue -> AnyContractId
 unpackCid (AV_ContractId cid) = cid

@@ -29,7 +29,9 @@ import Splice.TokenStandard.Utils
 template OTCTradeAllocationRequest with
     authorizer : V2.Account
     settlement : V2.SettlementInfo
-    transferLegs : [V2.TransferLeg]
+    requestedAt : Time
+    settleAt : Time
+    allocations : [V2.RequestedAllocation]
   where
     signatory settlement.executors
     observer accountParties authorizer
@@ -44,7 +46,9 @@ template OTCTradeAllocationRequest with
       view = V2.AllocationRequestView with
         originalRequestCid = None
         settlement
-        transferLegs
+        requestedAt
+        settleAt = Some settleAt
+        allocations
         authorizer
         availableActions = Map.fromList
           [ ([p], [V2.ARA_Accept, V2.ARA_Reject]) | p <- accountParties authorizer ]
@@ -92,10 +96,28 @@ data SettlementBatch
   deriving (Eq, Show)
 
 
+-- | Leg of a trade.
+data Tradeleg = Tradeleg with
+    admin : Party
+      -- ^ Admin party of the instrument being transferred.
+    leg : V2.TransferLeg
+      -- ^ The transfer details.
+  deriving (Eq, Show)
+
+splitLegsBy : Ord k => (leg -> k) -> [leg] -> Map.Map k [leg]
+splitLegsBy f legs = Map.fromListWithR (<>) [ (f leg, [leg]) | leg <- legs ]
+
+-- | Group transfer legs by the account that needs to authorize them.
+splitTradeLegsByAuthorizer : [Tradeleg] -> Map.Map V2.Account [(Party, V2.TransferLegSide)]
+splitTradeLegsByAuthorizer legs = Map.fromListWithR (++) $ do
+  tradeleg <- legs
+  (authorizer, leg) <- transferLegSidesWithAuthorizer tradeleg.leg
+  pure (authorizer, [(tradeleg.admin, leg)])
+
 -- | A matched trade ready to settle.
 template OTCTrade with
     venue : Party
-    transferLegs : [V2.TransferLeg] -- ^ Transfers to settle.
+    tradeLegs : [Tradeleg] -- ^ Transfers to settle.
     createdAt : Time -- ^ When the matched trade was created on-ledger.
     settleAt : Time -- ^ When the trade should be settled by.
     settlementDeadline : Optional Time -- ^ Deadline for when the settlement should be completed.
@@ -106,12 +128,21 @@ template OTCTrade with
       with
       controller venue
       do
-        let settlement = mkOtcTradeSettlementInfo self this
-        forA (Map.toList $ splitLegsByAuthorizer transferLegs) $ \(authorizer, transferLegs) -> do
+        let settlement = mkOtcTradeSettlementInfoV2 self this
+        forA (Map.toList $ splitTradeLegsByAuthorizer tradeLegs) $ \(authorizer, authorizerLegs) -> do
           create OTCTradeAllocationRequest with
             authorizer
             settlement
-            transferLegs
+            settleAt = settleAt
+            requestedAt = createdAt
+            allocations = do
+              (admin, legs) <- Map.toList $ splitLegsBy (._1) authorizerLegs
+              pure V2.RequestedAllocation with
+                admin
+                transferLegSides = map (._2) legs
+                nextIterationFunding = None -- Note: this trading app does not make use of iterated settlement
+                committed = False
+                meta = emptyMetadata
 
     choice OTCTrade_Settle : OTCTrade_SettleResult
       with
@@ -125,8 +156,9 @@ template OTCTrade with
           assertWithinDeadline "settlementDeadline" deadline
 
         -- compute reference data
-        let settlement = mkOtcTradeSettlementInfo self this
-            transferLegsByAdmin = splitLegsByAdmin transferLegs
+        let settlementV2 = mkOtcTradeSettlementInfoV2 self this
+        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementV2
+            transferLegsByAdmin = splitLegsBy (.admin) tradeLegs
 
         -- Archive requests known to be active at this point, so that trader
         -- wallets won't see the archival of the allocation without a
@@ -134,7 +166,7 @@ template OTCTrade with
         forA_ allocationRequests $ \reqCid -> do
           req <- fetch reqCid
           archive reqCid
-          requireMatchExpected ("AllocationRequest.settlement", req.settlement) settlement
+          requireMatchExpected ("AllocationRequest.settlement", req.settlement) settlementV2
           -- note: we are not checking that there is a request for every traders, as it could be
           -- there there is a request that got rejected but the allocation still got created.
           --
@@ -162,16 +194,16 @@ template OTCTrade with
 
               -- For V2 settlement, the _SettleBatch choice itself checks that the allocations match the legs
               result <- exercise factoryCid V2.SettlementFactory_SettleBatch with
-                settlement
-                transferLegs
-                allocationCids = allocationCids <> receiptAllocCids
+                settlement = settlementV2
+                transferLegs = map (.leg) transferLegs
+                allocations = map nonIteratedAllocation (allocationCids <> receiptAllocCids)
                 actors = [venue]
                 extraArgs = extraArgs
               pure $ Right (admin, result)
 
             Some (SettlementBatchV1 with allocationsWithContext) -> do
               -- For V1 settlement, we need to check that the allocations match the legs here
-              let expectedAllocations = expectedTradeAllocationsV1 settlement transferLegs
+              let expectedAllocations = expectedTradeAllocationsV1 settlementV1 transferLegs
               let mergedMaps = textMapZip allocationsWithContext expectedAllocations
               results <- textMapTraverseWithKey mergedMaps \legId (optSettleableAlloc,  optExpectedAlloc) -> do
                 let AllocationWithContextV1 {allocationCid, extraArgs, receiverAgreementCid, senderAgreementCid} =
@@ -206,8 +238,8 @@ template OTCTrade with
         allocationRequestCids : [ContractId OTCTradeAllocationRequest]
       controller venue
       do
-        let settlementV2 = mkOtcTradeSettlementInfo self this
-        let settlementV1 = downcast settlementV2
+        let settlementV2 = mkOtcTradeSettlementInfoV2 self this
+        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementV2
         forA_ allocationRequestCids $ \reqCid -> do
             req <- fetch reqCid
             archive reqCid
@@ -250,12 +282,10 @@ makeTradeRef tradeCid = V2.Reference with
   id = "OTCTradeProposal" -- set to the name of the template to simplify debugging
   cid = Some (coerceContractId tradeCid)
 
-mkOtcTradeSettlementInfo : ContractId OTCTrade -> OTCTrade -> V2.SettlementInfo
-mkOtcTradeSettlementInfo otcTradeCid otcTrade = V2.SettlementInfo with
+mkOtcTradeSettlementInfoV2 : ContractId OTCTrade -> OTCTrade -> V2.SettlementInfo
+mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade = V2.SettlementInfo with
   executors = [otcTrade.venue]
-  requestedAt = otcTrade.createdAt
   settlementRef = makeTradeRef otcTradeCid
-  settleAt = otcTrade.settleAt
   meta = emptyMetadata
   settlementDeadline = otcTrade.settlementDeadline
 
@@ -264,17 +294,15 @@ mkOtcTradeSettlementInfo otcTradeCid otcTrade = V2.SettlementInfo with
 -- That allocation is created by the sender, and settleed with the authority of sender
 -- and receiver
 expectedTradeAllocationsV1
-  : V2.SettlementInfo -> [V2.TransferLeg] -> TextMap.TextMap V1.AllocationSpecification
-expectedTradeAllocationsV1 settlementInfoV2 transferLegs =
+  : V1.SettlementInfo -> [Tradeleg] -> TextMap.TextMap V1.AllocationSpecification
+expectedTradeAllocationsV1 settlementInfo transferLegs =
   TextMap.fromList $ do
-    transferLeg <- transferLegs
+    leg <- transferLegs
     let spec = V1.AllocationSpecification with
           settlement = settlementInfo
-          transferLegId = transferLeg.transferLegId
-          transferLeg = downcast transferLeg
-    pure (transferLeg.transferLegId, spec)
-  where
-    settlementInfo = downcast settlementInfoV2
+          transferLegId = leg.leg.transferLegId
+          transferLeg = downcast_v2_v1_TransferLeg leg.admin leg.leg
+    pure (leg.leg.transferLegId, spec)
 
 
 -- V1 Authorization infrastructure

@@ -51,6 +51,10 @@ module Splice.TokenStandard.Utils (
   reasonToMeta,
   mkMetaTransferFrom,
 
+  -- * Missing Time utilities
+  -- TODO(#4865): upstream these to the Daml stdlib
+  maxTime,
+
   -- * Missing TextMap utilities
 
   -- TODO(#4865): upstream these to the Daml stdlib
@@ -72,8 +76,6 @@ module Splice.TokenStandard.Utils (
   burnAccount,
   mintAccount,
 
-  allocationToTransferEventLeg,
-
   logMint,
   logBurn,
   logNonEmptyChange,
@@ -81,14 +83,20 @@ module Splice.TokenStandard.Utils (
   logTransfer,
   logAllocationSettlement,
 
+
   -- * Allocation workflows
 
   -- ** Utilities for allocations
-  allocationAdmin,
+
   netAllocationCreditAmounts,
-  filterLegsForAccount,
-  splitLegsByAdmin,
-  splitLegsByAuthorizer,
+  requestedAllocationToSpecification,
+  nonIteratedAllocation,
+
+  -- *** Working with transfer legs and their sides
+  senderSide,
+  receiverSide,
+  transferLegFromSide,
+  transferLegSidesWithAuthorizer,
 
   -- *** Auto-creation of receipt allocations
   ensureIsReceiptAllocation,
@@ -108,11 +116,16 @@ module Splice.TokenStandard.Utils (
 
   -- ** Non-standard conversions
   upcast_v1_v2_TransferLeg,
+  downcast_v2_v1_TransferLeg,
+  downcast_v2_v1_SettlementInfo,
   upcast_v1_v2_Allocation,
 
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImplUsingV1,
+
+  ensureWithdrawIsAllowed,
+  mkCannotWithdrawCommittedAllocationFailure,
 
   -- ** Settlement factory implementation
   settlementFactoryV2_settleBatchDefaultImpl,

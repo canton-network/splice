@@ -392,20 +392,25 @@ runTest mkTest = do
       trader
 
   -- register OTC trade
-  let transferLegs = do
+  let tradeLegs = do
         (i, TestLeg{..}) <- zip [1..length test.transferLegs] test.transferLegs
-        pure V2.TransferLeg with
-          transferLegId = "leg" <> show i
-          sender = basicAccount sender
-          receiver = basicAccount receiver
-          amount
-          instrumentId = mkInstrumentId env instrumentId
-          meta = emptyMetadata
+        let iid = mkInstrumentId env instrumentId
+        let leg = V2.TransferLeg with
+              transferLegId = "leg" <> show i
+              sender = basicAccount sender
+              receiver = basicAccount receiver
+              amount
+              instrumentId = iid.id
+              meta = emptyMetadata
+        pure TradingAppV2.Tradeleg with
+          leg
+          admin = iid.admin
+
   now <- getTime
   let settlementDeadline = now `addRelTime` hours 2
   let otcTrade = TradingAppV2.OTCTrade with
         venue = env.venue
-        transferLegs
+        tradeLegs
         settleAt = now `addRelTime` hours 1
         createdAt = now
         settlementDeadline = Some settlementDeadline
@@ -469,7 +474,7 @@ runTest mkTest = do
         forA_ allocs $ \(allocCid, optAllocView) -> do
           -- TODO(#4517): also test lock expiry
           Some allocView <- pure optAllocView
-          registry <- MultiRegistry.getRegistryApiV2 env.registries (allocationAdmin allocView.allocation)
+          registry <- MultiRegistry.getRegistryApiV2 env.registries allocView.allocation.admin
           context <- RegistryApiV2.getAllocation_WithdrawContext registry allocCid emptyMetadata
           submitWithDisclosures' withdrawer context.disclosures $ exerciseCmd allocCid
             V2.Allocation_Withdraw with
