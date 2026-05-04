@@ -53,11 +53,12 @@
     },
     "runtimeDetails": {
       "type": "object",
-      "required": [ "scanUrl" ],
+      "required": [ "migrationId", "scanUrl" ],
       "additionalProperties": false,
       "properties": {
+        "migrationId": { "type": "integer", "minimum": 0, "maximum": 9 },
         "scanUrl": { "type": "string", "minLength": 1 },
-        "logToStderrAfterFailures": { "type": "integer", "minimum": 1 }
+        "tlsSkipVerify": { "type": "boolean", "default": false }
       }
     },
     "deploymentDetails": {

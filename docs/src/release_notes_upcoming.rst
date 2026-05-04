@@ -33,3 +33,8 @@
         through an ``ADDITIONAL_CONFIG`` environment variable. LSUs
         will still work but be slightly slower due to extra
         reconnects.
+
+    - SV deployment
+
+        - Splice Info endpoint now includes ``/runtime/status.json`` which provides status of core components (sv, scan and mediator at this moment) refreshed
+          every 60 seconds. ``splice-info`` helm chart now requires ``runtimeDetails.migrationId`` to be specified.
