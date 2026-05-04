@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation
 
 import cats.implicits.catsSyntaxOptionId
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -12,6 +13,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
@@ -73,6 +75,7 @@ class SvDsoAutomationService(
     upgradesConfig: UpgradesConfig,
     spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
     override protected val loggerFactory: NamedLoggerFactory,
+    grpcClientMetrics: GrpcClientMetrics,
     packageVersionSupport: PackageVersionSupport,
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
@@ -83,6 +86,7 @@ class SvDsoAutomationService(
     tracer: Tracer,
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
+    esf: ExecutionSequencerFactory,
 ) extends SpliceAppAutomationService(
       config.automation,
       clock,
@@ -509,8 +513,10 @@ class SvDsoAutomationService(
           sequencerContext.mediatorAdminConnection,
           clock,
           pruningConfig.retentionPeriod,
+          pruningConfig.pruningSafetyCheckPercentage,
           participantAdminConnection,
           config.domainMigrationId,
+          grpcClientMetrics,
         )
       )
     }
