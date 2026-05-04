@@ -264,25 +264,23 @@ class ScanVerdictIngestionService(
           sys.exit(1)
         }
 
-        // After the first verdict that contains activity records, every verdict must have a traffic summary.
-        _ <- {
-          val missingTimes =
-            if (activityIngestionStarted)
-              verdicts
-                .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-                .filterNot(summaryByTime.keySet.contains)
-            else Seq.empty
-          if (missingTimes.nonEmpty)
-            Future.failed(
-              Status.INTERNAL
-                .withDescription(
-                  s"${missingTimes.size} verdicts missing traffic summaries " +
-                    s"after ingestion start: $missingTimes"
-                )
-                .asRuntimeException()
-            )
-          else Future.unit
-        }
+        // After activity ingestion has started, every verdict must have a traffic summary.
+        _ <-
+          if (activityIngestionStarted) {
+            val missingTimes = verdicts
+              .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+              .filterNot(summaryByTime.keySet.contains)
+            if (missingTimes.nonEmpty)
+              Future.failed(
+                Status.INTERNAL
+                  .withDescription(
+                    s"${missingTimes.size} verdicts missing traffic summaries " +
+                      s"after ingestion start: $missingTimes"
+                  )
+                  .asRuntimeException()
+              )
+            else Future.unit
+          } else Future.unit
 
         _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
       } yield {
