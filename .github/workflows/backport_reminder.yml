@@ -15,3 +15,4 @@ jobs:
           with:
             pr_number: ${{ github.event.pull_request.number }}
             lookup_prod_cluster_configs: false
+            token: ${{ secrets.GH_CREATE_PRS_TOKEN }}
