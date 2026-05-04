@@ -11,6 +11,7 @@ validator1:
     retention: "30d"
 multiValidator:
   postgresPvcSize: '100Gi'
+  # remind me
   # Dummy values for testing
   extraValidatorEnvVars:
     - name: MULTI_VALIDATOR_ADDITIONAL_CONFIG_YOLO
