@@ -1682,7 +1682,7 @@
           "istioNamespace": "cluster-ingress"
         }
       },
-      "version": "1.28.1"
+      "version": "1.28.6"
     },
     "name": "istio-base",
     "provider": "",
@@ -1902,7 +1902,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.28.6"
     },
     "name": "istio-ingress-cometbft",
     "provider": "",
@@ -2086,7 +2086,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.28.6"
     },
     "name": "istio-ingress",
     "provider": "",
@@ -2332,7 +2332,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.28.6"
     },
     "name": "istiod",
     "provider": "",
