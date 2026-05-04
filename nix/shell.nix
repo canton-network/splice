@@ -65,6 +65,8 @@ let
     python3Packages.dockerfile-parse
     python3Packages.flask
     python3Packages.gitpython
+    python3Packages.google-cloud-bigquery
+    python3Packages.google-cloud-storage
     python3Packages.gql
     python3Packages.humanize
     python3Packages.json-logging
@@ -79,6 +81,7 @@ let
     python3Packages.regex
     python3Packages.requests
     python3Packages.rich
+    python3Packages.pulumi
     python3Packages.pypandoc
     python3Packages.google-cloud-storage
     python3Packages.requests-toolbelt
