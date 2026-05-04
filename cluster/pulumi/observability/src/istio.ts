@@ -25,6 +25,7 @@ export function istioMonitoring(
       // specify the namespaces to monitor, to scrape only the istio-proxy sidecars used for our apps
       namespaces: Array.from({ length: 16 }, (_, i) => `sv-${i + 1}`).concat([
         'sv',
+        'sv-da-1',
         'splitwell',
         'validator1',
         'validator',
