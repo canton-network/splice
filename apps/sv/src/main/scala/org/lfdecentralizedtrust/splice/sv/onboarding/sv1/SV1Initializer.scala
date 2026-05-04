@@ -52,6 +52,7 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.config.{
@@ -115,6 +116,7 @@ class SV1Initializer(
     override protected val retryProvider: RetryProvider,
     override protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
     override protected val loggerFactory: NamedLoggerFactory,
+    override protected val grpcClientMetrics: GrpcClientMetrics,
     enabledFeatures: EnabledFeaturesConfig,
     svAcsStoreDescriptorUserVersion: Option[Long],
     dsoAcsStoreDescriptorUserVersion: Option[Long],
