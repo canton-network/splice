@@ -44,6 +44,7 @@ class UnsupportedPackageVettingIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      .withoutAliceValidatorConnectingToSplitwell
       // if other tests run before, packages that break this test might already be vetted
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .addConfigTransforms((_, config) =>
