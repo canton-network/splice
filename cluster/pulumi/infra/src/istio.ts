@@ -34,7 +34,7 @@ interface ConfiguredIstio {
 }
 
 export const istioVersion = {
-  istio: '1.28.1',
+  istio: '1.28.6',
   //   updated from https://grafana.com/orgs/istio/dashboards, must be updated on each istio version
   dashboards: {
     general: 280,
