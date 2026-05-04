@@ -255,7 +255,7 @@ class ScanVerdictIngestionService(
         }
 
         // Ensure meta row exists and versions match (first batch with activity records).
-        (downgradeO, ingestionStarted) <- activityMetaCheckO
+        (downgradeO, activityIngestionStarted) <- activityMetaCheckO
           .fold(Future.successful((None: Option[DowngradeDetected], false)))(
             _.ensureIfReady(firstRecordTimeMicros, appActivityRecords)
           )
@@ -264,10 +264,10 @@ class ScanVerdictIngestionService(
           sys.exit(1)
         }
 
-        // After ingestion has started, every verdict must have a traffic summary.
+        // After the first verdict that contains activity records, every verdict must have a traffic summary.
         _ <- {
           val missingTimes =
-            if (ingestionStarted)
+            if (activityIngestionStarted)
               verdicts
                 .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
                 .filterNot(summaryByTime.keySet.contains)
