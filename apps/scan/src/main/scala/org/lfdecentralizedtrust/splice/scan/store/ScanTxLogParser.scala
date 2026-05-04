@@ -111,7 +111,8 @@ class ScanTxLogParser(
               outputs = Seq(output),
               result = node.result.value.result,
             )
-            val description = node.result.value.meta.values.asScala.get(TokenStandardMetadata.reasonMetaKey)
+            val description =
+              node.result.value.meta.values.asScala.get(TokenStandardMetadata.reasonMetaKey)
             state.setTransferPreapprovalSendFields(tree, exercised, description.toJava)
           case CreateTokenStandardTransferInstruction(node) =>
             val cid: String = node.result.value.output match {
