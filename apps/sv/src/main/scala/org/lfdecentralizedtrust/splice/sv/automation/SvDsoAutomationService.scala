@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation
 
 import cats.implicits.catsSyntaxOptionId
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -12,6 +13,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
@@ -48,10 +50,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.*
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.scan.AggregatingScanConnection
 import org.lfdecentralizedtrust.splice.sv.config.{SequencerPruningConfig, SvAppBackendConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{
-  LogicalSynchronizerUpgradeAnnouncementTrigger,
-  LogicalSynchronizerUpgradeSequencingTestTrigger,
-  LogicalSynchronizerUpgradeTrigger,
-  LogicalSyncUpgradeTransferTrafficTrigger,
+  LsuAnnouncementTrigger,
+  LsuSequencingTestTrigger,
+  LsuTransferTrafficTrigger,
+  LsuTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -73,6 +75,7 @@ class SvDsoAutomationService(
     upgradesConfig: UpgradesConfig,
     spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
     override protected val loggerFactory: NamedLoggerFactory,
+    grpcClientMetrics: GrpcClientMetrics,
     packageVersionSupport: PackageVersionSupport,
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
@@ -83,6 +86,7 @@ class SvDsoAutomationService(
     tracer: Tracer,
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
+    esf: ExecutionSequencerFactory,
 ) extends SpliceAppAutomationService(
       config.automation,
       clock,
@@ -237,7 +241,7 @@ class SvDsoAutomationService(
     )
 
     registerTrigger(
-      new LogicalSynchronizerUpgradeAnnouncementTrigger(
+      new LsuAnnouncementTrigger(
         triggerContext,
         dsoStore,
         participantAdminConnection,
@@ -283,7 +287,7 @@ class SvDsoAutomationService(
     synchronizerNodeService.nodes.successor match {
       case Some(successorSynchronizerNode) =>
         registerTrigger(
-          new LogicalSynchronizerUpgradeTrigger(
+          new LsuTrigger(
             triggerContext,
             synchronizerNodeReconciler,
             synchronizerNodeService.nodes,
@@ -297,14 +301,14 @@ class SvDsoAutomationService(
           )
         )
         registerTrigger(
-          new LogicalSyncUpgradeTransferTrafficTrigger(
+          new LsuTransferTrafficTrigger(
             triggerContext,
             synchronizerNodeService.nodes.current,
             successorSynchronizerNode,
           )
         )
         registerTrigger(
-          new LogicalSynchronizerUpgradeSequencingTestTrigger(
+          new LsuSequencingTestTrigger(
             config,
             triggerContext,
             synchronizerNodeService.nodes.current,
@@ -509,8 +513,10 @@ class SvDsoAutomationService(
           sequencerContext.mediatorAdminConnection,
           clock,
           pruningConfig.retentionPeriod,
+          pruningConfig.pruningSafetyCheckPercentage,
           participantAdminConnection,
           config.domainMigrationId,
+          grpcClientMetrics,
         )
       )
     }
@@ -576,9 +582,9 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
-      aTrigger[LogicalSynchronizerUpgradeTrigger],
-      aTrigger[LogicalSynchronizerUpgradeAnnouncementTrigger],
-      aTrigger[LogicalSyncUpgradeTransferTrafficTrigger],
-      aTrigger[LogicalSynchronizerUpgradeSequencingTestTrigger],
+      aTrigger[LsuTrigger],
+      aTrigger[LsuAnnouncementTrigger],
+      aTrigger[LsuTransferTrafficTrigger],
+      aTrigger[LsuSequencingTestTrigger],
     )
 }
