@@ -10,6 +10,8 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.tracing.TraceContext
+import io.circe.Json
+import io.circe.syntax.*
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
@@ -117,11 +119,9 @@ class PeriodicTopologySnapshotTrigger(
       metadataMap = summary.map(e => (e._1.code, e._2.toString)) +
         ("sequencerId" -> sequencerId.toProtoPrimitive) +
         ("physicalSynchronizerId" -> physicalSynchronizerId.toProtoPrimitive)
-      metadataKv = metadataMap
-        .map { case (key, value) =>
-          s"$key,$value"
-        }
-        .mkString("\n")
+      metadataJson = Json
+        .obj(metadataMap.map { case (k, v) => k -> Json.fromString(v) }.toSeq*)
+        .spaces2
       _ <- Future {
         blocking {
           val fileDesc =
@@ -137,7 +137,7 @@ class PeriodicTopologySnapshotTrigger(
             BackupDump.write(
               config.location,
               Paths.get(s"$folderName/metadata"),
-              metadataKv,
+              metadataJson,
               loggerFactory,
             ),
           )
