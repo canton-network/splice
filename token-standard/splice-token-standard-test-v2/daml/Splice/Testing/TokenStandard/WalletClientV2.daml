@@ -248,12 +248,12 @@ listTransferOffers p instrumentId = do
 transfer : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
 transfer registries actor transferArg = do
   batch <- mkTransferFactory_TransferV2 registries transferArg
-  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch actor batch
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
 acceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
 acceptTransferOffer registries actor instrCid = do
   batch <- mkTransferInstruction_AcceptV2 registries actor instrCid
-  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch actor batch
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
 -- TODO: Switch to batching
 rejectTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
@@ -432,11 +432,11 @@ executeTSABatch registries actor batch
 
 
 -- | Execute a batch containing a single token standard action.
-executeSingletonTSABatch : Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
-executeSingletonTSABatch actor batch = do
+executeSingletonTSABatch : MultiRegistry.MultiRegistry -> Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
+executeSingletonTSABatch registries actor batch = do
   -- Note: in a production wallet we'd want to execute the action directly without the BatchingUtilityV2
   -- to save on traffic cost. For testing here, we skip that for code simplicity.
-  result <- executeTSABatch actor batch
+  (result, _changes) <- executeTSABatch registries actor batch
   case result.actionResults of
     [res] -> pure res
     _ -> fail "Multiple actions were executed in the batch, expected exactly one"

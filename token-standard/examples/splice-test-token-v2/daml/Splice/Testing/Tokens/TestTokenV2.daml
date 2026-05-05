@@ -4,7 +4,7 @@
 -- | A mock implementation of a test token for the purpose of testing V2 token standard workflows.
 module Splice.Testing.Tokens.TestTokenV2 where
 
-import DA.Action (when, unless)
+import DA.Action (when)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.List ((\\), dedup, dedupSort)
@@ -12,7 +12,6 @@ import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
-import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
@@ -250,11 +249,10 @@ template TokenAllocationV2 with
             require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
             pure (holding.instrumentId, holding.amount)
 
-          {- FIXME
-          -- log v2 transfer events
-          tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
+          -- FIXME
+          -- -- log v2 transfer events
+          -- tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
           -- logAllocationSettlement (toInterfaceContractId tokenRulesCid) allocation
-          -}
 
           -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
           let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
@@ -435,8 +433,7 @@ template TokenTransferOffer with
           tokenCid <- create Token with
             holding = (senderHoldingFromTransfer transfer) with
               account = transfer.receiver
-          -- FIXME
-          -- logTransfer (coerceContractId self) transfer
+          -- FIXME: logTransfer (coerceContractId self) transfer
           pure V2.TransferInstructionResult with
             senderChangeCids
             output = V2.TransferInstructionResult_Completed with
@@ -449,7 +446,7 @@ template TokenTransferOffer with
         admin = transfer.instrumentId.admin
         meta = emptyMetadata
 
-      eventLog_holdingsChange = eventLog_holdingsChangeDefaultImpl transfer.instrumentId.admin
+      eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl transfer.instrumentId.admin
 
 -- This function implements the authorization flow state machine for TransferOffer.
 authorizeTransferOfferAction
@@ -593,7 +590,7 @@ template TokenRules with
                 context = ChoiceContext with
                   values = textMapSingleton tokenRulesContextKey (AV_ContractId (coerceContractId self))
         in
-          settlementFactoryV2_settleBatchDefaultImpl admin self arg
+          settlementFactoryV2_settleBatchDefaultImpl this.admin self arg
 
       -- no extra observers to avoid leaking the settlement of different allocations to the other authorizers
       settlementFactory_settleBatchExtraObservers _arg = []
@@ -610,34 +607,6 @@ template TokenRules with
 
       allocationFactory_allocateImpl self arg = token_allocationFactoryV2_allocateImpl this self arg
       allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
-
-    nonconsuming choice TokenRules_OfferMint : TokenRulesOfferMintResult with
-        receiver : V2.Account
-        amount : Decimal
-        instrumentId : V2.InstrumentId
-        offeredAt : Time
-      controller admin
-      do
-        requireMatchExpected ("instrumentId.admin", instrumentId.admin) admin
-        assertDeadlineExceeded "offeredAt" offeredAt
-        offerCid <- create TokenTransferOffer with
-          transfer = V2.Transfer with
-            sender = mintAccount admin
-            receiver
-            amount
-            instrumentId
-            inputHoldingCids = []
-            requestedAt = offeredAt
-            executeBefore = offeredAt `addRelTime` days 7
-            meta = reasonToMeta "mint offer" emptyMetadata
-        pure TokenRulesOfferMintResult with
-          offerCid
-          meta = emptyMetadata
-
-data TokenRulesOfferMintResult = TokenRulesOfferMintResult with
-    offerCid : ContractId TokenTransferOffer
-    meta : Metadata
-  deriving (Eq, Show)
 
 -- | Create a V2 transfer offer
 -- All this does is to authorize the Accept action on a fresh
@@ -663,7 +632,7 @@ token_transferFactory_transferImpl admin eventLogCid actors transfer extraArgs =
     tokenCid <- create Token with
       holding = (senderHoldingFromTransfer transfer) with
         account = transfer.receiver
-    logTransfer eventLogCid transfer
+    -- FIXME: logTransfer eventLogCid transfer
     pure V2.TransferInstructionResult with
       senderChangeCids
       output = V2.TransferInstructionResult_Completed with
@@ -728,7 +697,6 @@ splitAndLock allocation inputTokenCids = do
   -- create locked tokens and change for the sender
   let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
   let combinedAmounts = mergeAmountMaps inputAmounts creditAmounts
-  let contextDesc = "allocation for settlement of " <> arg.allocation.settlement.settlementRef.id
   locksAndChange <- forA (Map.toList combinedAmounts) $ \(instrumentId, (inputAmount, creditAmount)) -> do
     let netAmount = min 0.0 creditAmount + inputAmount
     when (netAmount < 0.0) $
@@ -836,8 +804,8 @@ senderHoldingFromTransfer transfer = V2.HoldingView with
 jointAuthorizers : V2.Account -> [Party]
 jointAuthorizers = dedupSort . accountParties
 
--- Event log factory retrieval
-------------------------------
+-- Event log retrieval
+----------------------
 
 tokenRulesContextKey : Text
 tokenRulesContextKey = "testTokenV2/tokenRules"
@@ -849,8 +817,6 @@ getTokenRulesFromContext context = do
     None -> fail $ "Context value for '" <> tokenRulesContextKey <> "' not found"
     v -> fail $ "Failed to decode context value for '" <> tokenRulesContextKey <> "': " <> show v
 
--- | We ensure that all token standard actions always run in a context that references the
--- token rules to use. Thereby we can always retrieve them to log events.
 getEventLogFromContext : ChoiceContext -> Update (ContractId TransferEventsV2.EventLog)
 getEventLogFromContext context = toInterfaceContractId <$> getTokenRulesFromContext context
 
