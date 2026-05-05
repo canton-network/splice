@@ -88,6 +88,7 @@ mint registry account intrumentName amount = do
   -- offer mint
   [(tokenRulesCid, _)] <- query @TestTokenV2.TokenRules registry.admin
   now <- getTime
+  (Some (_cid, receiverConfig, _disclosures)) <- getAccountConfig' registry account
   result <- submit registry.admin $ exerciseCmd tokenRulesCid TestTokenV2.TokenRules_OfferMint with
     receiver = account
     instrumentId = V2.InstrumentId with
@@ -95,6 +96,7 @@ mint registry account intrumentName amount = do
       admin = registry.admin
     amount = amount
     offeredAt = now
+    receiverConfig
   -- have receiver accept immediately
   let offerCid = toInterfaceContractId result.offerCid
   let accept = V2.TransferInstruction_Accept with
@@ -266,10 +268,17 @@ getAccountMapAndDisclosures registry accounts = do
 
 getAccountConfig : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, Disclosures'))
 getAccountConfig registry account = do
+  result <- getAccountConfig' registry account
+  case result of
+    Some (cid, _config, disclosures) -> return (Some (cid, disclosures))
+    None -> return None
+
+getAccountConfig' : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, AccountConfig.AccountConfig, Disclosures'))
+getAccountConfig' registry account = do
   cids <- queryFilter @AccountConfig.AccountConfig registry.admin (\config -> config.account == account)
   case cids of
-    [(cid, _config)] -> do
+    [(cid, config)] -> do
       disclosure <- queryDisclosure' @AccountConfig.AccountConfig registry.admin cid
-      return (Some (cid, disclosure))
+      return (Some (cid, config, disclosure))
     [] -> return None
     _ -> abort ("More than one account config found for " <> (show account))

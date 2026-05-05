@@ -12,6 +12,7 @@ import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
+import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
@@ -607,6 +608,49 @@ template TokenRules with
 
       allocationFactory_allocateImpl self arg = token_allocationFactoryV2_allocateImpl this self arg
       allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
+
+    nonconsuming choice TokenRules_OfferMint : TokenRulesOfferMintResult with
+        receiver : V2.Account
+        amount : Decimal
+        instrumentId : V2.InstrumentId
+        offeredAt : Time
+        receiverConfig : AccountConfig
+      controller admin
+      do
+        requireMatchExpected ("instrumentId.admin", instrumentId.admin) admin
+        assertDeadlineExceeded "offeredAt" offeredAt
+        {- FIXME: extract account configs from context, if required
+
+        acs <- extractAccountConfigs admin extraArgs [receiver]
+        (receiverConfig, _oAccountCid) <- expectOneElement "receiver account config" show acs
+        -}
+        -- FIXME: move to 'AccountConfig' module
+        let mintConfig = AccountConfig with
+              admin
+              account = mintAccount admin
+              ownerConfig = PartyConfig True True
+              providerConfig = PartyConfig True True
+        offerCid <- create TokenTransferOffer with
+          originalInstructionCid = None
+          actionAuthorizers = Map.empty
+          availableActions = mkAvailableTransferActions Map.empty mintConfig receiverConfig
+          transfer = V2.Transfer with
+            sender = mintAccount admin
+            receiver
+            amount
+            instrumentId
+            inputHoldingCids = []
+            requestedAt = offeredAt
+            executeBefore = offeredAt `addRelTime` days 7
+            meta = reasonToMeta "mint offer" emptyMetadata
+        pure TokenRulesOfferMintResult with
+          offerCid
+          meta = emptyMetadata
+
+data TokenRulesOfferMintResult = TokenRulesOfferMintResult with
+    offerCid : ContractId TokenTransferOffer
+    meta : Metadata
+  deriving (Eq, Show)
 
 -- | Create a V2 transfer offer
 -- All this does is to authorize the Accept action on a fresh
