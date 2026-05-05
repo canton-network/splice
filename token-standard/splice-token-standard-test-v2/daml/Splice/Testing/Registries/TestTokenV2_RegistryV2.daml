@@ -181,10 +181,11 @@ registryApi_getTransferOfferContext registry instrCid _meta = do
 registryApi_getAllocationInstructionContext : TestTokenV2Registry -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
 registryApi_getAllocationInstructionContext registry instrCid _meta = do
   Some instrView <- queryInterfaceContractId @V2.AllocationInstruction registry.admin instrCid
+  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
   (accountC, accountConfigD) <- getAccountMapC registry [instrView.allocation.authorizer]
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD
-    choiceContext = accountC
+    disclosures = accountConfigD <> tokenRulesD
+    choiceContext = accountC <> tokenRulesC
 
 registryApi_getWithdrawContext
   : TestTokenV2Registry

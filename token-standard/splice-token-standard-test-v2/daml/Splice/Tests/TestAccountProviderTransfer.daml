@@ -39,8 +39,6 @@ make_account_if_missing env config = do
         id = "X"
         admin = env.testTokenV2.admin
 
-  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
-  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
   -- Create an AccountConfig contract as needed.
   case config.account.provider of
@@ -59,6 +57,10 @@ make_account_if_missing env config = do
 
           return ()
         _ -> abort ("Multiple accounts found for config: " <> show config)
+
+  -- mint
+  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
+  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
 test_transfer_flows : Script ()
 test_transfer_flows = do

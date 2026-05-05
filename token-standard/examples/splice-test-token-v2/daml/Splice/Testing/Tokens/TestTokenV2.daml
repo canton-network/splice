@@ -84,7 +84,8 @@ template TokenAllocationInstructionV2 with
       allocationInstruction_acceptImpl self arg = do
         authorizeAllocationInstructionAction this (Some self) arg.actors V2.AIA_Accept arg.extraArgs $ do
           [(accountConfig, _)] <- extractAccountConfigs admin arg.extraArgs [allocation.authorizer]
-          (lockedTokens, authorizerChangeCids) <- splitAndLock allocation inputHoldingCids
+          eventLogCid <- getEventLogFromContext arg.extraArgs.context
+          (lockedTokens, authorizerChangeCids) <- splitAndLock eventLogCid allocation inputHoldingCids
           allocationCid <- create TokenAllocationV2 with
             originalAllocationCid = None
             availableActions = mkAvailableAllocationActions Map.empty allocation.settlement.executors admin accountConfig
@@ -741,9 +742,9 @@ createLockedInputs transfer = do
         context = Some $ "transfer to " <> show transfer.receiver
   pure [coerceContractId lockedCid]
 
--- | Create a locked input for a transfer
-splitAndLock : V2.AllocationSpecification -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
-splitAndLock allocation inputTokenCids = do
+-- | Create a locked input for an allocation.
+splitAndLock : ContractId TransferEventsV2.EventLog -> V2.AllocationSpecification -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
+splitAndLock eventLogCid allocation inputTokenCids = do
 
   -- debit all input amounts
   inputAmounts <- Map.fromListWithR (+) . concat <$> forA (TextMap.toList inputTokenCids) (\(_, cids) -> forA cids (\cid -> do
@@ -794,6 +795,18 @@ splitAndLock allocation inputTokenCids = do
     lockedCids = TextMap.fromListWithR (++) $ concatMap fst locksAndChange
     authorizerChangeCids = TextMap.fromListWithR (++) $ concatMap snd locksAndChange
 
+  -- log the tx history v2 event
+  logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+    admin = allocationAdmin allocation
+    account = allocation.authorizer
+    inputHoldingCids = concat $ textMapValues inputTokenCids
+    transferLegs = []
+    outputHoldingCids = concat $ textMapValues $ lockedCids <> authorizerChangeCids
+    observers = accountParties allocation.authorizer
+    extraArgs = ExtraArgs with
+      context = emptyChoiceContext
+      meta = reasonToMeta ("lock holdings for allocation") emptyMetadata
+
   return (lockedCids, authorizerChangeCids)
 
 -- | Create a V2 allocation
@@ -802,7 +815,7 @@ token_allocationFactoryV2_allocateImpl
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
-token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
+token_allocationFactoryV2_allocateImpl tokenRules self arg = do
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token
     token <- fetch tokenCid
@@ -822,7 +835,7 @@ token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
 
   authorizeAllocationInstructionAction allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs do
     [(accountConfig, _)] <- extractAccountConfigs tokenRules.admin arg.extraArgs [arg.allocation.authorizer]
-    (lockedTokens, authorizerChangeCids) <- splitAndLock arg.allocation inputHoldingMap
+    (lockedTokens, authorizerChangeCids) <- splitAndLock (coerceContractId self) arg.allocation inputHoldingMap
     allocationCid <- create TokenAllocationV2 with
       originalAllocationCid = None
       admin = tokenRules.admin
