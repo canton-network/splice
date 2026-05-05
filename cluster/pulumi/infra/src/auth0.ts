@@ -226,6 +226,16 @@ function newUiApp(
       webOrigins: urls,
       crossOriginAuth: false,
       description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
+      oidcConformant: true,
+      refreshToken: {
+        rotationType: 'rotating',
+        expirationType: 'expiring',
+        tokenLifetime: 2592000, // 30d
+        idleTokenLifetime: 1296000, // 15d
+        infiniteTokenLifetime: false,
+        infiniteIdleTokenLifetime: false,
+        leeway: 5,
+      },
     },
     { provider: auth0DomainProvider }
   );
