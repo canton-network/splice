@@ -202,7 +202,11 @@ class LocalNetFrontendIntegrationTest
         appProviderParticipant.name,
         appProviderParticipant.config.copy(token = Some(token)),
       )
-      participantClient.synchronizers.list_connected().loneElement.physicalSynchronizerId.protocolVersion shouldBe ProtocolVersion.v35
+      participantClient.synchronizers
+        .list_connected()
+        .loneElement
+        .physicalSynchronizerId
+        .protocolVersion shouldBe ProtocolVersion.v35
     }
   }
 }
