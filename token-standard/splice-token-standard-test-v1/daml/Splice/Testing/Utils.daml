@@ -56,6 +56,11 @@ withExtraDisclosures : Disclosures' -> OpenApiChoiceContext -> OpenApiChoiceCont
 withExtraDisclosures discs ctx =
   ctx with disclosures = ctx.disclosures <> discs
 
+instance Monoid OpenApiChoiceContext where
+  mempty = OpenApiChoiceContext with
+    choiceContext = ChoiceContext with values = TextMap.empty
+    disclosures = mempty
+
 instance Semigroup OpenApiChoiceContext where
   ctx1 <> ctx2 =
         OpenApiChoiceContext with
