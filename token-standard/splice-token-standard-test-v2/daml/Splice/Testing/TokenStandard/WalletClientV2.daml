@@ -89,7 +89,6 @@ import DA.Optional
 import DA.Time
 import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
-import DA.Text qualified as T
 import DA.Set qualified as Set
 
 import Splice.Api.Token.MetadataV1 as MetadataV1

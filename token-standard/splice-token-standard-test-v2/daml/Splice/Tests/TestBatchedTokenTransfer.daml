@@ -17,6 +17,7 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
+import Splice.TokenStandard.Utils
 import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
 
 import Splice.Testing.Utils

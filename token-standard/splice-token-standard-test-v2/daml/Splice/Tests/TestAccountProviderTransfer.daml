@@ -18,6 +18,7 @@ import Splice.TokenStandard.Utils as TSU
 import Splice.Testing.Utils
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as AccountConfig
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
@@ -31,7 +32,7 @@ import DA.Foldable (forA_)
 -- Shared test setup
 --------------------
 
-make_account_if_missing : MultiRegistry.Env -> AccountConfig -> Script ()
+make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
 make_account_if_missing env config = do
   -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
@@ -51,22 +52,22 @@ make_account_if_missing env config = do
         [] -> do
           accountProposalCid <- submit provider do
             createCmd AccountConfig.AccountProposal with
-              config 
+              config
 
           submit config.account.owner do
             exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
-          
+
           return ()
         _ -> abort ("Multiple accounts found for config: " <> show config)
 
 test_transfer_flows : Script ()
 test_transfer_flows = do
-  env <- MultiRegistry.initialize MultiRegistry.defaultConfig
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
   let mkParty name = do
         party <- allocatePartyExact name
         WalletClientV2.createBatchingUtility party
         pure party
-  
+
   -- Same party names as in UnitTest_AccountConfig
   a <- mkParty "a"
   b <- mkParty "b"
@@ -124,8 +125,8 @@ test_transfer_flows = do
         (a, v, b, w, ic, j, a, [ba, aw], False),
         -- Rejects
         (a, v, b, w, ic, ic, a, [br], False),
-        
-        -- In provider confirmed, those flows work 
+
+        -- In provider confirmed, those flows work
         -- where the investors initiate
         -- Happy flows
         (a, v, b, w, pc, pc, a, [va, ba, wa], True),
@@ -150,12 +151,12 @@ test_transfer_flows = do
 -- Split the test as the script otherwise gets too large.
 test_transfer_flows_2 : Script ()
 test_transfer_flows_2 = do
-  env <- MultiRegistry.initialize MultiRegistry.defaultConfig
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
   let mkParty name = do
         party <- allocatePartyExact name
         WalletClientV2.createBatchingUtility party
         pure party
-  
+
   -- Same party names as in UnitTest_AccountConfig
   a <- mkParty "a"
   b <- mkParty "b"
@@ -177,9 +178,9 @@ test_transfer_flows_2 = do
     aw = (a, V2.TIA_Withdraw)
     vw = (v, V2.TIA_Withdraw)
 
-  let test_cases = 
+  let test_cases =
         -- First test self-custodial setups.
-        (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [        
+        (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
             -- Happy flows
             (a, a, b, b, acc, acc, a, [ba], True),
             (a, v, b, b, j, acc, v, [aa, ba], True),
@@ -231,7 +232,7 @@ test_transfer_flows_2 = do
     test_transfer_flow env i1 p1 i2 p2 mkacc1 mkacc2 init acts succ
     )
 
-test_transfer_flow : MultiRegistry.Env
+test_transfer_flow : TestRegistries.Env
   -> Party -> Party -> Party -> Party
   -> MkAccountConfig -> MkAccountConfig
   -> Party
@@ -251,7 +252,7 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
 
   senderBalanceBefore <- WalletClientV2.getAccountBalance sender senderConfig.account instrX
   receiverBalanceBefore <- WalletClientV2.getAccountBalance receiver receiverConfig.account instrX
-  
+
   -- shared transfer params
   now <- getTime
   let requestedAt = now
@@ -293,7 +294,7 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
     else do
       assertMsg "Sender balance should not have changed." (senderBalanceBefore == senderBalanceAfter)
       assertMsg "Receiver balance should not have changed." (receiverBalanceAfter == receiverBalanceBefore)
-  
+
 
 -- TODO(#4813): add and test missing transfer instruction actions; test v2 transfers; test preapproved transfers
 -- TODO(#4540): test with multiple accounts, and acting as an account provider
@@ -301,7 +302,7 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
 test_self_transfer_to_account : Script ()
 test_self_transfer_to_account = do
   -- registry and instrument setup
-  env <- MultiRegistry.initialize MultiRegistry.defaultConfig
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
   let registries = env.registries
   let instrX = V2.InstrumentId with
         id = "X2"
