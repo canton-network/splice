@@ -55,11 +55,15 @@ class RewardExpiryIntegrationTest
   // for at least the amulet package.
   private val initialPackageConfig = InitialPackageConfig(
     amuletVersion = initialAmuletPackage.metadata.version.toString,
-    amuletNameServiceVersion = DarResources.amuletNameService.minimumInitialization.metadata.version.toString,
-    dsoGovernanceVersion = DarResources.dsoGovernance.minimumInitialization.metadata.version.toString,
-    validatorLifecycleVersion = DarResources.validatorLifecycle.minimumInitialization.metadata.version.toString,
+    amuletNameServiceVersion =
+      DarResources.amuletNameService.minimumInitialization.metadata.version.toString,
+    dsoGovernanceVersion =
+      DarResources.dsoGovernance.minimumInitialization.metadata.version.toString,
+    validatorLifecycleVersion =
+      DarResources.validatorLifecycle.minimumInitialization.metadata.version.toString,
     walletVersion = DarResources.wallet.minimumInitialization.metadata.version.toString,
-    walletPaymentsVersion = DarResources.walletPayments.minimumInitialization.metadata.version.toString,
+    walletPaymentsVersion =
+      DarResources.walletPayments.minimumInitialization.metadata.version.toString,
   )
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
