@@ -385,6 +385,7 @@ template TokenTransferOffer with
       -- access account contracts in view function.
     transfer : V2.Transfer
     originalInstructionCid : Optional (ContractId V2.TransferInstruction)
+    mintAmount : Decimal
   where
     ensure isValidTransferV2 transfer
     signatory fromOptional [] (Map.lookup V2.TIA_Accept actionAuthorizers), transfer.instrumentId.admin
@@ -430,7 +431,7 @@ template TokenTransferOffer with
 
       transferInstruction_acceptImpl self arg = do
         authorizeTransferOfferAction this (Some self) arg.actors V2.TIA_Accept arg.extraArgs $ do
-          senderChangeCids <- debitHoldings transfer
+          senderChangeCids <- debitHoldings this
           tokenCid <- create Token with
             holding = (senderHoldingFromTransfer transfer) with
               account = transfer.receiver
@@ -515,7 +516,7 @@ authorizeTransferOfferAction
         -- amount to send and lock it.
         if newlySenderAuthorized && not fullyAuthorized
           then do
-            senderChangeCids <- debitHoldings this.transfer
+            senderChangeCids <- debitHoldings this
             inputHoldingsCids <- createLockedInputs this.transfer
             pure (senderChangeCids, inputHoldingsCids)
           else pure ([], this.transfer.inputHoldingCids)
@@ -629,11 +630,13 @@ template TokenRules with
               admin
               account = mintAccount admin
               ownerConfig = PartyConfig True True
-              providerConfig = PartyConfig True True
+              providerConfig = PartyConfig False False
+        let adminApproved = Map.singleton V2.TIA_Accept [admin]
         offerCid <- create TokenTransferOffer with
           originalInstructionCid = None
-          actionAuthorizers = Map.empty
-          availableActions = mkAvailableTransferActions Map.empty mintConfig receiverConfig
+          actionAuthorizers = adminApproved
+          availableActions = mkAvailableTransferActions adminApproved mintConfig receiverConfig
+          mintAmount = amount
           transfer = V2.Transfer with
             sender = mintAccount admin
             receiver
@@ -666,13 +669,14 @@ token_transferFactory_transferImpl admin eventLogCid actors transfer extraArgs =
   require' ("transfer.instrumentId.admin", transfer.instrumentId.admin) isEqualR ("transferFactory.admin", admin)
 
   let offer = TokenTransferOffer with
+        mintAmount = 0.0
         actionAuthorizers = Map.empty -- Nothing authorized (yet).
         availableActions = Map.empty -- Gets recomputed by authorizeTransferOfferAction.
         originalInstructionCid = None
         transfer
 
   authorizeTransferOfferAction offer None actors V2.TIA_Accept extraArgs $ do
-    senderChangeCids <- debitHoldings transfer
+    senderChangeCids <- debitHoldings offer
     tokenCid <- create Token with
       holding = (senderHoldingFromTransfer transfer) with
         account = transfer.receiver
@@ -698,18 +702,18 @@ sumAndArchiveHoldings transfer = do
   return (sum inputAmounts)
 
 -- | Debit an amount from holdings
-debitHoldings : V2.Transfer -> Update [ContractId V2.Holding]
-debitHoldings transfer = do
+debitHoldings : TokenTransferOffer -> Update [ContractId V2.Holding]
+debitHoldings offer = do
   -- consume all inputs
-  inputAmount <- sumAndArchiveHoldings transfer
-  require' ("inputAmount for " <> show transfer.instrumentId, inputAmount) isGreaterOrEqualR
-    ("transfer.amount", transfer.amount)
+  inputAmount <- sumAndArchiveHoldings offer.transfer
+  require' ("inputAmount + mintAmount for " <> show offer.transfer.instrumentId, inputAmount + offer.mintAmount) isGreaterOrEqualR
+    ("transfer.amount", offer.transfer.amount)
 
   -- split off change
-  let remainder = inputAmount - transfer.amount
+  let remainder = inputAmount - offer.transfer.amount
   if remainder <= 0.0 then pure [] else do
     cid <- create Token with
-      holding = (senderHoldingFromTransfer transfer) with
+      holding = (senderHoldingFromTransfer offer.transfer) with
         amount = remainder
     pure [toInterfaceContractId cid]
 

@@ -43,7 +43,6 @@ make_account_if_missing env config = do
         admin = env.testTokenV2.admin
 
   cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
-  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
   -- Create an AccountConfig contract as needed.
   case config.account.provider of
@@ -63,6 +62,8 @@ make_account_if_missing env config = do
           return ()
         _ -> abort ("Multiple accounts found for config: " <> show config)
 
+  -- mint funds
+  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
 test_allocation_flows : Script ()
 test_allocation_flows = do

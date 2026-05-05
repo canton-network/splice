@@ -101,13 +101,13 @@ mint registry account intrumentName amount = do
   -- have receiver accept immediately
   let offerCid = toInterfaceContractId result.offerCid
   let accept = V2.TransferInstruction_Accept with
-        actors = [account.owner]
+        actors = accountParties account
         extraArgs = ExtraArgs with
           context = emptyChoiceContext
           meta = emptyMetadata
   context <- registryApi_getTransferOfferContext registry offerCid emptyMetadata
   void $ WalletClientV2.extractAndCheckTxHistory [registry.admin] $
-    submitResultAndTree (actAs account.owner <> discloseMany' context.disclosures) $
+    submitResultAndTree (foldMap actAs (accountParties account) <> discloseMany' context.disclosures) $
       exerciseCmd offerCid accept with
         extraArgs = ExtraArgs with
           context = context.choiceContext
