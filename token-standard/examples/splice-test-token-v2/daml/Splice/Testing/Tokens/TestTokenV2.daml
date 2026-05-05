@@ -250,15 +250,10 @@ template TokenAllocationV2 with
             require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
             pure (holding.instrumentId, holding.amount)
 
-          -- FIXME
-          -- -- log v2 transfer events
-          -- tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
-          -- logAllocationSettlement (toInterfaceContractId tokenRulesCid) allocation
-
           -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
           let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
           let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
-          authorizerHoldingCids <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
+          authorizerHoldingCids0 <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
             require'
               ("archived lockedAmulet.amount for " <> show instrumentId, debitAmount)
               isEqualR
@@ -278,9 +273,17 @@ template TokenAllocationV2 with
                 -- No credit of Token ==> no holding change
                 pure (instrumentId.id, [])
 
+          -- log v2 transfer events
+          tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
+          let authorizerHoldingCids = TextMap.fromListWithR (++) $ authorizerHoldingCids0
+          logAllocationSettlement (toInterfaceContractId tokenRulesCid)
+            (concat $ textMapValues lockedTokens)
+            allocation
+            (concat $ textMapValues authorizerHoldingCids)
+
           pure V2.AllocationResult with
             output = V2.AllocationResult_Settled
-            authorizerHoldingCids = TextMap.fromListWithR (++) $ authorizerHoldingCids
+            authorizerHoldingCids = authorizerHoldingCids
             meta = emptyMetadata
               -- Note: for V1 tx history we would need create extra choices for
               -- the creation, as this choice here cannot express the creation and
@@ -435,7 +438,12 @@ template TokenTransferOffer with
           tokenCid <- create Token with
             holding = (senderHoldingFromTransfer transfer) with
               account = transfer.receiver
-          -- FIXME: logTransfer (coerceContractId self) transfer
+          -- log v2 history event
+          tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
+          logTransfer (toInterfaceContractId tokenRulesCid)
+            transfer
+            []
+            [toInterfaceContractId tokenCid]
           pure V2.TransferInstructionResult with
             senderChangeCids
             output = V2.TransferInstructionResult_Completed with
@@ -680,7 +688,10 @@ token_transferFactory_transferImpl admin eventLogCid actors transfer extraArgs =
     tokenCid <- create Token with
       holding = (senderHoldingFromTransfer transfer) with
         account = transfer.receiver
-    -- FIXME: logTransfer eventLogCid transfer
+    logTransfer eventLogCid
+      transfer
+      senderChangeCids
+      [toInterfaceContractId tokenCid]
     pure V2.TransferInstructionResult with
       senderChangeCids
       output = V2.TransferInstructionResult_Completed with

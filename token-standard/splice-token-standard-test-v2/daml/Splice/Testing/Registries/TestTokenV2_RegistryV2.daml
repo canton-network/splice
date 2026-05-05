@@ -175,7 +175,7 @@ registryApi_getTransferOfferContext registry instrCid _meta = do
     let tokenCid = coerceContractId holdingCid : ContractId Token
     queryDisclosure' @Token registry.admin tokenCid
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD <> mconcat lockedDs
+    disclosures = accountConfigD <> mconcat lockedDs <> tokenRulesD
     choiceContext = accountC <> tokenRulesC
 
 registryApi_getAllocationInstructionContext : TestTokenV2Registry -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
