@@ -19,9 +19,5 @@
     "preview": "PULUMI_CONFIG_PASSPHRASE= ts-node ./pulumiPreview.ts",
     "down": "PULUMI_CONFIG_PASSPHRASE= ts-node ./runPulumiDown.ts",
     "up": "PULUMI_CONFIG_PASSPHRASE= ts-node ./pulumiUp.ts"
-  },
-  "devDependencies": {
-    "@types/sinon": "^21.0.0",
-    "sinon": "^21.0.3"
   }
 }

@@ -1,10 +1,6 @@
 {
   "name": "@lfdecentralizedtrust/splice-pulumi-validator1",
   "main": "src/index.ts",
-  "devDependencies": {
-    "@types/sinon": "^21.0.0",
-    "sinon": "^21.0.3"
-  },
   "dependencies": {
     "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
     "@lfdecentralizedtrust/splice-pulumi-common-validator": "1.0.0"
