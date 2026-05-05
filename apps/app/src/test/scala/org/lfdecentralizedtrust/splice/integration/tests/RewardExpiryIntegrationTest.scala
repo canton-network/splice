@@ -49,16 +49,17 @@ class RewardExpiryIntegrationTest
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(1, Minute)))
 
+  val initialAmuletPackage = DarResources.amulet.minimumInitialization
+
   // Exact config does not matter all that much, just want one that is older than the default versions
   // for at least the amulet package.
-  val initialAmuletPackage = DarResources.amulet_0_1_14
   private val initialPackageConfig = InitialPackageConfig(
     amuletVersion = initialAmuletPackage.metadata.version.toString,
-    amuletNameServiceVersion = initialAmuletPackage.metadata.version.toString,
-    dsoGovernanceVersion = "0.1.19",
-    validatorLifecycleVersion = "0.1.5",
-    walletVersion = initialAmuletPackage.metadata.version.toString,
-    walletPaymentsVersion = initialAmuletPackage.metadata.version.toString,
+    amuletNameServiceVersion = DarResources.amuletNameService.minimumInitialization.metadata.version.toString,
+    dsoGovernanceVersion = DarResources.dsoGovernance.minimumInitialization.metadata.version.toString,
+    validatorLifecycleVersion = DarResources.validatorLifecycle.minimumInitialization.metadata.version.toString,
+    walletVersion = DarResources.wallet.minimumInitialization.metadata.version.toString,
+    walletPaymentsVersion = DarResources.walletPayments.minimumInitialization.metadata.version.toString,
   )
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
