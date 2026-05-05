@@ -114,7 +114,7 @@ template AmuletAllocationV2
               logAllocationSettlement (toInterfaceContractId configStateCid) [] allocation [newHoldingCid]
 
               let reason = "Settle net positive allocation for settlement " <> allocation.settlement.settlementRef.id
-              pure V2.Allocation_SettleResult with
+              pure V2.AllocationResult with
                 output = V2.AllocationResult_Settled
                 authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, [newHoldingCid])]
                 meta = simpleHoldingTxMeta TxKind_Mint (Some reason) None
@@ -137,7 +137,7 @@ template AmuletAllocationV2
               logAllocationSettlement (toInterfaceContractId configStateCid) [toInterfaceContractId lockedAmuletCid] allocation []
 
               let reason = "Settle net negative allocation for settlement " <> show allocation.settlement.settlementRef.id
-              pure V2.Allocation_SettleResult with
+              pure V2.AllocationResult with
                 output = V2.AllocationResult_Settled
                 authorizerHoldingCids = mempty
                 meta = simpleHoldingTxMeta TxKind_Burn (Some reason) None

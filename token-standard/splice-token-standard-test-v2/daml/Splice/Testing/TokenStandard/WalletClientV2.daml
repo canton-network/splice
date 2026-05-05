@@ -89,7 +89,6 @@ import DA.Optional
 import DA.Time
 import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
-import DA.Text qualified as T
 import DA.Set qualified as Set
 
 import Splice.Api.Token.MetadataV1 as MetadataV1
@@ -248,12 +247,12 @@ listTransferOffers p instrumentId = do
 transfer : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
 transfer registries actor transferArg = do
   batch <- mkTransferFactory_TransferV2 registries transferArg
-  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch actor batch
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
 acceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
 acceptTransferOffer registries actor instrCid = do
   batch <- mkTransferInstruction_AcceptV2 registries actor instrCid
-  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch actor batch
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
 -- TODO: Switch to batching
 rejectTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
@@ -261,7 +260,9 @@ rejectTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
   registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
   context <- V2.getTransferInstruction_RejectContext registry instrCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
     exerciseCmd instrCid
       V2.TransferInstruction_Reject with
         actors = [actor]
@@ -278,7 +279,9 @@ withdrawTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
   registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
   context <- V2.getTransferInstruction_WithdrawContext registry instrCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
     exerciseCmd instrCid
       V2.TransferInstruction_Withdraw with
         actors = [actor]
@@ -363,13 +366,15 @@ acceptAllocationInstructionV2 registries actor (instrCid, instr) = do
   let firstTl::_ = instrView.allocation.transferLegs
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
-  submitWithDisclosures' actor context.disclosures $
-    exerciseCmd instrCid
-      V2.AllocationInstruction_Accept with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
+  (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
+        V2.AllocationInstruction_Accept with
+          actors = [actor]
+          extraArgs = ExtraArgs with
+            context = context.choiceContext
+            meta = emptyMetadata
+  pure result
 
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
 -- TODO: Use Batching
@@ -379,8 +384,10 @@ withdrawAllocationInstructionV2
 withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
-    exerciseCmd instrCid
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
       V2.AllocationInstruction_Withdraw with
         actors = [actor]
         extraArgs = ExtraArgs with
@@ -398,7 +405,9 @@ withdrawAllocationV2
 withdrawAllocationV2 registries actor (allocCid, allocView) = do
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin allocView.allocation)
   context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
     exerciseCmd allocCid
       V2.Allocation_Withdraw with
         actors = [actor]
@@ -432,11 +441,11 @@ executeTSABatch registries actor batch
 
 
 -- | Execute a batch containing a single token standard action.
-executeSingletonTSABatch : Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
-executeSingletonTSABatch actor batch = do
+executeSingletonTSABatch : MultiRegistry.MultiRegistry -> Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
+executeSingletonTSABatch registries actor batch = do
   -- Note: in a production wallet we'd want to execute the action directly without the BatchingUtilityV2
   -- to save on traffic cost. For testing here, we skip that for code simplicity.
-  result <- executeTSABatch actor batch
+  (result, _changes) <- executeTSABatch registries actor batch
   case result.actionResults of
     [res] -> pure res
     _ -> fail "Multiple actions were executed in the batch, expected exactly one"

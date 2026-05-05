@@ -18,6 +18,7 @@ import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 import Splice.Testing.Utils
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as AccountConfig
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Apps.TradingAppV2 qualified as TradingAppV2
@@ -34,7 +35,7 @@ import DA.Optional (fromSome)
 -- Shared test setup
 --------------------
 
-make_account_if_missing : MultiRegistry.Env -> AccountConfig -> Script ()
+make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
 make_account_if_missing env config = do
   -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
@@ -42,7 +43,6 @@ make_account_if_missing env config = do
         admin = env.testTokenV2.admin
 
   cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
-  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
   -- Create an AccountConfig contract as needed.
   case config.account.provider of
@@ -54,23 +54,25 @@ make_account_if_missing env config = do
         [] -> do
           accountProposalCid <- submit provider do
             createCmd AccountConfig.AccountProposal with
-              config 
+              config
 
           submit config.account.owner do
             exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
-          
+
           return ()
         _ -> abort ("Multiple accounts found for config: " <> show config)
 
+  -- mint funds
+  when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
 test_allocation_flows : Script ()
 test_allocation_flows = do
-  env <- MultiRegistry.initialize MultiRegistry.defaultConfig
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
   let mkParty name = do
         party <- allocatePartyExact name
         WalletClientV2.createBatchingUtility party
         pure party
-  
+
   -- Same party names as in UnitTest_AccountConfig
   a <- mkParty "a"
   v <- mkParty "v"
@@ -94,7 +96,7 @@ test_allocation_flows = do
     ess = ([e1, e2], V2.AA_Settle)
 
 
-  let 
+  let
     test_cases = [
         -- Happy flows
         (a, v, [e1], j, a, [vaia], [e1s], True),
@@ -132,7 +134,7 @@ test_allocation_flows = do
     )
 
 
-test_allocation_flow : MultiRegistry.Env
+test_allocation_flow : TestRegistries.Env
   -> Party -> Party -> [Party]
   -> MkAccountConfig
   -> Party
@@ -150,7 +152,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
         admin = env.testTokenV2.admin
   let
     accountConfig = mkac "authorizer" env.testTokenV2.admin authorizer provider
-    voidAccount = V2.Account with 
+    voidAccount = V2.Account with
       owner = fromSome $ partyFromText "void"
       provider = None
       id = ""
@@ -162,13 +164,13 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
   balanceXBefore <- WalletClientV2.getAccountBalance authorizer accountConfig.account instrX
   balanceYBefore <- WalletClientV2.getAccountBalance authorizer accountConfig.account instrY
 
-  
+
   -- shared transfer params
   now <- getTime
   let requestedAt = now
   let settleAt = now `addRelTime` days 1
 
-  let 
+  let
     transferLegs = [
         V2.TransferLeg with
           transferLegId = "out"
@@ -222,7 +224,6 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
       let
         batch = V2.SettlementFactory_SettleBatch with
           allocationCids = [allocCid]
-          extraReceiptAuthorizers = []
           extraArgs = emptyExtraArgs
           ..
 
@@ -231,17 +232,17 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
 
       registry <- MultiRegistry.getRegistryApiV2 registries env.testTokenV2.admin
       context <- V2.getSettlementFactory registry batch
-      submit (actAs actors' <> mconcat (map disclose (Map.values context.disclosures.disclosures))) do 
+      submit (actAs actors' <> mconcat (map disclose (Map.values context.disclosures.disclosures))) do
         -- We don't go through the factory because we don't have a counterparty allocation.
         -- exerciseCmd context.factoryCid batch
         exerciseCmd allocCid V2.Allocation_Settle with
           actors = actors'
           extraArgs = context.arg.extraArgs
-          
+
     cancel_allocation actors (allocCid, _) = do
       registry <- MultiRegistry.getRegistryApiV2 registries env.testTokenV2.admin
       context <- V2.getAllocation_CancelContext registry allocCid emptyMetadata
-      submit (actAs actors <> mconcat (map disclose (Map.values context.disclosures.disclosures))) do 
+      submit (actAs actors <> mconcat (map disclose (Map.values context.disclosures.disclosures))) do
         exerciseCmd allocCid V2.Allocation_Cancel with
           actors
           extraArgs = emptyExtraArgs with context = context.choiceContext
@@ -273,4 +274,4 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
     else do
       assertMsg "X balance should not have changed." (balanceXBefore == balanceXAfter)
       assertMsg "Y balance should not have changed." (balanceYBefore == balanceYAfter)
-  
+
