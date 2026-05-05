@@ -33,10 +33,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvSynchronizerNodeConfig,
   SvSynchronizerNodesConfig,
 }
-import org.lfdecentralizedtrust.splice.sv.lsu.{
-  LogicalSyncUpgradeTransferTrafficTrigger,
-  LogicalSynchronizerUpgradeTrigger,
-}
+import org.lfdecentralizedtrust.splice.sv.lsu.{LsuTransferTrafficTrigger, LsuTrigger}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.config.WalletAppClientConfig
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.Http.BuyTrafficRequestStatus
@@ -354,7 +351,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
         "Pause traffic transfer trigger on sv2 to simulate a participant that is connected to a non initialized sequencer past upgrade tiem"
       ) {
         sv2Backend.dsoAutomation
-          .trigger[LogicalSyncUpgradeTransferTrafficTrigger]
+          .trigger[LsuTransferTrafficTrigger]
           .pause()
           .futureValue
       }
@@ -389,7 +386,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
         sv2Backend.stop()
         sv2Backend.startSync()
         sv2Backend.dsoAutomation
-          .trigger[LogicalSyncUpgradeTransferTrafficTrigger]
+          .trigger[LsuTransferTrafficTrigger]
           .resume()
       }
 
@@ -613,7 +610,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
       clue("sv4 upgrades") {
         loggerFactory.suppress(
-          SuppressionRule.forLogger[LogicalSynchronizerUpgradeTrigger] && SuppressionRule.Level(
+          SuppressionRule.forLogger[LsuTrigger] && SuppressionRule.Level(
             org.slf4j.event.Level.WARN
           )
         ) {
