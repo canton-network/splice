@@ -15,6 +15,7 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
 import com.digitalasset.canton.util.HexString
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.console.*
 import org.lfdecentralizedtrust.splice.environment.{
@@ -86,7 +87,14 @@ class LogicalSynchronizerUpgradeIntegrationTest
           .updateAllSvAppConfigs { (name, config) =>
             config.copy(
               localSynchronizerNodes = config.localSynchronizerNodes
-                .copy(successor = config.localSynchronizerNodes.current.some),
+                .copy(successor =
+                  config.localSynchronizerNodes.current
+                    // always set the successor PV to 35
+                    // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
+                    // otherwise we will run a PV35 -> PV35 LSU
+                    .copy(protocolVersion = ProtocolVersion.v35)
+                    .some
+                ),
               domainMigrationDumpPath = Some(
                 (SynchronizerUpgradeUtil.migrationTestDumpDir(
                   name

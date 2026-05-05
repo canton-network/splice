@@ -1,4 +1,4 @@
-name: Integration tests against PV 35
+name: Integration tests against PV 34
 on:
   schedule:
     - cron: '0 5 * * *'
@@ -18,5 +18,5 @@ jobs:
   build:
     uses: ./.github/workflows/build.yml
     with:
-      protocol_version: "35"
+      protocol_version: "34"
     secrets: inherit
