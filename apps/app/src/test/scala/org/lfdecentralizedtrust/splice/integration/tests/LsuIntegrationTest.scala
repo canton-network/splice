@@ -89,6 +89,9 @@ class LogicalSynchronizerUpgradeIntegrationTest
               localSynchronizerNodes = config.localSynchronizerNodes
                 .copy(successor =
                   config.localSynchronizerNodes.current
+                    // always set the successor PV to 35
+                    // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
+                    // otherwise we will run a PV35 -> PV35 LSU
                     .copy(protocolVersion = ProtocolVersion.v35)
                     .some
                 ),
