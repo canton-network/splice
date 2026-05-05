@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, PathParams } from 'msw';
 import { LookupTransferPreapprovalByPartyResponse } from '@lfdecentralizedtrust/scan-openapi';
 import { test, expect, describe } from 'vitest';
 import { vi } from 'vitest';
@@ -307,20 +307,23 @@ describe('Wallet user can', () => {
         expect(acceptButtons.length).toBe(1);
 
         server.use(
-          http.post(`${walletUrl}/v0/allocations`, async ({ request }) => {
-            const body = await request.json();
-            calledCreate(body);
-            const response: AllocateAmuletResponse = {
-              output: {
-                allocation_instruction_cid: 'alloc_instr_cid',
-                allocation_cid: 'alloc_cid',
-                dummy: {},
-              },
-              sender_change_cids: ['whatever'],
-              meta: {},
-            };
-            return HttpResponse.json(response);
-          })
+          http.post<PathParams, AllocateAmuletRequest>(
+            `${walletUrl}/v0/allocations`,
+            async ({ request }) => {
+              const body = await request.json();
+              calledCreate(body);
+              const response: AllocateAmuletResponse = {
+                output: {
+                  allocation_instruction_cid: 'alloc_instr_cid',
+                  allocation_cid: 'alloc_cid',
+                  dummy: {},
+                },
+                sender_change_cids: ['whatever'],
+                meta: {},
+              };
+              return HttpResponse.json(response);
+            }
+          )
         );
 
         acceptButtons[0].click();
@@ -366,8 +369,8 @@ describe('Wallet user can', () => {
               }),
             });
           }),
-          http.post(`${walletUrl}/v0/allocations/:cid/withdraw`, ({ params }) => {
-            calledWithdrawArgs.push(params.cid.toString());
+          http.post<{ cid: string }>(`${walletUrl}/v0/allocations/:cid/withdraw`, ({ params }) => {
+            calledWithdrawArgs.push(params.cid);
             return HttpResponse.json<AmuletAllocationWithdrawResult>({
               sender_holding_cids: [],
               meta: {},
@@ -422,10 +425,10 @@ describe('Wallet user can', () => {
               allocations: [],
             });
           }),
-          http.post(
+          http.post<{ cid: string }>(
             `${walletUrl}/v0/wallet/token-standard/allocation-requests/:cid/reject`,
             ({ params }) => {
-              calledRejectArgs.push(params.cid.toString());
+              calledRejectArgs.push(params.cid);
               return HttpResponse.json<ChoiceExecutionMetadata>({
                 meta: {},
               });
@@ -644,10 +647,13 @@ describe('Wallet user can', () => {
     // Track the cancel API call
     const calledCancelArgs: string[] = [];
     server.use(
-      http.post(`${walletUrl}/v0/wallet/minting-delegations/:cid/reject`, ({ params }) => {
-        calledCancelArgs.push(params.cid.toString());
-        return new HttpResponse(null, { status: 200 });
-      })
+      http.post<{ cid: string }>(
+        `${walletUrl}/v0/wallet/minting-delegations/:cid/reject`,
+        ({ params }) => {
+          calledCancelArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
+        }
+      )
     );
 
     const user = userEvent.setup();
@@ -680,10 +686,13 @@ describe('Wallet user can', () => {
 
     const calledArgs: string[] = [];
     server.use(
-      http.post(`${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`, ({ params }) => {
-        calledArgs.push(params.cid.toString());
-        return new HttpResponse(null, { status: 200 });
-      })
+      http.post<{ cid: string }>(
+        `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`,
+        ({ params }) => {
+          calledArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
+        }
+      )
     );
 
     const user = userEvent.setup();
@@ -713,10 +722,13 @@ describe('Wallet user can', () => {
 
     const calledArgs: string[] = [];
     server.use(
-      http.post(`${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/reject`, ({ params }) => {
-        calledArgs.push(params.cid.toString());
-        return new HttpResponse(null, { status: 200 });
-      })
+      http.post<{ cid: string }>(
+        `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/reject`,
+        ({ params }) => {
+          calledArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
+        }
+      )
     );
 
     const user = userEvent.setup();
@@ -746,10 +758,13 @@ describe('Wallet user can', () => {
 
     const calledAcceptArgs: string[] = [];
     server.use(
-      http.post(`${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`, ({ params }) => {
-        calledAcceptArgs.push(params.cid.toString());
-        return new HttpResponse(null, { status: 200 });
-      })
+      http.post<{ cid: string }>(
+        `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`,
+        ({ params }) => {
+          calledAcceptArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
+        }
+      )
     );
 
     const user = userEvent.setup();

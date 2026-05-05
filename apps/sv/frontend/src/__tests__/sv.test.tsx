@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, PathParams } from 'msw';
 import { mockAllIsIntersecting } from 'react-intersection-observer/test-utils';
 import {
   CreateVoteRequest,
@@ -335,10 +335,13 @@ describe('SetAmuletRules', () => {
         resolve => (calledCreate = resolve)
       );
       server.use(
-        http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
-          calledCreate(await request.json());
-          return HttpResponse.json({});
-        })
+        http.post<PathParams, CreateVoteRequest>(
+          `${svUrl}/v0/admin/sv/voterequest/create`,
+          async ({ request }) => {
+            calledCreate(await request.json());
+            return HttpResponse.json({});
+          }
+        )
       );
 
       const user = userEvent.setup();
