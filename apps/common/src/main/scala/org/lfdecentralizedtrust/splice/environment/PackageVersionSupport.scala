@@ -69,18 +69,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  def supportDevelopmentFund(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceDsoGovernance,
-      now,
-      DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_21,
-    )
-  }
-
   def supportsConvertFeaturedAppActivityMarkerObservers(
       parties: Seq[PartyId],
       now: CantonTimestamp,
