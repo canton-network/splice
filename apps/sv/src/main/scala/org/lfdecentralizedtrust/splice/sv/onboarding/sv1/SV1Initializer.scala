@@ -661,7 +661,7 @@ class SV1Initializer(
       RetryFor.WaitingOnInitDependency,
       "bootstrap_dso",
       "bootstrapping DSO",
-      bootstrapDso(initialRound, packageVersionSupport),
+      bootstrapDso(initialRound),
       logger,
     )
 
@@ -676,8 +676,8 @@ class SV1Initializer(
     }
 
     // Create DsoRules and AmuletRules and open the first mining round
-    private def bootstrapDso(initialRound: Long, packageVersionSupport: PackageVersionSupport)(
-        implicit tc: TraceContext
+    private def bootstrapDso(initialRound: Long)(implicit
+        tc: TraceContext
     ): Future[Unit] = {
       val dsoRulesConfig = SvUtil.defaultDsoRulesConfig(
         synchronizerId,
@@ -704,31 +704,26 @@ class SV1Initializer(
                     show"This should never happen.\nAmuletRules: $amuletRules"
                 )
               case None =>
+                val amuletConfig = defaultAmuletConfig(
+                  sv1Config.initialTickDuration,
+                  sv1Config.initialMaxNumInputs,
+                  synchronizerId,
+                  sv1Config.initialSynchronizerFeesConfig.extraTrafficPrice.value,
+                  sv1Config.initialSynchronizerFeesConfig.minTopupAmount.value,
+                  sv1Config.initialSynchronizerFeesConfig.baseRateBurstAmount.value,
+                  sv1Config.initialSynchronizerFeesConfig.baseRateBurstWindow,
+                  sv1Config.initialSynchronizerFeesConfig.readVsWriteScalingFactor.value,
+                  sv1Config.initialPackageConfig.toPackageConfig,
+                  sv1Config.initialHoldingFee,
+                  sv1Config.initialTransferPreapprovalFee,
+                  sv1Config.initialFeaturedAppActivityMarkerAmount,
+                  developmentFundPercentage = sv1Config.developmentFundPercentage,
+                  developmentFundManager = sv1Config.developmentFundManager,
+                  initialExternalPartyConfigStateTickDuration =
+                    sv1Config.initialExternalPartyConfigStateTickDuration,
+                  optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
+                )
                 for {
-                  developmentFund <- packageVersionSupport.supportDevelopmentFund(
-                    Seq(svParty),
-                    clock.now,
-                  )
-                  amuletConfig = defaultAmuletConfig(
-                    sv1Config.initialTickDuration,
-                    sv1Config.initialMaxNumInputs,
-                    synchronizerId,
-                    sv1Config.initialSynchronizerFeesConfig.extraTrafficPrice.value,
-                    sv1Config.initialSynchronizerFeesConfig.minTopupAmount.value,
-                    sv1Config.initialSynchronizerFeesConfig.baseRateBurstAmount.value,
-                    sv1Config.initialSynchronizerFeesConfig.baseRateBurstWindow,
-                    sv1Config.initialSynchronizerFeesConfig.readVsWriteScalingFactor.value,
-                    sv1Config.initialPackageConfig.toPackageConfig,
-                    sv1Config.initialHoldingFee,
-                    sv1Config.initialTransferPreapprovalFee,
-                    sv1Config.initialFeaturedAppActivityMarkerAmount,
-                    developmentFundPercentage =
-                      if (developmentFund.supported) sv1Config.developmentFundPercentage else None,
-                    developmentFundManager = sv1Config.developmentFundManager,
-                    initialExternalPartyConfigStateTickDuration =
-                      sv1Config.initialExternalPartyConfigStateTickDuration,
-                    optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
-                  )
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(
                     synchronizerNodeService.nodes.current.cometbftNode,
                     synchronizerNodeService.nodes.current,
