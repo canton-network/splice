@@ -17,6 +17,7 @@
     "@daml/types": "^3.4.11",
     "@js-temporal/polyfill": "^0.4.4",
     "@lfdecentralizedtrust/splice-common-frontend-utils": "0.1.0",
+    "@dmsnell/diff-match-patch": "^1.1.0",
     "@lfdecentralizedtrust/splice-common-typeface-termina": "1.0.0",
     "@lfdecentralizedtrust/splitwell-openapi": "0.0.1",
     "@lfdecentralizedtrust/sv-openapi": "0.0.1",
