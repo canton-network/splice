@@ -199,11 +199,13 @@ const V2AllocationRequestActionButton: React.FC<{
   // basicAccount check: authorizer matches basicAccount(userParty)
   const canAccept = amuletLegsForUser.length > 0 && isAuthorizer;
 
-  const hasExistingAllocation = allocations.some(alloc =>
+  const correspondingAllocation = allocations.find(alloc =>
     isAllocationForRequest(alloc, allocationRequest)
   );
 
-  const { createAllocationV2 } = useWalletClient();
+  const hasExistingAllocation = !!correspondingAllocation;
+
+  const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
       const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegsForUser);
@@ -215,8 +217,44 @@ const V2AllocationRequestActionButton: React.FC<{
     },
   });
 
-  // TODO (#4915): implement withdraw button for v2 when hasExistingAllocation
-  if (!canAccept || hasExistingAllocation) return null;
+  const withdrawAllocationV2Mutation = useMutation({
+    mutationFn: async () => {
+      if (correspondingAllocation) {
+        return await withdrawAllocationV2(correspondingAllocation.contractId);
+      } else {
+        throw new Error("This mutation shouldn't be called without a corresponding allocation");
+      }
+    },
+    onSuccess: () => {},
+    onError: error => {
+      console.error('Failed to withdraw allocation', error);
+    },
+  });
+
+  if (!canAccept) return null;
+
+  if (hasExistingAllocation) {
+    return (
+      <DisableConditionally
+        conditions={[
+          {
+            disabled: withdrawAllocationV2Mutation.isPending,
+            reason: 'Withdrawing allocation...',
+          },
+        ]}
+      >
+        <Button
+          variant="pill"
+          size="small"
+          id={`allocation-request-${allocationRequest.contractId}-withdraw`}
+          className="allocation-withdraw"
+          onClick={() => withdrawAllocationV2Mutation.mutate()}
+        >
+          Withdraw
+        </Button>
+      </DisableConditionally>
+    );
+  }
 
   return (
     <DisableConditionally

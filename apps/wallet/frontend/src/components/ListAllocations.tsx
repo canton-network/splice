@@ -12,7 +12,6 @@ import TransferLegsDisplay from './TransferLegsDisplay';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import { useMutation } from '@tanstack/react-query';
 import { useWalletClient } from '../contexts/WalletServiceContext';
-import { ContractId } from '@daml/types';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 
 const ListAllocations: React.FC = () => {
@@ -52,6 +51,7 @@ const ListAllocations: React.FC = () => {
 const AllocationDisplay: React.FC<{
   allocation: Contract<AmuletAllocation | AmuletAllocationV2>;
 }> = ({ allocation }) => {
+  const { withdrawAllocation, withdrawAllocationV2 } = useWalletClient();
   const v2 = isV2(allocation.payload);
   const spec = getAllocationSpec(allocation.payload);
   const { settlement, transferLegs } = spec;
@@ -73,10 +73,15 @@ const AllocationDisplay: React.FC<{
           <TransferLegsDisplay
             parentId={allocation.contractId}
             transferLegs={transferLegs}
-            getActionButton={() =>
-              // TODO (#4915): implement withdraw button for v2 when hasExistingAllocation
-              v2 ? null : <WithdrawAllocationButton allocationCid={allocation.contractId} />
-            }
+            getActionButton={() => (
+              <WithdrawAllocationButton
+                withdrawFn={() =>
+                  v2
+                    ? withdrawAllocationV2(allocation.contractId)
+                    : withdrawAllocation(allocation.contractId)
+                }
+              />
+            )}
           />
         </Stack>
       </CardContent>
@@ -120,12 +125,11 @@ function getAllocationSpec(
 }
 
 const WithdrawAllocationButton: React.FC<{
-  allocationCid: ContractId<AmuletAllocation | AmuletAllocationV2>;
-}> = ({ allocationCid }) => {
-  const { withdrawAllocation } = useWalletClient();
+  withdrawFn: () => Promise<void>;
+}> = ({ withdrawFn }) => {
   const withdrawAllocationMutation = useMutation({
     mutationFn: async () => {
-      return await withdrawAllocation(allocationCid);
+      return await withdrawFn();
     },
     onSuccess: () => {},
     onError: error => {

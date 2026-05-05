@@ -145,6 +145,7 @@ export interface WalletClient {
   createAllocation: (allocateAmuletRequest: AllocateAmuletRequest) => Promise<void>;
   createAllocationV2: (allocateAmuletV2Request: AllocateAmuletV2Request) => Promise<void>;
   withdrawAllocation: (allocationCid: ContractId<AmuletAllocation>) => Promise<void>;
+  withdrawAllocationV2: (allocationCid: ContractId<AmuletAllocation>) => Promise<void>;
 
   getAppPaymentRequest: (contractId: string) => Promise<ContractWithState<AppPaymentRequest>>;
   acceptAppPaymentRequest: (requestContractId: string) => Promise<void>;
@@ -431,6 +432,10 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
       },
       withdrawAllocation: async allocationCid => {
         await walletClient.withdrawAmuletAllocation(allocationCid);
+      },
+      withdrawAllocationV2: async allocationCid => {
+        console.error(`Withdrawing allocation v2 ${allocationCid}`);
+        await walletClient.withdrawAmuletAllocationV2(allocationCid);
       },
       getAppPaymentRequest: async contractId => {
         const response = await walletClient.getAppPaymentRequest(contractId);
