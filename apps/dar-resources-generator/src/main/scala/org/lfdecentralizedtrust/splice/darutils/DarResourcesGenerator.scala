@@ -18,12 +18,12 @@ object DarResourcesGenerator {
 
   // TODO(tech-debt): consider moving this to a dedicated config file if it bugs us here
   private val minimumInitializations: Map[String, String] = Map(
-    "splice-amulet" -> "0.1.14",
-    "splice-amulet-name-service" -> "0.1.14",
-    "splice-dso-governance" -> "0.1.19",
-    "splice-wallet" -> "0.1.14",
-    "splice-wallet-payments" -> "0.1.14",
-    "splitwell" -> "0.1.14",
+    "splice-amulet" -> "0.1.15",
+    "splice-amulet-name-service" -> "0.1.16",
+    "splice-dso-governance" -> "0.1.21",
+    "splice-wallet" -> "0.1.15",
+    "splice-wallet-payments" -> "0.1.15",
+    "splitwell" -> "0.1.15",
     "splice-validator-lifecycle" -> "0.1.5",
     "splice-util-batched-markers" -> "1.0.0",
     "splice-api-token-metadata-v1" -> "1.0.0",
