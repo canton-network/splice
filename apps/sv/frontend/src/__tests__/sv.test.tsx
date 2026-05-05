@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { mockAllIsIntersecting } from 'react-intersection-observer/test-utils';
 import {
   CreateVoteRequest,
@@ -251,8 +251,8 @@ describe('An SetConfig request', () => {
 
   test('disables the Proceed button in the confirmation dialog if a conflict arises after request creation', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/admin/sv/voterequests`, (_, res, ctx) => {
-        return res(ctx.json<ListDsoRulesVoteRequestsResponse>({ dso_rules_vote_requests: [] }));
+      http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
+        return HttpResponse.json<ListDsoRulesVoteRequestsResponse>({ dso_rules_vote_requests: [] });
       })
     );
 
@@ -281,8 +281,8 @@ describe('An SetConfig request', () => {
     await user.click(screen.getByText('Send Request to Super Validators'));
 
     server.use(
-      rest.get(`${svUrl}/v0/admin/sv/voterequests`, (_, res, ctx) => {
-        return res(ctx.json<ListDsoRulesVoteRequestsResponse>(voteRequests));
+      http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
+        return HttpResponse.json<ListDsoRulesVoteRequestsResponse>(voteRequests);
       })
     );
 
@@ -335,9 +335,9 @@ describe('SetAmuletRules', () => {
         resolve => (calledCreate = resolve)
       );
       server.use(
-        rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, async (req, res, ctx) => {
-          calledCreate(await req.json());
-          return res(ctx.json({}));
+        http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+          calledCreate(await request.json());
+          return HttpResponse.json({});
         })
       );
 
