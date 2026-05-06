@@ -487,6 +487,7 @@ template AmuletRules
             void $ create CalculateRewardsV2 with
               dso
               round = roundToArchive.round
+              roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = False
 
@@ -494,6 +495,7 @@ template AmuletRules
             void $ create CalculateRewardsV2 with
               dso
               round = roundToArchive.round
+              roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = True
 
@@ -666,8 +668,8 @@ template AmuletRules
     nonconsuming choice AmuletRules_ClaimExpiredRewardsV2 : AmuletRules_ClaimExpiredRewardsV2Result
       with
         rewardCouponCids : [ContractId RewardCouponV2]
-        beneficiaries : [Party]
-      observer beneficiaries
+        expiryObservers : [Party]
+      observer expiryObservers
       controller dso
       do
         require "at least one coupon" (not (null rewardCouponCids))
@@ -677,8 +679,8 @@ template AmuletRules
           coupon <- fetchAndArchive (ForDso with dso) cid
           assertDeadlineExceeded "coupon.expiresAt" coupon.expiresAt
           return coupon
-        let actualBeneficiaries = [ coupon.beneficiary | coupon <- coupons ]
-        require "beneficiaries match coupons" (sort beneficiaries == dedupSort actualBeneficiaries)
+        let actualExpiryObservers = [ coupon.provider | coupon <- coupons, coupon.providerIsObserver ]
+        require "expiryObservers match coupons" (sort expiryObservers == dedupSort actualExpiryObservers)
 
         -- create unclaimed reward for the total
         let amount = sum [ coupon.amount | coupon <- coupons ]
@@ -696,32 +698,33 @@ template AmuletRules
         create ProcessRewardsV2 with
           dso
           round = calculateRewards.round
+          roundClosedAt = calculateRewards.roundClosedAt
           dryRun = calculateRewards.dryRun
           rewardCouponTimeToLive = calculateRewards.rewardCouponTimeToLive
           batchHash
 
         return AmuletRules_StartProcessingRewardsV2Result {}
 
-    -- batch conversion of coupons not yet observable by their beneficiaries
+    -- batch conversion of coupons not yet observable by their providers
     nonconsuming choice AmuletRules_UnhideRewardCouponsV2 : AmuletRules_UnhideRewardCouponsV2Result
       with
         rewardCouponCids : [ContractId RewardCouponV2]
-        beneficiaries : [Party]
-      observer beneficiaries
+        providers : [Party]
+      observer providers
       controller dso
       do
         require "at least one coupon" (not (null rewardCouponCids))
 
         -- unhide coupons
-        actualBeneficiaries <- forA rewardCouponCids $ \cid -> do
+        actualProviders <- forA rewardCouponCids $ \cid -> do
           coupon <- fetchAndArchive (ForDso with dso) cid
-          require "beneficiary is no observer on the coupon" (not (coupon.beneficiaryIsObserver))
+          require "provider is no observer on the coupon" (not (coupon.providerIsObserver))
           assertWithinDeadline "coupon.expiresAt" coupon.expiresAt
-          create coupon with beneficiaryIsObserver = True
-          pure coupon.beneficiary
+          create coupon with providerIsObserver = True
+          pure coupon.provider
 
-        -- check specified beneficiaries match actual beneficiaries of the coupons
-        require "beneficiaries match coupons" (dedupSort beneficiaries == dedupSort actualBeneficiaries)
+        -- check specified providers match actual providers of the coupons
+        require "providers match coupons" (dedupSort providers == dedupSort actualProviders)
 
         return AmuletRules_UnhideRewardCouponsV2Result {}
 
