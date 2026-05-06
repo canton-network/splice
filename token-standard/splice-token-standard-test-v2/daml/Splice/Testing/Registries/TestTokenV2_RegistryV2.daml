@@ -128,30 +128,28 @@ mint registry account intrumentName amount = do
 
 registryApi_getTransferFactory : TestTokenV2Registry -> V2.TransferFactory_Transfer -> Script (EnrichedFactoryChoice factory V2.TransferFactory_Transfer)
 registryApi_getTransferFactory registry transfer = do
-  (tokenRulesCid, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
-  (accountConfigC, accountConfigD) <- getAccountMapC registry [transfer.transfer.sender, transfer.transfer.receiver]
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [transfer.transfer.sender, transfer.transfer.receiver]
   let
     transfer' =
       transfer with
-        extraArgs.context = accountConfigC <> tokenRulesC
+        extraArgs.context = context
 
   pure EnrichedFactoryChoice with
     factoryCid = coerceContractId tokenRulesCid
     arg = transfer'
-    disclosures = tokenRulesD <> accountConfigD
+    disclosures
 
 registryApi_getAllocationFactory : TestTokenV2Registry -> V2.AllocationFactory_Allocate -> Script (EnrichedFactoryChoice factory V2.AllocationFactory_Allocate)
 registryApi_getAllocationFactory registry allocation = do
-  (tokenRulesCid, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
-  (accountConfigC, accountConfigD) <- getAccountMapC registry [allocation.allocation.authorizer]
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [allocation.allocation.authorizer]
   let
     allocation' =
       allocation with
-        extraArgs.context = accountConfigC <> tokenRulesC
+        extraArgs.context = context
   pure EnrichedFactoryChoice with
     factoryCid = coerceContractId tokenRulesCid
     arg = allocation'
-    disclosures = tokenRulesD <> accountConfigD
+    disclosures
 
 registryApi_getSettlementFactory
   : TestTokenV2Registry
@@ -159,40 +157,37 @@ registryApi_getSettlementFactory
   -> Script (EnrichedFactoryChoice V2.SettlementFactory V2.SettlementFactory_SettleBatch)
 registryApi_getSettlementFactory registry arg = do
   let accounts = dedup $ concatMap (\leg -> [leg.sender, leg.receiver]) arg.transferLegs
-  (accountC, accountConfigD) <- getAccountMapC registry accounts
-  (tokenRulesCid, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry accounts
   lockedDs <- forA arg.allocationCids $ \allocCid -> do
     getLockedTokensForAllocationsD registry allocCid
   let
     arg' =
       arg with
-        extraArgs.context = accountC <> tokenRulesC
+        extraArgs.context = context
 
   pure EnrichedFactoryChoice with
     factoryCid = coerceContractId tokenRulesCid
     arg = arg'
-    disclosures = accountConfigD <> tokenRulesD <> mconcat lockedDs
+    disclosures = disclosures <> mconcat lockedDs
 
 registryApi_getTransferOfferContext : TestTokenV2Registry -> ContractId V2.TransferInstruction -> Metadata -> Script OpenApiChoiceContext
 registryApi_getTransferOfferContext registry instrCid _meta = do
-  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction registry.admin instrCid
-  (accountC, accountConfigD) <- getAccountMapC registry [instrView.transfer.sender, instrView.transfer.receiver]
+  (_tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [instrView.transfer.sender, instrView.transfer.receiver]
   lockedDs <- forA instrView.transfer.inputHoldingCids $ \holdingCid -> do
     let tokenCid = coerceContractId holdingCid : ContractId Token
     queryDisclosure' @Token registry.admin tokenCid
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD <> mconcat lockedDs <> tokenRulesD
-    choiceContext = accountC <> tokenRulesC
+    disclosures = disclosures <> mconcat lockedDs
+    choiceContext = context
 
 registryApi_getAllocationInstructionContext : TestTokenV2Registry -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
 registryApi_getAllocationInstructionContext registry instrCid _meta = do
   Some instrView <- queryInterfaceContractId @V2.AllocationInstruction registry.admin instrCid
-  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
-  (accountC, accountConfigD) <- getAccountMapC registry [instrView.allocation.authorizer]
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [instrView.allocation.authorizer]
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD <> tokenRulesD
-    choiceContext = accountC <> tokenRulesC
+    disclosures
+    choiceContext
 
 registryApi_getWithdrawContext
   : TestTokenV2Registry
@@ -201,12 +196,10 @@ registryApi_getWithdrawContext
   -> Script OpenApiChoiceContext
 registryApi_getWithdrawContext registry cid _meta = do
   Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin cid
-  (accountConfigC, accountConfigD) <- getAccountMapC registry [allocView.allocation.authorizer]
-  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
-  -- FIXME: combine the functions to get account config and token rules context
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [allocView.allocation.authorizer]
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD <> tokenRulesD
-    choiceContext = accountConfigC <> tokenRulesC
+    disclosures
+    choiceContext
 
 registryApi_getCancelContext
   : TestTokenV2Registry
@@ -215,12 +208,11 @@ registryApi_getCancelContext
   -> Script OpenApiChoiceContext
 registryApi_getCancelContext registry cid _meta = do
   Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin cid
-  (accountConfigC, accountConfigD) <- getAccountMapC registry [allocView.allocation.authorizer]
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [allocView.allocation.authorizer]
   lockedTokensD <- getLockedTokensForAllocationsD registry cid
-  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD <> lockedTokensD <> tokenRulesD
-    choiceContext = accountConfigC <> tokenRulesC
+    disclosures = disclosures <> lockedTokensD
+    choiceContext = choiceContext
 
 getTokenRules : TestTokenV2Registry -> Script (ContractId TestTokenV2.TokenRules, TestTokenV2.TokenRules)
 getTokenRules registry = getTokenRules' registry.admin
@@ -233,15 +225,6 @@ getTokenRules' admin = do
     [] -> fail $ "No TestTokenV2Rules found: did you initialize the TestTokenV2 registry?"
     _ -> fail "Multiple TestTokenV2Rules found: are you initializing the TestTokenV2 registry multiple times?"
 
-getTokenRulesC
-  : TestTokenV2Registry -> Script (ContractId TestTokenV2.TokenRules, ChoiceContext, Disclosures')
-getTokenRulesC registry = do
-  (tokenRulesCid, _) <- getTokenRules registry
-  tokenRulesD <- queryDisclosure' @TestTokenV2.TokenRules registry.admin tokenRulesCid
-  let context = ChoiceContext with
-        values = TextMap.fromList [(tokenRulesContextKey, AV_ContractId (toAnyContractId tokenRulesCid))]
-  pure (tokenRulesCid, context, tokenRulesD)
-
 getLockedTokensForAllocationsD : TestTokenV2Registry -> ContractId V2.Allocation -> Script Disclosures'
 getLockedTokensForAllocationsD registry allocCid = do
   Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin allocCid
@@ -250,13 +233,19 @@ getLockedTokensForAllocationsD registry allocCid = do
     queryDisclosure' @Token registry.admin tokenCid
   pure $ mconcat discs
 
-getAccountMapC : TestTokenV2Registry -> [V2.Account] -> Script (ChoiceContext, Disclosures')
-getAccountMapC registry accounts = do
+getAccountMapAndTokenRulesC
+  : TestTokenV2Registry -> [V2.Account] -> Script (ContractId TokenRules, ChoiceContext, Disclosures')
+getAccountMapAndTokenRulesC registry accounts = do
+  (tokenRulesCid, _) <- getTokenRules registry
+  tokenRulesD <- queryDisclosure' @TestTokenV2.TokenRules registry.admin tokenRulesCid
   accountConfigs <- catOptionals <$> forA accounts (getAccountConfig registry)
   let accountConfigsValue = AV_List (map (AV_ContractId . coerceContractId . fst) accountConfigs)
-  let choiceContext =ChoiceContext with
-        values = TextMap.insert accountConfigsContextKey accountConfigsValue TextMap.empty
-  pure (choiceContext, foldMap snd accountConfigs)
+  let choiceContext = ChoiceContext with
+        values = TextMap.fromList
+          [ (accountConfigsContextKey, accountConfigsValue)
+          , (tokenRulesContextKey, AV_ContractId (toAnyContractId tokenRulesCid))
+          ]
+  pure (tokenRulesCid, choiceContext, tokenRulesD <> foldMap snd accountConfigs)
 
 getAccountConfig : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, Disclosures'))
 getAccountConfig registry account = do
@@ -274,12 +263,3 @@ getAccountConfig' registry account = do
       return (Some (cid, config, disclosure))
     [] -> return None
     _ -> abort ("More than one account config found for " <> (show account))
-
-
--- FIXME: move to test utils v1
-
-instance Monoid ChoiceContext where
-  mempty = ChoiceContext with values = TextMap.empty
-
-instance Semigroup ChoiceContext where
-  (ChoiceContext c1) <> (ChoiceContext c2) = ChoiceContext (c1 <> c2)
