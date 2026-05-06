@@ -170,7 +170,7 @@ test_ClaimExpiredRewardsV2 = do
     amuletRulesCid
     choiceArg = AmuletRules_ClaimExpiredRewardsV2 with
       rewardCouponCids = map fst rewardCouponCids
-      beneficiaries = [bob, alice]
+      expiryObservers = []
     sv = sv1
 
   -- no coupons left

@@ -325,24 +325,24 @@ test_claim_expired_coupons = do
 
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredRewardsV2 with
     rewardCouponCids
-    beneficiaries = [bob, alice]
+    expiryObservers = [alice]
 
   -- move time past expiry of the first coupon
   passTime $ hours 48
 
-  -- beneficiaries are checked
+  -- expiryObservers are checked
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredRewardsV2 with
     rewardCouponCids
-    beneficiaries = []
+    expiryObservers = []
 
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredRewardsV2 with
     rewardCouponCids
-    beneficiaries = [alice, bob, charlie]
+    expiryObservers = [alice, bob, charlie]
 
   -- correct expiry works
   submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredRewardsV2 with
     rewardCouponCids
-    beneficiaries = [bob, alice]
+    expiryObservers = [alice]
 
   -- no coupons left
   [] <- query @RewardCouponV2 app.dso

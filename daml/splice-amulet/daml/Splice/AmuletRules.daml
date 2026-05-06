@@ -668,8 +668,8 @@ template AmuletRules
     nonconsuming choice AmuletRules_ClaimExpiredRewardsV2 : AmuletRules_ClaimExpiredRewardsV2Result
       with
         rewardCouponCids : [ContractId RewardCouponV2]
-        beneficiaries : [Party]
-      observer beneficiaries
+        expiryObservers : [Party]
+      observer expiryObservers
       controller dso
       do
         require "at least one coupon" (not (null rewardCouponCids))
@@ -679,8 +679,8 @@ template AmuletRules
           coupon <- fetchAndArchive (ForDso with dso) cid
           assertDeadlineExceeded "coupon.expiresAt" coupon.expiresAt
           return coupon
-        let actualBeneficiaries = [ coupon.provider | coupon <- coupons ]
-        require "beneficiaries match coupons" (sort beneficiaries == dedupSort actualBeneficiaries)
+        let actualExpiryObservers = [ coupon.provider | coupon <- coupons, coupon.providerIsObserver ]
+        require "expiryObservers match coupons" (sort expiryObservers == dedupSort actualExpiryObservers)
 
         -- create unclaimed reward for the total
         let amount = sum [ coupon.amount | coupon <- coupons ]
