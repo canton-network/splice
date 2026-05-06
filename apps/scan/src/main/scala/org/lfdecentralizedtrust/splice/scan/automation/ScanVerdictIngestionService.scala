@@ -323,8 +323,24 @@ class ScanVerdictIngestionService(
     }
   }
 
-  private def batchSource[T, Mat](source: Source[T, Mat]): Source[Seq[T], Mat] =
-    source.batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(_ :+ _)
+  private def batchSource[Mat](source: Source[v30.Verdict, Mat]): Source[Seq[v30.Verdict], Mat] =
+    source.batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(
+      // TODO(DACH-NY/cn-test-failures#8281): Remove once we have figured out why we're getting duplicate data.
+      (batch, newElement) => {
+        batch.find(_.updateId == newElement.updateId) match {
+          case Some(existingElement) =>
+            logger.info(
+              s"Received duplicate verdict with update_id ${newElement.updateId} in the same batch. " +
+                s"Batch size: ${batch.size} / ${config.mediatorVerdictIngestion.batchSize}  " +
+                s"Existing verdict: ${existingElement}. New verdict: ${newElement}. " +
+                s"Keeping existing verdict, skipping new verdict."
+            )
+            batch
+          case None =>
+            batch :+ newElement
+        }
+      }
+    )
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = super
     .closeAsync()
