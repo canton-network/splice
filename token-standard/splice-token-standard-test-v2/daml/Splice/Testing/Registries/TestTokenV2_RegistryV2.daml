@@ -86,10 +86,17 @@ mint registry account intrumentName amount = do
   -- offer mint
   [(tokenRulesCid, _)] <- query @TestTokenV2.TokenRules registry.admin
   now <- getTime
-  optAccountConfig <- getAccountConfig' registry account
-  receiverConfig <- case optAccountConfig of
-    None -> abort $ "Cannot mint, as account config not found for account" <> show account
-    Some (_cid, config, _disclosures) -> pure config
+  receiverConfig <- case account.provider of
+      None -> pure $ AccountConfig with
+        admin = registry.admin
+        account
+        ownerConfig = PartyConfig True True
+        providerConfig = PartyConfig False False
+      Some _ -> do
+        optAccountConfig <- getAccountConfig' registry account
+        case optAccountConfig of
+          None -> abort $ "Cannot mint, as account config not found for account" <> show account
+          Some (_cid, config, _disclosures) -> pure config
   result <- submit registry.admin $ exerciseCmd tokenRulesCid TestTokenV2.TokenRules_OfferMint with
     receiver = account
     instrumentId = V2.InstrumentId with

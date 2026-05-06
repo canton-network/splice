@@ -418,6 +418,7 @@ template TokenTransferOffer with
                 holding = senderHoldingFromTransfer transfer
               return [toInterfaceContractId tokenCid]
             _ -> return this.transfer.inputHoldingCids
+          -- FIXME: log history
           pure V2.TransferInstructionResult with
             output = V2.TransferInstructionResult_Failed
             senderChangeCids
@@ -428,6 +429,7 @@ template TokenTransferOffer with
           sumAndArchiveHoldings transfer
           tokenCid <- create Token with
             holding = senderHoldingFromTransfer transfer
+          -- FIXME: log history
           pure V2.TransferInstructionResult with
             output = V2.TransferInstructionResult_Failed
             senderChangeCids = [toInterfaceContractId tokenCid]
@@ -443,7 +445,7 @@ template TokenTransferOffer with
           tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
           logTransfer (toInterfaceContractId tokenRulesCid)
             transfer
-            []
+            senderChangeCids
             [toInterfaceContractId tokenCid]
           pure V2.TransferInstructionResult with
             senderChangeCids
@@ -527,6 +529,18 @@ authorizeTransferOfferAction
           then do
             senderChangeCids <- debitHoldings this
             inputHoldingsCids <- createLockedInputs this.transfer
+            -- log the tx history v2 event
+            eventLogCid <- getEventLogFromContext extraArgs.context
+            logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+              admin = this.transfer.instrumentId.admin
+              account = this.transfer.sender
+              inputHoldingCids = this.transfer.inputHoldingCids
+              transferLegs = []
+              outputHoldingCids = inputHoldingsCids <> senderChangeCids
+              observers = accountParties this.transfer.sender
+              extraArgs = ExtraArgs with
+                context = emptyChoiceContext
+                meta = reasonToMeta ("lock for transfer to " <> show this.transfer.receiver) emptyMetadata
             pure (senderChangeCids, inputHoldingsCids)
           else pure ([], this.transfer.inputHoldingCids)
       else pure ([], this.transfer.inputHoldingCids)
@@ -799,9 +813,9 @@ splitAndLock eventLogCid allocation inputTokenCids = do
   logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
     admin = allocationAdmin allocation
     account = allocation.authorizer
-    inputHoldingCids = concat $ textMapValues inputTokenCids
+    inputHoldingCids = concat (textMapValues inputTokenCids)
     transferLegs = []
-    outputHoldingCids = concat $ textMapValues $ lockedCids <> authorizerChangeCids
+    outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
     observers = accountParties allocation.authorizer
     extraArgs = ExtraArgs with
       context = emptyChoiceContext

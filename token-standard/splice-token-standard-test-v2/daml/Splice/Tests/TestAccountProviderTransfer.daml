@@ -39,7 +39,6 @@ make_account_if_missing env config = do
         id = "X"
         admin = env.testTokenV2.admin
 
-
   -- Create an AccountConfig contract as needed.
   case config.account.provider of
     None -> return ()

@@ -260,6 +260,7 @@ rejectTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
   registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
   context <- V2.getTransferInstruction_RejectContext registry instrCid emptyMetadata
+  -- FIXME: check tx history here and in the other cases
   res <- submitWithDisclosures' actor context.disclosures $
     exerciseCmd instrCid
       V2.TransferInstruction_Reject with
