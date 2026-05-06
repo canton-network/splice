@@ -434,7 +434,6 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
         await walletClient.withdrawAmuletAllocation(allocationCid);
       },
       withdrawAllocationV2: async allocationCid => {
-        console.error(`Withdrawing allocation v2 ${allocationCid}`);
         await walletClient.withdrawAmuletAllocationV2(allocationCid);
       },
       getAppPaymentRequest: async contractId => {
