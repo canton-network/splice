@@ -37,7 +37,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
   protected val enableUnsupportedDarsUnvetting: Boolean = true
 
   private val extraPackagesToUnvet: Seq[DarResource] = Seq(
-    DarResources.wallet_0_1_15
+    DarResources.wallet_0_1_16
   )
 
   private val supportedPackagesToUnvet: Map[PackageName, Set[PackageVersion]] =

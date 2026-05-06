@@ -17,7 +17,6 @@ let
     ammonite
     auth0-cli
     bc
-    cabal2nix
     canton
     circleci-cli
     curl

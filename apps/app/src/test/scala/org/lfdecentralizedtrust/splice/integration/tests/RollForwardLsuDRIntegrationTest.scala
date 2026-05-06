@@ -94,13 +94,12 @@ class RollForwardLsuDRIntegrationTest
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
       .unsafeWithSequencerAvailabilityDelay(NonNegativeFiniteDuration.ofSeconds(5))
+      .withSvBftSequencerConnectionDisabled()
       .addConfigTransforms(
         (_, config) => {
           ConfigTransforms
             .updateAllSvAppConfigs { (name, config) =>
               config.copy(
-                // TODO(#4682) Make it work with BFT connections.
-                bftSequencerConnection = false,
                 domainMigrationDumpPath = Some(
                   (File(
                     SynchronizerUpgradeUtil.migrationTestDumpDir(
@@ -506,16 +505,6 @@ class RollForwardLsuDRIntegrationTest
       grpcClientMetrics,
       retryProvider,
     )
-
-  // private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
-  //   listTransactionsFromScan(scan).count(
-  //     _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
-  //   )
-  // }
-
-  // private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
-  //   scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
-  // }
 
   private def getSequencerUrlSet(
       participantConnection: ParticipantClientReference,
