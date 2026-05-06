@@ -54,6 +54,8 @@ monitoring:
           overMinutes: 5
           rate: 25
       delegatelessContention:
+        thresholdPerNamespace: 0.2
+      delegatelessNonLocalErrors:
         thresholdPerNamespace: 0.05
       deployment:
         pendingPeriodMinutes: 5

@@ -436,7 +436,75 @@ groups:
         execErrState: Alerting
         for: 5m
         annotations:
-          description: '{{ index $labels "namespace" }} had more than 5% contention in the last 30 minutes.'
+          description: '{{ index $labels "namespace" }} had more than 20% contention in the last 30 minutes.'
+        isPaused: false
+      - uid: fentlrcbcrsaob
+        title: Delegateless trigger non-local errors
+        condition: threshold
+        data:
+          - refId: total_attempts
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum(rate(splice_trigger_attempted_total{isDsoDelegateTrigger="true", node_type="sv"}[30m])) by (namespace)
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: total_attempts
+          - refId: total_non_local_errors
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(splice_trigger_attempted_total{statusCode!~"OK", isDsoDelegateTrigger="true", node_type="sv", contentionFailure="false"}[30m])) by (namespace)
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: total_non_local_errors
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [ ]
+                  reducer:
+                    params: [ ]
+                    type: avg
+                  type: query
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: (${total_non_local_errors} > $NON_LOCAL_ERRORS_THRESHOLD_PERCENTAGE_PER_NAMESPACE * ${total_attempts}) && (${total_non_local_errors} > 0)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: threshold
+              type: math
+        # Alert also reports noData when there are no errors.
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: '{{ index $labels "namespace" }} had more than 5% non-local errors in the last 30 minutes.'
         isPaused: false
       - uid: df3t10f23cm68c
         title: 'Ingestion saturation'

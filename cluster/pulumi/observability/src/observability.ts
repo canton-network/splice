@@ -852,6 +852,10 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 monitoringConfig.alerting.alerts.delegatelessContention.thresholdPerNamespace.toString()
               )
               .replaceAll(
+                '$NON_LOCAL_ERRORS_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
+                monitoringConfig.alerting.alerts.delegatelessNonLocalErrors.thresholdPerNamespace.toString()
+              )
+              .replaceAll(
                 '$INGESTION_ENTRIES_PER_BATCH_THRESHOLD',
                 monitoringConfig.alerting.alerts.ingestion.thresholdEntriesPerBatch.toString()
               ),
