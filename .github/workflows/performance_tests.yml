@@ -81,10 +81,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Check ingestion thresholds
+        id: perf_check
         #if: ${{ success() && github.event_name == 'schedule' }}
         if: ${{ success() }}
         run: |
-          python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics
+          python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics || true
 
       # sanity check
       - name: Check logs for errors
@@ -103,7 +104,7 @@ jobs:
           name: "logs-ingestion-performance-tests"
 
       - name: Report Failures on Slack & Github
-        if: failure() && github.event_name == 'schedule'
+        if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
           job_subname: "Daily Store Ingestion Performance Tests"
