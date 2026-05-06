@@ -105,7 +105,7 @@ jobs:
 
       - name: Report Failures on Slack & Github
         #if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
-        if: ${{ failure() || steps.perf_check.outputs.has_breaches == 'true') }}
+        if: ${{ failure() || steps.perf_check.outputs.has_breaches == 'true' }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
           job_subname: "Daily Store Ingestion Performance Tests"
