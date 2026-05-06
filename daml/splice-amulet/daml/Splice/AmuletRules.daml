@@ -705,26 +705,26 @@ template AmuletRules
 
         return AmuletRules_StartProcessingRewardsV2Result {}
 
-    -- batch conversion of coupons not yet observable by their beneficiaries
+    -- batch conversion of coupons not yet observable by their providers
     nonconsuming choice AmuletRules_UnhideRewardCouponsV2 : AmuletRules_UnhideRewardCouponsV2Result
       with
         rewardCouponCids : [ContractId RewardCouponV2]
-        beneficiaries : [Party]
-      observer beneficiaries
+        providers : [Party]
+      observer providers
       controller dso
       do
         require "at least one coupon" (not (null rewardCouponCids))
 
         -- unhide coupons
-        actualBeneficiaries <- forA rewardCouponCids $ \cid -> do
+        actualProviders <- forA rewardCouponCids $ \cid -> do
           coupon <- fetchAndArchive (ForDso with dso) cid
           require "provider is no observer on the coupon" (not (coupon.providerIsObserver))
           assertWithinDeadline "coupon.expiresAt" coupon.expiresAt
           create coupon with providerIsObserver = True
           pure coupon.provider
 
-        -- check specified beneficiaries match actual beneficiaries of the coupons
-        require "beneficiaries match coupons" (dedupSort beneficiaries == dedupSort actualBeneficiaries)
+        -- check specified providers match actual providers of the coupons
+        require "providers match coupons" (dedupSort providers == dedupSort actualProviders)
 
         return AmuletRules_UnhideRewardCouponsV2Result {}
 

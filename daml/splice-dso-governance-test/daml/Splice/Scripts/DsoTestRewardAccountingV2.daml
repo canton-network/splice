@@ -130,7 +130,7 @@ test_reward_accounting_v2 = do
     amuletRulesCid
     choiceArg = AmuletRules_UnhideRewardCouponsV2 with
       rewardCouponCids = map fst unobservableCoupons
-      beneficiaries = map (._2.provider) unobservableCoupons
+      providers = map (._2.provider) unobservableCoupons
 
   couponsAfterUnhiding <- query @RewardCouponV2 app.dso
   sortOn (.provider) (map snd couponsAfterUnhiding) ===
