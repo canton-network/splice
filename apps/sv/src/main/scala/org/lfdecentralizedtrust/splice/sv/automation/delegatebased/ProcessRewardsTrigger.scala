@@ -29,8 +29,10 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, TemplateJsonDecoder}
+import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.{Set as DamlSet}
@@ -64,6 +66,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     with SvTaskBasedTrigger[ProcessRewardsV2Contract] {
 
   private val store = svTaskContext.dsoStore
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
 
   override def completeTaskAsDsoDelegate(
       task: ProcessRewardsV2Contract,
@@ -104,8 +107,13 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
           )
           .noDedup
           .yieldUnit()
+        delay = java.time.Duration
+          .between(task.payload.roundClosedAt, context.clock.now.toInstant)
+        _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(
+          MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+        )
       } yield TaskSuccess(
-        s"Processed batch for ProcessRewardsV2 round $round, batchHash=$batchHash, dryRun=$isDryRun"
+        s"Processed batch for ProcessRewardsV2 round $round, batchHash=$batchHash, dryRun=$isDryRun, processingDelay=$delay"
       )
     }
   }

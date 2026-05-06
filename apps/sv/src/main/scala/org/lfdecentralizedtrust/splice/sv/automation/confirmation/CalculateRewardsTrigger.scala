@@ -22,10 +22,12 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
+import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
+import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -52,6 +54,7 @@ abstract class CalculateRewardsTriggerBase(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     calculateRewards <- store.listCalculateRewardsV2()
@@ -99,8 +102,15 @@ abstract class CalculateRewardsTriggerBase(
                 deduplicationOffset = offset,
               )
               .yieldUnit()
+            delay = java.time.Duration.between(
+              task.calculateRewards.payload.roundClosedAt,
+              context.clock.now.toInstant,
+            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
+              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+            )
           } yield TaskSuccess(
-            s"created confirmation for CalculateRewardsV2 round $round"
+            s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
           )
       }
     } yield taskOutcome
