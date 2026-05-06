@@ -120,7 +120,7 @@ jobs:
       - name: Run Tests
         uses: ./splice-shared-gha/.github/actions/tests/scala_test
         with:
-          cache_version: nicu_nix_cache
+          cache_version: nicu_nix_cache2
           start_canton_options: -F -w
           artifactory_user: ${{ vars.ARTIFACTORY_USER }}
           artifactory_password: ${{ secrets.ARTIFACTORY_PASSWORD }}
