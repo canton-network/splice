@@ -941,6 +941,7 @@ class HttpWalletHandler(
   )()(tuser: WalletUserRequest): Future[WalletResource.ListTokenStandardTransfersResponse] = {
     implicit val WalletUserRequest(user, userWallet, traceContext) = tuser
     listContracts(
+      // Note that AmuletTransferInstruction implements both V1 and V2 of the Token Standard
       AmuletTransferInstruction.COMPANION,
       userWallet.store,
       contracts =>

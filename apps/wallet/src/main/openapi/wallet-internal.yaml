@@ -617,8 +617,7 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
     get:
       description:
-        List all open transfers (v1 and v2) where the user is either sender or receiver.
-        They can be differentiated by the template_id in the response.
+        List all open transfers where the user is either sender or receiver.
       tags: [ wallet ]
       x-jvm-package: wallet
       operationId: "listTokenStandardTransfers"
