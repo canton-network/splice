@@ -617,7 +617,8 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
     get:
       description:
-        List all open transfers where the user is either sender or receiver.
+        List all open transfers (v1 and v2) where the user is either sender or receiver.
+        They can be differentiated by the template_id in the response.
       tags: [ wallet ]
       x-jvm-package: wallet
       operationId: "listTokenStandardTransfers"
@@ -700,6 +701,7 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
   /v2/wallet/token-standard/transfers:
+    # get is in v0
     post:
       tags: [ wallet ]
       x-jvm-package: wallet
@@ -747,24 +749,6 @@ paths:
             application/json:
               schema:
                 $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-    get:
-      description:
-        List all open transfers (v1 and v2) where the user is either sender or receiver.
-        They can be differentiated by the template_id in the response.
-      tags: [ wallet ]
-      x-jvm-package: wallet
-      operationId: "listTokenStandardTransfersV2"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListTokenStandardTransfersResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
   /v2/wallet/token-standard/transfers/{contract_id}/reject:
@@ -1914,6 +1898,8 @@ components:
 
     ListTokenStandardTransfersResponse:
       type: object
+      description: |
+        V1 and V2 transfers can be differentiated by the template_id in the contract.
       required:
         - transfers
       properties:

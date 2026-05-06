@@ -76,11 +76,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   holdingv2,
   metadatav1,
   transferinstructionv1,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.transferinstructionresult_output.{
-  TransferInstructionResult_Completed,
-  TransferInstructionResult_Failed,
-  TransferInstructionResult_Pending,
+  transferinstructionv2,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AllocateAmuletRequest,
@@ -903,12 +899,34 @@ class HttpWalletHandler(
   ): d0.TransferInstructionResultResponse = {
     d0.TransferInstructionResultResponse(
       result.output match {
-        case completed: TransferInstructionResult_Completed =>
+        case completed: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Completed =>
           d0.TransferInstructionCompleted(
             completed.receiverHoldingCids.asScala.map(_.contractId).toVector
           )
-        case _: TransferInstructionResult_Failed => d0.TransferInstructionFailed()
-        case pending: TransferInstructionResult_Pending =>
+        case _: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Failed =>
+          d0.TransferInstructionFailed()
+        case pending: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Pending =>
+          d0.TransferInstructionPending(pending.transferInstructionCid.contractId)
+        case x =>
+          throw new IllegalArgumentException(s"Unexpected TransferInstructionResult: $x")
+      },
+      result.senderChangeCids.asScala.map(_.contractId).toVector,
+      result.meta.values.asScala.toMap,
+    )
+  }
+
+  private def transferInstructionResultToResponse(
+      result: transferinstructionv2.TransferInstructionResult
+  ): d0.TransferInstructionResultResponse = {
+    d0.TransferInstructionResultResponse(
+      result.output match {
+        case completed: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed =>
+          d0.TransferInstructionCompleted(
+            completed.receiverHoldingCids.asScala.map(_.contractId).toVector
+          )
+        case _: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Failed =>
+          d0.TransferInstructionFailed()
+        case pending: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Pending =>
           d0.TransferInstructionPending(pending.transferInstructionCid.contractId)
         case x =>
           throw new IllegalArgumentException(s"Unexpected TransferInstructionResult: $x")
@@ -1030,14 +1048,35 @@ class HttpWalletHandler(
 
   override def createTokenStandardTransferV2(
       respond: WalletResource.CreateTokenStandardTransferV2Response.type
-  )(body: CreateTokenStandardTransferRequest)(
+  )(request: CreateTokenStandardTransferRequest)(
       extracted: WalletUserRequest
-  ): Future[WalletResource.CreateTokenStandardTransferV2Response] = ???
-
-  override def listTokenStandardTransfersV2(
-      respond: WalletResource.ListTokenStandardTransfersV2Response.type
-  )()(extracted: WalletUserRequest): Future[WalletResource.ListTokenStandardTransfersV2Response] =
-    ???
+  ): Future[WalletResource.CreateTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = extracted
+    withSpan(s"$workflowId.createTokenStandardTransferV2") { _ => _ =>
+      val commandId = CommandId(
+        "org.lfdecentralizedtrust.splice.wallet.createTokenStandardTransferV2",
+        Seq(userWallet.store.key.endUserParty),
+        request.trackingId,
+      )
+      val dedupConfig = AmuletOperationDedupConfig(
+        commandId,
+        dedupDuration,
+      )
+      (for {
+        result <- userWallet.treasury.enqueueTokenStandardTransferOperationV2(
+          Codec.tryDecode(Codec.Party)(request.receiverPartyId),
+          BigDecimal(request.amount),
+          request.description,
+          Codec.tryDecode(Codec.Timestamp)(request.expiresAt),
+          dedup = Some(dedupConfig),
+        )
+      } yield WalletResource.CreateTokenStandardTransferV2Response.OK(
+        transferInstructionResultToResponse(result)
+      )).transform(
+        HttpErrorHandler.onGrpcAlreadyExists("CreateTokenStandardTransfer duplicate command")
+      )
+    }
+  }
 
   override def acceptTokenStandardTransferV2(
       respond: WalletResource.AcceptTokenStandardTransferV2Response.type
@@ -1049,13 +1088,15 @@ class HttpWalletHandler(
       respond: WalletResource.RejectTokenStandardTransferV2Response.type
   )(contractId: String)(
       extracted: WalletUserRequest
-  ): Future[WalletResource.RejectTokenStandardTransferV2Response] = ???
+  ): Future[WalletResource.RejectTokenStandardTransferV2Response] =
+    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5415").asRuntimeException())
 
   override def withdrawTokenStandardTransferV2(
       respond: WalletResource.WithdrawTokenStandardTransferV2Response.type
   )(contractId: String)(
       extracted: WalletUserRequest
-  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] = ???
+  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] =
+    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5415").asRuntimeException())
 
   override def allocateAmulet(respond: WalletResource.AllocateAmuletResponse.type)(
       body: AllocateAmuletRequest
