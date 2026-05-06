@@ -1,0 +1,11 @@
+services:
+  test:
+    build:
+      context: ${SPLICE_ROOT}/cluster/compose/localnet/docker/console
+      args:
+        BASE_IMAGE: ghcr.io/digital-asset/decentralized-canton-sync-dev/docker/canton:0.6.3-snapshot.20260506.2696.0.v5855b960
+    volumes:
+      - ${SPLICE_ROOT}/cluster/compose/localnet/docker/console/entrypoint.sh:/app/entrypoint.sh
+    entrypoint: /app/entrypoint.sh
+    stdin_open: true
+    tty: true
