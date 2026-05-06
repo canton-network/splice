@@ -260,8 +260,9 @@ rejectTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
   registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
   context <- V2.getTransferInstruction_RejectContext registry instrCid emptyMetadata
-  -- FIXME: check tx history here and in the other cases
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
     exerciseCmd instrCid
       V2.TransferInstruction_Reject with
         actors = [actor]
@@ -278,7 +279,9 @@ withdrawTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
   registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
   context <- V2.getTransferInstruction_WithdrawContext registry instrCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
     exerciseCmd instrCid
       V2.TransferInstruction_Withdraw with
         actors = [actor]
@@ -363,13 +366,15 @@ acceptAllocationInstructionV2 registries actor (instrCid, instr) = do
   let firstTl::_ = instrView.allocation.transferLegs
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
-  submitWithDisclosures' actor context.disclosures $
-    exerciseCmd instrCid
-      V2.AllocationInstruction_Accept with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
+  (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
+        V2.AllocationInstruction_Accept with
+          actors = [actor]
+          extraArgs = ExtraArgs with
+            context = context.choiceContext
+            meta = emptyMetadata
+  pure result
 
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
 -- TODO: Use Batching
@@ -379,8 +384,10 @@ withdrawAllocationInstructionV2
 withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
-    exerciseCmd instrCid
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
       V2.AllocationInstruction_Withdraw with
         actors = [actor]
         extraArgs = ExtraArgs with
@@ -398,7 +405,9 @@ withdrawAllocationV2
 withdrawAllocationV2 registries actor (allocCid, allocView) = do
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin allocView.allocation)
   context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
-  res <- submitWithDisclosures' actor context.disclosures $
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
     exerciseCmd allocCid
       V2.Allocation_Withdraw with
         actors = [actor]
