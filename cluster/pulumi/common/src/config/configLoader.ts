@@ -154,6 +154,8 @@ export function loadClusterYamlConfig(): unknown {
 }
 
 export function getClusterConfigPath(): string {
-  return spliceEnvConfig.optionalEnv('OVERRIDE_PULUMI_CONFIG_FILE') ||
-    join(spliceEnvConfig.context.clusterPath(), 'config.yaml');
+  return (
+    spliceEnvConfig.optionalEnv('OVERRIDE_PULUMI_CONFIG_FILE') ||
+    join(spliceEnvConfig.context.clusterPath(), 'config.yaml')
+  );
 }
