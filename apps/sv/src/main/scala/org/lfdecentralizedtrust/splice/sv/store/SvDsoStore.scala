@@ -1269,7 +1269,7 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           rewardRound = Some(contract.payload.round.number),
-          rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.beneficiary)),
+          rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
           rewardAmount = Some(contract.payload.amount),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
