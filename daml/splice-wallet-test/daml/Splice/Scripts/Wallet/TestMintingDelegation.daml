@@ -86,12 +86,11 @@ testMintingDelegation = do
   let rewardCouponV2Amount = 42.0
   rewardCouponV2Cid <- submit app.dso $ createCmd RewardCouponV2 with
     dso = app.dso
-    provider = provider2.primaryParty
-    beneficiary = beneficiary
+    provider = beneficiary
     amount = rewardCouponV2Amount
     expiresAt = now `addRelTime` days 60
     round = openRound.round
-    beneficiaryIsObserver = False
+    providerIsObserver = False
 
   -- Wait for rounds to advance so coupons can be minted
   runNextIssuance app
