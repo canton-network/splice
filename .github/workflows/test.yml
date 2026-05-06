@@ -16,15 +16,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
-          token: '${{ secrets.GH_CREATE_PRS_TOKEN }}' # need to checkout with a stronger token to be able to push later
-
-      - name: Set up Nix (Self hosted)
-        uses: ./splice-shared-gha/.github/actions/nix/setup_nix
-        with:
-          cache_version: 8
-          artifactory_user: dummy
-          artifactory_password: dummy
-          target: default
+          token: '${{ secrets.GH_CREATE_PRS_TOKEN }}' # need to checkout with a stronger token to be able to push later 
 
       - name: Report Failures on Slack & Github
         if: always()
