@@ -32,3 +32,8 @@
 
         If you need to access data for any of the parties on your node
         use the ledger API.
+
+    - SV deployment
+
+        - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
+          in the security context of the pods as the participant, validator app, and sv app charts.
