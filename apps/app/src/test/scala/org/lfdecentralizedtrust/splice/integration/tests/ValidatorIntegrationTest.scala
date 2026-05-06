@@ -665,4 +665,33 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     }
   }
 
+  "preserve trace ID with case-insensitive traceparent header" in { implicit env =>
+    import org.apache.pekko.http.scaladsl.model.headers.RawHeader
+
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    implicit val sys = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+
+    val traceId = "8e757892bf75f4d67b82bd7e8ddd96ce"
+    val parentId = "0561c713d931c93b"
+    val traceparentValue = s"00-$traceId-$parentId-03"
+
+    val response = Http()
+      .singleRequest(
+        Get(s"${aliceValidatorBackend.httpClientConfig.url}/api/validator/livez")
+          .withHeaders(
+            // Vendors MUST expect the header name in any case...
+            RawHeader("TraceParenT", traceparentValue)
+          )
+      )
+      .futureValue
+
+    response.status shouldBe StatusCodes.OK
+    val relevantHeaders = response.headers.filter(h => h.is("traceparent"))
+    // ...and SHOULD send the header name in lowercase.
+    relevantHeaders.loneElement shouldBe RawHeader("traceparent", traceparentValue)
+  }
+
 }
