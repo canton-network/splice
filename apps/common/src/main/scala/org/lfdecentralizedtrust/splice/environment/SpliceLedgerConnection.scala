@@ -29,7 +29,6 @@ import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.LoggerUtil
 import com.digitalasset.daml.lf.data.Ref
-import com.google.protobuf.ByteString
 import com.google.protobuf.field_mask.FieldMask
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
@@ -58,7 +57,6 @@ import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.implicitNotFound
-import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -100,7 +98,7 @@ class BaseLedgerConnection(
   def activeContracts(
       eventFormat: com.daml.ledger.api.v2.transaction_filter.EventFormat,
       offset: Long,
-      restartSettings: RestartSettings = DefaultActiveContractsRestartSettings,
+      restartSettings: RestartSettings,
   )(implicit
       tc: TraceContext
   ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] = {
@@ -110,7 +108,7 @@ class BaseLedgerConnection(
       RestartSource.onFailuresWithBackoff(restartSettings)(() => {
         val restartItem = lastItem.get()
         logger.info(
-          s"Starting active contracts stream with continuation token from last response $restartItem"
+          s"Starting active contracts stream with continuation token from last response: $restartItem"
         )
         client
           .activeContracts(
@@ -158,7 +156,7 @@ class BaseLedgerConnection(
   def activeContracts(
       filter: IngestionFilter,
       offset: Long,
-      restartSettings: RestartSettings = DefaultActiveContractsRestartSettings,
+      restartSettings: RestartSettings,
   )(implicit
       tc: TraceContext
   ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] =
@@ -1271,9 +1269,6 @@ object BaseLedgerConnection {
     case class IncompleteAssign(assign: IncompleteReassignmentEvent.Assign)
         extends ActiveContractsItem
   }
-
-  lazy val DefaultActiveContractsRestartSettings: RestartSettings =
-    RestartSettings(1.seconds, 10.second, 0.2)
 }
 
 object SpliceLedgerConnection {

@@ -9,7 +9,7 @@ import com.daml.ledger.api.v2.transaction_filter.EventFormat
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.google.protobuf.ByteString
-import org.apache.pekko.stream.Attributes
+import org.apache.pekko.stream.{Attributes, RestartSettings}
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection.ActiveContractsItem
@@ -20,6 +20,7 @@ import org.slf4j.event.Level
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.Future
+import scala.concurrent.duration.*
 
 class ActiveContractsRestartTest
     extends BaseTest
@@ -27,6 +28,9 @@ class ActiveContractsRestartTest
     with HasActorSystem
     with HasExecutionContext
     with HasRetryProvider {
+
+  private val restartSettings: RestartSettings =
+    RestartSettings(1.seconds, 10.second, 0.2)
 
   private def makeResponse(
       n: Int
@@ -53,7 +57,7 @@ class ActiveContractsRestartTest
     )
 
   "activeContracts" should {
-    "resume with the last continuation token after a stream failure" in {
+    "resume with the last continuation token after a stream Source failure" in {
       val callCount = new AtomicInteger(0)
       val ledgerClient = mock[LedgerClient]
 
@@ -99,7 +103,7 @@ class ActiveContractsRestartTest
       val result: Seq[BaseLedgerConnection.ActiveContractsItem] =
         loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           connection
-            .activeContracts(EventFormat.defaultInstance, 0L)
+            .activeContracts(EventFormat.defaultInstance, 0L, restartSettings)
             // Disable akka's debugging which escapes the suppression
             .addAttributes(
               Attributes
@@ -110,7 +114,12 @@ class ActiveContractsRestartTest
           lines => {
             forExactly(1, lines) { line =>
               line.message should include(
-                "Starting active contracts stream with continuation token Some(token-2)"
+                "Starting active contracts stream with continuation token from last response: None"
+              )
+            }
+            forExactly(1, lines) { line =>
+              line.message should include(
+                "Starting active contracts stream with continuation token from last response: Some"
               )
             }
           },
@@ -121,6 +130,36 @@ class ActiveContractsRestartTest
         .collect { case ActiveContractsItem.ActiveContract(contract) =>
           contract.createdEvent.getContractId
         } should be(List("1", "2", "3"))
+    }
+
+    "fail the stream if the failure is not in the Source" in {
+      val ledgerClient = mock[LedgerClient]
+      when(
+        ledgerClient.activeContracts(any[lapi.state_service.GetActiveContractsRequest])(
+          anyTraceContext
+        )
+      )
+        .thenAnswer { (_: lapi.state_service.GetActiveContractsRequest) =>
+          Source.repeat(()).zipWithIndex.map { case (_, index) => makeResponse(index.toInt) }
+        }
+
+      val connection = new BaseLedgerConnection(
+        ledgerClient,
+        "test-user",
+        loggerFactory,
+        testRetryProvider,
+      )
+
+      val failure =
+        new RuntimeException("Expected failure in the stream processing logic, not the Source")
+      val result = connection
+        .activeContracts(EventFormat.defaultInstance, 0L, restartSettings)
+        .mapAsync(parallelism = 1)(_ => Future.failed(failure))
+        .runWith(Sink.ignore)
+        .failed
+        .futureValue
+
+      result should be(failure)
     }
   }
 }
