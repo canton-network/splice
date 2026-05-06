@@ -35,6 +35,8 @@
          walletPayments     0.1.15
          ================== =======
 
+       - Fix an issue where onboarding a new SV could fail when importing the ACS snapshot due to a vetting issue.
+
     - SV deployment
 
         - Updated ``participantAddress``` in `scan-values.yaml` and ``sv-validator-values.yaml`` to use the participant adress with a migration suffix.
