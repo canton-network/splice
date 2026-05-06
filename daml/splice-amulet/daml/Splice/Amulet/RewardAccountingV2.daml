@@ -108,7 +108,6 @@ template ProcessRewardsV2 with
                   expiresAt
                   providerIsObserver =
                     not $ Set.member provider providersWithWrongVettingState
-                  beneficiary = None
 
         -- intentionally not returning any information here to save computational overhead
         return ProcessRewardsV2_ProcessBatchResult {}

@@ -679,7 +679,7 @@ template AmuletRules
           coupon <- fetchAndArchive (ForDso with dso) cid
           assertDeadlineExceeded "coupon.expiresAt" coupon.expiresAt
           return coupon
-        let actualBeneficiaries = [ fromOptional coupon.provider coupon.beneficiary | coupon <- coupons ]
+        let actualBeneficiaries = [ coupon.provider | coupon <- coupons ]
         require "beneficiaries match coupons" (sort beneficiaries == dedupSort actualBeneficiaries)
 
         -- create unclaimed reward for the total

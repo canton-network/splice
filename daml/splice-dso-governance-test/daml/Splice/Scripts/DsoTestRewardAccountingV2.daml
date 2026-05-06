@@ -116,7 +116,6 @@ test_reward_accounting_v2 = do
           round = Round 0
           expiresAt = couponExpiryTime
           providerIsObserver = provider `notElem` [bob, dora]
-          beneficiary = None
 
   actualCoupons0 <- query @RewardCouponV2 app.dso
   let actualCoupons = sortOn (.provider) $ fmap snd actualCoupons0
@@ -152,7 +151,7 @@ test_ClaimExpiredRewardsV2 = do
 
 
   -- create coupons
-  forA_ [ (alice, Some alice, 100.0), (alice, Some bob, 500.0) ] $ \(provider, beneficiary, amount) -> do
+  forA_ [ (alice, 100.0), (bob, 500.0) ] $ \(provider, amount) -> do
     submit app.dso $ createCmd RewardCouponV2 with
       dso = app.dso
       provider
@@ -160,7 +159,6 @@ test_ClaimExpiredRewardsV2 = do
       round = Round 0
       expiresAt = demoTime `addRelTime` hours 48
       providerIsObserver = False
-      beneficiary
 
   -- expiry works
   setTime $ demoTime `addRelTime` hours 48
