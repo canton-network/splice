@@ -202,9 +202,11 @@ registryApi_getWithdrawContext
 registryApi_getWithdrawContext registry cid _meta = do
   Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin cid
   (accountConfigC, accountConfigD) <- getAccountMapC registry [allocView.allocation.authorizer]
+  (_, tokenRulesC, tokenRulesD) <- getTokenRulesC registry
+  -- FIXME: combine the functions to get account config and token rules context
   pure OpenApiChoiceContext with
-    disclosures = accountConfigD
-    choiceContext = accountConfigC
+    disclosures = accountConfigD <> tokenRulesD
+    choiceContext = accountConfigC <> tokenRulesC
 
 registryApi_getCancelContext
   : TestTokenV2Registry

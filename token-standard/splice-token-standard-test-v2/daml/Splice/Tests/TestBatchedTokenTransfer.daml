@@ -165,8 +165,8 @@ genericTestTransfers TestSetup {..} = do
   when checkMetadata $ do
     let testTransferReason = "alice -> charlie - test transfer 2"
     WalletClientV2.expectTxHistoryReasons changes
-      [ (basicAccount alice, [testTransferReason], "")
-      , (basicAccount charlie, [testTransferReason], "")
+      [ (selfCustodied alice, [testTransferReason], "")
+      , (selfCustodied charlie, [testTransferReason], "")
       ]
     -- V1 history metadata
     let expectedMeta = Metadata with
