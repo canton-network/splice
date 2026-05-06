@@ -100,28 +100,28 @@ class BaseLedgerConnection(
   def activeContracts(
       eventFormat: com.daml.ledger.api.v2.transaction_filter.EventFormat,
       offset: Long,
+      restartSettings: RestartSettings = DefaultActiveContractsRestartSettings,
   )(implicit
       tc: TraceContext
   ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] = {
     // The source can restart due to expired auth, so we have to restart it from where we left off
-    val streamContinuationToken = new AtomicReference(Option.empty[ByteString])
+    val lastItem = new AtomicReference(Option.empty[lapi.state_service.GetActiveContractsResponse])
     val activeContractsRequest = {
-      RestartSource.onFailuresWithBackoff(RestartSettings(0.5.seconds, 1.second, 0.5))(() => {
-        val streamContinuationTokenValue = streamContinuationToken.get()
+      RestartSource.onFailuresWithBackoff(restartSettings)(() => {
+        val restartItem = lastItem.get()
         logger.info(
-          s"Starting active contracts stream with continuation token ${streamContinuationTokenValue
-              .map(_.toStringUtf8)}"
+          s"Starting active contracts stream with continuation token from last response $restartItem"
         )
         client
           .activeContracts(
             lapi.state_service.GetActiveContractsRequest(
               activeAtOffset = offset,
               eventFormat = Some(eventFormat),
-              streamContinuationToken = streamContinuationTokenValue,
+              streamContinuationToken = restartItem.map(_.streamContinuationToken),
             )
           )
           .map { item =>
-            streamContinuationToken.set(Some(item.streamContinuationToken))
+            lastItem.set(Some(item))
             item
           }
       })
@@ -158,10 +158,11 @@ class BaseLedgerConnection(
   def activeContracts(
       filter: IngestionFilter,
       offset: Long,
+      restartSettings: RestartSettings = DefaultActiveContractsRestartSettings,
   )(implicit
       tc: TraceContext
   ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] =
-    activeContracts(filter.toEventFormat, offset)
+    activeContracts(filter.toEventFormat, offset, restartSettings)
 
   def getContract(
       contractId: ContractId[?],
@@ -1270,6 +1271,9 @@ object BaseLedgerConnection {
     case class IncompleteAssign(assign: IncompleteReassignmentEvent.Assign)
         extends ActiveContractsItem
   }
+
+  lazy val DefaultActiveContractsRestartSettings: RestartSettings =
+    RestartSettings(1.seconds, 10.second, 0.2)
 }
 
 object SpliceLedgerConnection {
