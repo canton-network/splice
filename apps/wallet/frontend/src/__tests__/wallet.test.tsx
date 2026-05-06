@@ -54,7 +54,7 @@ import { AnyContract } from '@daml.js/splice-api-token-metadata/lib/Splice/Api/T
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
-import { LockedAmulet } from '@daml.js/splice-amulet-0.1.19/lib/Splice/Amulet';
+import { LockedAmulet } from '@daml.js/splice-amulet/lib/Splice/Amulet';
 
 const dsoEntry = nameServiceEntries.find(e => e.name.startsWith('dso'))!;
 

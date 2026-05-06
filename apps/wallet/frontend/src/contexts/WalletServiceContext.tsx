@@ -144,8 +144,8 @@ export interface WalletClient {
   rejectAllocationRequest: (allocationRequestCid: ContractId<AllocationRequest>) => Promise<void>;
   createAllocation: (allocateAmuletRequest: AllocateAmuletRequest) => Promise<void>;
   createAllocationV2: (allocateAmuletV2Request: AllocateAmuletV2Request) => Promise<void>;
-  withdrawAllocation: (allocationCid: ContractId<AmuletAllocation>) => Promise<void>;
-  withdrawAllocationV2: (allocationCid: ContractId<AmuletAllocation>) => Promise<void>;
+  withdrawAllocation: (allocationCid: ContractId<AmuletAllocationV1>) => Promise<void>;
+  withdrawAllocationV2: (allocationCid: ContractId<AmuletAllocationV2>) => Promise<void>;
 
   getAppPaymentRequest: (contractId: string) => Promise<ContractWithState<AppPaymentRequest>>;
   acceptAppPaymentRequest: (requestContractId: string) => Promise<void>;

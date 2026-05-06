@@ -8,6 +8,8 @@ import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-comm
 import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
 import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { usePrimaryParty } from '../hooks';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -33,6 +35,7 @@ import {
 import { damlTimestampToOpenApiTimestamp } from '../utils/timestampConversion';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import UseGetAmuletRules from '../hooks/scan-proxy/useGetAmuletRules';
+import { ContractId } from '@daml/types';
 
 dayjs.extend(relativeTime);
 
@@ -220,7 +223,9 @@ const V2AllocationRequestActionButton: React.FC<{
   const withdrawAllocationV2Mutation = useMutation({
     mutationFn: async () => {
       if (correspondingAllocation) {
-        return await withdrawAllocationV2(correspondingAllocation.contractId);
+        return await withdrawAllocationV2(
+          correspondingAllocation.contractId as ContractId<AmuletAllocationV2>
+        );
       } else {
         throw new Error("This mutation shouldn't be called without a corresponding allocation");
       }
@@ -312,7 +317,9 @@ const V1AllocationRequestActionButton: React.FC<{
   const withdrawAllocationMutation = useMutation({
     mutationFn: async () => {
       if (correspondingAllocation) {
-        return await withdrawAllocation(correspondingAllocation.contractId);
+        return await withdrawAllocation(
+          correspondingAllocation.contractId as ContractId<AmuletAllocationV1>
+        );
       } else {
         throw new Error("This mutation shouldn't be called without a corresponding allocation");
       }
