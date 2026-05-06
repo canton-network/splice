@@ -34,3 +34,8 @@
          wallet             0.1.15
          walletPayments     0.1.15
          ================== =======
+
+    - SV deployment
+
+        - Updated ``participantAddress``` in `scan-values.yaml` and ``sv-validator-values.yaml`` to use the participant adress with a migration suffix.
+          Ensure you override this with the correct helm install name for the participant ore reinstall the participant without a migration suffix ().
