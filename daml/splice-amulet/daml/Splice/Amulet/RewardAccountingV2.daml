@@ -29,7 +29,7 @@ template CalculateRewardsV2 with
     roundClosedAt : Time
       -- ^ The time at which the round was closed.
       --
-      -- This should be the creation time of this contract.
+      -- This should be equal to the creation time of this contract.
       -- We store this for ease of doing debugging and gathering metrics.
     rewardCouponTimeToLive : RelTime
       -- ^ Time to live for reward coupons that are created.
