@@ -49,3 +49,6 @@
           Ensure you override this with the correct helm install name for the participant ore reinstall the participant without a migration suffix ().
 
         - Cometbft: increased resource requests from 2 CPU and 5Gi to 3 CPUs and 7Gi, and the limit from 8Gi to 10Gi to better fit observed resource usage.
+
+        - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
+          in the security context of the pods as the participant, validator app, and sv app charts.
