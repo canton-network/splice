@@ -60,6 +60,32 @@ def metric_value(data: dict, name: str) -> float | None:
     return None
 
 
+def append_step_output(key: str, value: str) -> None:
+    """Append `key=value` to $GITHUB_OUTPUT so later steps can read it via
+    `steps.<id>.outputs.<key>`.
+    """
+    out_path = os.environ.get("GITHUB_OUTPUT")
+    if not out_path:
+        print(
+            "info: GITHUB_OUTPUT not set (running outside GitHub Actions?); "
+            f"skipping step output '{key}'",
+            file=sys.stderr,
+        )
+        return
+    try:
+        with open(out_path, "a") as f:
+            if "\n" in value:
+                delim = "EOF_PERF_THRESHOLDS"
+                f.write(f"{key}<<{delim}\n{value}\n{delim}\n")
+            else:
+                f.write(f"{key}={value}\n")
+    except OSError as e:
+        print(
+            f"warning: could not write GITHUB_OUTPUT ({out_path}): {e}",
+            file=sys.stderr,
+        )
+
+
 def append_step_summary(lines: list[str]) -> None:
     """Append a Markdown block to GitHub Actions' step summary, if available.
     """
@@ -153,7 +179,10 @@ def main() -> int:
 
     print(f"Done. files_seen={files_seen} breaches={len(breaches)}")
 
+    append_step_output("has_breaches", "true" if breaches else "false")
+    append_step_output("breach_count", str(len(breaches)))
     if breaches:
+        append_step_output("breaches", "\n".join(breaches))
         append_step_summary(
             ["## Performance threshold breaches", "", "```", *breaches, "```"]
         )

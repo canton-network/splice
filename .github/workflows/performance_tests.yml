@@ -78,11 +78,14 @@ jobs:
         with:
           name: store-ingestion-perf-metrics-${{ github.run_id }}
           path: /tmp/store-ingestion-perf-metrics
+          if-no-files-found: ignore
+
       - name: Check ingestion thresholds
         id: perf_check
-        if: ${{ success() && github.event_name == 'schedule' }}
+        #if: ${{ success() && github.event_name == 'schedule' }}
+        if: ${{ success() }}
         run: |
-          python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics
+          python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics || true
 
       # sanity check
       - name: Check logs for errors
@@ -104,7 +107,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
-          job_subname: "Ingestion Tests"
+          job_subname: "Daily Store Ingestion Performance Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}"
           notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
@@ -172,8 +175,9 @@ jobs:
         with:
           name: store-read-perf-metrics-${{ github.run_id }}
           path: /tmp/store-read-perf-metrics
+          if-no-files-found: ignore
+
       - name: Check read thresholds
-        id: perf_check
         if: ${{ success() && github.event_name == 'schedule' }}
         run: |
           python3 scripts/performance/check_perf_thresholds.py /tmp/store-read-perf-metrics
@@ -192,10 +196,10 @@ jobs:
           name: "logs-read-performance-tests"
 
       - name: Report Failures on Slack & Github
-        if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
+        if: failure() && github.event_name == 'schedule'
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
-          job_subname: "Read Tests"
+          job_subname: "Daily Store Read Performance Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}"
           notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
