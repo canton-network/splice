@@ -230,8 +230,8 @@ function newUiApp(
       refreshToken: {
         rotationType: 'rotating',
         expirationType: 'expiring',
-        tokenLifetime: 2592000, // 30d
-        idleTokenLifetime: 1296000, // 15d
+        tokenLifetime: 604800, // 7d
+        idleTokenLifetime: 259200, // 3d
         infiniteTokenLifetime: false,
         infiniteIdleTokenLifetime: false,
         leeway: 5,

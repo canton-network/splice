@@ -103,12 +103,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.splitwell.mock.network.canton.global",
@@ -183,12 +183,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://cns.sv.mock.network.canton.global",
@@ -233,12 +233,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://sv.sv.mock.network.canton.global",
@@ -283,12 +283,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.sv.mock.network.canton.global",
@@ -2535,12 +2535,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.sv-2.mock.network.canton.global",
@@ -2705,12 +2705,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.sv-1.mock.network.canton.global",
@@ -2843,12 +2843,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.validator1.mock.network.canton.global",
@@ -2903,12 +2903,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://cns.validator.mock.network.canton.global",
@@ -2961,12 +2961,12 @@
       "oidcConformant": true,
       "refreshToken": {
         "expirationType": "expiring",
-        "idleTokenLifetime": 1296000,
+        "idleTokenLifetime": 259200,
         "infiniteIdleTokenLifetime": false,
         "infiniteTokenLifetime": false,
         "leeway": 5,
         "rotationType": "rotating",
-        "tokenLifetime": 2592000
+        "tokenLifetime": 604800
       },
       "webOrigins": [
         "https://wallet.validator.mock.network.canton.global",
