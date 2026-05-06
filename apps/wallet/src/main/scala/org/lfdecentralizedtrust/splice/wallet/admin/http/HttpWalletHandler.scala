@@ -883,7 +883,7 @@ class HttpWalletHandler(
         dedupDuration,
       )
       (for {
-        result <- userWallet.treasury.enqueueTokenStandardTransferOperation(
+        result <- userWallet.treasury.enqueueTokenStandardTransferOperationV1(
           Codec.tryDecode(Codec.Party)(request.receiverPartyId),
           BigDecimal(request.amount),
           request.description,
@@ -1028,6 +1028,35 @@ class HttpWalletHandler(
     }
   }
 
+  override def createTokenStandardTransferV2(
+      respond: WalletResource.CreateTokenStandardTransferV2Response.type
+  )(body: CreateTokenStandardTransferRequest)(
+      extracted: WalletUserRequest
+  ): Future[WalletResource.CreateTokenStandardTransferV2Response] = ???
+
+  override def listTokenStandardTransfersV2(
+      respond: WalletResource.ListTokenStandardTransfersV2Response.type
+  )()(extracted: WalletUserRequest): Future[WalletResource.ListTokenStandardTransfersV2Response] =
+    ???
+
+  override def acceptTokenStandardTransferV2(
+      respond: WalletResource.AcceptTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      extracted: WalletUserRequest
+  ): Future[WalletResource.AcceptTokenStandardTransferV2Response] = ???
+
+  override def rejectTokenStandardTransferV2(
+      respond: WalletResource.RejectTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      extracted: WalletUserRequest
+  ): Future[WalletResource.RejectTokenStandardTransferV2Response] = ???
+
+  override def withdrawTokenStandardTransferV2(
+      respond: WalletResource.WithdrawTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      extracted: WalletUserRequest
+  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] = ???
+
   override def allocateAmulet(respond: WalletResource.AllocateAmuletResponse.type)(
       body: AllocateAmuletRequest
   )(extracted: WalletUserRequest): Future[WalletResource.AllocateAmuletResponse] = {
@@ -1113,22 +1142,14 @@ class HttpWalletHandler(
         body.transferLegs.map { leg =>
           new allocationv2.TransferLeg(
             leg.transferLegId,
-            new holdingv2.Account(
-              leg.sender,
-              java.util.Optional.empty,
-              "",
-            ),
-            new holdingv2.Account(leg.receiver, java.util.Optional.empty, ""),
+            TreasuryService.basicAccount(leg.sender),
+            TreasuryService.basicAccount(leg.receiver),
             Codec.tryDecode(Codec.JavaBigDecimal)(leg.amount),
             new holdingv2.InstrumentId(userWallet.store.key.dsoParty.toProtoPrimitive, "Amulet"),
             new metadatav1.Metadata(leg.meta.getOrElse(Map.empty).asJava),
           )
         }.asJava,
-        /*authorizer=*/ new holdingv2.Account(
-          authorizer.toProtoPrimitive,
-          java.util.Optional.empty,
-          "",
-        ),
+        /*authorizer=*/ TreasuryService.basicAccount(authorizer),
       )
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,

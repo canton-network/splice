@@ -699,6 +699,141 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v2/wallet/token-standard/transfers:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "createTokenStandardTransferV2"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateTokenStandardTransferRequest"
+      responses:
+        "200":
+          description: The transfer has been created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "400":
+          description: |
+            Invalid request, check the error response for details.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            The submitter’s wallet could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "409":
+          description:
+            A transfer with the same tracking id has been created.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "429":
+          description:
+            A transfer with the same tracking id is currently being processed,
+            which may or may not succeed. Retry submitting the request with exponential
+            back-off.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+    get:
+      description:
+        List all open transfers (v1 and v2) where the user is either sender or receiver.
+        They can be differentiated by the template_id in the response.
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "listTokenStandardTransfersV2"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTokenStandardTransfersResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/reject:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "rejectTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/accept:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "acceptTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/withdraw:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "withdrawTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/wallet/token-standard/allocation-requests:
     get:
       tags: [ wallet ]

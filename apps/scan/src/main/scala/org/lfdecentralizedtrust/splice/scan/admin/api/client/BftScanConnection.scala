@@ -91,7 +91,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
@@ -103,7 +103,6 @@ import org.lfdecentralizedtrust.tokenstandard.{
   metadata,
   transferinstruction,
 }
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
 import org.slf4j.event.Level
 
 import java.util.concurrent.ConcurrentHashMap
@@ -530,10 +529,23 @@ class BftScanConnection(
           transferinstructionv1.TransferFactory.ContractId,
           transferinstructionv1.TransferFactory_Transfer,
         ],
-        TransferFactoryWithChoiceContext.TransferKind,
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
     )
   ] =
     bftCall(_.getTransferFactory(choiceArgs))
+
+  def getTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        FactoryChoiceWithDisclosures[
+          transferinstructionv2.TransferFactory.ContractId,
+          transferinstructionv2.TransferFactory_Transfer,
+        ],
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+    )
+  ] =
+    bftCall(_.getTransferFactoryV2(choiceArgs))
 
   def getTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
@@ -542,19 +554,19 @@ class BftScanConnection(
     bftCall(_.getTransferFactoryRaw(arg))
 
   def getTransferInstructionAcceptContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionAcceptContext(instructionCid)
   )
 
   def getTransferInstructionRejectContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionRejectContext(instructionCid)
   )
 
   def getTransferInstructionWithdrawContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionWithdrawContext(instructionCid)
   )

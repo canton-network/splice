@@ -1358,6 +1358,21 @@ lazy val `apps-scan` =
           ),
           ScalaServer(
             new File(
+              "token-standard/splice-api-token-transfer-instruction-v2/openapi/transfer-instruction-v2.yaml"
+            ),
+            pkg = "org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2",
+            modules = List("pekko-http-v1.0.0", "circe"),
+            customExtraction = true,
+          ),
+          ScalaClient(
+            new File(
+              "token-standard/splice-api-token-transfer-instruction-v2/openapi/transfer-instruction-v2.yaml"
+            ),
+            modules = List("pekko-http-v1.0.0", "circe"),
+            pkg = "org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2",
+          ),
+          ScalaServer(
+            new File(
               "token-standard/splice-api-token-allocation-instruction-v1/openapi/allocation-instruction-v1.yaml"
             ),
             pkg = "org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1",
