@@ -12,6 +12,18 @@ const GcpQuotasConfigSchema = z.object({
   enabled: z.literal(true).optional(),
   excludedMetrics: z.array(quotaMetricNameSchema),
   excludedApproachingMetrics: z.array(quotaMetricNameSchema),
+  rollingWindowSeconds: z.number().int().min(60, {
+    // this rule comes from GCP aggregations.alignmentPeriod on quota-exceeded
+    message: 'must be at least 60s',
+  }),
+  retestWindowSeconds: z
+    .number()
+    .int()
+    .positive()
+    .refine(v => v % 60 === 0, {
+      // this rule comes from GCP duration on quota-exceeded
+      message: 'must be a positive multiple of 60s',
+    }),
 });
 
 const MonitoringConfigSchema = z
@@ -84,9 +96,23 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        trafficBasedRewards: z.object({
+          featuredAppRightsLimit: z.number(),
+        }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
+      muteTimeIntervals: z
+        .array(
+          z.object({
+            name: z.string(),
+            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+            startTime: z.string(), // UTC
+            endTime: z.string(), // UTC
+            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+          })
+        )
+        .default([]),
     }),
   })
   .strict();

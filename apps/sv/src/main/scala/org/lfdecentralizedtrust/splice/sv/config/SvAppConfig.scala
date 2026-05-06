@@ -210,12 +210,6 @@ object SvOnboardingConfig {
   }
 
   // TODO(DACH-NY/canton-network-internal#498) Consider adding `JoinWithToken` based on an already signed token instead of the raw keys
-
-  case class DomainMigration(
-      name: String,
-      dumpFilePath: Path,
-  ) extends SvOnboardingConfig
-
   def hideConfidential(config: SvOnboardingConfig): SvOnboardingConfig = {
     val hidden = "****"
     config match {
@@ -416,7 +410,6 @@ case class SvAppBackendConfig(
       onboarding.fold(true) {
         case _: SvOnboardingConfig.FoundDso => true
         case _: SvOnboardingConfig.JoinWithKey => true
-        case _: SvOnboardingConfig.DomainMigration => false
         case _: SvOnboardingConfig.RollForwardLsu => false
       }
   override val nodeTypeName: String = "SV"
@@ -475,6 +468,14 @@ final case class SequencerPruningConfig(
     pruningInterval: NonNegativeFiniteDuration,
     // data within the retention period preceding the current time will not be removed during the pruning process
     retentionPeriod: NonNegativeFiniteDuration,
+    // TODO(DACH-NY/cn-test-failures#8065) We currently check that the
+    // delta between the earliest and latest transaction on the current
+    // physical synchronizer is > retentionPeriod.  The earliest
+    // available timestamp is itself subject to mediator pruning so we
+    // allow a bit of slack and check that it is
+    // pruningSafetyCheckPercentage * retentionPeriod to ensure we can
+    // actually prune. For 30 days this corresponds to 8 hours slack.
+    pruningSafetyCheckPercentage: Double = 0.99,
 )
 
 final case class SvSequencerConfig(
@@ -489,6 +490,13 @@ final case class SvSequencerConfig(
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
     isBftSequencer: Boolean = false,
+    dabftPruning: Option[PruningConfig] = Some(
+      PruningConfig(
+        cron = "0 /10 * * * ?", // Run every 10min,
+        maxDuration = PositiveDurationSeconds.ofMinutes(5),
+        retention = PositiveDurationSeconds.ofDays(30),
+      )
+    ),
 ) {
   def toCantonConfig: RemoteSequencerConfig = RemoteSequencerConfig(
     adminApi,

@@ -63,7 +63,7 @@ class BootstrapPackageConfigIntegrationTest
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(1, Minute)))
 
   // Factored out so we can reuse it in the test
-  val initialAmulet: DarResource = DarResources.amulet_0_1_14
+  val initialAmulet: DarResource = DarResources.amulet.minimumInitialization
 
   private val initialPackageConfig = InitialPackageConfig.minimumInitialPackageConfig
 
@@ -258,8 +258,8 @@ class BootstrapPackageConfigIntegrationTest
         },
       )("vote request has been created", _ => sv1Backend.listVoteRequests().loneElement)
 
-      actAndCheck(timeUntilSuccess = 30.seconds)(
-        s"sv1-3 accept vote request for upraded packages",
+      actAndCheck(timeUntilSuccess = 45.seconds)(
+        s"sv1-3 accept vote request for upgraded packages",
         Seq(sv1Backend, sv2Backend, sv3Backend).map(sv =>
           eventuallySucceeds() {
             sv.castVote(

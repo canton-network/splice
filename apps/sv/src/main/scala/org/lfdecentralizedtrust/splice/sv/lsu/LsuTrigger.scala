@@ -25,7 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.lsu.LogicalSynchronizerUpgradeTrigger.LsuTransferTask
+import org.lfdecentralizedtrust.splice.sv.lsu.LsuTrigger.LsuTransferTask
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
@@ -33,7 +33,7 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import java.nio.file.Path
 import scala.concurrent.{ExecutionContext, Future}
 
-class LogicalSynchronizerUpgradeTrigger(
+class LsuTrigger(
     baseContext: TriggerContext,
     reconciler: SynchronizerNodeReconciler,
     localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
@@ -134,6 +134,7 @@ class LogicalSynchronizerUpgradeTrigger(
         task.work.announcement.successorSynchronizerId,
         task.readyAt,
         Some(task.work.announcement.upgradeTime),
+        ignorePsidCheck = false,
       )
       currentPsid <- currentSynchronizerNode.sequencerAdminConnection
         .getPhysicalSynchronizerId()
@@ -220,7 +221,7 @@ class LogicalSynchronizerUpgradeTrigger(
   }
 }
 
-object LogicalSynchronizerUpgradeTrigger {
+object LsuTrigger {
   case class LsuTransferTask(announcement: LsuAnnouncement) extends PrettyPrinting {
 
     override def pretty: Pretty[this.type] = prettyOfClass(

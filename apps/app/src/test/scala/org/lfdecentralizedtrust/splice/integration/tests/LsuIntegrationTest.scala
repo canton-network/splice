@@ -15,6 +15,7 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
 import com.digitalasset.canton.util.HexString
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.console.*
 import org.lfdecentralizedtrust.splice.environment.{
@@ -33,7 +34,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvSynchronizerNodeConfig,
   SvSynchronizerNodesConfig,
 }
-import org.lfdecentralizedtrust.splice.sv.lsu.LogicalSynchronizerUpgradeTrigger
+import org.lfdecentralizedtrust.splice.sv.lsu.{LsuTransferTrafficTrigger, LsuTrigger}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.config.WalletAppClientConfig
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.Http.BuyTrafficRequestStatus
@@ -86,7 +87,14 @@ class LogicalSynchronizerUpgradeIntegrationTest
           .updateAllSvAppConfigs { (name, config) =>
             config.copy(
               localSynchronizerNodes = config.localSynchronizerNodes
-                .copy(successor = config.localSynchronizerNodes.current.some),
+                .copy(successor =
+                  config.localSynchronizerNodes.current
+                    // always set the successor PV to 35
+                    // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
+                    // otherwise we will run a PV35 -> PV35 LSU
+                    .copy(protocolVersion = ProtocolVersion.v35)
+                    .some
+                ),
               domainMigrationDumpPath = Some(
                 (SynchronizerUpgradeUtil.migrationTestDumpDir(
                   name
@@ -347,6 +355,15 @@ class LogicalSynchronizerUpgradeIntegrationTest
       logSuffix = "global-synchronizer-upgrade",
     )() {
 
+      clue(
+        "Pause traffic transfer trigger on sv2 to simulate a participant that is connected to a non initialized sequencer past upgrade tiem"
+      ) {
+        sv2Backend.dsoAutomation
+          .trigger[LsuTransferTrafficTrigger]
+          .pause()
+          .futureValue
+      }
+
       clue(s"wait for lsu announcement") {
         waitForLsuAnnouncement()
       }
@@ -356,7 +373,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
           val upgradeSequencerClient = backend.sequencerClientFor(_.successor.value)
           val upgradeMediatorClient = backend.mediatorClientFor(_.successor.value)
           clue(s"check ${backend.name} initialized sequencer from synchronizer predecessor") {
-            eventuallySucceeds(2.minutes) {
+            eventuallySucceeds(3.minutes) {
               upgradeSequencerClient.physical_synchronizer_id shouldBe successorPsid
             }
           }
@@ -371,6 +388,14 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
       clue(s"wait for upgrade time $upgradeTime") {
         Threading.sleep(Duration.between(Instant.now(), upgradeTime.toInstant).toMillis.abs)
+      }
+
+      clue("Restart sv2 and resume traffic transfer trigger") {
+        sv2Backend.stop()
+        sv2Backend.startSync()
+        sv2Backend.dsoAutomation
+          .trigger[LsuTransferTrafficTrigger]
+          .resume()
       }
 
       def participantIsConnectedToNewSynchronizer(
@@ -593,7 +618,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
       clue("sv4 upgrades") {
         loggerFactory.suppress(
-          SuppressionRule.forLogger[LogicalSynchronizerUpgradeTrigger] && SuppressionRule.Level(
+          SuppressionRule.forLogger[LsuTrigger] && SuppressionRule.Level(
             org.slf4j.event.Level.WARN
           )
         ) {

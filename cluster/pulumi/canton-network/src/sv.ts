@@ -219,6 +219,7 @@ export async function installSvNode(
         ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
         : []
     )
+    .concat(bulkStorageBucket ? [bulkStorageBucket.secret, bulkStorageBucket.bucket] : [])
     .concat(extraDependsOn);
 
   const defaultPostgres = config.splitPostgresInstances
@@ -231,7 +232,7 @@ export async function installSvNode(
         spliceConfig.pulumiProjectConfig.cloudSql,
         false,
         {
-          logicalDecoding: !!baseConfig.scanBigQuery,
+          logicalDecoding: !!baseConfig.scanApp?.bigQuery,
         }
       );
 
@@ -245,7 +246,7 @@ export async function installSvNode(
       svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
       true,
       {
-        logicalDecoding: !!baseConfig.scanBigQuery,
+        logicalDecoding: !!baseConfig.scanApp?.bigQuery,
       }
     ));
 
@@ -287,8 +288,8 @@ export async function installSvNode(
     config.version
   );
 
-  if (baseConfig.scanBigQuery && appsPostgres instanceof postgres.CloudPostgres) {
-    configureScanBigQuery(appsPostgres, baseConfig.scanBigQuery, scan);
+  if (baseConfig.scanApp?.bigQuery && appsPostgres instanceof postgres.CloudPostgres) {
+    configureScanBigQuery(appsPostgres, baseConfig.scanApp!.bigQuery, scan);
   }
 
   const validatorApp = await installValidator(
@@ -614,9 +615,9 @@ function installScan(
           bulkStorage: {
             s3: {
               region: config.bulkStorageBucket.region,
-              bucketName: config.bulkStorageBucket.bucketName,
+              bucketName: config.bulkStorageBucket.bucket.name,
               endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
-              secretName: config.bulkStorageBucket.secretName,
+              secretName: config.bulkStorageBucket.secret.metadata.name,
             },
           },
         }
