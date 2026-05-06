@@ -43,7 +43,7 @@ const MonitoringConfigSchema = z
         delegatelessContention: z.object({
           thresholdPerNamespace: z.number(),
         }),
-        delegatelessNonLocalErrors: z.object({
+        delegatelessNonLocalContention: z.object({
           thresholdPerNamespace: z.number(),
         }),
         trafficWaste: z.object({

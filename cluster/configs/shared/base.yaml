@@ -99,7 +99,7 @@ monitoring:
         thresholdEntriesPerBatch: 80
       delegatelessContention:
         thresholdPerNamespace: 0.20
-      delegatelessNonLocalErrors:
+      delegatelessNonLocalContention:
         thresholdPerNamespace: 0.05
       trafficWaste:
         kilobytes: 1
