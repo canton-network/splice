@@ -41,3 +41,5 @@
 
         - Updated ``participantAddress``` in `scan-values.yaml` and ``sv-validator-values.yaml`` to use the participant adress with a migration suffix.
           Ensure you override this with the correct helm install name for the participant ore reinstall the participant without a migration suffix ().
+
+        - Cometbft: increased resource requests from 2 CPU and 5Gi to 3 CPUs and 7Gi, and the limit from 8Gi to 10Gi to better fit observed resource usage.
