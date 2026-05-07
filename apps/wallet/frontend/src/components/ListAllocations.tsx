@@ -6,14 +6,18 @@ import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-comm
 import Typography from '@mui/material/Typography';
 import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
-import { AmuletAllocation } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import TransferLegsDisplay from './TransferLegsDisplay';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import { useMutation } from '@tanstack/react-query';
-import { useWalletClient } from '../contexts/WalletServiceContext';
-import { ContractId } from '@daml/types';
+import {
+  AmuletAllocation,
+  isV2Allocation,
+  useWalletClient,
+} from '../contexts/WalletServiceContext';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
+import { ContractId } from '@daml/types';
 
 const ListAllocations: React.FC = () => {
   const allocationsQuery = useAmuletAllocations();
@@ -52,7 +56,8 @@ const ListAllocations: React.FC = () => {
 const AllocationDisplay: React.FC<{
   allocation: Contract<AmuletAllocation | AmuletAllocationV2>;
 }> = ({ allocation }) => {
-  const v2 = isV2(allocation.payload);
+  const { withdrawAllocation, withdrawAllocationV2 } = useWalletClient();
+  const v2 = isV2Allocation(allocation.payload);
   const spec = getAllocationSpec(allocation.payload);
   const { settlement, transferLegs } = spec;
   return (
@@ -73,10 +78,15 @@ const AllocationDisplay: React.FC<{
           <TransferLegsDisplay
             parentId={allocation.contractId}
             transferLegs={transferLegs}
-            getActionButton={() =>
-              // TODO (#4915): implement withdraw button for v2 when hasExistingAllocation
-              v2 ? null : <WithdrawAllocationButton allocationCid={allocation.contractId} />
-            }
+            getActionButton={() => (
+              <WithdrawAllocationButton
+                withdrawFn={() =>
+                  v2
+                    ? withdrawAllocationV2(allocation.contractId as ContractId<AmuletAllocationV2>)
+                    : withdrawAllocation(allocation.contractId as ContractId<AmuletAllocationV1>)
+                }
+              />
+            )}
           />
         </Stack>
       </CardContent>
@@ -84,14 +94,8 @@ const AllocationDisplay: React.FC<{
   );
 };
 
-function isV2(payload: AmuletAllocation | AmuletAllocationV2): payload is AmuletAllocationV2 {
-  return 'dso' in payload;
-}
-
-function getAllocationSpec(
-  payload: AmuletAllocation | AmuletAllocationV2
-): AllocationSpecification {
-  if (isV2(payload)) {
+function getAllocationSpec(payload: AmuletAllocation): AllocationSpecification {
+  if (isV2Allocation(payload)) {
     return payload.allocation;
   }
   // V1: convert to V2 AllocationSpecification shape
@@ -120,12 +124,11 @@ function getAllocationSpec(
 }
 
 const WithdrawAllocationButton: React.FC<{
-  allocationCid: ContractId<AmuletAllocation | AmuletAllocationV2>;
-}> = ({ allocationCid }) => {
-  const { withdrawAllocation } = useWalletClient();
+  withdrawFn: () => Promise<void>;
+}> = ({ withdrawFn }) => {
   const withdrawAllocationMutation = useMutation({
     mutationFn: async () => {
-      return await withdrawAllocation(allocationCid);
+      return await withdrawFn();
     },
     onSuccess: () => {},
     onError: error => {
