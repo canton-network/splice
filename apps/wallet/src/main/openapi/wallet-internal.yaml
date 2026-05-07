@@ -1897,8 +1897,6 @@ components:
 
     ListTokenStandardTransfersResponse:
       type: object
-      description: |
-        V1 and V2 transfers can be differentiated by the template_id in the contract.
       required:
         - transfers
       properties:
