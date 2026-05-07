@@ -20,6 +20,6 @@ export interface StaticCometBftConfigWithNodeName extends StaticCometBftConfig {
 export function cometBFTExternalPort(migrationId: number, nodeIndex: number): number {
   // TODO(DACH-NY/canton-network-node#10482) Revisit port scheme
   return nodeIndex >= 10
-    ? Number(`26${migrationId}${nodeIndex}`)
-    : Number(`26${migrationId}${nodeIndex}6`);
+    ? Number(`26${migrationId % 10}${nodeIndex}`)
+    : Number(`26${migrationId % 10}${nodeIndex}6`);
 }

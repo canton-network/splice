@@ -276,21 +276,19 @@ function configureCometBFTGatewayService(
   // and support easily deploying without refreshing the infra stack.
   const numSVs = numCoreSvsToDeploy < 4 && isDevNet ? 4 : numCoreSvsToDeploy;
 
-  const cometBftIngressPorts = Array.from({ length: numMigrations }, (_, i) => i).flatMap(
-    migration => {
-      const res = Array.from({ length: numSVs }, (_, node) => node).map(node =>
-        ingressPort(
-          `cometbft-${migration}-${node + 1}-gw`,
-          cometBFTExternalPort(migration, node + 1)
-        )
-      );
-      if (!isMainNet) {
-        // For non-mainnet clusters, include "node 0" for the sv runbook
-        res.unshift(ingressPort(`cometbft-${migration}-0-gw`, cometBFTExternalPort(migration, 0)));
-      }
-      return res;
+  const cometBftIngressPorts = Array.from(
+    { length: Math.min(numMigrations, 10) },
+    (_, i) => i
+  ).flatMap(migration => {
+    const res = Array.from({ length: numSVs }, (_, node) => node).map(node =>
+      ingressPort(`cometbft-${migration}-${node + 1}-gw`, cometBFTExternalPort(migration, node + 1))
+    );
+    if (!isMainNet) {
+      // For non-mainnet clusters, include "node 0" for the sv runbook
+      res.unshift(ingressPort(`cometbft-${migration}-0-gw`, cometBFTExternalPort(migration, 0)));
     }
-  );
+    return res;
+  });
   return configureGatewayService(
     ingressNs,
     pulumi.output(['0.0.0.0/0']),
@@ -606,16 +604,18 @@ function configureGateway(
     },
   });
 
-  const servers = Array.from({ length: numMigrations }, (_, i) => i).flatMap(migration => {
-    const ret = Array.from({ length: numSVs }, (_, node) => node).map(node =>
-      server(migration, node + 1)
-    );
-    if (!isMainNet) {
-      // For non-mainnet clusters, include "node 0" for the sv runbook
-      ret.unshift(server(migration, 0));
+  const servers = Array.from({ length: Math.min(numMigrations, 10) }, (_, i) => i).flatMap(
+    migration => {
+      const ret = Array.from({ length: numSVs }, (_, node) => node).map(node =>
+        server(migration, node + 1)
+      );
+      if (!isMainNet) {
+        // For non-mainnet clusters, include "node 0" for the sv runbook
+        ret.unshift(server(migration, 0));
+      }
+      return ret;
     }
-    return ret;
-  });
+  );
 
   const appsGw = new k8s.apiextensions.CustomResource(
     'cn-apps-gateway',
