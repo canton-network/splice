@@ -31,8 +31,7 @@ def load_thresholds(path: Path) -> dict:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError(f"thresholds file {path} must be a JSON object")
-    # Convention: keys starting with "_" are comments (e.g. "_comment",
-    # "_comment_total_time_ns"), so skip them,
+    # keys starting with "_" are comments, so skip them
     return {
         test: {k: v for k, v in rules.items() if not k.startswith("_")}
         for test, rules in data.items()
@@ -59,7 +58,6 @@ def get_metric_value(data: dict, name: str) -> float | None:
 
 def extract_threshold(rule) -> float | None:
     """Extract the `max` threshold from a rule of the form {"max": <number>}.
-    Returns None for anything else; the caller is expected to raise.
     """
     if not isinstance(rule, dict):
         return None
