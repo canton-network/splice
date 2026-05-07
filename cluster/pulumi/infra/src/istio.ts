@@ -276,7 +276,7 @@ function configureCometBFTGatewayService(
   // and support easily deploying without refreshing the infra stack.
   const numSVs = numCoreSvsToDeploy < 4 && isDevNet ? 4 : numCoreSvsToDeploy;
 
-  const cometBftIngressPorts = Array.from({ length: numMigrations }, (_, i) => i).flatMap(
+  const cometBftIngressPorts = Array.from({ length: Math.min(numMigrations, 10) }, (_, i) => i).flatMap(
     migration => {
       const res = Array.from({ length: numSVs }, (_, node) => node).map(node =>
         ingressPort(

@@ -28,7 +28,6 @@ export const MigrationInfoSchema = z
   .object({
     id: z
       .number()
-      .lt(10, 'Migration id must be less than or equal to 10 as we use in the cometbft ports.')
       .gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),

@@ -288,7 +288,7 @@
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
           "enableLogicalSynchronizerDeploymentMode": false,
-          "id": 3,
+          "id": 9,
           "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
@@ -311,7 +311,7 @@
         "archived": [
           {
             "enableLogicalSynchronizerDeploymentMode": false,
-            "id": 1,
+            "id": 7,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
@@ -331,7 +331,7 @@
           },
           {
             "enableLogicalSynchronizerDeploymentMode": false,
-            "id": 2,
+            "id": 8,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
@@ -354,7 +354,7 @@
         "lsuEnabled": true,
         "upgrade": {
           "enableLogicalSynchronizerDeploymentMode": true,
-          "id": 4,
+          "id": 10,
           "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
@@ -649,6 +649,96 @@
             "name": "cometbft-4-2-p2p",
             "number": 26426,
             "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-0-p2p",
+            "number": 26506,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-1-p2p",
+            "number": 26516,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-2-p2p",
+            "number": 26526,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-0-p2p",
+            "number": 26606,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-1-p2p",
+            "number": 26616,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-2-p2p",
+            "number": 26626,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-0-p2p",
+            "number": 26706,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-1-p2p",
+            "number": 26716,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-2-p2p",
+            "number": 26726,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-0-p2p",
+            "number": 26806,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-1-p2p",
+            "number": 26816,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-2-p2p",
+            "number": 26826,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-0-p2p",
+            "number": 26906,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-1-p2p",
+            "number": 26916,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-2-p2p",
+            "number": 26926,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-0-p2p",
+            "number": 26006,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-1-p2p",
+            "number": 26016,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-2-p2p",
+            "number": 26026,
+            "protocol": "TCP"
           }
         ],
         "resolution": "DNS"
@@ -764,6 +854,96 @@
           {
             "name": "cometbft-4-2-p2p",
             "number": 26426,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-0-p2p",
+            "number": 26506,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-1-p2p",
+            "number": 26516,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-5-2-p2p",
+            "number": 26526,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-0-p2p",
+            "number": 26606,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-1-p2p",
+            "number": 26616,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-6-2-p2p",
+            "number": 26626,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-0-p2p",
+            "number": 26706,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-1-p2p",
+            "number": 26716,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-7-2-p2p",
+            "number": 26726,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-0-p2p",
+            "number": 26806,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-1-p2p",
+            "number": 26816,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-8-2-p2p",
+            "number": 26826,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-0-p2p",
+            "number": 26906,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-1-p2p",
+            "number": 26916,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-9-2-p2p",
+            "number": 26926,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-0-p2p",
+            "number": 26006,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-1-p2p",
+            "number": 26016,
+            "protocol": "TCP"
+          },
+          {
+            "name": "cometbft-10-2-p2p",
+            "number": 26026,
             "protocol": "TCP"
           }
         ],
@@ -2206,13 +2386,13 @@
           "synchronizer": {
             "active": {
               "chainIdSuffix": "4",
-              "migrationId": 3,
+              "migrationId": 9,
               "version": "0.3.20"
             },
             "legacy": null,
             "staging": {
               "chainIdSuffix": "4",
-              "migrationId": 4,
+              "migrationId": 10,
               "version": "0.3.21"
             }
           }
@@ -2285,8 +2465,8 @@
         "ingress": {
           "decentralizedSynchronizer": {
             "migrationIds": [
-              "3",
-              "4"
+              "9",
+              "10"
             ]
           }
         },
@@ -2703,15 +2883,15 @@
         },
         "synchronizers": {
           "current": {
-            "mediator": "global-domain-3-mediator",
-            "sequencer": "global-domain-3-sequencer"
+            "mediator": "global-domain-9-mediator",
+            "sequencer": "global-domain-9-sequencer"
           },
           "successor": {
             "bftSequencerConfig": {
-              "p2pUrl": "https://sequencer-p2p-4.sv-2.mock.global.canton.network.digitalasset.com"
+              "p2pUrl": "https://sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com"
             },
-            "mediator": "global-domain-4-mediator",
-            "sequencer": "global-domain-4-sequencer"
+            "mediator": "global-domain-10-mediator",
+            "sequencer": "global-domain-10-sequencer"
           }
         },
         "tolerations": [
@@ -2942,29 +3122,29 @@
           "synchronizers": {
             "current": {
               "cometBFT": {
-                "connectionUri": "http://global-domain-3-cometbft-cometbft-rpc:26657",
+                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
                 "enabled": true
               },
-              "mediatorAddress": "global-domain-3-mediator",
-              "sequencerAddress": "global-domain-3-sequencer",
+              "mediatorAddress": "global-domain-9-mediator",
+              "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {
                 "enabled": true,
                 "pruningInterval": "1 hour",
                 "retentionPeriod": "30 days"
               },
-              "sequencerPublicUrl": "https://sequencer-3.sv-2.mock.global.canton.network.digitalasset.com"
+              "sequencerPublicUrl": "https://sequencer-9.sv-2.mock.global.canton.network.digitalasset.com"
             },
             "skipInitialization": true,
             "successor": {
               "enableBftSequencer": true,
-              "mediatorAddress": "global-domain-4-mediator",
-              "sequencerAddress": "global-domain-4-sequencer",
+              "mediatorAddress": "global-domain-10-mediator",
+              "sequencerAddress": "global-domain-10-sequencer",
               "sequencerPruningConfig": {
                 "enabled": true,
                 "pruningInterval": "1 hour",
                 "retentionPeriod": "30 days"
               },
-              "sequencerPublicUrl": "https://sequencer-4.sv-2.mock.global.canton.network.digitalasset.com"
+              "sequencerPublicUrl": "https://sequencer-10.sv-2.mock.global.canton.network.digitalasset.com"
             }
           },
           "tolerations": [
@@ -3410,13 +3590,13 @@
           "synchronizer": {
             "active": {
               "chainIdSuffix": "4",
-              "migrationId": 3,
+              "migrationId": 9,
               "version": "0.3.20"
             },
             "legacy": null,
             "staging": {
               "chainIdSuffix": "4",
-              "migrationId": 4,
+              "migrationId": 10,
               "version": "0.3.21"
             }
           }
@@ -3489,8 +3669,8 @@
         "ingress": {
           "decentralizedSynchronizer": {
             "migrationIds": [
-              "3",
-              "4"
+              "9",
+              "10"
             ]
           }
         },
@@ -3767,15 +3947,15 @@
         },
         "synchronizers": {
           "current": {
-            "mediator": "global-domain-3-mediator",
-            "sequencer": "global-domain-3-sequencer"
+            "mediator": "global-domain-9-mediator",
+            "sequencer": "global-domain-9-sequencer"
           },
           "successor": {
             "bftSequencerConfig": {
-              "p2pUrl": "https://sequencer-p2p-4.sv-1.mock.global.canton.network.digitalasset.com"
+              "p2pUrl": "https://sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com"
             },
-            "mediator": "global-domain-4-mediator",
-            "sequencer": "global-domain-4-sequencer"
+            "mediator": "global-domain-10-mediator",
+            "sequencer": "global-domain-10-sequencer"
           }
         },
         "tolerations": [
@@ -3896,7 +4076,7 @@
             "name": "cn-mocknet"
           },
           "contactPoint": "sv-support@digitalasset.com",
-          "decentralizedSynchronizerUrl": "http://global-domain-3-sequencer.sv-1:5008",
+          "decentralizedSynchronizerUrl": "http://global-domain-9-sequencer.sv-1:5008",
           "delegatelessAutomationExpectedTaskDuration": 5000,
           "delegatelessAutomationExpiredRewardCouponBatchSize": 100,
           "delegatelessAutomationExpiredRewardCouponNumBatches": 100,
@@ -3970,30 +4150,30 @@
           "synchronizers": {
             "current": {
               "cometBFT": {
-                "connectionUri": "http://global-domain-3-cometbft-cometbft-rpc:26657",
+                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
                 "enabled": true,
                 "externalGovernanceKey": true
               },
-              "mediatorAddress": "global-domain-3-mediator",
-              "sequencerAddress": "global-domain-3-sequencer",
+              "mediatorAddress": "global-domain-9-mediator",
+              "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {
                 "enabled": true,
                 "pruningInterval": "1 hour",
                 "retentionPeriod": "30 days"
               },
-              "sequencerPublicUrl": "https://sequencer-3.sv-1.mock.global.canton.network.digitalasset.com"
+              "sequencerPublicUrl": "https://sequencer-9.sv-1.mock.global.canton.network.digitalasset.com"
             },
             "skipInitialization": true,
             "successor": {
               "enableBftSequencer": true,
-              "mediatorAddress": "global-domain-4-mediator",
-              "sequencerAddress": "global-domain-4-sequencer",
+              "mediatorAddress": "global-domain-10-mediator",
+              "sequencerAddress": "global-domain-10-sequencer",
               "sequencerPruningConfig": {
                 "enabled": true,
                 "pruningInterval": "1 hour",
                 "retentionPeriod": "30 days"
               },
-              "sequencerPublicUrl": "https://sequencer-4.sv-1.mock.global.canton.network.digitalasset.com"
+              "sequencerPublicUrl": "https://sequencer-10.sv-1.mock.global.canton.network.digitalasset.com"
             }
           },
           "tolerations": [
@@ -4136,7 +4316,7 @@
           "svValidator": true,
           "synchronizer": {
             "connectionType": "trust-single",
-            "url": "https://sequencer-3.sv-2.mock.global.canton.network.digitalasset.com"
+            "url": "https://sequencer-9.sv-2.mock.global.canton.network.digitalasset.com"
           },
           "tolerations": [
             {

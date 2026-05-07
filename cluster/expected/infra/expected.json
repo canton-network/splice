@@ -863,6 +863,186 @@
               "number": 26426,
               "protocol": "TCP"
             }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-0-gw",
+              "number": 26506,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-1-gw",
+              "number": 26516,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-2-gw",
+              "number": 26526,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-0-gw",
+              "number": 26606,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-1-gw",
+              "number": 26616,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-2-gw",
+              "number": 26626,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-0-gw",
+              "number": 26706,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-1-gw",
+              "number": 26716,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-2-gw",
+              "number": 26726,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-0-gw",
+              "number": 26806,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-1-gw",
+              "number": 26816,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-2-gw",
+              "number": 26826,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-0-gw",
+              "number": 26906,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-1-gw",
+              "number": 26916,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-2-gw",
+              "number": 26926,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-10-0-gw",
+              "number": 26006,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-10-1-gw",
+              "number": 26016,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-10-2-gw",
+              "number": 26026,
+              "protocol": "TCP"
+            }
           }
         ]
       }
@@ -1355,6 +1535,96 @@
               "port": 26426,
               "protocol": "TCP",
               "targetPort": 26426
+            },
+            {
+              "name": "cometbft-5-0-gw",
+              "port": 26506,
+              "protocol": "TCP",
+              "targetPort": 26506
+            },
+            {
+              "name": "cometbft-5-1-gw",
+              "port": 26516,
+              "protocol": "TCP",
+              "targetPort": 26516
+            },
+            {
+              "name": "cometbft-5-2-gw",
+              "port": 26526,
+              "protocol": "TCP",
+              "targetPort": 26526
+            },
+            {
+              "name": "cometbft-6-0-gw",
+              "port": 26606,
+              "protocol": "TCP",
+              "targetPort": 26606
+            },
+            {
+              "name": "cometbft-6-1-gw",
+              "port": 26616,
+              "protocol": "TCP",
+              "targetPort": 26616
+            },
+            {
+              "name": "cometbft-6-2-gw",
+              "port": 26626,
+              "protocol": "TCP",
+              "targetPort": 26626
+            },
+            {
+              "name": "cometbft-7-0-gw",
+              "port": 26706,
+              "protocol": "TCP",
+              "targetPort": 26706
+            },
+            {
+              "name": "cometbft-7-1-gw",
+              "port": 26716,
+              "protocol": "TCP",
+              "targetPort": 26716
+            },
+            {
+              "name": "cometbft-7-2-gw",
+              "port": 26726,
+              "protocol": "TCP",
+              "targetPort": 26726
+            },
+            {
+              "name": "cometbft-8-0-gw",
+              "port": 26806,
+              "protocol": "TCP",
+              "targetPort": 26806
+            },
+            {
+              "name": "cometbft-8-1-gw",
+              "port": 26816,
+              "protocol": "TCP",
+              "targetPort": 26816
+            },
+            {
+              "name": "cometbft-8-2-gw",
+              "port": 26826,
+              "protocol": "TCP",
+              "targetPort": 26826
+            },
+            {
+              "name": "cometbft-9-0-gw",
+              "port": 26906,
+              "protocol": "TCP",
+              "targetPort": 26906
+            },
+            {
+              "name": "cometbft-9-1-gw",
+              "port": 26916,
+              "protocol": "TCP",
+              "targetPort": 26916
+            },
+            {
+              "name": "cometbft-9-2-gw",
+              "port": 26926,
+              "protocol": "TCP",
+              "targetPort": 26926
             }
           ]
         },
@@ -1964,11 +2234,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-1-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-1-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv-1.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -1987,7 +2257,7 @@
         }
       }
     },
-    "name": "sv-1-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-1-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -1998,11 +2268,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-1-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-1-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv-1.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2021,7 +2291,7 @@
         }
       }
     },
-    "name": "sv-1-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-1-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2068,11 +2338,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-da-1-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-da-1-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv-da-1.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv-da-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2091,7 +2361,7 @@
         }
       }
     },
-    "name": "sv-da-1-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-da-1-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2102,11 +2372,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-da-1-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-da-1-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv-da-1.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv-da-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2125,7 +2395,7 @@
         }
       }
     },
-    "name": "sv-da-1-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-da-1-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2136,11 +2406,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2159,7 +2429,7 @@
         }
       }
     },
-    "name": "sv-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2170,11 +2440,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2193,7 +2463,7 @@
         }
       }
     },
-    "name": "sv-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
