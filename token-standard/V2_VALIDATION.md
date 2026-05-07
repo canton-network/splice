@@ -127,3 +127,8 @@ Cleanup performed so far:
 - Improve commentary on `AllocationRequest_Accept` to call out that there is no guarantee that
   wallets call the choice, and thus apps must clean up allocation requests independently
 - Add `Monoid` instance for `Splice.Testing.Utils.OpenApiChoiceContext` to simplify writing tests
+- Extend the token metadata API so instrument metadata can expose a `paused` flag and optional `pauseInfo`,
+  allowing wallets and other clients to detect when an instrument is paused and why.
+  This was done as a backwards-compatible change to `token-metadata-v1.yaml` to
+  allow both V1 and V2 clients to benefit from this information without needing
+  to upgrade to a new version of the metadata API.

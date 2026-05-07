@@ -7,7 +7,7 @@ info:
   description: |
     Implemented by token registries for the purpose of serving metadata about
     their tokens and the standards supported by the registry.
-  version: 1.1.0
+  version: 1.2.0
 paths:
 
   /registry/metadata/v1/info:
@@ -157,6 +157,14 @@ components:
           type: integer
           format: int8
           default: 10
+        paused:
+          description: |
+            Indicates whether the instrument is currently paused. A paused instrument cannot be
+            transferred or allocated.
+          type: boolean
+          default: false
+        pauseInfo:
+          $ref: "#/components/schemas/PauseInfo"
         supportedApis:
           $ref: "#/components/schemas/SupportedApis"
         showAccountInputFields:
@@ -207,3 +215,18 @@ components:
       additionalProperties:
         type: integer
         format: int32
+
+    PauseInfo:
+      description: |
+        Additional information about the instrument pause state.
+      type: object
+      properties:
+        reason:
+          description: |
+            Why the instrument is paused.
+          type: string
+        until:
+          description: |
+            Timestamp (exclusive) until which the instrument is paused, if known.
+          type: string
+          format: date-time
