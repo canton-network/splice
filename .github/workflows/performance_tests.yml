@@ -62,13 +62,10 @@ jobs:
             echo "Downloading updates from mainnet for performance tests"
             curl -sSL --fail-with-body "https://storage.googleapis.com/mainnet-history-dumps/mainnetupdates.json" -o /tmp/mainnetupdates.json
             ls -lah /tmp/mainnetupdates.json
-          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
-          #cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
 
       - name: Push ingestion metrics to Prometheus Pushgateway
-        # TODO: re-enable once <reason>; replace `false` with the original predicate below.
-        if: false
-        # if: ${{ success() }}
+        if: ${{ success() }}
         run: |
           python3 scripts/performance/push_store_ingestion_perf_metrics.py
 
@@ -82,8 +79,7 @@ jobs:
 
       - name: Check ingestion thresholds
         id: perf_check
-        #if: ${{ success() && github.event_name == 'schedule' }}
-        if: ${{ success() }}
+        if: ${{ success() && github.event_name == 'schedule' }}
         run: |
           python3 scripts/performance/check_perf_thresholds.py /tmp/store-ingestion-perf-metrics || true
 
@@ -104,8 +100,7 @@ jobs:
           name: "logs-ingestion-performance-tests"
 
       - name: Report Failures on Slack & Github
-        #if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
-        if: ${{ failure() || steps.perf_check.outputs.has_breaches == 'true' }}
+        if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
           job_subname: "Ingestion Tests"
