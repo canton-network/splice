@@ -739,7 +739,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test("can 'reject' a minting delegation proposal", async () => {
@@ -775,7 +775,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test('shows replacement dialog when accepting proposal for beneficiary with existing delegation', async () => {
@@ -827,7 +827,7 @@ describe('Wallet user can', () => {
     await user.click(proceedButton);
 
     // Verify accept was called (backend handles replacement automatically)
-    expect(calledAcceptArgs).toHaveLength(1);
+    await waitFor(() => expect(calledAcceptArgs).toHaveLength(1));
   });
 
   test('transfer preapproval (without token standard) does not show nor send description if not supported', async () => {
