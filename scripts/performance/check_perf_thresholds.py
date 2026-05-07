@@ -2,14 +2,11 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compare perf metrics against absolute thresholds and write the result to GITHUB_OUTPUT:
-  - reads every metrics.json in the given dirs,
-  - compares each metric to its rule in `.github/store-perf-thresholds.json`,
-  - prints a per-(test, metric) result to stdout,
-  - writes `has_breaches`, `breach_count`, and (if any) `breaches` to
-    GITHUB_OUTPUT so downstream steps can branch on them,
-  - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY (visible
-    in the GHA UI and linked from the failure notification),
+"""Compare perf metrics against the thresholds and write the result to GITHUB_OUTPUT:
+  - reads every metrics.json in the given dirs
+  - compares each metric to its thresholds in `.github/store-perf-thresholds.json`
+  - writes information of the breaches to GITHUB_OUTPUT so downstream steps can branch on them
+  - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY, which is visible in the GH issue
 
 Usage:
   python3 check_perf_thresholds.py <metrics_dir>
@@ -25,14 +22,15 @@ from pathlib import Path
 from typing import Iterable
 
 DEFAULT_THRESHOLDS = Path(".github/store-perf-thresholds.json")
+NEWLINE = "\n"
+GITHUB_OUTPUT_HEREDOC_DELIM = "EOF_PERF_THRESHOLDS"
 
 
 def load_thresholds(path: Path) -> dict:
-    """Parse the JSON thresholds file, dropping `_*` comment keys."""
     with open(path) as f:
         data = json.load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"thresholds file {path} must be a JSON object at the top level")
+        raise ValueError(f"thresholds file {path} must be a JSON object")
     return {k: v for k, v in data.items() }
 
 
@@ -44,7 +42,7 @@ def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
         yield from sorted(d.glob("*.json"))
 
 
-def metric_value(data: dict, name: str) -> float | None:
+def get_metric_value(data: dict, name: str) -> float | None:
     for m in data.get("metrics", []):
         if m.get("name") == name:
             try:
@@ -68,20 +66,16 @@ def append_step_output(key: str, value: str) -> None:
         return
     try:
         with open(out_path, "a") as f:
-            if "\n" in value:
-                delim = "EOF_PERF_THRESHOLDS"
-                f.write(f"{key}<<{delim}\n{value}\n{delim}\n")
+            if NEWLINE in value:
+                f.write(f"{key}<<{GITHUB_OUTPUT_HEREDOC_DELIM}\n{value}\n{GITHUB_OUTPUT_HEREDOC_DELIM}\n")
             else:
                 f.write(f"{key}={value}\n")
     except OSError as e:
-        print(
-            f"warning: could not write GITHUB_OUTPUT ({out_path}): {e}",
-            file=sys.stderr,
-        )
+        print( f"warning: could not write GITHUB_OUTPUT ({out_path}): {e}", file=sys.stderr)
 
 
 def append_step_summary(lines: list[str]) -> None:
-    """Append a Markdown block to GitHub Actions' step summary, if available.
+    """Append a Markdown to GitHub Actions' step summary.
     """
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
@@ -95,10 +89,7 @@ def append_step_summary(lines: list[str]) -> None:
         with open(summary_path, "a") as f:
             f.write("\n".join(lines) + "\n")
     except OSError as e:
-        print(
-            f"warning: could not write GITHUB_STEP_SUMMARY ({summary_path}): {e}",
-            file=sys.stderr,
-        )
+        print( f"warning: could not write GITHUB_STEP_SUMMARY ({summary_path}): {e}", file=sys.stderr )
 
 
 def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict ) -> tuple[list[str], int]:
@@ -122,18 +113,18 @@ def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict 
             print(f"info: no thresholds configured for '{test_name}', skipping ({f.name})")
             continue
 
-        for metric_name, raw_limit in rules.items():
+        for metric_name, raw_threshold in rules.items():
             try:
-                limit = float(raw_limit)
+                threshold = float(raw_threshold)
             except (TypeError, ValueError):
                 print(
                     f"warning: rule {test_name}::{metric_name} has non-numeric "
-                    f"value {raw_limit!r}, skipping",
+                    f"value {raw_threshold}, skipping",
                     file=sys.stderr,
                 )
                 continue
 
-            observed = metric_value(data, metric_name)
+            observed = get_metric_value(data, metric_name)
             if observed is None:
                 print(
                     f"warning: metric '{metric_name}' not in {f.name} for '{test_name}'",
@@ -141,14 +132,14 @@ def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict 
                 )
                 continue
 
-            if observed <= limit:
-                print(f"OK     {test_name} :: {metric_name} = {observed:.0f} (<= {limit:.0f})")
+            if observed <= threshold:
+                print(f"OK     {test_name} :: {metric_name} = {observed:.0f} (<= {threshold:.0f})")
                 continue
 
-            pct = ((observed - limit) / limit * 100.0) if limit else 0.0
+            pct = ((observed - threshold) / threshold * 100.0) if threshold else 0.0
             line = (
                 f"BREACH {test_name} :: {metric_name} = {observed:.0f} "
-                f"(> {limit:.0f}, +{pct:.2f}%)"
+                f"(> {threshold:.0f}, +{pct:.2f}%)"
             )
             print(line)
             breaches.append(line)
