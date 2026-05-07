@@ -3,6 +3,7 @@
 import {
   Auth0ClientType,
   config,
+  DecentralizedSynchronizerUpgradeConfig,
   getAuth0Config,
 } from '@lfdecentralizedtrust/splice-pulumi-common';
 
@@ -23,5 +24,7 @@ async function main() {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
-main();
+if (DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode) {
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  main();
+}
