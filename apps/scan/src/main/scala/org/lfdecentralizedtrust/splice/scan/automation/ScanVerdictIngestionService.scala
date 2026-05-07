@@ -323,7 +323,9 @@ class ScanVerdictIngestionService(
     }
   }
 
-  private def batchSource[Mat](source: Source[v30.Verdict, Mat]): Source[Seq[v30.Verdict], Mat] =
+  private def batchSource[Mat](
+      source: Source[v30.Verdict, Mat]
+  )(implicit tc: TraceContext): Source[Seq[v30.Verdict], Mat] =
     source.batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(
       // TODO(DACH-NY/cn-test-failures#8281): Remove once we have figured out why we're getting duplicate data.
       (batch, newElement) => {
