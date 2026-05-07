@@ -205,16 +205,21 @@ class DbAppActivityRecordStore(
   }
 
   def getRecordsByVerdictRowIds(
-      verdictRowIds: Seq[Long]
+      verdictRowIds: Seq[Long],
+      earliestCompleteRound: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
     if (verdictRowIds.isEmpty) Future.successful(Map.empty)
     else {
+      val roundFilter = earliestCompleteRound match {
+        case Some(round) => sql" round_number >= $round and"
+        case None => sql""
+      }
       storage
         .query(
           (sql"""
           select verdict_row_id, round_number, app_provider_parties, app_activity_weights
           from #${Tables.appActivityRecords}
-          where """ ++ inClause("verdict_row_id", verdictRowIds))
+          where""" ++ roundFilter ++ sql" " ++ inClause("verdict_row_id", verdictRowIds))
             .as[AppActivityRecordT],
           "appActivity.getRecordsByVerdictRowIds",
         )
