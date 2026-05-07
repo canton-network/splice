@@ -43,8 +43,7 @@ def load_thresholds(path: Path) -> dict:
 def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
     for d in dirs:
         if not d.is_dir():
-            print(f"warning: metrics dir {d} does not exist, skipping", file=sys.stderr)
-            continue
+            raise FileNotFoundError(f"metrics dir {d} does not exist")
         yield from sorted(d.glob("*.json"))
 
 
@@ -121,15 +120,16 @@ def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict 
         files_seen += 1
         try:
             data = json.loads(f.read_text())
-        except Exception as e:
-            print(f"warning: cannot parse {f}: {e}", file=sys.stderr)
-            continue
+        except (OSError, json.JSONDecodeError) as e:
+            raise ValueError(f"cannot parse metrics file {f}: {e}") from e
 
         test_name = data.get("test_name") or f.stem
         rules = thresholds.get(test_name)
         if not rules:
-            print(f"info: no thresholds configured for '{test_name}', skipping ({f.name})")
-            continue
+            raise KeyError(
+                f"no thresholds configured for '{test_name}' (from {f.name}); "
+                f"add a rule to {DEFAULT_THRESHOLDS}"
+           )
 
         for metric_name, rule in rules.items():
             threshold = extract_threshold(rule)
