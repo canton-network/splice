@@ -115,9 +115,7 @@ jobs:
     container:
       image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
     name: Read Performance Tests
-    # TODO: re-enable once <reason>; replace `false` with the original predicate below.
-    if: false
-    # if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     steps:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
