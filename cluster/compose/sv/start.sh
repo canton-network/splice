@@ -64,7 +64,10 @@ fi
 
 extra_args=()
 if [ $wait -eq 1 ]; then
-  extra_args+=("--wait" "--wait-timeout" "600")
+  # Note that the wait-timeout must be higher than the startup time of the healthcheck in the image,
+  # which is currently 10m. Otherwise, the container may still be in "starting" state when the timeout
+  # is reached, which is not considered a failure in docker compose.
+  extra_args+=("--wait" "--wait-timeout" "700")
 fi
 
 export HOST_BIND_IP
