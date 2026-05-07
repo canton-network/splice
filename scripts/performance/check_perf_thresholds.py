@@ -6,7 +6,7 @@
   - reads every metrics.json in the given dirs
   - compares each metric to its thresholds in `.github/store-perf-thresholds.json`
   - writes information of the breaches to GITHUB_OUTPUT so downstream steps can branch on them
-  - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY, which is visible in the GH issue
+  - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY for visibility in GHA UI which is linked from GH issue
 
 Usage:
   python3 check_perf_thresholds.py <metrics_dir>
