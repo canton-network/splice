@@ -4,6 +4,9 @@ on:
     branches:
       - 'main'
 
+permissions:
+  id-token: write
+
 jobs:
   trigger_cimain:
     uses: ./.github/workflows/cluster_tests.yml

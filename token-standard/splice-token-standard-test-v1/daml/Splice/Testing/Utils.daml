@@ -7,6 +7,7 @@ module Splice.Testing.Utils
     -- * Utilities for disclosures
     Disclosures'(..),
     queryDisclosure',
+    discloseMany',
     submitWithDisclosures',
     submitWithDisclosuresMustFail',
 
@@ -55,6 +56,11 @@ withExtraDisclosures : Disclosures' -> OpenApiChoiceContext -> OpenApiChoiceCont
 withExtraDisclosures discs ctx =
   ctx with disclosures = ctx.disclosures <> discs
 
+instance Monoid OpenApiChoiceContext where
+  mempty = OpenApiChoiceContext with
+    choiceContext = ChoiceContext with values = TextMap.empty
+    disclosures = mempty
+
 instance Semigroup OpenApiChoiceContext where
   ctx1 <> ctx2 =
         OpenApiChoiceContext with
@@ -89,13 +95,16 @@ queryDisclosure' p cid = do
     None -> fail $ "Disclosure not found for: " <> show cid
     Some d -> pure Disclosures' with disclosures = Map.fromList [(coerceContractId cid, d)]
 
+discloseMany' : Disclosures' -> SubmitOptions
+discloseMany' d = discloseMany (Map.values d.disclosures)
+
 -- | Version of 'submitWithDisclosures' that works with the simplified `Disclosures'` type.
 submitWithDisclosures' : Party -> Disclosures' -> Commands a -> Script a
-submitWithDisclosures' p (Disclosures' ds) cmds = submit (actAs p <> discloseMany (Map.values ds)) cmds
+submitWithDisclosures' p ds cmds = submit (actAs p <> discloseMany' ds) cmds
 
 -- | Version of 'submitWithDisclosuresMustFail' that works with the simplified `Disclosures'` type.
 submitWithDisclosuresMustFail' : Party -> Disclosures' -> Commands a -> Script ()
-submitWithDisclosuresMustFail' p (Disclosures' ds) cmds = submitMustFail (actAs p <> discloseMany (Map.values ds)) cmds
+submitWithDisclosuresMustFail' p ds cmds = submitMustFail (actAs p <> discloseMany' ds) cmds
 
 -- | Allocate party with a specific name.
 allocatePartyExact : Text -> Script Party
@@ -109,8 +118,8 @@ allocatePartyExact name = allocatePartyByHint (PartyIdHint name)
 -- | Use this to check that commands fail with the expected 'FailureStatus'.
 submitWithDisclosuresMustFail''
   : Show a => FailureStatusCheck -> Party -> Disclosures' -> Commands a -> Script ()
-submitWithDisclosuresMustFail'' check p (Disclosures' ds) cmds = do
-  result <- trySubmit (actAs p <> discloseMany (Map.values ds)) cmds
+submitWithDisclosuresMustFail'' check p ds cmds = do
+  result <- trySubmit (actAs p <> discloseMany' ds) cmds
   checkSubmitFailure check result
 
 
