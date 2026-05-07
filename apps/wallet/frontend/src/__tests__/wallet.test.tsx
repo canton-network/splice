@@ -827,7 +827,7 @@ describe('Wallet user can', () => {
     await user.click(proceedButton);
 
     // Verify accept was called (backend handles replacement automatically)
-    expect(calledAcceptArgs).toHaveLength(1);
+    await waitFor(() => expect(calledAcceptArgs).toHaveLength(1));
   });
 
   test('transfer preapproval (without token standard) does not show nor send description if not supported', async () => {
