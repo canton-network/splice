@@ -559,6 +559,12 @@ class BftScanConnection(
     _.getTransferInstructionAcceptContext(instructionCid)
   )
 
+  def getTransferInstructionAcceptContext(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionAcceptContextV2(instructionCid)
+  )
+
   def getTransferInstructionRejectContext(
       instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(

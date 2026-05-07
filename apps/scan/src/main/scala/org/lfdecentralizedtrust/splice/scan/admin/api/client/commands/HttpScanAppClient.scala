@@ -2004,6 +2004,40 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferInstructionAcceptContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionAcceptContextResponse,
+        ChoiceContextWithDisclosures,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionAcceptContextResponse] = {
+      client.getTransferInstructionAcceptContext(
+        transferInstructionId.contractId,
+        body = transferinstruction.v2.definitions.GetChoiceContextRequest(meta = None),
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      transferinstruction.v2.GetTransferInstructionAcceptContextResponse,
+      Either[String, ChoiceContextWithDisclosures],
+    ] = { case transferinstruction.v2.GetTransferInstructionAcceptContextResponse.OK(context) =>
+      val disclosedContracts =
+        context.disclosedContracts.map(fromTransferInstructionV2HttpDisclosedContract)
+      for {
+        choiceContext <- parseAsChoiceContext(context.choiceContextData)
+      } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
+    }
+  }
+
   case class GetTransferInstructionTransferContextRaw(
       transferInstructionId: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,

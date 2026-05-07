@@ -1082,8 +1082,37 @@ class HttpWalletHandler(
   override def acceptTokenStandardTransferV2(
       respond: WalletResource.AcceptTokenStandardTransferV2Response.type
   )(contractId: String)(
-      extracted: WalletUserRequest
-  ): Future[WalletResource.AcceptTokenStandardTransferV2Response] = ???
+      tUser: WalletUserRequest
+  ): Future[WalletResource.AcceptTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.acceptTokenStandardTransferV2") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionAcceptContext(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Accept(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Accept(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.AcceptTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
 
   override def rejectTokenStandardTransferV2(
       respond: WalletResource.RejectTokenStandardTransferV2Response.type

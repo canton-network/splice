@@ -82,7 +82,6 @@ class TokenStandardV2TransferIntegrationTest
         )(
           "Alice and Bob see it",
           _ => {
-            // TODO: v2
             Seq(aliceWalletClient, bobWalletClient).foreach(
               _.listTokenStandardTransfers() should have size i.toLong withClue "TokenStandardTransfers"
             )
@@ -139,14 +138,12 @@ class TokenStandardV2TransferIntegrationTest
 
         actAndCheck(
           "Bob accepts one transfer offer",
-          // TODO: v2
           bobWalletClient.acceptTokenStandardTransfer(toAccept),
         )(
           "The offer is removed and bob's balance is updated",
           result => {
             inside(result.output) { case members.TransferInstructionCompleted(_) => () }
             Seq(aliceWalletClient, bobWalletClient).foreach(
-              // TODO: v2
               _.listTokenStandardTransfers() should have size (cids.length.toLong - 3L) withClue "TokenStandardTransfers"
             )
             bobWalletClient.balance().unlockedQty should be > BigDecimal(0)
