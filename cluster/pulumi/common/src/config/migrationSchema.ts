@@ -26,9 +26,7 @@ export const GitReferenceSchema = z.object({
 
 export const MigrationInfoSchema = z
   .object({
-    id: z
-      .number()
-      .gte(0),
+    id: z.number().gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),
     enableLogicalSynchronizerDeploymentMode: z.boolean().default(false),

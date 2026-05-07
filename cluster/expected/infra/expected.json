@@ -1013,36 +1013,6 @@
               "number": 26926,
               "protocol": "TCP"
             }
-          },
-          {
-            "hosts": [
-              "*"
-            ],
-            "port": {
-              "name": "cometbft-10-0-gw",
-              "number": 26006,
-              "protocol": "TCP"
-            }
-          },
-          {
-            "hosts": [
-              "*"
-            ],
-            "port": {
-              "name": "cometbft-10-1-gw",
-              "number": 26016,
-              "protocol": "TCP"
-            }
-          },
-          {
-            "hosts": [
-              "*"
-            ],
-            "port": {
-              "name": "cometbft-10-2-gw",
-              "number": 26026,
-              "protocol": "TCP"
-            }
           }
         ]
       }
