@@ -52,11 +52,6 @@ class UnsupportedPackageVettingIntegrationTest
           _.withPausedTrigger[SvPackageVettingTrigger]
         )(config)
       )
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ValidatorPackageVettingTrigger]
-        )(config)
-      )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
     implicit env =>
@@ -80,13 +75,6 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
-      )
-      test(
-        sv1ValidatorBackend.appState.participantAdminConnection,
-        synchronizerId,
-        unsupportedDarsToVetSv,
-        unsupportedDarsToVetSv,
-        sv1ValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
       )
       // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(

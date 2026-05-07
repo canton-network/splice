@@ -237,18 +237,19 @@ class ValidatorAutomationService(
       )
     )
 
-  registerTrigger(
-    new ValidatorPackageVettingTrigger(
-      participantAdminConnection,
-      scanConnection,
-      triggerContext,
-      maxVettingDelay,
-      latestPackagesOnly,
-      svValidator,
-      enabledFeatures.enableUnsupportedDarsUnvetting,
-      additionalPackagesToUnvet,
+  if (!svValidator) {
+    registerTrigger(
+      new ValidatorPackageVettingTrigger(
+        participantAdminConnection,
+        scanConnection,
+        triggerContext,
+        maxVettingDelay,
+        latestPackagesOnly,
+        enabledFeatures.enableUnsupportedDarsUnvetting,
+        additionalPackagesToUnvet,
+      )
     )
-  )
+  }
 
   registerTrigger(
     new ValidatorLicenseMetadataTrigger(

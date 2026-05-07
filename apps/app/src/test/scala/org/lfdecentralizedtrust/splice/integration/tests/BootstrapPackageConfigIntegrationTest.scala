@@ -41,7 +41,6 @@ import org.lfdecentralizedtrust.splice.splitwell.admin.api.client.commands.HttpS
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, SpliceUtil, SplitwellTestUtil}
-import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.scalatest.time.{Minute, Span}
 
@@ -201,8 +200,6 @@ class BootstrapPackageConfigIntegrationTest
 
     val sv2PackageVettingTrigger =
       sv2Backend.appState.dsoAutomation.trigger[SvPackageVettingTrigger]
-    val sv2ValidatorPackageVettingTrigger =
-      sv2ValidatorBackend.appState.automation.trigger[ValidatorPackageVettingTrigger]
 
     // 20s picked empirically to be far enough in the future that the voting can go through before that date.
     // it must also leave enough time for the dars to be uploaded and vetting to happen to prevent command failures
@@ -210,7 +207,6 @@ class BootstrapPackageConfigIntegrationTest
     val scheduledTime =
       Instant.now().plus(expiration.microseconds, ChronoUnit.MICROS).plus(1, ChronoUnit.SECONDS)
     sv2PackageVettingTrigger.pause().futureValue
-    sv2ValidatorPackageVettingTrigger.pause().futureValue
 
     val vettingScheduledTime = CantonTimestamp.assertFromInstant(
       scheduledTime
@@ -328,7 +324,6 @@ class BootstrapPackageConfigIntegrationTest
     val amuletCreateTimeWhenVettingResumed =
       amuletRulesCreateTimestamp
     sv2PackageVettingTrigger.resume()
-    sv2ValidatorPackageVettingTrigger.resume()
 
     clue(s"Vetting state for slow sv is updated after the trigger runs, and alice sees it") {
       eventually() {
