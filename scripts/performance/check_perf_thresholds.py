@@ -2,24 +2,18 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compare perf metrics against absolute thresholds. Exit non-zero on breach.
-
-This script *only detects* breaches; reporting is delegated to the existing
-`failure_notifications` GH action at the bottom of each job, which fires on
-`if: failure()`. So this script:
+"""Compare perf metrics against absolute thresholds and write the result to GITHUB_OUTPUT:
   - reads every metrics.json in the given dirs,
-  - compares each metric to its rule in `.github/perf-thresholds.json`,
+  - compares each metric to its rule in `.github/store-perf-thresholds.json`,
   - prints a per-(test, metric) result to stdout,
+  - writes `has_breaches`, `breach_count`, and (if any) `breaches` to
+    GITHUB_OUTPUT so downstream steps can branch on them,
   - appends a Markdown summary of breaches to GITHUB_STEP_SUMMARY (visible
     in the GHA UI and linked from the failure notification),
-  - exits 1 if any breach occurred.
 
 Usage:
-  python3 check_perf_thresholds.py <metrics_dir> [<metrics_dir> ...]
+  python3 check_perf_thresholds.py <metrics_dir>
 
-Exit codes:
-  0  no breaches
-  1  one or more breaches
 """
 
 from __future__ import annotations
@@ -30,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-DEFAULT_THRESHOLDS = Path(".github/perf-thresholds.json")
+DEFAULT_THRESHOLDS = Path(".github/store-perf-thresholds.json")
 
 
 def load_thresholds(path: Path) -> dict:
@@ -39,7 +33,7 @@ def load_thresholds(path: Path) -> dict:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError(f"thresholds file {path} must be a JSON object at the top level")
-    return {k: v for k, v in data.items() if not k.startswith("_")}
+    return {k: v for k, v in data.items() }
 
 
 def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
@@ -107,13 +101,9 @@ def append_step_summary(lines: list[str]) -> None:
         )
 
 
-def evaluate_breaches(
-    metric_dirs: list[Path], thresholds: dict
-) -> tuple[list[str], int]:
+def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict ) -> tuple[list[str], int]:
     """Compare every metrics.json under `metric_dirs` to `thresholds`.
-
-    Returns (breach_lines, files_seen). Per-(test, metric) verdicts are
-    printed to stdout as a side effect so they show up in the GHA step log.
+    Returns (breach_lines, files_seen).
     """
     breaches: list[str] = []
     files_seen = 0
@@ -168,17 +158,18 @@ def evaluate_breaches(
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print(__doc__, file=sys.stderr)
-        return 2
+        print( "warning: no metrics dir given; nothing to check", file=sys.stderr)
 
-    thresholds_file = Path(os.environ.get("THRESHOLDS_FILE", str(DEFAULT_THRESHOLDS)))
+    thresholds_file = Path(str(DEFAULT_THRESHOLDS))
     thresholds = load_thresholds(thresholds_file)
     metric_dirs = [Path(p) for p in sys.argv[1:]]
 
-    breaches, files_seen = evaluate_breaches(metric_dirs, thresholds)
+    breaches, files_seen = evaluate_perf_threshold_breaches(metric_dirs, thresholds)
 
     print(f"Done. files_seen={files_seen} breaches={len(breaches)}")
 
+    # Breach signaling is done via GITHUB_OUTPUT
+    # downstream steps can branch on `steps.<id>.outputs.has_breaches`
     append_step_output("has_breaches", "true" if breaches else "false")
     append_step_output("breach_count", str(len(breaches)))
     if breaches:
@@ -186,9 +177,6 @@ def main() -> int:
         append_step_summary(
             ["## Performance threshold breaches", "", "```", *breaches, "```"]
         )
-        return 1
-    return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

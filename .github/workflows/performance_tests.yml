@@ -108,7 +108,7 @@ jobs:
         if: ${{ failure() || steps.perf_check.outputs.has_breaches == 'true' }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
-          job_subname: "Daily Store Ingestion Performance Tests"
+          job_subname: "Ingestion Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}"
           notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
@@ -179,9 +179,10 @@ jobs:
           if-no-files-found: ignore
 
       - name: Check read thresholds
+        id: perf_check
         if: ${{ success() && github.event_name == 'schedule' }}
         run: |
-          python3 scripts/performance/check_perf_thresholds.py /tmp/store-read-perf-metrics
+          python3 scripts/performance/check_perf_thresholds.py /tmp/store-read-perf-metrics || true
 
       # sanity check
       - name: Check logs for errors
@@ -197,10 +198,10 @@ jobs:
           name: "logs-read-performance-tests"
 
       - name: Report Failures on Slack & Github
-        if: failure() && github.event_name == 'schedule'
+        if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
         uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
         with:
-          job_subname: "Daily Store Read Performance Tests"
+          job_subname: "Read Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}"
           notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
