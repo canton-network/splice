@@ -2,9 +2,7 @@
   "name": "@lfdecentralizedtrust/splice-pulumi-sv-runbook",
   "main": "src/index.ts",
   "devDependencies": {
-    "@types/node-fetch": "^2.6.12",
-    "@types/sinon": "^21.0.1",
-    "sinon": "^21.1.2"
+    "@types/node-fetch": "^2.6.12"
   },
   "dependencies": {
     "@lfdecentralizedtrust/canton-network-pulumi-deployment": "1.0.0",

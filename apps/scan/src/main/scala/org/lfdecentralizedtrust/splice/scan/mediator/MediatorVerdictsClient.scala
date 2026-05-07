@@ -12,7 +12,8 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.networking.grpc.{ClientChannelBuilder, GrpcManagedChannel}
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
-import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.admin.api.client.{
   GrpcClientMetrics,
   GrpcMetricsClientInterceptor,
@@ -22,7 +23,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 
 final class MediatorVerdictsClient(
-    mediatorAdminClientConfig: com.digitalasset.canton.config.FullClientConfig,
+    mediatorAdminClientConfig: com.digitalasset.canton.config.ClientConfig,
     hasRunOnClosing: HasRunOnClosing,
     grpcClientMetrics: GrpcClientMetrics,
     protected val loggerFactory: NamedLoggerFactory,
@@ -100,4 +101,12 @@ final class MediatorVerdictsClient(
         completePromise.future
       }
   }
+
+  def earliestUnprunedRecordTime()(implicit
+      tc: TraceContext,
+      mat: Materializer,
+  ): Future[Option[CantonTimestamp]] =
+    streamVerdicts(None)
+      .runWith(Sink.headOption)
+      .map(_.flatMap(_.recordTime).map(CantonTimestamp.tryFromProtoTimestamp(_)))
 }

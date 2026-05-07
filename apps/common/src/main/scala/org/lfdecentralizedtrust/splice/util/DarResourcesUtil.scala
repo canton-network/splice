@@ -52,11 +52,11 @@ object DarResourcesUtil extends NamedLogging {
     val unsupportedVersions = additionalPackagesToUnvet
       .getOrElse(name, Set.empty)
       .filter { v =>
-        if (minimumInitializationVersion < v && v <= upToRequiredVersion) {
+        if (minimumInitializationVersion <= v && v <= upToRequiredVersion) {
           true
         } else {
           logger.debug(
-            s"Version $v of package $name configured in `additionalPackagesToUnvet` is smaller or equal to the minimum initialization version $minimumInitializationVersion or larger than $upToRequiredVersion."
+            s"Version $v of package $name configured in `additionalPackagesToUnvet` is smaller than the minimum initialization version $minimumInitializationVersion or larger than $upToRequiredVersion."
           )
           false
         }

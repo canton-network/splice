@@ -11,9 +11,8 @@ import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, WalletFrontendTestUtil}
 import com.digitalasset.canton.http.json.v2.JsStateServiceCodecs.*
+import com.digitalasset.canton.version.ProtocolVersion
 import com.daml.ledger.api.v2.state_service.GetConnectedSynchronizersResponse
-import com.daml.ledger.api.v2.commands.{Command, CreateCommand, ExerciseByKeyCommand}
-import com.daml.ledger.api.v2.value.{Identifier, Record, RecordField, Value}
 import monocle.Monocle.toAppliedFocusOps
 
 import scala.concurrent.duration.*
@@ -203,114 +202,11 @@ class LocalNetFrontendIntegrationTest
         appProviderParticipant.name,
         appProviderParticipant.config.copy(token = Some(token)),
       )
-      val hash = participantClient.upload_dar_unless_exists(
-        "apps/app/src/test/resources/nuck-example-0.0.1.dar"
-      )
-      val AssetTemplate = Some(
-        Identifier(
-          packageId = hash,
-          moduleName = "Main",
-          entityName = "Asset",
-        )
-      )
-
-      val GiveChoice = Some(
-        Identifier(
-          packageId = hash,
-          moduleName = "Main",
-          entityName = "Give",
-        )
-      )
-
-      val alice =
-        participantClient.ledger_api.parties.allocate("alice", userId = "ledger-api-user").party
-      val bob =
-        participantClient.ledger_api.parties.allocate("bob", userId = "ledger-api-user").party
-      participantClient.ledger_api.commands.submit(
-        actAs = Seq(alice),
-        commands = Seq(
-          Command.of(
-            Command.Command.Create(
-              CreateCommand(
-                templateId = AssetTemplate,
-                createArguments = Some(
-                  Record(
-                    recordId = AssetTemplate,
-                    fields = Seq(
-                      RecordField(
-                        "issuer",
-                        Some(Value(Value.Sum.Party(alice.toProtoPrimitive))),
-                      ),
-                      RecordField(
-                        "owner",
-                        Some(Value(Value.Sum.Party(alice.toProtoPrimitive))),
-                      ),
-                      RecordField("name", Some(Value(Value.Sum.Text("Sofa")))),
-                    ),
-                  )
-                ),
-              )
-            )
-          )
-        ),
-        userId = "ledger-api-user",
-        optTimeout =
-          None, // Otherwise, optionallyAwait fails with permission issues reading from unrelated parties
-      )
-
-      participantClient.ledger_api.commands.submit(
-        actAs = Seq(alice),
-        commands = Seq(
-          Command.of(
-            Command.Command.ExerciseByKey(
-              ExerciseByKeyCommand(
-                templateId = AssetTemplate,
-                contractKey = Some(
-                  Value(
-                    Value.Sum.Record(
-                      Record(
-                        recordId = None,
-                        fields = Seq(
-                          RecordField(
-                            "_1",
-                            Some(Value(Value.Sum.Party(alice.toProtoPrimitive))),
-                          ),
-                          RecordField("_2", Some(Value(Value.Sum.Text("Sofa")))),
-                        ),
-                      )
-                    )
-                  )
-                ),
-                choice = "Give",
-                choiceArgument = Some(
-                  Value(
-                    Value.Sum.Record(
-                      Record(
-                        recordId = GiveChoice,
-                        fields = Seq(
-                          RecordField(
-                            "newOwner",
-                            Some(Value(Value.Sum.Party(bob.toProtoPrimitive))),
-                          )
-                        ),
-                      )
-                    )
-                  )
-                ),
-              )
-            )
-          )
-        ),
-        userId = "ledger-api-user",
-        optTimeout = None,
-      )
-
-      val aliceAcs = participantClient.ledger_api.state.acs.of_party(alice)
-      val bobAcs = participantClient.ledger_api.state.acs.of_party(bob)
-      aliceAcs should have size 1
-      bobAcs should have size 1
-      aliceAcs.head.contractId shouldBe bobAcs.head.contractId
-      aliceAcs.head.arguments.get("owner").value shouldBe bob.toProtoPrimitive
+      participantClient.synchronizers
+        .list_connected()
+        .loneElement
+        .physicalSynchronizerId
+        .protocolVersion shouldBe ProtocolVersion.v35
     }
   }
 }

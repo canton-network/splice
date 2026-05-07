@@ -8,9 +8,7 @@ LABEL org.opencontainers.image.base.name="ubuntu:24.04"
 
 ARG KUBECTL_VERSION
 
-RUN sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources && \
-    sed -i 's/security.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources && \
-    apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y \
     postgresql-client \
     curl \
     netcat-openbsd \
