@@ -502,21 +502,6 @@
             "name": "cometbft-9-2-p2p",
             "number": 26926,
             "protocol": "TCP"
-          },
-          {
-            "name": "cometbft-10-0-p2p",
-            "number": 26006,
-            "protocol": "TCP"
-          },
-          {
-            "name": "cometbft-10-1-p2p",
-            "number": 26016,
-            "protocol": "TCP"
-          },
-          {
-            "name": "cometbft-10-2-p2p",
-            "number": 26026,
-            "protocol": "TCP"
           }
         ],
         "resolution": "DNS"
