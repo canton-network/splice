@@ -1,8 +1,8 @@
 {
   "SvDsoStoreIngestionPerformanceTest": {
-    "_comment_avg_item_time_ns": "median*(1+ (p95 - median)/median + 10%) of 30d",
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
     "splice_perf_ingestion_avg_item_time_ns": {
-      "max": 2000000
+      "max": 2400000
     },
     "_comment_total_time_ns": "hard max of 1h",
     "splice_perf_ingestion_total_time_ns": {
@@ -10,9 +10,9 @@
     }
   },
   "ScanStoreIngestionPerformanceTest": {
-    "_comment_avg_item_time_ns": "median*(1+ (p95 - median)/median + 10%) of 30d",
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
     "splice_perf_ingestion_avg_item_time_ns": {
-      "max": 2000000
+      "max": 2100000
     },
     "_comment_total_time_ns": "hard max of 1h",
     "splice_perf_ingestion_total_time_ns": {
@@ -20,9 +20,9 @@
     }
   },
   "UpdateHistoryIngestionPerformanceTest": {
-    "_comment_avg_item_time_ns": "median*(1+ (p95 - median)/median + 10%) of 30d",
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
     "splice_perf_ingestion_avg_item_time_ns": {
-      "max": 5000000
+      "max": 14600000
     },
     "_comment_total_time_ns": "hard max of 1h",
     "splice_perf_ingestion_total_time_ns": {
@@ -30,7 +30,7 @@
     }
   },
   "UpdateHistoryReadPerformanceTest-getUpdate": {
-    "_comment_avg_item_time_ns": "median*(1+ (p95 - median)/median + 10%) of 30d",
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
     "splice_perf_read_avg_item_time_ns": {
       "max": 1000000000
     },
@@ -40,7 +40,7 @@
     }
   },
   "UpdateHistoryReadPerformanceTest-encodeUpdate": {
-    "_comment_avg_item_time_ns": "median*(1+ (p95 - median)/median + 10%) of 30d",
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
     "splice_perf_read_avg_item_time_ns": {
       "max": 1000000000
     },
