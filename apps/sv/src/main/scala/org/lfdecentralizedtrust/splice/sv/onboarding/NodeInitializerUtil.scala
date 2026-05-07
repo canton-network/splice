@@ -15,6 +15,7 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
   NetworkAppClientConfig,
@@ -59,6 +60,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected val participantAdminConnection: ParticipantAdminConnection
   protected val ledgerClient: SpliceLedgerClient
   protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig
+  protected val grpcClientMetrics: GrpcClientMetrics
 
   protected def newSvStore(
       key: SvStore.Key,
@@ -148,6 +150,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       tracer: Tracer,
       httpClient: HttpClient,
       templateJsonDecoder: TemplateJsonDecoder,
+      esf: ExecutionSequencerFactory,
   ) =
     new SvDsoAutomationService(
       clock,
@@ -163,6 +166,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       upgradesConfig,
       spliceInstanceNamesConfig,
       loggerFactory,
+      grpcClientMetrics,
       packageVersionSupport,
       synchronizerId,
       enabledFeatures,

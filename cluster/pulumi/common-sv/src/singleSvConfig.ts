@@ -111,6 +111,7 @@ const ScanAppConfigSchema = z
       .object({
         dataset: z.string(),
         prefix: z.string(),
+        functionsDataset: z.string().optional(),
       })
       .optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
