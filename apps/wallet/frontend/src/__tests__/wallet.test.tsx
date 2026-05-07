@@ -739,7 +739,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test("can 'reject' a minting delegation proposal", async () => {
@@ -775,7 +775,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test('shows replacement dialog when accepting proposal for beneficiary with existing delegation', async () => {

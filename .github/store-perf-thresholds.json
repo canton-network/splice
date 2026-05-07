@@ -1,0 +1,21 @@
+{
+  "SvDsoStoreIngestionPerformanceTest": {
+    "splice_perf_ingestion_total_time_ns": 600000000000
+  },
+
+  "ScanStoreIngestionPerformanceTest": {
+    "splice_perf_ingestion_total_time_ns": 600000000000
+  },
+
+  "UpdateHistoryIngestionPerformanceTest": {
+    "splice_perf_ingestion_total_time_ns": 1800000000000
+  },
+
+  "UpdateHistoryReadPerformanceTest-getUpdate": {
+    "splice_perf_read_total_time_ns": 5000000000
+  },
+
+  "UpdateHistoryReadPerformanceTest-encodeUpdate": {
+    "splice_perf_read_total_time_ns": 5000000000
+  }
+}

@@ -105,8 +105,8 @@ Concretely, the procedure is as follows:
 
     - name: ADDITIONAL_CONFIG_SEQUENCER_LSU_SEQUENCING_BOUNDS
       value: |
-        canton.sequencers.sequencer.parameters.parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=LOWER_BOUND_SEQUENCING_TIME_EXCLUSIVE
-        canton.sequencers.sequencer.parameters.parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=UPGRADE_TIME
+        canton.sequencers.sequencer.parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=LOWER_BOUND_SEQUENCING_TIME_EXCLUSIVE
+        canton.sequencers.sequencer.parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=UPGRADE_TIME
 
 3. Super validators wait until ingestion completed.
 
