@@ -59,7 +59,7 @@ def get_metric_value(data: dict, name: str) -> float | None:
 
 def extract_threshold(rule) -> float | None:
     """Extract the `max` threshold from a rule of the form {"max": <number>}.
-    Returns None for anything else; caller logs and skips.
+    Returns None for anything else; the caller is expected to raise.
     """
     if not isinstance(rule, dict):
         return None
@@ -129,17 +129,15 @@ def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict 
             raise KeyError(
                 f"no thresholds configured for '{test_name}' (from {f.name}); "
                 f"add a rule to {DEFAULT_THRESHOLDS}"
-           )
+            )
 
         for metric_name, rule in rules.items():
             threshold = extract_threshold(rule)
             if threshold is None:
-                print(
-                    f"warning: rule {test_name}::{metric_name} has no usable "
-                    f"numeric 'max' (got {rule!r}), skipping",
-                    file=sys.stderr,
+                raise ValueError(
+                    f"rule {test_name}::{metric_name} has no usable numeric 'max' "
+                    f"(got {rule}); fix it in {DEFAULT_THRESHOLDS}"
                 )
-                continue
 
             observed = get_metric_value(data, metric_name)
             if observed is None:
