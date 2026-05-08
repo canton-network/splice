@@ -1,7 +1,10 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.tracing.TraceContext
+import java.time.Duration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationrequestv1,
   allocationv1,
@@ -10,17 +13,20 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  ConfigurableApp,
-  updateAutomationConfig,
-}
+import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
+import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.CompactJson
+import definitions.GetRewardAccountingBatchResponse
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
-import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
+  CalculateRewardsTrigger,
+  CalculateRewardsDryRunTrigger,
+}
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -37,7 +43,8 @@ import scala.util.Random
 //
 // DvP settlement from TokenStandardTest is used here just to confirm distribution of rewards
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-class TrafficBasedRewardsTimeBasedIntegrationTest
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
+abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with WalletTestUtil
@@ -46,12 +53,37 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     with ExternallySignedPartyTestUtil
     with TokenStandardTest {
 
+  // We run this test in multiple modes to confirm that various triggers work
+  // correctly based on the rewardConfig. Although this is somewhat redundant,
+  // it allows us to re-use the same test, and because it is expected that in long
+  // term only MintingTrafficBased would be necessary.
+  //
+  // The NoConfig is a special case; as it is simply testing that no regression
+  // happen until the rewardConfig is set to 'Some' value. Once we set the
+  // rewardConfig via vote, it will likely never get toggled back to None, and hence
+  // this mode could be removed altogether.
+  //
+  // Similarly OnlyRewardConfig and DryRun could be removed once traffic-based
+  // rewards is the default.
+  protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
+
+  private def dryRunEnabled: Boolean =
+    rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
+
+  private def mintingTrafficBased: Boolean =
+    rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
+
+  private def producesV2Contracts: Boolean = dryRunEnabled || mintingTrafficBased
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
+          sv2ValidatorBackend,
+          sv3ValidatorBackend,
+          sv4ValidatorBackend,
           aliceValidatorBackend,
           bobValidatorBackend,
           splitwellValidatorBackend,
@@ -59,22 +91,37 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
           backend.participantClient.upload_dar_unless_exists(tokenStandardTestDarPath)
         }
       })
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Scan)(
-          _.withPausedTrigger[RewardComputationTrigger]
-        )(config)
-      )
       .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = TrafficBasedRewardsTimeBasedIntegrationTest.trafficBasedAppRewards,
-            appRewardCouponThreshold =
-              TrafficBasedRewardsTimeBasedIntegrationTest.appRewardCouponThreshold,
-          )
+        rewardConfigMode match {
+          case TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig => config
+          case TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun |
+              TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.OnlyRewardConfig |
+              TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased =>
+            ConfigTransforms.withRewardConfig(
+              InitialRewardConfig(
+                mintingVersion =
+                  if (mintingTrafficBased)
+                    TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
+                  else TrafficBasedRewardsTimeBasedIntegrationTestBase.featuredAppMarkers,
+                dryRunVersion = Option.when(dryRunEnabled)(
+                  TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
+                ),
+                appRewardCouponThreshold =
+                  TrafficBasedRewardsTimeBasedIntegrationTestBase.appRewardCouponThreshold,
+              )
+            )(config)
+        }
+      )
+      // Pause background wallet/validator automation so that we can test round with no activity,
+      // and even do calcs comparison for known transactions in a round
+      .addConfigTransform((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Validator)(
+          _.withPausedTrigger[ReceiveFaucetCouponTrigger]
+            .withPausedTrigger[CollectRewardsAndMergeAmuletsTrigger]
         )(config)
       )
 
-  "App activity records are created for featured app parties" in { implicit env =>
+  "CIP-104 reward accounting pipeline works" in { implicit env =>
     val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
     val venuePartyHint = s"venue-party-${Random.nextInt()}"
@@ -87,8 +134,8 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       ),
     )
 
-    aliceWalletClient.tap(1000)
-    bobWalletClient.tap(1000)
+    aliceWalletClient.tap(20000)
+    bobWalletClient.tap(20000)
 
     assertOldestOpenRound(0)
 
@@ -101,56 +148,133 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     // confirm that activity record computations does happen properly even when
     // the ingestion is catching up, by reading the Tcs store data for the
     // archived rounds. I.e., pausing is not necessary, it merely improves test coverage.
-    //
+    // The pause of CalculateRewardsTrigger is necessary to confirm contracts
+    // were created for each round.
+    val calculateRewardsTriggers =
+      activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
+    val calculateRewardsDryRunTriggers =
+      activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
+
     // Sequence of actions
     //   Open rounds | Action
     //   ------------+--------------------------------------
     //   3, 4        | settle id0, grant venue FAP
     //   4, 5        | settle id1, grant alice FAP
     //   5, 6        | settle id2, cancel venue FAP
-    //   6, 7        | settle id3
-    //   7, 8        | settle id4
-    val (updateId0, updateId1, updateId2, updateId3, updateId4) =
+    //   6, 7        | settle id3, (total 2 DvP trades)
+    //   7, 8        | settle id4, (total 3 DvP trades)
+    //   8, 9        | no-activity
+    //   9, 10       | settle id5, 1 DvP + 3 direct trades
+    //   10, 11      | settle id6, (total 5 DvP trades)
+    //   11, 12      | settle id7, (round not closed)
+    val (updateId0, updateId1, updateId3, updateId4, updateId5, updateId6, updateId7) =
       pauseScanVerdictIngestionWithin(sv1ScanBackend) {
+        setTriggersWithin(triggersToPauseAtStart =
+          calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
+        ) {
 
-        // 3 initial advances to get open rounds with staggered opensAt
-        for (round <- 1 to 3) {
+          // 3 initial advances to get open rounds with staggered opensAt
+          for (round <- 1 to 3) {
+            advanceRoundsToNextRoundOpening
+            assertOldestOpenRound(round.toLong)
+          }
+
+          val id0 = settleTrade(aliceParty, bobParty, venueParty)
+          grantFeaturedAppRight(splitwellWalletClient)
+
           advanceRoundsToNextRoundOpening
-          assertOldestOpenRound(round.toLong)
+          assertOldestOpenRound(4)
+
+          val id1 = settleTrade(aliceParty, bobParty, venueParty)
+          grantFeaturedAppRight(aliceWalletClient)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(5)
+
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(6)
+
+          val id3 = settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(7)
+
+          val id4 = settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(8)
+
+          // No activity for round 8
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(9)
+
+          // Do only one DvP; this would not generate enough activity to reward the parties.
+          val id5 = settleTrade(aliceParty, bobParty, venueParty)
+
+          // But do additional txs by alice such that only alice receives the rewards
+          (1 to 3).foreach { _ =>
+            val offerCid = aliceWalletClient.createTransferOffer(
+              bobParty,
+              BigDecimal(10.0),
+              "round-9-alice-only",
+              CantonTimestamp.now().plus(Duration.ofMinutes(1)),
+              s"round9-transfer-${scala.util.Random.nextInt()}",
+            )
+            bobWalletClient.acceptTransferOffer(offerCid)
+          }
+
+          actAndCheck(
+            "Cancel venue's featured app right",
+            retryCommandSubmission(splitwellWalletClient.cancelFeaturedAppRight()),
+          )(
+            "Wait for right cancellation to be ingested",
+            _ => sv1ScanBackend.lookupFeaturedAppRight(venueParty) shouldBe None,
+          )
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(10)
+
+          // Do five in a round to check nested BatchOfBatches processing
+          val id6 = settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(11)
+
+          val id7 = settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+
+          if (producesV2Contracts) {
+            clue(
+              "CalculateRewardsV2 contracts should exist for each round"
+            ) {
+              eventually() {
+                val calculateRewardsRounds =
+                  sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .map(_.payload.round.number)
+                    .toSet
+                (0L to 10L).foreach { round =>
+                  calculateRewardsRounds should contain(round) withClue
+                    s"CalculateRewardsV2 should exist for round $round"
+                }
+              }
+            }
+          }
+
+          (id0, id1, id3, id4, id5, id6, id7)
         }
-
-        val id0 = settleTrade(aliceParty, bobParty, venueParty)
-        grantFeaturedAppRight(splitwellWalletClient)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(4)
-
-        val id1 = settleTrade(aliceParty, bobParty, venueParty)
-        grantFeaturedAppRight(aliceWalletClient)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(5)
-
-        val id2 = settleTrade(aliceParty, bobParty, venueParty)
-        actAndCheck(
-          "Cancel venue's featured app right",
-          retryCommandSubmission(splitwellWalletClient.cancelFeaturedAppRight()),
-        )(
-          "Wait for right cancellation to be ingested",
-          _ => sv1ScanBackend.lookupFeaturedAppRight(venueParty) shouldBe None,
-        )
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(6)
-
-        val id3 = settleTrade(aliceParty, bobParty, venueParty)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(7)
-
-        val id4 = settleTrade(aliceParty, bobParty, venueParty)
-
-        (id0, id1, id2, id3, id4)
       }
 
     def fetchEvent(updateId: String, label: String): definitions.EventHistoryItem =
@@ -178,102 +302,185 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       assertNoAppActivity(event, "updateId1")
     }
 
-    // Expected featured app providers per round — used for both event-level
-    // activity assertions and reward pipeline provider assertions.
-    val expectedProvidersByRound: Map[Long, Set[PartyId]] = Map(
-      5L -> Set(venueParty),
-      6L -> Set(venueParty, aliceParty),
-      7L -> Set(aliceParty),
-    )
-
-    // Capture per-round traffic costs for reward pipeline assertions.
-    // Each round has exactly one settlement in this test.
-    val trafficCostByRound: Map[Long, Long] = Map(
-      5L -> clue("updateId2") {
-        val event = fetchEvent(updateId2, "updateId2")
-        assertTrafficSummary(event, "updateId2")
-        assertAppActivity(event, "updateId2", expectedProvidersByRound(5L), expectedRound = 5)
-        event.trafficSummary.value.totalTrafficCost
-      },
-      6L -> clue("updateId3") {
-        val event = fetchEvent(updateId3, "updateId3")
-        assertTrafficSummary(event, "updateId3")
-        assertAppActivity(event, "updateId3", expectedProvidersByRound(6L), expectedRound = 6)
-        event.trafficSummary.value.totalTrafficCost
-      },
-      7L -> clue("updateId4") {
-        val event = fetchEvent(updateId4, "updateId4")
-        assertTrafficSummary(event, "updateId4")
-        assertAppActivity(event, "updateId4", expectedProvidersByRound(7L), expectedRound = 7)
-        event.trafficSummary.value.totalTrafficCost
-      },
-    )
-
-    // -- Reward pipeline endpoint checks --------------------------------------
-    // ScanAggregationTrigger runs unpaused throughout the test and has already
-    // aggregated completed rounds. Run the paused RewardComputationTrigger to
-    // compute rewards, then verify the reward accounting HTTP endpoints.
-
-    clue("Run the reward computation trigger") {
-      sv1ScanBackend.automation
-        .trigger[RewardComputationTrigger]
-        .runOnce()
-        .futureValue
+    clue("updateId3") {
+      val event = fetchEvent(updateId3, "updateId3")
+      assertTrafficSummary(event, "updateId3")
+      assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
     }
 
-    val earliest = clue("Verify earliest available round is returned") {
-      val e = sv1ScanBackend.getRewardAccountingEarliestAvailableRound()
-      e shouldBe defined
-      e.value
+    clue("updateId4") {
+      val event = fetchEvent(updateId4, "updateId4")
+      assertTrafficSummary(event, "updateId4")
+      assertAppActivity(event, "updateId4", Set(aliceParty, venueParty), expectedRound = 7)
     }
 
-    val expectedProviders = expectedProvidersByRound.getOrElse(
-      earliest,
-      fail(s"No expected providers for earliest round $earliest"),
-    )
-
-    clue("Verify activity totals for the computed round") {
-      val totals = sv1ScanBackend.getRewardAccountingActivityTotals(earliest)
-      totals.value.roundNumber shouldBe earliest
-      totals.value.activityRecordsCount should be > 0L
-      totals.value.activePartiesCount shouldBe expectedProviders.size.toLong
-      totals.value.totalAppActivityWeight should be > 0L
-      // The total weight must be at least as large as the traffic cost from the
-      // test's known settlement, since that settlement contributes activity records
-      // to the round (other background transactions may also contribute).
-      val roundTrafficCost = trafficCostByRound(earliest)
-      totals.value.totalAppActivityWeight should be >= roundTrafficCost
+    clue("updateId5") {
+      val event = fetchEvent(updateId5, "updateId5")
+      assertTrafficSummary(event, "updateId5")
+      // Round 9: one DvP — venue has activity but will be below the coupon threshold;
+      // alice's additional transfers push her above it.
+      assertAppActivity(event, "updateId5", Set(aliceParty, venueParty), expectedRound = 9)
     }
 
-    clue("Verify root hash is available") {
-      val rootHash = sv1ScanBackend.getRewardAccountingRootHash(earliest)
-      rootHash shouldBe defined
-      rootHash.value.roundNumber shouldBe earliest
-      rootHash.value.rootHash should have length 64 // hex-encoded SHA-256
+    clue("updateId6") {
+      val event = fetchEvent(updateId6, "updateId6")
+      assertTrafficSummary(event, "updateId6")
+      assertAppActivity(event, "updateId6", Set(aliceParty, venueParty), expectedRound = 10)
     }
 
-    clue("Verify batch contains expected providers with non-zero amounts") {
-      val rootHashHex = sv1ScanBackend.getRewardAccountingRootHash(earliest).value.rootHash
-      val batch = sv1ScanBackend.getRewardAccountingBatch(earliest, rootHashHex)
-      batch shouldBe defined
-      batch.value match {
-        case definitions.GetRewardAccountingBatchResponse.members
-              .RewardAccountingBatchOfMintingAllowances(allowances) =>
-          val providers = allowances.mintingAllowances.map(_.provider).toSet
-          providers shouldBe expectedProviders.map(_.toProtoPrimitive)
-          allowances.mintingAllowances.foreach { ma =>
-            BigDecimal(ma.amount) should be > BigDecimal(0)
-          }
-        case definitions.GetRewardAccountingBatchResponse.members
-              .RewardAccountingBatchOfBatches(batches) =>
-          batches.childHashes should not be empty
+    clue("updateId7") {
+      val event = fetchEvent(updateId7, "updateId7")
+      assertTrafficSummary(event, "updateId7")
+      // Round 11: venue's FAP was cancelled in round 9, so only alice is a
+      // featured-app provider here.
+      assertAppActivity(event, "updateId7", Set(aliceParty), expectedRound = 11)
+    }
+
+    if (
+      rewardConfigMode != TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig
+    ) {
+      assertRewardCalcs(aliceParty, venueParty)
+    } else {
+      clue("No CalculateRewardsV2 contracts are produced when rewardConfig is unset") {
+        sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue shouldBe empty
       }
     }
 
-    clue("Verify 404 for non-existent data") {
-      sv1ScanBackend.getRewardAccountingActivityTotals(earliest + 100) shouldBe None
-      sv1ScanBackend.getRewardAccountingRootHash(earliest + 100) shouldBe None
-      sv1ScanBackend.getRewardAccountingBatch(earliest, "0" * 64) shouldBe None
+    // Other misc API tests
+    clue("404 for non-existent batch data") {
+      sv1ScanBackend.getRewardAccountingBatch(6L, "0" * 64) shouldBe None
+    }
+  }
+
+  private def assertRewardCalcs(
+      aliceParty: PartyId,
+      venueParty: PartyId,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val allScanBackends =
+      Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)
+
+    clue("Scan computes activity totals through round 10 on all SVs") {
+      eventually() {
+        allScanBackends.foreach(
+          _.getRewardAccountingActivityTotals(10L) shouldBe defined
+        )
+      }
+    }
+
+    val totalsByRound: Map[Long, definitions.GetRewardAccountingActivityTotalsResponse] =
+      clue("Rounds 6..10 activity totals and root hash are computed") {
+        (6L to 10L).map { round =>
+          val totals = sv1ScanBackend.getRewardAccountingActivityTotals(round)
+          totals shouldBe defined withClue s"Round $round should have totals"
+          totals.value.roundNumber shouldBe round
+          val rootHash = sv1ScanBackend.getRewardAccountingRootHash(round)
+          rootHash shouldBe defined withClue s"Round $round should have a root hash"
+          rootHash.value.roundNumber shouldBe round
+          rootHash.value.rootHash should have length 64 // hex-encoded SHA-256
+          round -> totals.value
+        }.toMap
+      }
+
+    // For rounds 0..5 scan cannot do totals calcs/produce a root hash, rounds
+    // 0..4 had no activity records; round 5 is excluded as the earliest round
+    // with records, and round 11 has not closed yet.
+    clue(
+      "Minting allowances: rounds 6, 7, 10 reward both parties; round 9 only alice"
+    ) {
+      def providersFor(round: Long): Set[String] =
+        getMintingAllowancesForRound(round).map(_.provider).toSet
+
+      // Log per-round, per-party minting so test failures surface concrete
+      // values without needing to re-run with debug.
+      (6L to 10L).foreach { round =>
+        val amounts = getMintingAllowancesForRound(round)
+          .map(a => s"${a.provider.split("::").head}=${a.amount}")
+          .mkString(", ")
+        logger.info(s"Round $round minting: $amounts")(TraceContext.empty)
+      }
+
+      // Rounds 6, 7, 10: both alice and venue did DvP trades.
+      Seq(6L, 7L, 10L).foreach { round =>
+        providersFor(round) shouldBe Seq(aliceParty, venueParty)
+          .map(_.toProtoPrimitive)
+          .toSet withClue
+          s"Both parties should be rewarded in round $round"
+      }
+
+      // Round 8: no trades and background triggers are paused, so there is no
+      // activity records at all.
+      providersFor(8L) shouldBe Set() withClue
+        "Round 8 has no activity so no minting allowances are produced"
+      totalsByRound(8L).activityRecordsCount shouldBe 0L withClue
+        "Round 8 has no activity records"
+      totalsByRound(8L).totalAppActivityWeight shouldBe 0L withClue
+        "Round 8 has no activity weight"
+
+      // Round 9: one DvP + alice→bob transfers; venue is below the coupon threshold
+      // so only alice receives minting allowances.
+      providersFor(9L) shouldBe Set(aliceParty.toProtoPrimitive) withClue
+        "Round 9: venue is below reward threshold so only alice should be rewarded"
+
+    }
+
+    // The remaining assertions cover the handling of V2 contracts created on ledger.
+    if (producesV2Contracts) {
+      def listProcessRewardsV2Rounds(): Seq[Long] =
+        sv1Backend.appState.dsoStore
+          .listProcessRewardsV2()
+          .futureValue
+          .map(_.payload.round.number)
+
+      clue("CalculateRewards and ProcessRewards triggers consume middle-round (6..10) contracts") {
+        // V2 contracts for rounds 6..10 should be processed by SVs
+        eventually() {
+          val remainingCalculate = sv1Backend.appState.dsoStore
+            .listCalculateRewardsV2()
+            .futureValue
+            .filter(c => c.payload.round.number >= 6L && c.payload.round.number <= 10L)
+          remainingCalculate shouldBe empty withClue
+            "Middle-round CalculateRewardsV2 contracts (6..10) should be consumed"
+          val remainingProcess = listProcessRewardsV2Rounds()
+            .filter(r => r >= 6L && r <= 10L)
+          remainingProcess shouldBe empty withClue
+            "Middle-round ProcessRewardsV2 contracts (6..10) should be consumed"
+        }
+      }
+
+      // V2 contracts for rounds 0..5 and 11 remain unprocessed by triggers
+      // Which provides us opportunity to test the archive endpoint
+      if (dryRunEnabled) {
+        clue("archiveDryRunRewardAccountingContracts clears remaining rounds") {
+          // Archive them via the sv admin API and confirm both
+          // CalculateRewardsV2 and ProcessRewardsV2 are empty afterwards.
+          val otherRounds = sv1Backend.appState.dsoStore
+            .listCalculateRewardsV2()
+            .futureValue
+            .map(_.payload.round.number: Long)
+            .filterNot(r => r >= 6L && r <= 10L)
+            .distinct
+          otherRounds should not be empty withClue
+            "Expected CalculateRewardsV2 contracts for rounds outside [6..10] before archive"
+          actAndCheck(
+            "Archive dry-run reward accounting contracts for rounds outside [6..10]",
+            sv1Backend.archiveDryRunRewardAccountingContracts(otherRounds),
+          )(
+            "All dry-run CalculateRewardsV2 and ProcessRewardsV2 contracts should be archived",
+            _ => {
+              sv1Backend.appState.dsoStore
+                .listCalculateRewardsV2()
+                .futureValue shouldBe empty withClue
+                "All dry-run CalculateRewardsV2 contracts should be archived"
+              listProcessRewardsV2Rounds() shouldBe empty withClue
+                "All dry-run ProcessRewardsV2 contracts should be archived"
+            },
+          )
+        }
+      }
+    } else {
+      clue("No CalculateRewardsV2 contracts when V2 minting/dry-run is unset") {
+        sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue shouldBe empty
+      }
     }
   }
 
@@ -350,6 +557,22 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
         roundNumbers.head shouldBe expectedOldestRound
       }
     }
+  }
+
+  private def getMintingAllowancesForRound(
+      round: Long
+  )(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Seq[definitions.RewardAccountingMintingAllowance] = {
+    val hash = sv1ScanBackend.getRewardAccountingRootHash(round).value.rootHash
+    def walk(h: String): Seq[definitions.RewardAccountingMintingAllowance] =
+      sv1ScanBackend.getRewardAccountingBatch(round, h).toList.flatMap {
+        case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfBatches(b) =>
+          b.childHashes.flatMap(walk)
+        case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfMintingAllowances(b) =>
+          b.mintingAllowances.toSeq
+      }
+    walk(hash)
   }
 
   private def settleTrade(
@@ -445,12 +668,57 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
   }
 }
 
-object TrafficBasedRewardsTimeBasedIntegrationTest {
+object TrafficBasedRewardsTimeBasedIntegrationTestBase {
 
-  // Use traffic-based app rewards (CIP-0104), not on-ledger coupon counting.
+  sealed trait RewardConfigMode
+  object RewardConfigMode {
+    // (AmuletConfig.rewardConfig = None).
+    case object NoConfig extends RewardConfigMode
+    // RewardConfig with dryRunVersion = None and mintingVersion = FeaturedAppMarkers
+    case object OnlyRewardConfig extends RewardConfigMode
+    // dryRunVersion = TrafficBased
+    case object DryRun extends RewardConfigMode
+    // mintingVersion = TrafficBased, dryRunVersion = None
+    case object MintingTrafficBased extends RewardConfigMode
+  }
+
   val trafficBasedAppRewards = "RewardVersion_TrafficBasedAppRewards"
+  val featuredAppMarkers = "RewardVersion_FeaturedAppMarkers"
 
-  // Set to zero so no rewards are filtered out in this test.
-  // In production this would be a small USD amount (e.g. 0.5).
-  val appRewardCouponThreshold = BigDecimal(0.0)
+  // This threshold has been chosen to keep the venue's app activity below
+  // threshold for the round 9. See the test for details.
+  //
+  // appRewardCouponThreshold is in USD and compared against the minting
+  // allowance. For this test amuletPrice = 0.005, trafficPrice = 16.67 USD/MB,
+  // and issuancePerCoupon is observed to be ~100, so 30 KB of activity ≈ 50 USD
+  // (30/1000 MB × 16.67 × 100).
+  val appRewardCouponThreshold = BigDecimal("50")
+}
+
+class TrafficBasedRewardsTimeBasedIntegrationTest
+    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
+  override protected val rewardConfigMode
+      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
+    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
+}
+
+class TrafficBasedRewardsDryRunTimeBasedIntegrationTest
+    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
+  override protected val rewardConfigMode
+      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
+    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
+}
+
+class TrafficBasedRewardsOnlyRewardConfigTimeBasedIntegrationTest
+    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
+  override protected val rewardConfigMode
+      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
+    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.OnlyRewardConfig
+}
+
+class TrafficBasedRewardsNoRewardConfigTimeBasedIntegrationTest
+    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
+  override protected val rewardConfigMode
+      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
+    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig
 }
