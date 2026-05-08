@@ -87,10 +87,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv2,
   metadatav1,
   transferinstructionv1,
+  transferinstructionv2,
 }
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetFactoryRequest as GetTransferFactoryRequest
-import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.definitions.GetFactoryRequest as GetAllocationFactoryRequestV1
-import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v2.definitions.GetFactoryRequest as GetAllocationFactoryRequestV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
@@ -108,7 +106,8 @@ import scala.util.Try
 
 object HttpScanAppClient {
   import http.ScanClient as ScanClient
-  import transferinstruction.v1.Client as TClient
+  import transferinstruction.v1.Client as TV1Client
+  import transferinstruction.v2.Client as TV2Client
   import allocationinstruction.v1.Client as IV1Client
   import allocationinstruction.v2.Client as IV2Client
   import allocation.v1.Client as AV1Client
@@ -125,8 +124,13 @@ object HttpScanAppClient {
   }
 
   abstract class TokenStandardTransferInstructionBaseCommand[Res, Result]
-      extends HttpCommand[Res, Result, TClient] {
-    override val createGenClientFn = (fn, host, ec, mat) => TClient.httpClient(fn, host)(ec, mat)
+      extends HttpCommand[Res, Result, TV1Client] {
+    override val createGenClientFn = (fn, host, ec, mat) => TV1Client.httpClient(fn, host)(ec, mat)
+  }
+
+  abstract class TokenStandardTransferInstructionV2BaseCommand[Res, Result]
+      extends HttpCommand[Res, Result, TV2Client] {
+    override val createGenClientFn = (fn, host, ec, mat) => TV2Client.httpClient(fn, host)(ec, mat)
   }
 
   abstract class TokenStandardAllocationInstructionBaseCommand[Res, Result]
@@ -1809,7 +1813,7 @@ object HttpScanAppClient {
         ),
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -1823,7 +1827,10 @@ object HttpScanAppClient {
             s"Failed to parse a just-encoded json: $json. This is not supposed to happen."
           )
         )
-      client.getTransferFactory(GetTransferFactoryRequest(circeChoiceArgs, Some(true)), headers)
+      client.getTransferFactory(
+        transferinstruction.v1.definitions.GetFactoryRequest(circeChoiceArgs, Some(true)),
+        headers,
+      )
     }
 
     override protected def handleOk()(implicit
@@ -1846,7 +1853,7 @@ object HttpScanAppClient {
       } yield {
         val disclosedContracts =
           factory.choiceContext.disclosedContracts.map(
-            fromTransferInstructionHttpDisclosedContract
+            fromTransferInstructionV1HttpDisclosedContract
           )
         val args = new transferinstructionv1.TransferFactory_Transfer(
           choiceArgs.expectedAdmin,
@@ -1868,13 +1875,87 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)
+      extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferFactoryResponse,
+        (
+            FactoryChoiceWithDisclosures[
+              transferinstructionv2.TransferFactory.ContractId,
+              transferinstructionv2.TransferFactory_Transfer,
+            ],
+            transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+        ),
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferFactoryResponse] = {
+      val json = choiceArgs.toJson
+      val circeChoiceArgs = io.circe.parser
+        .parse(json)
+        .getOrElse(
+          throw new RuntimeException(
+            s"Failed to parse a just-encoded json: $json. This is not supposed to happen."
+          )
+        )
+      client.getTransferFactory(
+        transferinstruction.v2.definitions.GetFactoryRequest(circeChoiceArgs, Some(true)),
+        headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      transferinstruction.v2.GetTransferFactoryResponse,
+      Either[
+        String,
+        (
+            FactoryChoiceWithDisclosures[
+              transferinstructionv2.TransferFactory.ContractId,
+              transferinstructionv2.TransferFactory_Transfer,
+            ],
+            transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+        ),
+      ],
+    ] = { case transferinstruction.v2.GetTransferFactoryResponse.OK(factory) =>
+      for {
+        choiceContext <- parseAsChoiceContext(factory.choiceContext.choiceContextData)
+      } yield {
+        val disclosedContracts =
+          factory.choiceContext.disclosedContracts.map(
+            fromTransferInstructionV2HttpDisclosedContract
+          )
+        val args = new transferinstructionv2.TransferFactory_Transfer(
+          choiceArgs.transfer,
+          choiceArgs.actors,
+          new metadatav1.ExtraArgs(
+            choiceContext,
+            choiceArgs.extraArgs.meta,
+          ),
+        )
+        (
+          FactoryChoiceWithDisclosures(
+            new transferinstructionv2.TransferFactory.ContractId(factory.factoryId),
+            args,
+            disclosedContracts,
+          ),
+          factory.transferKind,
+        )
+      }
+    }
+  }
+
   case class GetTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)
       extends TokenStandardTransferInstructionBaseCommand[
         transferinstruction.v1.GetTransferFactoryResponse,
         transferinstruction.v1.definitions.TransferFactoryWithChoiceContext,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -1896,7 +1977,7 @@ object HttpScanAppClient {
         ChoiceContextWithDisclosures,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -1916,7 +1997,41 @@ object HttpScanAppClient {
       Either[String, ChoiceContextWithDisclosures],
     ] = { case transferinstruction.v1.GetTransferInstructionAcceptContextResponse.OK(context) =>
       val disclosedContracts =
-        context.disclosedContracts.map(fromTransferInstructionHttpDisclosedContract)
+        context.disclosedContracts.map(fromTransferInstructionV1HttpDisclosedContract)
+      for {
+        choiceContext <- parseAsChoiceContext(context.choiceContextData)
+      } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
+    }
+  }
+
+  case class GetTransferInstructionAcceptContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionAcceptContextResponse,
+        ChoiceContextWithDisclosures,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionAcceptContextResponse] = {
+      client.getTransferInstructionAcceptContext(
+        transferInstructionId.contractId,
+        body = transferinstruction.v2.definitions.GetChoiceContextRequest(meta = None),
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      transferinstruction.v2.GetTransferInstructionAcceptContextResponse,
+      Either[String, ChoiceContextWithDisclosures],
+    ] = { case transferinstruction.v2.GetTransferInstructionAcceptContextResponse.OK(context) =>
+      val disclosedContracts =
+        context.disclosedContracts.map(fromTransferInstructionV2HttpDisclosedContract)
       for {
         choiceContext <- parseAsChoiceContext(context.choiceContextData)
       } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
@@ -1931,7 +2046,7 @@ object HttpScanAppClient {
         transferinstruction.v1.definitions.ChoiceContext,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -1959,7 +2074,7 @@ object HttpScanAppClient {
         transferinstruction.v1.definitions.ChoiceContext,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -1986,7 +2101,7 @@ object HttpScanAppClient {
         ChoiceContextWithDisclosures,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -2006,7 +2121,7 @@ object HttpScanAppClient {
       Either[String, ChoiceContextWithDisclosures],
     ] = { case transferinstruction.v1.GetTransferInstructionRejectContextResponse.OK(context) =>
       val disclosedContracts =
-        context.disclosedContracts.map(fromTransferInstructionHttpDisclosedContract)
+        context.disclosedContracts.map(fromTransferInstructionV1HttpDisclosedContract)
       for {
         choiceContext <- parseAsChoiceContext(context.choiceContextData)
       } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
@@ -2021,7 +2136,7 @@ object HttpScanAppClient {
         transferinstruction.v1.definitions.ChoiceContext,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -2048,7 +2163,7 @@ object HttpScanAppClient {
         ChoiceContextWithDisclosures,
       ] {
     override def submitRequest(
-        client: TClient,
+        client: TV1Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[
       Throwable,
@@ -2068,7 +2183,7 @@ object HttpScanAppClient {
       Either[String, ChoiceContextWithDisclosures],
     ] = { case transferinstruction.v1.GetTransferInstructionWithdrawContextResponse.OK(context) =>
       val disclosedContracts =
-        context.disclosedContracts.map(fromTransferInstructionHttpDisclosedContract)
+        context.disclosedContracts.map(fromTransferInstructionV1HttpDisclosedContract)
       for {
         choiceContext <- parseAsChoiceContext(context.choiceContextData)
       } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
@@ -2120,7 +2235,7 @@ object HttpScanAppClient {
           )
         )
       client.getAllocationFactory(
-        GetAllocationFactoryRequestV1(circeChoiceArgs, Some(true)),
+        allocationinstruction.v1.definitions.GetFactoryRequest(circeChoiceArgs, Some(true)),
         headers,
       )
     }
@@ -2184,7 +2299,7 @@ object HttpScanAppClient {
           )
         )
       client.getAllocationFactory(
-        GetAllocationFactoryRequestV2(circeChoiceArgs, Some(true)),
+        allocationinstruction.v2.definitions.GetFactoryRequest(circeChoiceArgs, Some(true)),
         headers,
       )
     }
@@ -2717,8 +2832,26 @@ object HttpScanAppClient {
       .build()
   }
 
-  private def fromTransferInstructionHttpDisclosedContract(
+  private def fromTransferInstructionV1HttpDisclosedContract(
       disclosedContract: transferinstruction.v1.definitions.DisclosedContract
+  ): CommandsOuterClass.DisclosedContract = {
+    CommandsOuterClass.DisclosedContract
+      .newBuilder()
+      .setContractId(disclosedContract.contractId)
+      .setCreatedEventBlob(
+        ByteString.copyFrom(
+          java.util.Base64.getDecoder.decode(disclosedContract.createdEventBlob)
+        )
+      )
+      .setSynchronizerId(disclosedContract.synchronizerId)
+      .setTemplateId(
+        CompactJsonScanHttpEncodings().parseTemplateId(disclosedContract.templateId).toProto
+      )
+      .build()
+  }
+
+  private def fromTransferInstructionV2HttpDisclosedContract(
+      disclosedContract: transferinstruction.v2.definitions.DisclosedContract
   ): CommandsOuterClass.DisclosedContract = {
     CommandsOuterClass.DisclosedContract
       .newBuilder()
