@@ -30,7 +30,7 @@
           Note that the ``app_activity_records`` data already provided for events during this period is correct
           and the network explorers who have ingested this data should keep a copy of it.
 
-        - Added ``/v1/holdings/summary`` endpoint that drops the ``accumulated_holding_fees_unlocked``,
+        - Add ``/v1/holdings/summary`` endpoint that drops the ``accumulated_holding_fees_unlocked``,
           ``accumulated_holding_fees_locked``, ``accumulated_holding_fees_total``, and
           ``total_available_coin`` response fields and the ``as_of_round`` request parameter, as those
           values are not meaningful aggregates. The same endpoint is also exposed on the validator
@@ -58,8 +58,8 @@
 
     - SV deployment
 
-        - Update ``participantAddress``` in `scan-values.yaml` and ``sv-validator-values.yaml`` to use the participant address without a migration suffix.
-          Ensure that you override this with the correct helm install name for the participant or reinstall the participant without a migration suffix ().
+        - Update ``participantAddress`` in ``scan-values.yaml`` and ``sv-validator-values.yaml`` to use the participant address without a migration suffix.
+          Ensure that you override this with the correct helm install name for the participant or reinstall the participant without a migration suffix.
 
         - CometBFT: increased resource requests from 2 CPU and 5Gi to 3 CPUs and 7Gi, and the limit from 8Gi to 10Gi to better fit observed resource usage.
 
