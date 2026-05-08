@@ -74,16 +74,6 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
 
   type Console <: ConsoleEnvironment
 
-  def createConsole(
-      consoleOutput: ConsoleOutput = StandardConsoleOutput
-  ): Console = {
-    val console = _createConsole(consoleOutput)
-    healthDumpGenerator
-      .putIfAbsent(createHealthDumpGenerator(console.grpcAdminCommandRunner))
-      .discard
-    console
-  }
-
   protected def _createConsole(
       consoleOutput: ConsoleOutput = StandardConsoleOutput
   ): Console
@@ -139,6 +129,16 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
     new ExecutorServiceMetrics(
       metricsRegistry.generateMetricsFactory(MetricsContext.Empty)
     )
+
+  def createConsole(
+      consoleOutput: ConsoleOutput = StandardConsoleOutput
+  ): Console = {
+    val console = _createConsole(consoleOutput)
+    healthDumpGenerator
+      .putIfAbsent(createHealthDumpGenerator(console.grpcAdminCommandRunner))
+      .discard
+    console
+  }
 
   @VisibleForTesting
   protected def createHealthDumpGenerator(
