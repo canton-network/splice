@@ -852,8 +852,22 @@ ingestion version. Incrementing this value causes the scan app to
 record a new completeness boundary. Reward accounting excludes rounds
 before this boundary, even though their activity records are retained.
 
+Consequences of incrementing the user version:
+
+- Reward accounting excludes rounds before the new boundary, which may
+  result in the SV node not participating in reward computation for a
+  few rounds.
+- Existing activity records are retained, but scan may miss a few
+  activity records while there is no metadata row for the new version.
+  The results of the ``v0/events`` scan API may therefore differ from
+  those of other scans for event record times around the time the user
+  version was bumped.
+
 This is useful for recovering from ingestion or reward processing errors without
 reprocessing historical data.
+
+The user version must never decrease. A lower value than previously
+stored will cause the scan app to shut down to prevent data corruption.
 
 The HOCON configuration key is
 ``canton.scan-apps.scan-app.activity-ingestion-user-version``.
