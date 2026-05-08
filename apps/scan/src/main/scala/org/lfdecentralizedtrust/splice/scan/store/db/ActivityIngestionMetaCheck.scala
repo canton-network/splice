@@ -3,14 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.{
-  AppActivityRecordMetaT,
-  AppActivityRecordT,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordMetaT
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
@@ -37,28 +33,10 @@ class ActivityIngestionMetaCheck(
 
   private val checked = new AtomicBoolean(false)
 
-  /** Ensures the meta row exists if this batch has activity records.
-    * Returns any detected downgrade and whether ingestion has started.
-    */
-  def ensureIfReady(
-      firstRecordTimeMicros: Long,
-      appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
-  )(implicit tc: TraceContext): Future[(Option[DowngradeDetected], Boolean)] = {
-    if (checked.get()) Future.successful((None, true))
-    else if (appActivityRecords.isEmpty) Future.successful((None, false))
-    else {
-      val earliestRound = appActivityRecords
-        .map(_._2.roundNumber)
-        .minOption
-        .getOrElse(0L)
-      ensure(firstRecordTimeMicros, earliestRound).map {
-        case d: DowngradeDetected => (Some(d), false)
-        case _ => (None, checked.get())
-      }
-    }
-  }
+  /** Whether the meta check has completed successfully at least once. */
+  def isChecked: Boolean = checked.get()
 
-  private[scan] def ensure(
+  def ensure(
       firstRecordTimeMicros: Long,
       earliestIngestedRound: Long,
   )(implicit tc: TraceContext): Future[MetaCheckResult] = {

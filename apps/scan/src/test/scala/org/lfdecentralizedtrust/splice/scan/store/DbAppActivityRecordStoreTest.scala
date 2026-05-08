@@ -600,41 +600,37 @@ class DbAppActivityRecordStoreTest
     }
   }
 
-  "ActivityIngestionMetaCheck.ensureIfReady" should {
+  "ActivityIngestionMetaCheck.ensure" should {
 
-    "return not started for empty activity records" in {
+    "not be checked before ensure is called" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
-        (downgradeO, started) <- check.ensureIfReady(1000000L, Seq.empty)
-        meta <- store.lookupActivityRecordMeta()
       } yield {
-        downgradeO shouldBe None
-        started shouldBe false
-        meta shouldBe None
+        check.isChecked shouldBe false
       }
     }
 
-    "return started after successful ensure" in {
+    "be checked after successful ensure" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
-        (downgradeO, started) <- check.ensureIfReady(1000000L, recordsForRound(10L))
+        result <- check.ensure(1000000L, 10L)
       } yield {
-        downgradeO shouldBe None
-        started shouldBe true
+        result shouldBe InsertMeta
+        check.isChecked shouldBe true
       }
     }
 
-    "return started on cached subsequent calls" in {
+    "remain checked on subsequent calls" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
-        _ <- check.ensureIfReady(1000000L, recordsForRound(10L))
-        (downgradeO, started) <- check.ensureIfReady(2000000L, Seq.empty)
+        _ <- check.ensure(1000000L, 10L)
+        result <- check.ensure(2000000L, 20L)
       } yield {
-        downgradeO shouldBe None
-        started shouldBe true
+        result shouldBe Resume
+        check.isChecked shouldBe true
       }
     }
 
@@ -643,11 +639,11 @@ class DbAppActivityRecordStoreTest
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
-        (downgradeO, started) <- check.ensureIfReady(2000000L, recordsForRound(20L))
+        result <- check.ensure(2000000L, 20L)
       } yield {
-        downgradeO shouldBe defined
-        downgradeO.value.message should include("downgrade")
-        started shouldBe false
+        result shouldBe a[DowngradeDetected]
+        result.asInstanceOf[DowngradeDetected].message should include("downgrade")
+        check.isChecked shouldBe false
       }
     }
   }
@@ -772,9 +768,6 @@ class DbAppActivityRecordStoreTest
       appProviderParties = appProviderParties,
       appActivityWeights = appActivityWeights,
     )
-
-  private def recordsForRound(round: Long): Seq[(CantonTimestamp, AppActivityRecordT)] =
-    Seq(CantonTimestamp.Epoch -> mkRecord(0L, round, Seq("app1::provider"), Seq(100L)))
 
   private val testDomain = SynchronizerId.tryFromString("test::domain")
 

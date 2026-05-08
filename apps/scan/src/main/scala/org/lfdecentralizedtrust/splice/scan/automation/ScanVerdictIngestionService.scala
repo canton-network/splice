@@ -40,7 +40,11 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanVerdictStore,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.DowngradeDetected
+import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.{
+  DowngradeDetected,
+  InsertMeta,
+  Resume,
+}
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
 
@@ -255,13 +259,19 @@ class ScanVerdictIngestionService(
         }
 
         // Ensure meta row exists and versions match (first batch with activity records).
-        (downgradeO, activityIngestionStarted) <- activityMetaCheckO
-          .fold(Future.successful((None: Option[DowngradeDetected], false)))(
-            _.ensureIfReady(firstRecordTimeMicros, appActivityRecords)
-          )
-        _ = downgradeO.foreach { d =>
-          logger.error(d.message)
-          sys.exit(1)
+        activityIngestionStarted <- activityMetaCheckO match {
+          case Some(metaCheck) if metaCheck.isChecked =>
+            Future.successful(true)
+          case Some(metaCheck) if appActivityRecords.nonEmpty =>
+            val earliestRound =
+              appActivityRecords.map(_._2.roundNumber).foldLeft(Long.MaxValue)(math.min)
+            metaCheck.ensure(firstRecordTimeMicros, earliestRound).map {
+              case d: DowngradeDetected =>
+                logger.error(d.message)
+                sys.exit(1)
+              case InsertMeta | Resume => true
+            }
+          case _ => Future.successful(false)
         }
 
         // After activity ingestion has started, every verdict must have a traffic summary.
