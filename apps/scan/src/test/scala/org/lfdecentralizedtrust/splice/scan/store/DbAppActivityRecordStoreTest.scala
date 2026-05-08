@@ -432,7 +432,7 @@ class DbAppActivityRecordStoreTest
     "return None when no meta row exists" in {
       for {
         (store, _) <- newStore()
-        result <- store.lookupActivityRecordMeta()
+        result <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         result shouldBe None
       }
@@ -447,7 +447,7 @@ class DbAppActivityRecordStoreTest
           startedIngestingAt = 1000000L,
           earliestIngestedRound = 0L,
         )
-        result <- store.lookupActivityRecordMeta()
+        result <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         result shouldBe defined
         result.value.codeVersion shouldBe 1
@@ -456,7 +456,7 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "return the latest version after inserting multiple rows" in {
+    "return the matching version when multiple rows exist" in {
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(
@@ -471,13 +471,14 @@ class DbAppActivityRecordStoreTest
           startedIngestingAt = 2000000L,
           earliestIngestedRound = 5L,
         )
-        result <- store.lookupActivityRecordMeta()
+        result1 <- store.lookupActivityRecordMeta(1, 0)
+        result2 <- store.lookupActivityRecordMeta(2, 1)
+        resultMissing <- store.lookupActivityRecordMeta(3, 0)
       } yield {
-        result shouldBe defined
-        result.value.codeVersion shouldBe 2
-        result.value.userVersion shouldBe 1
-        result.value.startedIngestingAt shouldBe 2000000L
-        result.value.earliestIngestedRound shouldBe 5L
+        result1.value.startedIngestingAt shouldBe 1000000L
+        result2.value.startedIngestingAt shouldBe 2000000L
+        result2.value.earliestIngestedRound shouldBe 5L
+        resultMissing shouldBe None
       }
     }
 
@@ -492,18 +493,16 @@ class DbAppActivityRecordStoreTest
           earliestIngestedRound = 0L,
         )
         _ <- store2.insertActivityRecordMeta(
-          codeVersion = 5,
-          userVersion = 3,
+          codeVersion = 1,
+          userVersion = 0,
           startedIngestingAt = 9000000L,
           earliestIngestedRound = 0L,
         )
-        result1 <- store1.lookupActivityRecordMeta()
-        result2 <- store2.lookupActivityRecordMeta()
+        result1 <- store1.lookupActivityRecordMeta(1, 0)
+        result2 <- store2.lookupActivityRecordMeta(1, 0)
       } yield {
-        result1.value.codeVersion shouldBe 1
-        result1.value.userVersion shouldBe 0
-        result2.value.codeVersion shouldBe 5
-        result2.value.userVersion shouldBe 3
+        result1.value.startedIngestingAt shouldBe 1000000L
+        result2.value.startedIngestingAt shouldBe 9000000L
       }
     }
 
@@ -529,11 +528,48 @@ class DbAppActivityRecordStoreTest
           startedIngestingAt = 9999999L,
           earliestIngestedRound = 0L,
         )
-        result2 <- store2.lookupActivityRecordMeta()
+        result2 <- store2.lookupActivityRecordMeta(1, 0)
       } yield {
         result2.value.codeVersion shouldBe 1
         result2.value.userVersion shouldBe 0
         result2.value.startedIngestingAt shouldBe 1000000L
+      }
+    }
+  }
+
+  "lookupMaxMetaVersions" should {
+
+    "return None when no meta row exists" in {
+      for {
+        (store, _) <- newStore()
+        result <- store.lookupMaxMetaVersions()
+      } yield {
+        result shouldBe None
+      }
+    }
+
+    "return the max versions after inserting multiple rows" in {
+      for {
+        (store, _) <- newStore()
+        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 0L)
+        _ <- store.insertActivityRecordMeta(2, 1, 2000000L, 5L)
+        result <- store.lookupMaxMetaVersions()
+      } yield {
+        result shouldBe Some((2, 1))
+      }
+    }
+
+    "isolate by history_id" in {
+      for {
+        (store1, _) <- newStore()
+        (store2, _) <- newStore()
+        _ <- store1.insertActivityRecordMeta(1, 0, 1000000L, 0L)
+        _ <- store2.insertActivityRecordMeta(5, 3, 9000000L, 0L)
+        result1 <- store1.lookupMaxMetaVersions()
+        result2 <- store2.lookupMaxMetaVersions()
+      } yield {
+        result1 shouldBe Some((1, 0))
+        result2 shouldBe Some((5, 3))
       }
     }
   }
@@ -546,7 +582,7 @@ class DbAppActivityRecordStoreTest
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
         r1 <- check.ensure(1000000L, 10L)
         r2 <- check.ensure(2000000L, 20L)
-        meta <- store.lookupActivityRecordMeta()
+        meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         r1 shouldBe InsertMeta
         r2 shouldBe Resume
@@ -561,7 +597,7 @@ class DbAppActivityRecordStoreTest
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
         result <- check.ensure(2000000L, 20L)
-        meta <- store.lookupActivityRecordMeta()
+        meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         result shouldBe Resume
         meta.value.startedIngestingAt shouldBe 1000000L
@@ -575,7 +611,7 @@ class DbAppActivityRecordStoreTest
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, 2, 0, loggerFactory)
         result <- check.ensure(2000000L, 20L)
-        meta <- store.lookupActivityRecordMeta()
+        meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe InsertMeta
         meta.value.codeVersion shouldBe 2
@@ -590,7 +626,7 @@ class DbAppActivityRecordStoreTest
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
         result <- check.ensure(2000000L, 20L)
-        meta <- store.lookupActivityRecordMeta()
+        meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe DowngradeDetected(1, 0, 2, 0)
         meta.value.codeVersion shouldBe 2
