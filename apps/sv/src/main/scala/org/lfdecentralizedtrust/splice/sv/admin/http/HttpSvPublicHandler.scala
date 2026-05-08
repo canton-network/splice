@@ -118,32 +118,36 @@ class HttpSvPublicHandler(
                     )
                   )
                 } else {
-                  // Check whether a validator license already exists for this party,
-                  // because when recovering from an ACS snapshot "used secret" information will get lost.
-                  dsoStore
-                    .lookupValidatorLicenseWithOffset(PartyId.tryFromProtoPrimitive(body.partyId))
-                    .flatMap {
-                      case QueryResult(_, Some(_)) =>
-                        // This validator is already onboarded - nothing to do
-                        Future.successful(r0.OnboardValidatorResponseOK)
-                      case QueryResult(_, None) =>
-                        for {
-                          // We retry here because this mutates the AmuletRules and rounds contracts,
-                          // which can lead to races.
-                          _ <- retryProvider.retryForClientCalls(
-                            "onboard_validator",
-                            "onboard validator via DsoRules",
-                            onboardValidator(
-                              partyId,
-                              Secrets.encodeValidatorOnboardingSecret(storedSecret),
-                              vo,
-                              body.version,
-                              body.contactPoint,
-                            ),
-                            logger,
+                  // We retry here because the branch where validator license is missing
+                  // mutates the AmuletRules and rounds contracts, which can lead to races.
+                  // We need to retry with validator license lookup to avoid a situation where
+                  // we retry onboarding with an archived onboard contract.
+                  retryProvider.retryForClientCalls(
+                    "onboard_validator",
+                    "onboard validator via DsoRules",
+                    for {
+                      // Check whether a validator license already exists for this party,
+                      // because when recovering from an ACS snapshot "used secret" information will get lost.
+                      queryResult <- dsoStore
+                        .lookupValidatorLicenseWithOffset(
+                          PartyId.tryFromProtoPrimitive(body.partyId)
+                        )
+                      _ <- queryResult match {
+                        case QueryResult(_, Some(_)) =>
+                          // This validator is already onboarded - nothing to do
+                          Future.unit
+                        case QueryResult(_, None) =>
+                          onboardValidator(
+                            partyId,
+                            Secrets.encodeValidatorOnboardingSecret(storedSecret),
+                            vo,
+                            body.version,
+                            body.contactPoint,
                           )
-                        } yield r0.OnboardValidatorResponseOK
-                    }
+                      }
+                    } yield r0.OnboardValidatorResponseOK,
+                    logger,
+                  )
                 }
             }
           } else {
