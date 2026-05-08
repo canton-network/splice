@@ -6,7 +6,6 @@ package org.lfdecentralizedtrust.splice.scan.store.db
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordMetaT
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,7 +41,7 @@ class ActivityIngestionMetaCheck(
   )(implicit tc: TraceContext): Future[MetaCheckResult] = {
     if (checked.get()) Future.successful(Resume)
     else {
-      activityStore.lookupActivityRecordMeta().flatMap { existing =>
+      activityStore.lookupMaxMetaVersions().flatMap { existing =>
         checkMetaVersions(existing, runningCodeVersion, runningUserVersion) match {
           case InsertMeta =>
             val label = if (existing.isDefined) "version upgrade" else "initializing"
@@ -91,15 +90,15 @@ object ActivityIngestionMetaCheck {
   }
 
   def checkMetaVersions(
-      existing: Option[AppActivityRecordMetaT],
+      existing: Option[(Int, Int)],
       runningCode: Int,
       runningUser: Int,
   ): MetaCheckResult = existing match {
     case None => InsertMeta
-    case Some(meta) =>
-      if (runningCode < meta.codeVersion || runningUser < meta.userVersion)
-        DowngradeDetected(runningCode, runningUser, meta.codeVersion, meta.userVersion)
-      else if (runningCode > meta.codeVersion || runningUser > meta.userVersion)
+    case Some((storedCode, storedUser)) =>
+      if (runningCode < storedCode || runningUser < storedUser)
+        DowngradeDetected(runningCode, runningUser, storedCode, storedUser)
+      else if (runningCode > storedCode || runningUser > storedUser)
         InsertMeta
       else
         Resume

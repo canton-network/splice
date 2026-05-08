@@ -5,21 +5,12 @@ package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.digitalasset.canton.BaseTest
 import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordMetaT
 import org.scalatest.wordspec.AnyWordSpec
 
 class CheckMetaVersionsTest extends AnyWordSpec with BaseTest {
 
-  private def meta(code: Int, user: Int): Some[AppActivityRecordMetaT] =
-    Some(
-      AppActivityRecordMetaT(
-        historyId = 1L,
-        codeVersion = code,
-        userVersion = user,
-        startedIngestingAt = 0L,
-        earliestIngestedRound = 0L,
-      )
-    )
+  private def meta(code: Int, user: Int): Some[(Int, Int)] =
+    Some((code, user))
 
   "checkMetaVersions" should {
 
