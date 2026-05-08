@@ -399,6 +399,33 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "use current meta row when multiple meta rows exist" in {
+      for {
+        (store, historyId) <- newStore()
+        baseTs = CantonTimestamp.now()
+        rowId1 <- insertVerdictRow(historyId, baseTs, "update-10")
+        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-11")
+        rowId3 <- insertVerdictRow(historyId, baseTs.plusSeconds(10L), "update-20")
+        rowId4 <- insertVerdictRow(historyId, baseTs.plusSeconds(11L), "update-21")
+        _ <- store.insertAppActivityRecords(
+          Seq(
+            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
+            mkRecord(rowId2, 11L, Seq("app1::provider"), Seq(200L)),
+            mkRecord(rowId3, 20L, Seq("app1::provider"), Seq(300L)),
+            mkRecord(rowId4, 21L, Seq("app1::provider"), Seq(400L)),
+          )
+        )
+        // Old meta row from a previous ingestion run covering rounds 10,11
+        _ <- store.insertActivityRecordMeta(0, 0, baseTs.toMicros, 10L)
+        // Current meta row starting at round 20
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(10L).toMicros, 20L)
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        // Should use the current meta row (round 20), not the old one (round 10)
+        result.value shouldBe 21L
+      }
+    }
+
     "only consider records from own history_id" in {
       for {
         (store1, historyId1) <- newStore()
@@ -579,7 +606,7 @@ class DbAppActivityRecordStoreTest
     "insert meta on first call and resume on second" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         r1 <- check.ensure(1000000L, 10L)
         r2 <- check.ensure(2000000L, 20L)
         meta <- store.lookupActivityRecordMeta(1, 0)
@@ -595,7 +622,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         result <- check.ensure(2000000L, 20L)
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
@@ -607,9 +634,9 @@ class DbAppActivityRecordStoreTest
 
     "insert new row and return InsertMeta on version bump" in {
       for {
-        (store, _) <- newStore()
+        (store, _) <- newStore(DbAppActivityRecordStore.IngestionVersions(2, 0))
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, 2, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         result <- check.ensure(2000000L, 20L)
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
@@ -624,7 +651,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         result <- check.ensure(2000000L, 20L)
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
@@ -641,7 +668,7 @@ class DbAppActivityRecordStoreTest
     "not be checked before ensure is called" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
       } yield {
         check.isChecked shouldBe false
       }
@@ -650,7 +677,7 @@ class DbAppActivityRecordStoreTest
     "be checked after successful ensure" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         result <- check.ensure(1000000L, 10L)
       } yield {
         result shouldBe InsertMeta
@@ -661,7 +688,7 @@ class DbAppActivityRecordStoreTest
     "remain checked on subsequent calls" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         _ <- check.ensure(1000000L, 10L)
         result <- check.ensure(2000000L, 20L)
       } yield {
@@ -674,7 +701,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
         result <- check.ensure(2000000L, 20L)
       } yield {
         result shouldBe a[DowngradeDetected]
@@ -812,7 +839,10 @@ class DbAppActivityRecordStoreTest
   /** Creates a new store and returns it along with a unique history_id
     * obtained from UpdateHistory initialization.
     */
-  private def newStore(): Future[(DbAppActivityRecordStore, Long)] = {
+  private def newStore(
+      versions: DbAppActivityRecordStore.IngestionVersions =
+        DbAppActivityRecordStore.IngestionVersions(1, 0)
+  ): Future[(DbAppActivityRecordStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
@@ -831,6 +861,7 @@ class DbAppActivityRecordStoreTest
       val store = new DbAppActivityRecordStore(
         storage.underlying,
         updateHistory,
+        versions,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -858,6 +889,7 @@ class DbAppActivityRecordStoreTest
       val appStore = new DbAppActivityRecordStore(
         storage.underlying,
         updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
