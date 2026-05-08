@@ -4,9 +4,9 @@
     "splice_perf_ingestion_avg_item_time_ns": {
       "max": 2500000
     },
-    "_comment_total_time_ns": "hard max of 1h",
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m based on the past data collected on 2026-May-07 to detect the trends earlier",
     "splice_perf_ingestion_total_time_ns": {
-      "max": 3600000000000
+      "max": 600000000000
     }
   },
   "ScanStoreIngestionPerformanceTest": {
@@ -14,9 +14,9 @@
     "splice_perf_ingestion_avg_item_time_ns": {
       "max": 2400000
     },
-    "_comment_total_time_ns": "hard max of 1h",
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m based on the past data collected on 2026-May-07 to detect the trends earlier",
     "splice_perf_ingestion_total_time_ns": {
-      "max": 3600000000000
+      "max": 600000000000
     }
   },
   "UpdateHistoryIngestionPerformanceTest": {
@@ -24,9 +24,9 @@
     "splice_perf_ingestion_avg_item_time_ns": {
       "max": 16800000
     },
-    "_comment_total_time_ns": "hard max of 1h",
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 20m based on the past data collected on 2026-May-07 to detect the trends earlier",
     "splice_perf_ingestion_total_time_ns": {
-      "max": 3600000000000
+      "max": 1200000000000
     }
   },
   "UpdateHistoryReadPerformanceTest-getUpdate": {
