@@ -29,6 +29,7 @@
           data which has been provided for the events which happened between the ``0.5.18`` and this release.
           Note that the ``app_activity_records`` data already provided for events during this period is correct
           and the network explorers who have ingested this data should keep a copy of it.
+          The downstream reward-accounting tables are also cleared as part of this change.
 
     - Wallet UI
 
