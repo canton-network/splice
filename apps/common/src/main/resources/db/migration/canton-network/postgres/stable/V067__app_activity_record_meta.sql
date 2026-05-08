@@ -14,7 +14,7 @@ create table app_activity_record_meta
     -- by incrementing the value in ScanAppConfig.
     activity_ingestion_user_version   int not null,
     -- Record time (microseconds since epoch) of the first verdict in the
-    -- first batch with activity records. Rounds before this time may be partial.
+    -- with activity records. Rounds before this time may be partial.
     started_ingesting_at              bigint not null,
     -- The earliest round number in the first batch with activity records.
     -- Used to compute the earliest complete round without an expensive
