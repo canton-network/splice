@@ -3,23 +3,8 @@
 
 module Splice.Testing.CryptoHashProxy where
 
-import Splice.Amulet.CryptoHash (Hash(..), Hashable(..), hashRecord, hashVariant)
-import Splice.Amulet.RewardAccountingV2 (Batch)
-
--- | Hash a MintingAllowance{provider, amount}.
-hashMintingAllowance : Text -> Text -> Hash
-hashMintingAllowance provider amount =
-  hashRecord [hash provider, hash amount]
-
--- | Hash a BatchOfMintingAllowances variant.
-hashBatchOfMintingAllowances : [Hash] -> Hash
-hashBatchOfMintingAllowances allowanceHashes =
-  hashVariant "BatchOfMintingAllowances" [hash allowanceHashes]
-
--- | Hash a BatchOfBatches variant.
-hashBatchOfBatches : [Hash] -> Hash
-hashBatchOfBatches childHashes =
-  hashVariant "BatchOfBatches" [hash childHashes]
+import Splice.Amulet.CryptoHash (Hash(..), Hashable(..), hashVariant)
+import Splice.Amulet.RewardAccountingV2 (Batch, MintingAllowance(..))
 
 -- | Proxy template exposing hash functions as exercisable choices.
 -- Allows Scala integration tests to call Daml hash functions via the
@@ -50,22 +35,22 @@ template CryptoHashProxy with
 
     nonconsuming choice CryptoHashProxy_HashMintingAllowance : Text
       with
-        provider : Text
-        amount : Text
+        provider : Party
+        amount : Decimal
       controller owner
-      do pure (hashMintingAllowance provider amount).value
+      do pure (hash (MintingAllowance provider amount)).value
 
     nonconsuming choice CryptoHashProxy_HashBatchOfMintingAllowances : Text
       with
         allowanceHashes : [Text]
       controller owner
-      do pure (hashBatchOfMintingAllowances (map Hash allowanceHashes)).value
+      do pure (hashVariant "BatchOfMintingAllowances" [hash (map Hash allowanceHashes)]).value
 
     nonconsuming choice CryptoHashProxy_HashBatchOfBatches : Text
       with
         childHashes : [Text]
       controller owner
-      do pure (hashBatchOfBatches (map Hash childHashes)).value
+      do pure (hashVariant "BatchOfBatches" [hash (map Hash childHashes)]).value
 
     nonconsuming choice CryptoHashProxy_HashDecimal : Text
       with

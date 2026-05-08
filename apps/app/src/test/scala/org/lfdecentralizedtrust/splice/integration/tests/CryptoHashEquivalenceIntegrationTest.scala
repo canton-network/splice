@@ -71,6 +71,20 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
       svParty = sv1Backend.getDsoInfo().svParty
       svDb = sv1Backend.appState.storage
 
+      clue("Allocate parties for MintingAllowance tests") {
+        Seq("alice-hash-test", "bob-hash-test").foreach { hint =>
+          val party = scala.util
+            .Try(sv1Backend.participantClient.ledger_api.parties.allocate(hint).party)
+            .getOrElse(
+              sv1Backend.participantClient.ledger_api.parties
+                .list(filterParty = hint)
+                .head
+                .party
+            )
+          intermediates(s"party:$hint") = party.toProtoPrimitive
+        }
+      }
+
       clue("Upload dar and create CryptoHashProxy") {
         sv1Backend.participantClient.upload_dar_unless_exists(darPath)
         val createArgs = new DamlRecord(
@@ -328,7 +342,7 @@ object CryptoHashEquivalenceIntegrationTest {
   case class HashText(value: String) extends HashOp
   case class HashList(elems: Seq[HashRef]) extends HashOp
   case class HashVariant(tag: String, fields: Seq[HashRef]) extends HashOp
-  case class HashMintingAllowance(provider: String, amount: String) extends HashOp
+  case class HashMintingAllowance(provider: HashRef, amount: String) extends HashOp
   case class HashBatchOfMintingAllowances(hashes: Seq[HashRef]) extends HashOp
   case class HashBatchOfBatches(hashes: Seq[HashRef]) extends HashOp
   case class HashDecimal(value: String) extends HashOp
@@ -357,7 +371,10 @@ object CryptoHashEquivalenceIntegrationTest {
     case HashMintingAllowance(provider, amount) =>
       (
         "CryptoHashProxy_HashMintingAllowance",
-        record("provider" -> text(provider), "amount" -> text(amount)),
+        record(
+          "provider" -> new Party(r(provider)),
+          "amount" -> new Numeric(new java.math.BigDecimal(amount)),
+        ),
       )
     case HashBatchOfMintingAllowances(hashes) =>
       (
@@ -386,7 +403,7 @@ object CryptoHashEquivalenceIntegrationTest {
     case HashVariant(tag, fields) =>
       s"daml_crypto_hash_variant('${escapeSql(tag)}', ${sqlArray(fields.map(r))})"
     case HashMintingAllowance(provider, amount) =>
-      s"hash_minting_allowance('${escapeSql(provider)}', '${escapeSql(amount)}')"
+      s"hash_minting_allowance('${escapeSql(r(provider))}', daml_numeric_to_text(${escapeSql(amount)}::decimal(38,10)))"
     case HashBatchOfMintingAllowances(hashes) =>
       s"hash_batch_of_minting_allowances(${sqlArray(hashes.map(r))})"
     case HashBatchOfBatches(hashes) =>
@@ -438,10 +455,22 @@ object CryptoHashEquivalenceIntegrationTest {
       TestCaseDef("hx", HashText("x")),
 
       // Minting allowance hashes — used as intermediates by batch cases
-      TestCaseDef("maAlice", HashMintingAllowance("alice::provider", "10.0000000000")),
-      TestCaseDef("maBob", HashMintingAllowance("bob::provider", "0")),
-      TestCaseDef("maAlice5", HashMintingAllowance("alice::provider", "5.0")),
-      TestCaseDef("maBob3", HashMintingAllowance("bob::provider", "3.0")),
+      TestCaseDef(
+        "maAlice",
+        HashMintingAllowance(IntermediateRef("party:alice-hash-test"), "10.0000000000"),
+      ),
+      TestCaseDef(
+        "maBob",
+        HashMintingAllowance(IntermediateRef("party:bob-hash-test"), "0"),
+      ),
+      TestCaseDef(
+        "maAlice5",
+        HashMintingAllowance(IntermediateRef("party:alice-hash-test"), "5.0"),
+      ),
+      TestCaseDef(
+        "maBob3",
+        HashMintingAllowance(IntermediateRef("party:bob-hash-test"), "3.0"),
+      ),
       // Batch hashes — used as intermediates by batch-of-batches
       TestCaseDef("leaf1", HashBatchOfMintingAllowances(Seq(IntermediateRef("maAlice5")))),
       TestCaseDef("leaf2", HashBatchOfMintingAllowances(Seq(IntermediateRef("maBob3")))),
