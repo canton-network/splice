@@ -32,6 +32,10 @@ spec:
         {{- end }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       containers:
         - name: sequencer
         {{- if eq .Values.sequencer.driver.type "cometbft"}}
