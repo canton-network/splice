@@ -92,7 +92,7 @@ import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 
 case class SpliceConfig(
-    override val name: Option[String] = None,
+    name: Option[String] = None,
     validatorApps: Map[InstanceName, ValidatorAppBackendConfig] = Map.empty,
     validatorAppClients: Map[InstanceName, ValidatorAppClientConfig] = Map.empty,
     svApps: Map[InstanceName, SvAppBackendConfig] = Map.empty,

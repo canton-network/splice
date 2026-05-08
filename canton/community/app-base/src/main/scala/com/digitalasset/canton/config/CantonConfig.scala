@@ -378,7 +378,6 @@ final case class CantonFeatures(
 }
 
 trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self] { self: Self =>
-  def name: Option[String]
   def portDescription: String
   def sequencers: Map[InstanceName, SequencerNodeConfig]
   def mediators: Map[InstanceName, MediatorNodeConfig]
@@ -592,7 +591,6 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
   *   control which features are enabled
   */
 final case class CantonConfig(
-    name: Option[String] = None,
     sequencers: Map[InstanceName, SequencerNodeConfig] = Map.empty,
     mediators: Map[InstanceName, MediatorNodeConfig] = Map.empty,
     participants: Map[InstanceName, ParticipantNodeConfig] = Map.empty,
