@@ -24,3 +24,13 @@ create table app_activity_record_meta
         history_id, activity_ingestion_code_version, activity_ingestion_user_version
     )
 );
+
+-- Truncate downstream reward-accounting tables. Data ingested before
+-- this migration has no meta row; clearing the derived tables ensures
+-- they are re-computed within the new completeness boundary.
+truncate table app_activity_party_totals,
+               app_activity_round_totals,
+               app_reward_party_totals,
+               app_reward_round_totals,
+               app_reward_batch_hashes,
+               app_reward_root_hashes;
