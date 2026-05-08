@@ -9,6 +9,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   ValidatorRewardCoupon,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -278,6 +280,78 @@ class ScanFrontendTimeBasedIntegrationTest
             val totalUsdText = seleniumText(find(id("total-amulet-balance-usd")))
             val totalUsdBalance = totalBalance * amuletPrice
             parseAmountText(totalUsdText, "USD") shouldBe totalUsdBalance
+          },
+        )
+      }
+    }
+
+    "see the votes" in { implicit env =>
+      val dsoInfo = sv1Backend.getDsoInfo()
+      val amuletRules = dsoInfo.amuletRules
+
+      val baseAmuletConfig = amuletRules.payload.configSchedule.initialValue
+
+      val newMaxNumInputs = baseAmuletConfig.transferConfig.maxNumInputs.toInt + 1
+      val newAmuletConfig = mkUpdatedAmuletConfig(
+        amuletRules.contract,
+        NonNegativeFiniteDuration.tryFromDuration(
+          scala.concurrent.duration.Duration.fromNanos(
+            baseAmuletConfig.tickDuration.microseconds * 1000
+          )
+        ),
+        newMaxNumInputs,
+      )
+
+      val mockVoteAction = new ARC_AmuletRules(
+        new CRARC_SetConfig(
+          new AmuletRules_SetConfig(
+            newAmuletConfig,
+            baseAmuletConfig,
+          )
+        )
+      )
+
+      // only 1 SV in this test suite, so the vote is approved
+      sv1Backend.createVoteRequest(
+        dsoInfo.svParty.toProtoPrimitive,
+        mockVoteAction,
+        "url",
+        "Testing Testingaton",
+        dsoInfo.dsoRules.payload.config.voteRequestTimeout,
+        None,
+      )
+
+      withFrontEnd("scan-ui") { implicit webDriver =>
+        actAndCheck(
+          "Go to Scan UI for votes",
+          go to s"http://localhost:$scanUIPort/governance",
+        )(
+          "See the vote as executed",
+          _ => {
+            closeVoteModalsIfOpen
+
+            eventuallyClickOn(id("tab-panel-executed"))
+            val rows = getAllVoteRows("sv-vote-results-executed-table-body")
+
+            forExactly(1, rows) { reviewButton =>
+              closeVoteModalsIfOpen
+              reviewButton.underlying.click()
+
+              // TODO(#934): needs to be changed by using parseAmuletConfigValue() once the diff exists for the first change
+              try {
+                val newScheduleItem = webDriver.findElement(By.id("accordion-details"))
+                val json = newScheduleItem.findElement(By.tagName("pre")).getText
+                spray.json
+                  .JsonParser(json)
+                  .asJsObject("transferConfig")
+                  .fields("transferConfig")
+                  .asJsObject
+                  .fields("maxNumInputs")
+                  .convertTo[String] should be(newMaxNumInputs.toString)
+              } catch {
+                case _: NoSuchElementException => false
+              }
+            }
           },
         )
       }
