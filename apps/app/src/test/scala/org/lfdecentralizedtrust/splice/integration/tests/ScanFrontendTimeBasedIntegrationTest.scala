@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   ValidatorRewardCoupon,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -24,6 +25,8 @@ import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponT
 
 import java.time.{Duration, Instant}
 import scala.concurrent.Future
+import org.openqa.selenium.By
+import spray.json.DefaultJsonProtocol.StringJsonFormat
 
 class ScanFrontendTimeBasedIntegrationTest
     extends FrontendIntegrationTest("scan-ui")
