@@ -540,7 +540,7 @@ class DbAppActivityRecordStoreTest
 
   "ActivityIngestionMetaCheck.ensure" should {
 
-    "insert meta on first call and cache on second" in {
+    "insert meta on first call and resume on second" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, 1, 0, loggerFactory)
