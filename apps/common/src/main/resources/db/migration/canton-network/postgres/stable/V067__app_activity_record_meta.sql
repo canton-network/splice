@@ -16,9 +16,8 @@ create table app_activity_record_meta
     -- Record time (microseconds since epoch) of the first verdict in the
     -- with activity records. Rounds before this time may be partial.
     started_ingesting_at              bigint not null,
-    -- The earliest round number in the first batch with activity records.
-    -- Used to compute the earliest complete round without an expensive
-    -- min() aggregation over the activity records table.
+    -- The earliest round number in the first batch with activity records ingested
+    -- with this code version and user version
     earliest_ingested_round           bigint not null,
 
     constraint app_activity_record_meta_pkey primary key (
