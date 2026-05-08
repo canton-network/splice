@@ -56,7 +56,7 @@ svs:
         - name: ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS
           value: |
             canton.sequencers.sequencer.sequencer.config {
-              segment-length-for-pv34 = 4
+              segment-length-for-pv-34 = 4
               consensus-empty-block-creation-timeout = 500.milliseconds
               min-requests-in-batch = 16
             }
