@@ -293,6 +293,10 @@ class ScanApp(
             new DbAppActivityRecordStore(
               storage,
               updateHistory,
+              DbAppActivityRecordStore.IngestionVersions(
+                DbAppActivityRecordStore.ActivityIngestionCodeVersion,
+                config.activityIngestionUserVersion.fold(0)(_.toInt),
+              ),
               loggerFactory,
             )
           )

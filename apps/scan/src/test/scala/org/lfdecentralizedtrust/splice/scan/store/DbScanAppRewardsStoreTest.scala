@@ -1073,6 +1073,7 @@ class DbScanAppRewardsStoreTest
       val appActivityRecordStore = new DbAppActivityRecordStore(
         storage.underlying,
         updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(

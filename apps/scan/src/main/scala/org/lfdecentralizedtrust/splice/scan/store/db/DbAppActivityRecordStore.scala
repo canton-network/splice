@@ -57,11 +57,14 @@ object DbAppActivityRecordStore {
       startedIngestingAt: Long,
       earliestIngestedRound: Long,
   )
+
+  final case class IngestionVersions(code: Int, user: Int)
 }
 
 class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
+    val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -108,10 +111,14 @@ class DbAppActivityRecordStore(
       tc: TraceContext
   ): Future[Option[Long]] = {
 
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
     runQuerySingle(
       sql"""select m.earliest_ingested_round + 1
             from #${Tables.activityRecordMeta} m
             where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
               and exists (
                 select 1
                 from #${Tables.appActivityRecords} a

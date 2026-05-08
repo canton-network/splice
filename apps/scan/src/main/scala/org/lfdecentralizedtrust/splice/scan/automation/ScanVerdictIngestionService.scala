@@ -37,7 +37,6 @@ import org.lfdecentralizedtrust.splice.scan.metrics.ScanMediatorVerdictIngestion
 import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   ActivityIngestionMetaCheck,
-  DbAppActivityRecordStore,
   DbScanVerdictStore,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.{
@@ -78,8 +77,6 @@ class ScanVerdictIngestionService(
     store.appActivityRecordStoreO.map { activityStore =>
       new ActivityIngestionMetaCheck(
         activityStore,
-        runningCodeVersion = DbAppActivityRecordStore.ActivityIngestionCodeVersion,
-        runningUserVersion = config.activityIngestionUserVersion.fold(0)(_.toInt),
         loggerFactory,
       )
     }

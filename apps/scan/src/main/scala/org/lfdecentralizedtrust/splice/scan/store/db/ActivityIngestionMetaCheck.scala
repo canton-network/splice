@@ -24,11 +24,11 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class ActivityIngestionMetaCheck(
     activityStore: DbAppActivityRecordStore,
-    runningCodeVersion: Int,
-    runningUserVersion: Int,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends NamedLogging {
+
+  private val versions = activityStore.ingestionVersions
 
   private val checked = new AtomicBoolean(false)
 
@@ -42,18 +42,18 @@ class ActivityIngestionMetaCheck(
     if (checked.get()) Future.successful(Resume)
     else {
       activityStore.lookupMaxMetaVersions().flatMap { existing =>
-        checkMetaVersions(existing, runningCodeVersion, runningUserVersion) match {
+        checkMetaVersions(existing, versions.code, versions.user) match {
           case InsertMeta =>
             val label = if (existing.isDefined) "version upgrade" else "initializing"
             logger.info(
-              s"Activity record meta $label: codeVersion=$runningCodeVersion, " +
-                s"userVersion=$runningUserVersion, startedIngestingAt=$firstRecordTimeMicros, " +
+              s"Activity record meta $label: codeVersion=${versions.code}, " +
+                s"userVersion=${versions.user}, startedIngestingAt=$firstRecordTimeMicros, " +
                 s"earliestIngestedRound=$earliestIngestedRound"
             )
             activityStore
               .insertActivityRecordMeta(
-                runningCodeVersion,
-                runningUserVersion,
+                versions.code,
+                versions.user,
                 firstRecordTimeMicros,
                 earliestIngestedRound,
               )
