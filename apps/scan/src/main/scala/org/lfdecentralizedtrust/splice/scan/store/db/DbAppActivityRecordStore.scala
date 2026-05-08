@@ -99,7 +99,7 @@ class DbAppActivityRecordStore(
     *
     * Uses `earliest_ingested_round` from the meta table — the first round
     * may be partial, so the earliest complete round is
-    * `earliest_ingested_round + 1`, provided that round has records.
+    * `earliest_ingested_round + 1`.
     *
     * Returns None if no meta record exists (ingestion hasn't started) or
     * if the next round after the earliest hasn't been ingested yet.
