@@ -852,7 +852,7 @@ ingestion version. Incrementing this value causes the scan app to
 record a new completeness boundary. Reward accounting excludes rounds
 before this boundary, even though their activity records are retained.
 
-This is useful for recovering from ingestion errors without
+This is useful for recovering from ingestion or reward processing errors without
 reprocessing historical data.
 
 The HOCON configuration key is
