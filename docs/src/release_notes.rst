@@ -23,7 +23,8 @@
     - Scan app
 
         - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
-          This requires clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
+          Upon upgrade to this version, the existing data in this table which has been ingested since the ``0.5.18`` release
+          will be deleted in order to support that.
           This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
           Specifically the ``app_activity_records`` field will not contain the
           data which has been provided for the events which happened between the ``0.5.18`` and this release.
