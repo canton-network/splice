@@ -703,7 +703,7 @@ describe('Wallet user can', () => {
     await user.click(proceedButton);
 
     // Assert the cancel API was called once
-    expect(calledCancelArgs).toHaveLength(1);
+    await waitFor(() => expect(calledCancelArgs).toHaveLength(1));
   });
 
   test("can 'accept' a minting delegation proposal", async () => {
