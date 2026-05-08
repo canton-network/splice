@@ -104,7 +104,7 @@ class ExpiredLockedAmuletTrigger(
             )
           }
         }
-      // TODO(DACH-NY/canton/issues/31450): remove once TAPS use partial information from pass 1 in pass 2
+      // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
       synchronizerId <- store.getDsoRules().map(_.domain)
       preferredPackages <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
