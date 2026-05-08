@@ -47,7 +47,9 @@ class SplitwellIntegrationTest
         createSplitwellInstalls(aliceSplitwellClient, aliceUserParty)
 
         def createGroup() = {
-          val groupRequest = aliceSplitwellClient.requestGroup("group1")
+          val groupRequest = eventuallySucceeds() {
+            aliceSplitwellClient.requestGroup("group1")
+          }
 
           // Wait for request to be archived and therefore either the group to be created or
           // the request to be rejected.
