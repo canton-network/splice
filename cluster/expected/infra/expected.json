@@ -99,6 +99,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the Splitwell validator",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "Splitwell UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -179,6 +183,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -229,6 +237,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the SV UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "SV UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -279,6 +291,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -2531,6 +2547,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-1",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "SV1 UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -2701,6 +2721,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-da-1",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "SVDA1 UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -2839,6 +2863,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the standalone Validator1",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "Validator1 UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -2899,6 +2927,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {
@@ -2957,6 +2989,10 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
       "oidcConformant": true,
       "refreshToken": {

@@ -227,6 +227,7 @@ function newUiApp(
       crossOriginAuth: false,
       description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
       oidcConformant: true,
+      grantTypes: ['authorization_code', 'refresh_token'],
       refreshToken: {
         rotationType: 'rotating',
         expirationType: 'expiring',
