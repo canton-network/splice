@@ -7,8 +7,8 @@ create table app_activity_record_meta
 (
     -- History identifier for update history partitioning (same as update_history_id).
     history_id                        bigint not null,
-    -- Code version of the ingestion logic. Bumped when the ingestion
-    -- implementation changes materially.
+    -- Code version of the ingestion logic. Bumped when the computation
+    -- of app activity records is functionally changed.
     activity_ingestion_code_version   int not null,
     -- User-configured version, allowing operators to force a re-ingestion
     -- by incrementing the value in ScanAppConfig.
