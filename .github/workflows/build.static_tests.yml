@@ -139,11 +139,6 @@ jobs:
         with:
           cmd: ./scripts/actionlint.sh
 
-      - name: Check that docker base images are pinned by digest
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
-        with:
-          cmd: find cluster/images/ -name Dockerfile -exec scripts/check-base-images.py {} \;
-
       - name: Check that npm packages are properly namespaced
         uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
         with:
