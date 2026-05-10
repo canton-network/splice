@@ -5,4 +5,8 @@
 
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
-.. .. release-notes:: Upcoming
+.. release-notes:: Upcoming
+
+    - Scan UI
+
+      - Bring back the governance page that was removed in release 0.5.18.
