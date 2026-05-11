@@ -56,8 +56,8 @@ Test data dumps live in the GCP bucket [
 # List all files
 gcloud storage ls --long --recursive 'gs://mainnet-history-dumps/**'
 
-# Download a file to local /tmp (used by the read perf test)
-gcloud storage cp gs://mainnet-history-dumps/mainnet_big_update.json /tmp/mainnet_big_update.json
+# Download a file to local /tmp
+gcloud storage cp gs://mainnet-history-dumps/mainnetupdates.json /tmp/mainnetupdates.json
 
 # Upload a new test data file
 gcloud storage cp ./new_dump.json gs://mainnet-history-dumps/new_dump.json
