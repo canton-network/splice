@@ -11,8 +11,6 @@ and measure the time taken for the ingestion process.
 | **`ScanStore`**     | DSO's public queryable data | ACS contracts    |
 | **`UpdateHistory`** | DSO's append-only audit log | Updates and associated-events (create/exercise)|
 
-## Read (TODO)
-
 # How to run a test on branch
 
 ## CI
