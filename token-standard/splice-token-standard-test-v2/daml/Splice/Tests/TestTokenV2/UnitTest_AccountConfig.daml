@@ -85,70 +85,70 @@ test_availableTransferInstructionActions = do
     test_cases = [
 
       -- Start with Joint/Joint and all different parties
-      (a, v, b, w, j, j, [], [] ,[], [[a] ,[v], [a,v]], [], []),
-      (a, v, b, w, j, j, [a], [] ,[], [[v]], [[a]], []),
-      (a, v, b, w, j, j, [v], [] ,[], [[a]], [[v]], []),
+      (a, v, b, w, j, j, [], [] ,[], [[a] ,[v], [a,v]], [], [], TIS_Init),
+      (a, v, b, w, j, j, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
+      (a, v, b, w, j, j, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
       -- Now it's sender-authorized
-      (a, v, b, w, j, j, [a,v], [] ,[], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b], [w], [b,w]]),
+      (a, v, b, w, j, j, [a,v], [] ,[], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
       -- Test withdrawing
-      (a, v, b, w, j, j, [a,v], [a] ,[], [[b], [w], [b,w]], [[v]], [[b], [w], [b,w]]),
-      (a, v, b, w, j, j, [a,v], [v] ,[], [[b], [w], [b,w]], [[a]], [[b], [w], [b,w]]),
-      (a, v, b, w, j, j, [a,v], [a,v] ,[], [[b], [w], [b,w]], [], [[b], [w], [b,w]]),
+      (a, v, b, w, j, j, [a,v], [a] ,[], [[b], [w], [b,w]], [[v]], [[b], [w], [b,w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [v] ,[], [[b], [w], [b,w]], [[a]], [[b], [w], [b,w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
       -- Test rejecting
-      (a, v, b, w, j, j, [a,v], [] ,[b], [[b], [w], [b,w]], [[a], [v], [a,v]], [[w]]),
-      (a, v, b, w, j, j, [a,v], [] ,[w], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b]]),
-      (a, v, b, w, j, j, [a,v], [] ,[b, w], [[b], [w], [b,w]], [[a], [v], [a,v]], []),
+      (a, v, b, w, j, j, [a,v], [] ,[b], [[b], [w], [b,w]], [[a], [v], [a,v]], [[w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [] ,[w], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, j, j, [a,v], [a] ,[b], [[b], [w], [b,w]], [[v]], [[w]]),
-      (a, v, b, w, j, j, [a,v], [a] ,[w], [[b], [w], [b,w]], [[v]], [[b]]),
-      (a, v, b, w, j, j, [a,v], [v] ,[b], [[b], [w], [b,w]], [[a]], [[w]]),
-      (a, v, b, w, j, j, [a,v], [v] ,[w], [[b], [w], [b,w]], [[a]], [[b]]),
+      (a, v, b, w, j, j, [a,v], [a] ,[b], [[b], [w], [b,w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [a] ,[w], [[b], [w], [b,w]], [[v]], [[b]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [v] ,[b], [[b], [w], [b,w]], [[a]], [[w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v], [v] ,[w], [[b], [w], [b,w]], [[a]], [[b]], TIS_Authorized),
       -- Test Accepting
-      (a, v, b, w, j, j, [a,v,b], [] ,[], [[w]], [[a], [v], [a,v]], [[b], [w], [b,w]]),
-      (a, v, b, w, j, j, [a,v,w], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [w], [b,w]]),
-      (a, v, b, w, j, j, [a,v,b,w], [] ,[], [], [[a], [v], [a,v]], [[b], [w], [b,w]]),
+      (a, v, b, w, j, j, [a,v,b], [] ,[], [[w]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v,w], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, j, j, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]]),
-      (a, v, b, w, j, j, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]]),
-      (a, v, b, w, j, j, [a,v,b,w], [a] ,[b], [], [[v]], [[w]]),
+      (a, v, b, w, j, j, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, j, j, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, j, j, [a,v,b], [a,v] ,[b], [[w]], [], [[w]]),
-      (a, v, b, w, j, j, [a,v,w], [a,v] ,[b], [[b]], [], [[w]]),
-      (a, v, b, w, j, j, [a,v,b], [a] ,[b, w], [[w]], [[v]], []),
-      (a, v, b, w, j, j, [a,v,w], [a] ,[b, w], [[b]], [[v]], []),
+      (a, v, b, w, j, j, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, j, j, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, j, j, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
+      (a, v, b, w, j, j, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected),
 
       -- Do the same with provider controlled
-      (a, v, b, w, p, p, [], [] ,[], [[v], [a,v]], [], []),
-      (a, v, b, w, p, p, [a], [] ,[], [[v]], [[a]], []),
-      (a, v, b, w, p, p, [v], [] ,[], [[a]], [[v]], []),
+      (a, v, b, w, p, p, [], [] ,[], [[v], [a,v]], [], [], TIS_Init),
+      (a, v, b, w, p, p, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
+      (a, v, b, w, p, p, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
       -- Now it's sender-authorized
-      (a, v, b, w, p, p, [a,v], [] ,[], [[w], [b,w]], [[v], [a,v]], [[w], [b,w]]),
+      (a, v, b, w, p, p, [a,v], [] ,[], [[w], [b,w]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
       -- Test withdrawing
-      (a, v, b, w, p, p, [a,v], [a] ,[], [[w], [b,w]], [[v]], [[w], [b,w]]),
-      (a, v, b, w, p, p, [a,v], [v] ,[], [[w], [b,w]], [[a]], [[w], [b,w]]),
-      (a, v, b, w, p, p, [a,v], [a,v] ,[], [[w], [b,w]], [], [[w], [b,w]]),
+      (a, v, b, w, p, p, [a,v], [a] ,[], [[w], [b,w]], [[v]], [[w], [b,w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [v] ,[], [[w], [b,w]], [[a]], [[w], [b,w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
       -- Test rejecting
-      (a, v, b, w, p, p, [a,v], [] ,[b], [[w], [b,w]], [[v], [a,v]], [[w]]),
-      (a, v, b, w, p, p, [a,v], [] ,[w], [[w], [b,w]], [[v], [a,v]], [[b]]),
-      (a, v, b, w, p, p, [a,v], [] ,[b, w], [[w], [b,w]], [[v], [a,v]], []),
+      (a, v, b, w, p, p, [a,v], [] ,[b], [[w], [b,w]], [[v], [a,v]], [[w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [] ,[w], [[w], [b,w]], [[v], [a,v]], [[b]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, p, p, [a,v], [a] ,[b], [[w], [b,w]], [[v]], [[w]]),
-      (a, v, b, w, p, p, [a,v], [a] ,[w], [[w], [b,w]], [[v]], [[b]]),
-      (a, v, b, w, p, p, [a,v], [v] ,[b], [[w], [b,w]], [[a]], [[w]]),
-      (a, v, b, w, p, p, [a,v], [v] ,[w], [[w], [b,w]], [[a]], [[b]]),
+      (a, v, b, w, p, p, [a,v], [a] ,[b], [[w], [b,w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [a] ,[w], [[w], [b,w]], [[v]], [[b]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [v] ,[b], [[w], [b,w]], [[a]], [[w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v], [v] ,[w], [[w], [b,w]], [[a]], [[b]], TIS_Authorized),
       -- Test Accepting
-      (a, v, b, w, p, p, [a,v,b], [] ,[], [[w]], [[v], [a,v]], [[w], [b,w]]),
-      (a, v, b, w, p, p, [a,v,w], [] ,[], [[b]], [[v], [a,v]], [[w], [b,w]]),
-      (a, v, b, w, p, p, [a,v,b,w], [] ,[], [], [[v], [a,v]], [[w], [b,w]]),
+      (a, v, b, w, p, p, [a,v,b], [] ,[], [[w]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v,w], [] ,[], [[b]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, p, p, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]]),
-      (a, v, b, w, p, p, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]]),
-      (a, v, b, w, p, p, [a,v,b,w], [a] ,[b], [], [[v]], [[w]]),
+      (a, v, b, w, p, p, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, p, p, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, p, p, [a,v,b], [a,v] ,[b], [[w]], [], [[w]]),
-      (a, v, b, w, p, p, [a,v,w], [a,v] ,[b], [[b]], [], [[w]]),
-      (a, v, b, w, p, p, [a,v,b], [a] ,[b, w], [[w]], [[v]], []),
-      (a, v, b, w, p, p, [a,v,w], [a] ,[b, w], [[b]], [[v]], [])
+      (a, v, b, w, p, p, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, p, p, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, p, p, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
+      (a, v, b, w, p, p, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected)
       ]
 
       -- We do not expect a difference between provider confirmed, investor controlled,
@@ -156,81 +156,85 @@ test_availableTransferInstructionActions = do
       -- The second authorization from the provider is needed, but pulled in thorugh
       -- the accounts
       <> (mconcat . (flip map) [pc, ic])  (\acc -> [        
-      (a, v, b, w, acc, acc, [], [] ,[], [[a] ,[a,v]], [], []),
-      (a, v, b, w, acc, acc, [a], [] ,[], [[v]], [[a]], []),
-      (a, v, b, w, acc, acc, [v], [] ,[], [[a]], [[v]], []),
+      (a, v, b, w, acc, acc, [], [] ,[], [[a] ,[a,v]], [], [], TIS_Init),
+      (a, v, b, w, acc, acc, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
+      (a, v, b, w, acc, acc, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
       -- Now it's sender-authorized
-      (a, v, b, w, acc, acc, [a,v], [] ,[], [[b], [b,w]], [[a], [a,v]], [[b], [b,w]]),
+      (a, v, b, w, acc, acc, [a,v], [] ,[], [[b], [b,w]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
       -- Test withdrawing
-      (a, v, b, w, acc, acc, [a,v], [a] ,[], [[b], [b,w]], [[v]], [[b], [b,w]]),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[], [[b], [b,w]], [[a]], [[b], [b,w]]),
-      (a, v, b, w, acc, acc, [a,v], [a,v] ,[], [[b], [b,w]], [], [[b], [b,w]]),
+      (a, v, b, w, acc, acc, [a,v], [a] ,[], [[b], [b,w]], [[v]], [[b], [b,w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [v] ,[], [[b], [b,w]], [[a]], [[b], [b,w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
       -- Test rejecting
-      (a, v, b, w, acc, acc, [a,v], [] ,[b], [[b], [b,w]], [[a], [a,v]], [[w]]),
-      (a, v, b, w, acc, acc, [a,v], [] ,[w], [[b], [b,w]], [[a], [a,v]], [[b]]),
-      (a, v, b, w, acc, acc, [a,v], [] ,[b, w], [[b], [b,w]], [[a], [a,v]], []),
+      (a, v, b, w, acc, acc, [a,v], [] ,[b], [[b], [b,w]], [[a], [a,v]], [[w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [] ,[w], [[b], [b,w]], [[a], [a,v]], [[b]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, acc, acc, [a,v], [a] ,[b], [[b], [b,w]], [[v]], [[w]]),
-      (a, v, b, w, acc, acc, [a,v], [a] ,[w], [[b], [b,w]], [[v]], [[b]]),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[b], [[b], [b,w]], [[a]], [[w]]),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[w], [[b], [b,w]], [[a]], [[b]]),
+      (a, v, b, w, acc, acc, [a,v], [a] ,[b], [[b], [b,w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [a] ,[w], [[b], [b,w]], [[v]], [[b]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [v] ,[b], [[b], [b,w]], [[a]], [[w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v], [v] ,[w], [[b], [b,w]], [[a]], [[b]], TIS_Authorized),
       -- Test Accepting
-      (a, v, b, w, acc, acc, [a,v,b], [] ,[], [[w]], [[a], [a,v]], [[b], [b,w]]),
-      (a, v, b, w, acc, acc, [a,v,w], [] ,[], [[b]], [[a], [a,v]], [[b], [b,w]]),
-      (a, v, b, w, acc, acc, [a,v,b,w], [] ,[], [], [[a], [a,v]], [[b], [b,w]]),
+      (a, v, b, w, acc, acc, [a,v,b], [] ,[], [[w]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v,w], [] ,[], [[b]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]]),
-      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]]),
-      (a, v, b, w, acc, acc, [a,v,b,w], [a] ,[b], [], [[v]], [[w]]),
+      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
+      (a, v, b, w, acc, acc, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, acc, acc, [a,v,b], [a,v] ,[b], [[w]], [], [[w]]),
-      (a, v, b, w, acc, acc, [a,v,w], [a,v] ,[b], [[b]], [], [[w]]),
-      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b, w], [[w]], [[v]], []),
-      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b, w], [[b]], [[v]], [])
+      (a, v, b, w, acc, acc, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, acc, acc, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
+      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
+      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected)
       ])
 
       -- In the self-custodial case, the extra steps fall away. This is equally true
       -- for other account types if investors are their own providers.
       <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [        
-      (a, a, b, b, acc, acc, [], [] ,[], [[a]], [], []),
+      (a, a, b, b, acc, acc, [], [] ,[], [[a]], [], [], TIS_Init),
       -- Now it's sender-authorized
-      (a, a, b, b, acc, acc, [a], [] ,[], [[b]], [[a]], [[b]]),
+      (a, a, b, b, acc, acc, [a], [] ,[], [[b]], [[a]], [[b]], TIS_Authorized),
       -- Test withdrawing
-      (a, a, b, b, acc, acc, [a], [a] ,[], [[b]], [], [[b]]),
+      (a, a, b, b, acc, acc, [a], [a] ,[], [], [], [], TIS_Withdrawn),
       -- Test rejecting
-      (a, a, b, b, acc, acc, [a], [] ,[b], [[b]], [[a]], []),
+      (a, a, b, b, acc, acc, [a], [] ,[b], [], [], [], TIS_Rejected),
       -- Test Accepting
-      (a, a, b, b, acc, acc, [a,b], [] ,[], [], [[a]], [[b]])
+      (a, a, b, b, acc, acc, [a,b], [] ,[], [], [], [], TIS_Accepted)
       ])
 
       -- Special cases arise if the account providers on both sides are the same
       -- or indeed if the sender and receiver are the same.
       <> [
         -- A self-transfer between self-managed accounts goes straight through.
-        (a, a, a, a, j, j, [], [] ,[], [[a]], [], []),
-        (a, a, a, a, j, j, [a], [] ,[], [], [[a]], [[a]]),
+        (a, a, a, a, j, j, [], [] ,[], [[a]], [], [], TIS_Init),
+        (a, a, a, a, j, j, [a], [] ,[], [], [], [], TIS_Accepted),
         -- A transfer within a provider is simplified
-        (a, v, b, v, j, j, [], [] ,[], [[a], [v], [a,v]], [], []),
-        (a, v, b, v, j, j, [a,v], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [v], [b,v]]),
-        (a, v, b, v, j, j, [a,v,b], [] ,[], [], [[a], [v], [a,v]], [[b], [v], [b,v]])
+        (a, v, b, v, j, j, [], [] ,[], [[a], [v], [a,v]], [], [], TIS_Init),
+        (a, v, b, v, j, j, [a,v], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [v], [b,v]], TIS_Authorized),
+        (a, v, b, v, j, j, [a,v,b], [] ,[], [], [], [], TIS_Accepted)
       ]
       
-  forA_ test_cases (\(s, ps, r, pr, mks, mkr, aa, wa, ra, eaa, ewa, era) ->
-    test_transfer_instruction_case s ps r pr mks mkr aa wa ra eaa ewa era)
+  forA_ test_cases (\(s, ps, r, pr, mks, mkr, aa, wa, ra, eaa, ewa, era, state) ->
+    test_transfer_instruction_case s ps r pr mks mkr aa wa ra eaa ewa era state)
 
 test_transfer_instruction_case : Party -> Party -> Party -> Party
   -> MkAccountConfig -> MkAccountConfig
   -> [Party] -> [Party] -> [Party]
   -> [[Party]] -> [[Party]] -> [[Party]]
+  -> TransferInstructionState
   -> Script ()
 test_transfer_instruction_case sender senderProvider receiver receiverProvider mkacSender mkacReceiver
   acceptAuthorizers withdrawAuthorizers rejectAuthorizers 
-  expectedAcceptActors expectedWithdrawActors expectedRejectActors = do
+  expectedAcceptActors expectedWithdrawActors expectedRejectActors expectedState = do
   let
     senderAccount = mkacSender "sender" ad sender senderProvider
     receiverAccount = mkacReceiver "receiver" ad receiver receiverProvider
     actionAuthorizers = Map.fromList [(V2.TIA_Accept, acceptAuthorizers), (V2.TIA_Reject, rejectAuthorizers), (V2.TIA_Withdraw, withdrawAuthorizers)]
-    availableActions = mkAvailableTransferActions actionAuthorizers senderAccount receiverAccount
+    accountMap = Map.fromList [(senderAccount.account, (senderAccount, None)), (receiverAccount.account, (receiverAccount, None))]
+    spec = transferInstructionStateMachineSpec senderAccount.account receiverAccount.account
+    actualState = getState spec actionAuthorizers
+    availableActions = mkAvailableActions spec actionAuthorizers accountMap
     reversedAvailableActions = reverseMap availableActions
     expectedAvailableActions = Map.fromList $
       filter (\(_, x) -> not (null x)) [(V2.TIA_Accept, dedupSort expectedAcceptActors), (V2.TIA_Reject, dedupSort expectedRejectActors), (V2.TIA_Withdraw, dedupSort expectedWithdrawActors)]
@@ -242,7 +246,9 @@ test_transfer_instruction_case sender senderProvider receiver receiverProvider m
         "Receiver account: " <> show receiverAccount,
         "Existing authorizations: " <> show actionAuthorizers,
         "Expected available actions: " <> show expectedAvailableActions,
-        "Actual available actions: " <> show reversedAvailableActions
+        "Actual available actions: " <> show reversedAvailableActions,
+        "Expected state: " <> show expectedState,
+        "Actual state: " <> show actualState
     ])
     (reversedAvailableActions == expectedAvailableActions)
 
@@ -254,55 +260,55 @@ test_availableAllocationInstructionActions = do
   let
     test_cases = [
       -- Start with Joint/Joint and all different parties
-      (a, v, j, [], [], [[a] ,[v], [a,v]], []),
-      (a, v, j, [a], [], [[v]], [[a]]),
-      (a, v, j, [v], [], [[a]], [[v]]),
-      (a, v, j, [a,v], [], [], [[a] ,[v], [a,v]]),
-      (a, v, j, [a], [a], [[v]], []),
-      (a, v, j, [v], [v], [[a]], []),
-      (a, v, j, [a,v], [a,v], [], []),
-      (a, v, p, [], [], [[a, v], [v]], []),
-      (a, v, p, [v], [], [[a]], [[v]]),
-      (a, v, p, [a,v], [], [], [[v], [a,v]]),
-      (a, v, p, [v], [v], [[a]], []),
-      (a, v, p, [a,v], [a,v], [], [])
+      (a, v, j, [], [], [[a] ,[v], [a,v]], [], AIS_Init),
+      (a, v, j, [a], [], [[v]], [[a]], AIS_Init),
+      (a, v, j, [v], [], [[a]], [[v]], AIS_Init),
+      (a, v, j, [a,v], [], [], [], AIS_Accepted),
+      (a, v, j, [a], [a], [], [], AIS_Withdrawn),
+      (a, v, j, [v], [v], [], [], AIS_Withdrawn),
+      (a, v, p, [], [], [[a, v], [v]], [], AIS_Init),
+      (a, v, p, [v], [], [[a]], [[v]], AIS_Init),
+      (a, v, p, [a,v], [], [], [], AIS_Accepted),
+      (a, v, p, [v], [v], [], [], AIS_Withdrawn)
       ]
       -- We do not expect a difference between provider confirmed, investor controlled,
       -- In both cases the investor authorizes first. 
       -- The second authorization from the provider is needed, but pulled in thorugh
       -- the accounts
       <> (mconcat . (flip map) [pc, ic])  (\acc -> [
-      (a, v, acc, [], [], [[a], [a, v]], []),
-      (a, v, acc, [a], [], [[v]], [[a]]),
-      (a, v, acc, [a,v], [], [], [[a], [a,v]]),
-      (a, v, acc, [a], [a], [[v]], []),
-      (a, v, acc, [a,v], [a,v], [], [])
+      (a, v, acc, [], [], [[a], [a, v]], [], AIS_Init),
+      (a, v, acc, [a], [], [[v]], [[a]], AIS_Init),
+      (a, v, acc, [a,v], [], [], [], AIS_Accepted),
+      (a, v, acc, [a], [a], [], [], AIS_Withdrawn)
       ])
 
             -- In the self-custodial case, the extra steps fall away. This is equally true
       -- for other account types if investors are their own providers.
       <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [        
-      (a, a, acc, [], [], [[a]], []),
-      (a, a, acc, [a], [], [], [[a]]),
-      (a, a, acc, [a], [a], [], [])
+      (a, a, acc, [], [], [[a]], [], AIS_Init),
+      (a, a, acc, [a], [], [], [], AIS_Accepted)
       ])
 
-  forA_ test_cases (\(authorizer, provider, mkacc, aa, wa, eaa, ewa) ->
-    test_allocation_instruction_case authorizer provider mkacc aa wa eaa ewa)
+  forA_ test_cases (\(authorizer, provider, mkacc, aa, wa, eaa, ewa, state) ->
+    test_allocation_instruction_case authorizer provider mkacc aa wa eaa ewa state)
 
 
 test_allocation_instruction_case : Party -> Party
   -> MkAccountConfig 
   -> [Party] -> [Party]
   -> [[Party]] -> [[Party]]
+  -> AllocationInstructionState
   -> Script ()
 test_allocation_instruction_case authorizer provider mkacc
   acceptAuthorizers withdrawAuthorizers  
-  expectedAcceptActors expectedWithdrawActors  = do
+  expectedAcceptActors expectedWithdrawActors expectedState = do
     let
       account = mkacc "authorizer" ad authorizer provider
       actionAuthorizers = Map.fromList [(V2.AIA_Accept, acceptAuthorizers), (V2.AIA_Withdraw, withdrawAuthorizers)]
-      availableActions = mkAvailableAllocationInstructionActions actionAuthorizers account
+      accountMap = Map.fromList [(account.account, (account, None))]
+      spec = allocationInstructionStateMachineSpec account.account
+      actualState = getState spec actionAuthorizers
+      availableActions = mkAvailableActions spec actionAuthorizers accountMap
       reversedAvailableActions = reverseMap availableActions
       expectedAvailableActions = Map.fromList $
         filter (\(_, x) -> not (null x)) [(V2.AIA_Accept, dedupSort expectedAcceptActors), (V2.AIA_Withdraw, dedupSort expectedWithdrawActors)]
@@ -313,7 +319,9 @@ test_allocation_instruction_case authorizer provider mkacc
           "Account: " <> show account,
           "Existing authorizations: " <> show actionAuthorizers,
           "Expected available actions: " <> show expectedAvailableActions,
-          "Actual available actions: " <> show reversedAvailableActions
+          "Actual available actions: " <> show reversedAvailableActions,
+          "Expected state: " <> show expectedState,
+          "Actual state: " <> show actualState
       ])
       (reversedAvailableActions == expectedAvailableActions)
 
@@ -327,46 +335,50 @@ test_availableAllocationActions = do
   let
     test_cases = [
       -- Start with Joint and all different parties
-      (a, v, ad, [ex], j, [], [], [], [[a] ,[v], [a,v]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], j, [a], [], [], [[v]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], j, [v], [], [], [[a]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], j, [a,v], [], [], [], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], j, [], [ex], [], [[a] ,[v], [a,v]], [], [[ad, ex]]),
-      (a, v, ad, [ex], j, [], [], [ad, ex], [[a] ,[v], [a,v]], [[ex]], []),
+      (a, v, ad, [ex], j, [], [], [], [[a] ,[v], [a,v]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], j, [a], [], [], [[v]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], j, [v], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], j, [a,v], [], [], [], [], [], AS_Withdrawn),
+      (a, v, ad, [ex], j, [], [ex], [], [], [], [], AS_Cancelled),
+      (a, v, ad, [ex], j, [], [], [ad, ex], [], [], [], AS_Settled),
 
-      -- One other account types.
-      (a, a, ad, [ex], sc, [], [], [], [[a]], [[ex]], [[ad, ex]]),
-      (a, a, ad, [ex], j, [], [], [], [[a]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], ic, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], pc, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]]),
-      (a, v, ad, [ex], p, [], [], [], [[a,v], [v]], [[ex]], [[ad, ex]]),
+      -- Other account types.
+      (a, a, ad, [ex], sc, [], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
+      (a, a, ad, [ex], j, [], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], ic, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], pc, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]], AS_Init),
+      (a, v, ad, [ex], p, [], [], [], [[a,v], [v]], [[ex]], [[ad, ex]], AS_Init),
 
       -- Multiple executors
-      (a, v, ad, [ex,b], j, [], [], [], [[a] ,[v], [a,v]], [[b, ex]], [[ad, b, ex]]),
+      (a, v, ad, [ex,b], j, [], [], [], [[a] ,[v], [a,v]], [[b, ex]], [[ad, b, ex]], AS_Init),
 
       -- Admin as executor
-      (a, v, ad, [ad], j, [], [], [], [[a] ,[v], [a,v]], [[ad]], [[ad]]),
+      (a, v, ad, [ad], j, [], [], [], [[a] ,[v], [a,v]], [[ad]], [[ad]], AS_Init),
 
       -- Provider as executor
-      (a, v, ad, [v], j, [], [], [], [[a] ,[v], [a,v]], [[v]], [[ad, v]])
+      (a, v, ad, [v], j, [], [], [], [[a] ,[v], [a,v]], [[v]], [[ad, v]], AS_Init)
       ]
 
-  forA_ test_cases (\(authorizer, provider, admin, executor, mkacc, wa, ca, sa, ewa, eca, esa) ->
-    test_allocation_case authorizer provider admin executor mkacc wa ca sa ewa eca esa)
+  forA_ test_cases (\(authorizer, provider, admin, executor, mkacc, wa, ca, sa, ewa, eca, esa, state) ->
+    test_allocation_case authorizer provider admin executor mkacc wa ca sa ewa eca esa state)
 
 
 test_allocation_case : Party -> Party -> Party -> [Party]
   -> MkAccountConfig 
   -> [Party] -> [Party] -> [Party]
   -> [[Party]] -> [[Party]] -> [[Party]]
+  -> AllocationState
   -> Script ()
 test_allocation_case authorizer provider admin executors mkacc
   withdrawAuthorizers cancelAuthorizers settleAuthorizers
-  expectedWithdrawActors expectedCancelActors expectedSettleActors = do
+  expectedWithdrawActors expectedCancelActors expectedSettleActors expectedState = do
     let
       account = mkacc "authorizer" admin authorizer provider
       actionAuthorizers = Map.fromList [(V2.AA_Withdraw, withdrawAuthorizers), (V2.AA_Cancel, cancelAuthorizers), (V2.AA_Settle, settleAuthorizers)]
-      availableActions = mkAvailableAllocationActions actionAuthorizers executors admin account
+      accountMap = Map.fromList [(account.account, (account, None))]
+      spec = allocationStateMachineSpec account.account executors admin
+      availableActions = mkAvailableActions spec actionAuthorizers accountMap
+      actualState = getState spec actionAuthorizers
       reversedAvailableActions = reverseMap availableActions
       expectedAvailableActions = Map.fromList $
         filter (\(_, x) -> not (null x)) [(V2.AA_Withdraw, dedupSort expectedWithdrawActors), (V2.AA_Cancel, dedupSort expectedCancelActors), (V2.AA_Settle, dedupSort expectedSettleActors)]
@@ -377,7 +389,9 @@ test_allocation_case authorizer provider admin executors mkacc
           "Account: " <> show account,
           "Existing authorizations: " <> show actionAuthorizers,
           "Expected available actions: " <> show expectedAvailableActions,
-          "Actual available actions: " <> show reversedAvailableActions
+          "Actual available actions: " <> show reversedAvailableActions,
+          "Expected state: " <> show expectedState,
+          "Actual state: " <> show actualState
       ])
       (reversedAvailableActions == expectedAvailableActions)
 

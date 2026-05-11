@@ -23,7 +23,7 @@ import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 import Splice.Tests.TestTokenV2.UnitTest_AccountConfig
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig (AccountConfig)
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig
 import DA.Action (foldlA, when)
 import DA.Functor (void)
 import DA.Optional (isNone)
@@ -240,7 +240,7 @@ test_transfer_flow : TestRegistries.Env
   -> [(Party, V2.TransferInstructionAction)]
   -> Bool
   -> Script ()
-test_transfer_flow env sender senderProvider receiver receiverProvider mkacSender mkacReceiver initiator actions expectSuccess = do
+test_transfer_flow env sender senderProvider receiver receiverProvider mkacSender mkacReceiver initiator actions expectSuccess = do  
   let registries = env.registries
   let instrX = V2.InstrumentId with
         id = "X"
@@ -250,6 +250,8 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
     receiverConfig = mkacReceiver "receiver" env.testTokenV2.admin receiver receiverProvider
   make_account_if_missing env senderConfig
   make_account_if_missing env receiverConfig
+
+  debug $ "Test case: Sender: " <> show senderConfig <> "; Receiver: " <> show receiverConfig <> "; Initiator: " <> show initiator <> "; Actions: " <> show actions
 
   senderBalanceBefore <- WalletClientV2.getAccountBalance sender senderConfig.account instrX
   receiverBalanceBefore <- WalletClientV2.getAccountBalance receiver receiverConfig.account instrX

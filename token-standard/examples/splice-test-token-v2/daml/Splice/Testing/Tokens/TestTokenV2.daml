@@ -7,7 +7,7 @@ module Splice.Testing.Tokens.TestTokenV2 where
 import DA.Action (when)
 import DA.Assert
 import DA.Foldable (forA_)
-import DA.List ((\\), dedup, dedupSort)
+import DA.List (dedup, dedupSort)
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as T
@@ -75,20 +75,59 @@ template TokenAllocationInstructionV2 with
       allocationInstruction_acceptExtraObservers _arg = []
 
       allocationInstruction_withdrawImpl self arg = do
-        authorizeAllocationInstructionAction this (Some self) arg.actors V2.AIA_Withdraw arg.extraArgs $ do
-          pure V2.AllocationInstructionResult with
+        applyAllocationInstructionTransitions this (Some self) arg.actors V2.AIA_Withdraw arg.extraArgs
+
+      allocationInstruction_acceptImpl self arg = do
+        applyAllocationInstructionTransitions this (Some self) arg.actors V2.AIA_Accept arg.extraArgs
+
+applyAllocationInstructionTransitions
+  : TokenAllocationInstructionV2
+  -> Optional (ContractId V2.AllocationInstruction)
+  -> [Party]
+  -> V2.AllocationInstructionAction
+  -> ExtraArgs
+  -> Update V2.AllocationInstructionResult
+applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSelf actors action extraArgs = do
+
+  accountMap <- extractAccountConfigMap
+      this.admin
+      extraArgs
+      [this.allocation.authorizer]
+
+  let 
+    mkStateMachine v = allocationInstructionStateMachineSpec v.allocation.authorizer
+
+    mkPending newActionAuthorizers newAvailableActions = do
+      pendingInstrCid <- create this with
+        originalInstructionCid = fmap coerceContractId oSelf
+        actionAuthorizers = newActionAuthorizers
+        availableActions = newAvailableActions
+      return V2.AllocationInstructionResult with
+            output = V2.AllocationInstructionResult_Pending with
+              allocationInstructionCid = toInterfaceContractId pendingInstrCid
+            authorizerChangeCids = TextMap.empty
+            meta = emptyMetadata
+
+    tryUseAuthority actors action result authState accountMap extraArgs = case result.output of
+      V2.AllocationInstructionResult_Pending instrCid ->
+        tryUseAccountAuthorityForAIA' actors action instrCid authState accountMap extraArgs
+      _ -> return None
+    
+    transition fromState toState =  case (fromState, toState) of
+
+      (AIS_Init, AIS_Withdrawn) ->
+        pure V2.AllocationInstructionResult with
             output = V2.AllocationInstructionResult_Failed
             authorizerChangeCids = inputHoldingCids
             meta = emptyMetadata
 
-      allocationInstruction_acceptImpl self arg = do
-        authorizeAllocationInstructionAction this (Some self) arg.actors V2.AIA_Accept arg.extraArgs $ do
-          [(accountConfig, _)] <- extractAccountConfigs admin arg.extraArgs [allocation.authorizer]
-          eventLogCid <- getEventLogFromContext arg.extraArgs.context
+      (AIS_Init, AIS_Accepted) -> do
+          let allocationSpec = allocationStateMachineSpec allocation.authorizer allocation.settlement.executors (allocationAdmin allocation)
+          eventLogCid <- getEventLogFromContext extraArgs.context
           (lockedTokens, authorizerChangeCids) <- splitAndLock eventLogCid allocation inputHoldingCids
           allocationCid <- create TokenAllocationV2 with
             originalAllocationCid = None
-            availableActions = mkAvailableAllocationActions Map.empty allocation.settlement.executors admin accountConfig
+            availableActions = mkAvailableActions allocationSpec Map.empty accountMap
             actionAuthorizers = Map.empty
             ..
           pure V2.AllocationInstructionResult with
@@ -96,88 +135,12 @@ template TokenAllocationInstructionV2 with
             authorizerChangeCids
             meta = emptyMetadata
 
--- This function implements the authorization flow state machine for AllocationInstruction.
-authorizeAllocationInstructionAction
-  : TokenAllocationInstructionV2
-  -> Optional (ContractId V2.AllocationInstruction)
-  -> [Party]
-  -> V2.AllocationInstructionAction
-  -> ExtraArgs
-  -> Update V2.AllocationInstructionResult
-  -> Update V2.AllocationInstructionResult
-authorizeAllocationInstructionAction
-  this
-    -- ^ The AllocationInstruction on which to apply the authorization.
-  oSelf
-    -- ^ ContractId of the AllocationInstruction if it existed already.
-    --   Used only to archive.
-  actors
-    -- ^ The actors authorizing the action on the AllocationInstruction.
-  action
-    -- | The action to be authorized.
-  extraArgs
-    -- ^ ExtraArgs from which to extract choice context.
-  execute
-    -- ^ A continuation to execute when fully authorized.
-  = do
-    -- Extract account info.
-    acs <-
-      extractAccountConfigs
-      this.admin
-      extraArgs
-      [this.allocation.authorizer]
+      x -> abort $ "Unsupported state transition: " <> show x
 
-    (accountConfig, oAccountCid) <- expectOneElement "account config" show acs
-
-    -- Apply the account authorization rules
-    -- First check the actors are allowed to authorize the action.
-    let
-      availableActions = mkAvailableAllocationInstructionActions this.actionAuthorizers accountConfig
-      reverseAvailableActions = reverseMap availableActions
-      Some possibleActors = Map.lookup action reverseAvailableActions
-
-    checkActors actors possibleActors
-
-    -- Second apply the new authorization.
-    let
-      -- Compute the new available actions after adding the actors.
-      newActionAuthorizers =
-        Map.insertWith (\x y -> dedup (x ++ y)) action actors this.actionAuthorizers
-      newAvailableActions = mkAvailableAllocationInstructionActions newActionAuthorizers accountConfig
-      newReverseAvailableActions = reverseMap newAvailableActions
-      newPossibleActors = fromOptional [] $ Map.lookup action newReverseAvailableActions
-
-      -- If the taken action no longer has possible actors, it's fully authorized.
-      fullyAuthorized = null newPossibleActors
-
-    -- If the action is fully authorized, execute the continuation.
-    -- Otherwise create a pending instruction and try continuing on that.
-    res <- if fullyAuthorized
-      then execute
-      else do
-        -- record the request for this actor
-        pendingInstrCid <- create this with
-          originalInstructionCid = fmap coerceContractId oSelf
-          actionAuthorizers = newActionAuthorizers
-          availableActions = newAvailableActions
-
-        -- Now check whether we can use the accounts to transfer authority.
-        oRes <- tryUseAccountAuthorityForAIA actors newPossibleActors action (accountConfig, oAccountCid) (coerceContractId pendingInstrCid) extraArgs
-        case oRes of
-          Some res -> pure res
-          None ->
-            pure V2.AllocationInstructionResult with
-              output = V2.AllocationInstructionResult_Pending with
-                allocationInstructionCid = toInterfaceContractId pendingInstrCid
-              authorizerChangeCids = TextMap.empty
-              meta = emptyMetadata
-
-    -- Archive old AllocationInstruction
-    -- Do this last to be able to use the AllocationInstruction as event
-    -- factory
-    whenSome oSelf archive
-
-    return res
+  applyStateMachineTransitions 
+    this oSelf actors action mkStateMachine accountMap transition
+    mkPending tryUseAuthority extraArgs
+  
 
 -- | Implementation of a V2-only allocation.
 template TokenAllocationV2 with
@@ -220,158 +183,124 @@ template TokenAllocationV2 with
       allocation_withdrawExtraObservers _arg = allocation.settlement.executors
 
       allocation_withdrawImpl self arg = do
-        authorizeAllocationAction this (Some self) arg.actors V2.AA_Withdraw arg.extraArgs $ do
-          authorizerHoldingCids <- unlockTokenAllocationV2 "allocation withdrawn" this arg.extraArgs
-          pure V2.AllocationResult
-            with
-              output = V2.AllocationResult_Withdrawn
-              authorizerHoldingCids
-              meta = emptyMetadata
+        applyAllocationTransitions this (Some self) arg.actors V2.AA_Withdraw arg.extraArgs
 
       allocation_cancelImpl self arg = do
-        authorizeAllocationAction this (Some self) arg.actors V2.AA_Cancel arg.extraArgs $ do
-          authorizerHoldingCids <- unlockTokenAllocationV2 "allocation cancelled" this arg.extraArgs
-          pure V2.AllocationResult
-            with
-              output = V2.AllocationResult_Cancelled
-              authorizerHoldingCids
-              meta = emptyMetadata
+        applyAllocationTransitions this (Some self) arg.actors V2.AA_Cancel arg.extraArgs
 
       allocation_settleImpl self arg = do
-        authorizeAllocationAction this (Some self) arg.actors V2.AA_Settle arg.extraArgs $ do
-          -- check deadline
-          forA_ allocation.settlement.settlementDeadline $ \deadline ->
-            assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
+        applyAllocationTransitions this (Some self) arg.actors V2.AA_Settle arg.extraArgs
 
-          -- archive the locked tokens
-          debitAmounts <- fmap (Map.fromListWithR (+)) $ forA (Foldable.concat lockedTokens) $ \cid -> do
-            token <- fetch cid
-            let holding = view token
-            archive cid
-            require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
-            pure (holding.instrumentId, holding.amount)
 
-          -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
-          let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
-          let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
-          authorizerHoldingCids0 <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
-            require'
-              ("archived lockedAmulet.amount for " <> show instrumentId, debitAmount)
-              isEqualR
-              ("transferLegs.debitAmount", negate (min 0.0 creditAmount))
-            if creditAmount > 0.0
-              then do
-                -- Net credit of Token ==> create the holding
-                newHoldingCid <- create Token with
-                  holding = V2.HoldingView with
-                    account = allocation.authorizer
-                    amount = creditAmount
-                    instrumentId
-                    lock = None
-                    meta = emptyMetadata
-                pure (instrumentId.id, [toInterfaceContractId newHoldingCid])
-              else
-                -- No credit of Token ==> no holding change
-                pure (instrumentId.id, [])
-
-          -- log v2 transfer events
-          tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
-          let authorizerHoldingCids = TextMap.fromListWithR (++) $ authorizerHoldingCids0
-          logAllocationSettlement (toInterfaceContractId tokenRulesCid)
-            (concat $ textMapValues lockedTokens)
-            allocation
-            (concat $ textMapValues authorizerHoldingCids)
-
-          pure V2.AllocationResult with
-            output = V2.AllocationResult_Settled
-            authorizerHoldingCids = authorizerHoldingCids
-            meta = emptyMetadata
-              -- Note: for V1 tx history we would need create extra choices for
-              -- the creation, as this choice here cannot express the creation and
-              -- archival of multiple holdings for different instrument-ids.
-
--- This function implements the authorization flow state machine for Allocation.
-authorizeAllocationAction
+applyAllocationTransitions
   : TokenAllocationV2
   -> Optional (ContractId V2.Allocation)
   -> [Party]
   -> V2.AllocationAction
   -> ExtraArgs
   -> Update V2.AllocationResult
-  -> Update V2.AllocationResult
-authorizeAllocationAction
-  this
-    -- ^ The Allocation on which to apply the authorization.
-  oSelf
-    -- ^ ContractId of the Allocation if it existed already.
-    --   Used only to archive.
-  actors
-    -- ^ The actors authorizing the action on the Allocation.
-  action
-    -- ^ The action to be authorized.
-  extraArgs
-    -- ^ ExtraArgs from which to extract choice context.
-  execute
-    -- ^ A continuation to execute when fully authorized.
-  = do
-    -- Extract account info.
-    [(accountConfig, oAccountCid)] <- extractAccountConfigs
+applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraArgs = do
+
+  accountMap <- extractAccountConfigMap
       this.admin
       extraArgs
       [this.allocation.authorizer]
 
-    -- Apply the account authorization rules
-    -- First check the actors are allowed to authorize the action.
-    let
-      executors = this.allocation.settlement.executors
-      availableActions = mkAvailableAllocationActions this.actionAuthorizers executors this.admin accountConfig
-      reverseAvailableActions = reverseMap availableActions
-      Some possibleActors = Map.lookup action reverseAvailableActions
+  let 
+    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors (allocationAdmin v.allocation)
 
-    checkActors actors possibleActors
+    mkPending newActionAuthorizers newAvailableActions = do
+      pendingInstrCid <- create this with
+        originalAllocationCid = fmap coerceContractId oSelf
+        actionAuthorizers = newActionAuthorizers
+        availableActions = newAvailableActions
+      return V2.AllocationResult with
+            output = V2.AllocationResult_Pending with
+              allocationCid = toInterfaceContractId pendingInstrCid
+            authorizerHoldingCids = TextMap.empty
+            meta = emptyMetadata
+    
+    tryUseAuthority actors action result authState accountMap extraArgs = case result.output of
+      V2.AllocationResult_Pending allocationCid ->
+        tryUseAccountAuthorityForAA' actors action allocationCid authState accountMap extraArgs
+      _ -> return None
+    
+    transition fromState toState =  case (fromState, toState) of
 
-    -- Second apply the new authorization.
-    let
-      -- Compute the new available actions after adding the actors.
-      newActionAuthorizers =
-        Map.insertWith (\x y -> dedup (x ++ y)) action actors this.actionAuthorizers
-      newAvailableActions = mkAvailableAllocationActions newActionAuthorizers executors this.admin accountConfig
-      newReverseAvailableActions = reverseMap newAvailableActions
-      newPossibleActors = fromOptional [] $ Map.lookup action newReverseAvailableActions
+      (AS_Init, AS_Withdrawn) -> do
+        authorizerHoldingCids <- unlockTokenAllocationV2 "allocation withdrawn" this extraArgs
+        pure V2.AllocationResult
+          with
+            output = V2.AllocationResult_Withdrawn
+            authorizerHoldingCids
+            meta = emptyMetadata
+      
+      (AS_Init, AS_Cancelled) -> do
+        authorizerHoldingCids <- unlockTokenAllocationV2 "allocation cancelled" this extraArgs
+        pure V2.AllocationResult
+          with
+            output = V2.AllocationResult_Cancelled
+            authorizerHoldingCids
+            meta = emptyMetadata
 
-      -- If the taken action no longer has possible actors, it's fully authorized.
-      fullyAuthorized = null newPossibleActors
+      (AS_Init, AS_Settled) -> do
+        -- check deadline
+        forA_ allocation.settlement.settlementDeadline $ \deadline ->
+          assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
-    -- If the action is fully authorized, execute the continuation.
-    -- Otherwise create a pending instruction and try continuing on that.
-    res <- if fullyAuthorized
-      then execute
-      else do
-        -- record the request for this actor
-        pendingInstrCid <- create this with
-          originalAllocationCid = fmap coerceContractId oSelf
-          actionAuthorizers = newActionAuthorizers
-          availableActions = newAvailableActions
+        -- archive the locked tokens
+        debitAmounts <- fmap (Map.fromListWithR (+)) $ forA (Foldable.concat lockedTokens) $ \cid -> do
+          token <- fetch cid
+          let holding = view token
+          archive cid
+          require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
+          pure (holding.instrumentId, holding.amount)
 
-        -- Now check whether we can use the accounts to transfer authority.
-        oRes <- tryUseAccountAuthorityForAA actors newPossibleActors action (accountConfig, oAccountCid) (coerceContractId pendingInstrCid) extraArgs
-        case oRes of
-          Some res -> pure res
-          None ->
-            pure V2.AllocationResult with
-              output = V2.AllocationResult_Pending with
-                allocationCid = fromSome oSelf -- In this case oSelf is always set.
-              authorizerHoldingCids = TextMap.empty
-              meta = emptyMetadata
+        -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
+        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
+        let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
+        authorizerHoldingCids0 <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
+          require'
+            ("archived lockedAmulet.amount for " <> show instrumentId, debitAmount)
+            isEqualR
+            ("transferLegs.debitAmount", negate (min 0.0 creditAmount))
+          if creditAmount > 0.0
+            then do
+              -- Net credit of Token ==> create the holding
+              newHoldingCid <- create Token with
+                holding = V2.HoldingView with
+                  account = allocation.authorizer
+                  amount = creditAmount
+                  instrumentId
+                  lock = None
+                  meta = emptyMetadata
+              pure (instrumentId.id, [toInterfaceContractId newHoldingCid])
+            else
+              -- No credit of Token ==> no holding change
+              pure (instrumentId.id, [])
 
-    -- Archive old TransferOffer
-    -- Do this last to be able to use the TransferOffer as event
-    -- factory
-    whenSome oSelf archive
+        -- log v2 transfer events
+        tokenRulesCid <- getEventLogFromContext extraArgs.context
+        let authorizerHoldingCids = TextMap.fromListWithR (++) $ authorizerHoldingCids0
+        logAllocationSettlement (toInterfaceContractId tokenRulesCid)
+          (concat $ textMapValues lockedTokens)
+          allocation
+          (concat $ textMapValues authorizerHoldingCids)
 
-    return res
+        pure V2.AllocationResult with
+          output = V2.AllocationResult_Settled
+          authorizerHoldingCids = authorizerHoldingCids
+          meta = emptyMetadata
+            -- Note: for V1 tx history we would need create extra choices for
+            -- the creation, as this choice here cannot express the creation and
+            -- archival of multiple holdings for different instrument-ids.
 
+      x -> abort $ "Unsupported state transition: " <> show x
 
+  applyStateMachineTransitions 
+    this oSelf actors action mkStateMachine accountMap 
+    transition mkPending tryUseAuthority extraArgs
+  
 -- | Transfer instruction representing a token transfer offer.
 --
 -- Its input holdings reference the locked tokens.
@@ -408,42 +337,13 @@ template TokenTransferOffer with
       transferInstruction_withdrawExtraObservers = transferInstruction_withdrawDefaultExtraObservers this
 
       transferInstruction_withdrawImpl self arg = do
-        authorizeTransferOfferAction this (Some self) arg.actors V2.TIA_Withdraw arg.extraArgs $ do
-          -- Only try to unlock the inputs if fully
-          -- sender authorized.
-          senderChangeCids <- case (accountParties this.transfer.sender \\ (signatory this)) of
-            [] -> unlockTokenTransferOffer "transfer withdrawn" this arg.extraArgs
-            _ -> return this.transfer.inputHoldingCids
-          pure V2.TransferInstructionResult with
-            output = V2.TransferInstructionResult_Failed
-            senderChangeCids
-            meta = emptyMetadata
+        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Withdraw arg.extraArgs
 
       transferInstruction_rejectImpl self arg = do
-        authorizeTransferOfferAction this (Some self) arg.actors V2.TIA_Reject arg.extraArgs $ do
-          senderChangeCids <- unlockTokenTransferOffer "transfer rejected" this arg.extraArgs
-          pure V2.TransferInstructionResult with
-            output = V2.TransferInstructionResult_Failed
-            senderChangeCids
-            meta = emptyMetadata
+        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Reject arg.extraArgs
 
       transferInstruction_acceptImpl self arg = do
-        authorizeTransferOfferAction this (Some self) arg.actors V2.TIA_Accept arg.extraArgs $ do
-          senderChangeCids <- debitHoldings this
-          tokenCid <- create Token with
-            holding = (senderHoldingFromTransfer transfer) with
-              account = transfer.receiver
-          -- log v2 history event
-          tokenRulesCid <- getEventLogFromContext arg.extraArgs.context
-          logTransfer (toInterfaceContractId tokenRulesCid)
-            transfer
-            senderChangeCids
-            [toInterfaceContractId tokenCid]
-          pure V2.TransferInstructionResult with
-            senderChangeCids
-            output = V2.TransferInstructionResult_Completed with
-              receiverHoldingCids = [toInterfaceContractId tokenCid]
-            meta = mkMetaTransferFrom transfer.sender.owner (reasonFromMeta transfer.meta)
+        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Accept arg.extraArgs
 
     -- Implemented here so that we do not have to pull in the Rules contract.
     interface instance TransferEventsV2.EventLog for TokenTransferOffer where
@@ -453,123 +353,140 @@ template TokenTransferOffer with
 
       eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl transfer.instrumentId.admin
 
--- This function implements the authorization flow state machine for TransferOffer.
-authorizeTransferOfferAction
+-- The state transitions for a transfer offer
+transferInstructionTransition 
+  : TokenTransferOffer 
+  -> Optional (ContractId V2.TransferInstruction)
+  -> [Party]
+  -> AccountConfigMap
+  -> ExtraArgs 
+  -> TransferInstructionState 
+  -> TransferInstructionState 
+  -> Update V2.TransferInstructionResult
+transferInstructionTransition this _oSelf _actors _accountMap _extraArgs TIS_Init TIS_Withdrawn = do
+  pure V2.TransferInstructionResult with
+    output = V2.TransferInstructionResult_Failed
+    senderChangeCids = this.transfer.inputHoldingCids
+    meta = emptyMetadata
+
+transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Authorized TIS_Withdrawn = do
+  senderChangeCids <- unlockTokenTransferOffer "transfer withdrawn" this extraArgs
+  pure V2.TransferInstructionResult with
+    output = V2.TransferInstructionResult_Failed
+    senderChangeCids
+    meta = emptyMetadata
+
+transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Authorized TIS_Rejected = do
+  senderChangeCids <- unlockTokenTransferOffer "transfer rejected" this extraArgs
+  pure V2.TransferInstructionResult with
+    output = V2.TransferInstructionResult_Failed
+    senderChangeCids
+    meta = emptyMetadata
+
+transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized = do
+    senderChangeCids <- debitHoldings this
+    inputHoldingCids <- createLockedInputs this.transfer
+    -- log the tx history v2 event
+    eventLogCid <- getEventLogFromContext extraArgs.context
+    logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      admin = this.transfer.instrumentId.admin
+      account = this.transfer.sender
+      inputHoldingCids = this.transfer.inputHoldingCids
+      transferLegs = []
+      outputHoldingCids = inputHoldingCids <> senderChangeCids
+      observers = accountParties this.transfer.sender
+      extraArgs = ExtraArgs with
+        context = emptyChoiceContext
+        meta = reasonToMeta ("lock for transfer to " <> show this.transfer.receiver) emptyMetadata
+
+    let
+      newActionAuthorizers =
+        Map.insertWith (\x y -> dedup (x ++ y)) V2.TIA_Accept actors this.actionAuthorizers
+      spec = transferInstructionStateMachineSpec this.transfer.sender this.transfer.receiver
+      state = getState spec newActionAuthorizers
+
+    case state of
+      TIS_Authorized -> do
+        let newAvailableActions = mkAvailableActions spec newActionAuthorizers accountMap
+        pendingInstrCid <- create this with
+          actionAuthorizers = newActionAuthorizers
+          availableActions = newAvailableActions
+          transfer.inputHoldingCids = inputHoldingCids
+          originalInstructionCid = oSelf
+        pure V2.TransferInstructionResult with
+          senderChangeCids
+          output = V2.TransferInstructionResult_Pending (toInterfaceContractId pendingInstrCid)
+          meta = emptyMetadata
+      TIS_Accepted -> do
+        let
+          instr = this with
+            transfer = this.transfer with inputHoldingCids
+        res <- transferInstructionTransition instr oSelf actors accountMap extraArgs TIS_Authorized TIS_Accepted
+        return res with senderChangeCids = senderChangeCids ++ res.senderChangeCids
+      _ -> abort $ "Unexpected state after authorizing transfer instruction: " <> show state
+
+transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Authorized TIS_Accepted = do
+  senderChangeCids <- debitHoldings this
+  tokenCid <- create Token with
+    holding = (senderHoldingFromTransfer this.transfer) with
+      account = this.transfer.receiver
+  -- log v2 history event
+  tokenRulesCid <- getEventLogFromContext extraArgs.context
+  logTransfer (toInterfaceContractId tokenRulesCid)
+    this.transfer
+    senderChangeCids
+    [toInterfaceContractId tokenCid]
+  pure V2.TransferInstructionResult with
+    senderChangeCids
+    output = V2.TransferInstructionResult_Completed with
+      receiverHoldingCids = [toInterfaceContractId tokenCid]
+    meta = mkMetaTransferFrom this.transfer.sender.owner (reasonFromMeta this.transfer.meta)
+
+transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Accepted = do
+  transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized
+
+transferInstructionTransition _this _oSelf _actors _accountMap _extraArgs fromState toState = 
+  abort $ "Unsupported state transition: " <> show (fromState, toState)
+
+applyTransferInstructionTransitions
   : TokenTransferOffer
   -> Optional (ContractId V2.TransferInstruction)
   -> [Party]
   -> V2.TransferInstructionAction
   -> ExtraArgs
   -> Update V2.TransferInstructionResult
-  -> Update V2.TransferInstructionResult
-authorizeTransferOfferAction
-  this
-    -- ^ The TransferOffer on which to apply the authorization.
-  oSelf
-    -- ^ ContractId of the TransferOffer if it existed already.
-    --   Used only to archive.
-  actors
-    -- ^ The actors authorizing the action on the TransferOffer.
-  action
-    -- ^ The action to be authorized.
-  extraArgs
-    -- ^ ExtraArgs from which to extract choice context.
-  execute
-    -- ^ A continuation to execute when fully authorized.
-  = do
-    -- Extract account info.
-    [(senderConfig, oSenderCid), (receiverConfig, oReceiverCid)] <- extractAccountConfigs
-      this.transfer.instrumentId.admin
+applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors action extraArgs = do
+
+  accountMap <- extractAccountConfigMap
+      transfer.instrumentId.admin
       extraArgs
-      [this.transfer.sender, this.transfer.receiver]
+      [transfer.sender, transfer.receiver]
 
-    -- Apply the account authorization rules
-    -- First check the actors are allowed to authorize the action.
-    let
-      availableActions = mkAvailableTransferActions this.actionAuthorizers senderConfig receiverConfig
-      reverseAvailableActions = reverseMap availableActions
-      Some possibleActors = Map.lookup action reverseAvailableActions
+  let 
+    mkStateMachine v = transferInstructionStateMachineSpec v.transfer.sender v.transfer.receiver
 
-    checkActors actors possibleActors
-
-    -- Second apply the new authorization.
-    let
-      -- Compute the new available actions after adding the actors.
-      newActionAuthorizers =
-        Map.insertWith (\x y -> dedup (x ++ y)) action actors this.actionAuthorizers
-      newAvailableActions = mkAvailableTransferActions newActionAuthorizers senderConfig receiverConfig
-      newReverseAvailableActions = reverseMap newAvailableActions
-      newPossibleActors = fromOptional [] $ Map.lookup action newReverseAvailableActions
-
-      -- If the taken actors no longer has possible actions, it's fully authorized.
-      fullyAuthorized = null newPossibleActors
-
-    -- In case of an Accept action, the input holdings need to be split and locked
-    -- as soon as the transfer is fully sender authorized.
-    (senderChangeCids, inputHoldingCids) <- if action == V2.TIA_Accept
-      then do
-        let
-          -- work out whether the instruction is newly sender authorized.
-          acceptAuthorizersBefore = fromOptional [] $ Map.lookup V2.TIA_Accept this.actionAuthorizers
-          senderAuthorizedBefore = null (accountParties senderConfig.account \\ acceptAuthorizersBefore)
-          acceptAuthorizersAfter = fromOptional [] $ Map.lookup V2.TIA_Accept newActionAuthorizers
-          senderAuthorizedAfter = null (accountParties senderConfig.account \\ acceptAuthorizersAfter)
-          newlySenderAuthorized = senderAuthorizedAfter && not senderAuthorizedBefore
-        -- If the instruction is newly sender-authrized, split out the
-        -- amount to send and lock it.
-        if newlySenderAuthorized && not fullyAuthorized
-          then do
-            senderChangeCids <- debitHoldings this
-            inputHoldingsCids <- createLockedInputs this.transfer
-            -- log the tx history v2 event
-            eventLogCid <- getEventLogFromContext extraArgs.context
-            logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-              admin = this.transfer.instrumentId.admin
-              account = this.transfer.sender
-              inputHoldingCids = this.transfer.inputHoldingCids
-              transferLegs = []
-              outputHoldingCids = inputHoldingsCids <> senderChangeCids
-              observers = accountParties this.transfer.sender
-              extraArgs = ExtraArgs with
-                context = emptyChoiceContext
-                meta = reasonToMeta ("lock for transfer to " <> show this.transfer.receiver) emptyMetadata
-            pure (senderChangeCids, inputHoldingsCids)
-          else pure ([], this.transfer.inputHoldingCids)
-      else pure ([], this.transfer.inputHoldingCids)
-
-    -- If the action is fully authorized, execute the continuation.
-    -- Otherwise create a pending instruction and try continuing on that.
-    res <- if fullyAuthorized
-      then execute
-      else do
-        -- record the request for this actor
-        let originalInstructionCid = case oSelf of
-              Some self -> Some $ fromOptional (toInterfaceContractId self) this.originalInstructionCid
-              None -> None
-        pendingInstrCid <- create this with
-          actionAuthorizers = newActionAuthorizers
-          availableActions = newAvailableActions
-          transfer.inputHoldingCids = inputHoldingCids
-          originalInstructionCid
-
-        -- Now check whether we can use the accounts to transfer authority.
-        oRes <- tryUseAccountAuthorityForTIA actors newPossibleActors action (senderConfig, oSenderCid) (receiverConfig, oReceiverCid) (coerceContractId pendingInstrCid) extraArgs
-        case oRes of
-          Some res -> pure res with senderChangeCids = res.senderChangeCids ++ senderChangeCids
-          None ->
-            pure V2.TransferInstructionResult with
-              output = V2.TransferInstructionResult_Pending with
-                transferInstructionCid = toInterfaceContractId pendingInstrCid
-              senderChangeCids
-              meta = emptyMetadata
-
-    -- Archive old TransferOffer
-    -- Do this last to be able to use the TransferOffer as event
-    -- factory
-    whenSome oSelf archive
-
-    return res
-
+    mkPending newActionAuthorizers newAvailableActions = do
+      pendingInstrCid <- create this with
+        originalInstructionCid = fmap coerceContractId oSelf
+        actionAuthorizers = newActionAuthorizers
+        availableActions = newAvailableActions
+      return V2.TransferInstructionResult with
+            output = V2.TransferInstructionResult_Pending with
+              transferInstructionCid = toInterfaceContractId pendingInstrCid
+            senderChangeCids = []
+            meta = emptyMetadata
+    
+    tryUseAuthority actors action result authState accountMap extraArgs = case result.output of
+      V2.TransferInstructionResult_Pending instrCid ->
+        tryUseAccountAuthorityForTIA' actors action instrCid authState accountMap extraArgs
+      _ -> return None
+    
+    transition = transferInstructionTransition this oSelf actors accountMap extraArgs
+    
+  applyStateMachineTransitions 
+    this oSelf actors action mkStateMachine accountMap
+    transition mkPending tryUseAuthority extraArgs
+  
 -- | Template providing all the rules for how the tokens can be changed.
 --
 -- For this test token, they are given by the ones of the V2 token standard factories.
@@ -586,8 +503,8 @@ template TokenRules with
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
       transferFactory_transferExtraObservers = transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl
 
-      transferFactory_transferImpl self arg = do
-        token_transferFactory_transferImpl admin (coerceContractId self) arg.actors arg.transfer arg.extraArgs
+      transferFactory_transferImpl _self arg = do
+        token_transferFactory_transferImpl admin arg.actors arg.transfer arg.extraArgs
 
     interface instance TransferEventsV2.EventLog for TokenRules where
       view = TransferEventsV2.EventLogView with
@@ -647,10 +564,21 @@ template TokenRules with
               ownerConfig = PartyConfig True True
               providerConfig = PartyConfig False False
         let adminApproved = Map.singleton V2.TIA_Accept [admin]
+        let accountMap = Map.fromList [(receiverConfig.account, (receiverConfig, None)), (mintConfig.account, (mintConfig, None))]
+        let transfer = V2.Transfer with
+              sender = mintAccount admin
+              receiver
+              amount
+              instrumentId
+              inputHoldingCids = []
+              requestedAt = offeredAt
+              executeBefore = offeredAt `addRelTime` days 7
+              meta = reasonToMeta "mint offer" emptyMetadata
+        let spec = transferInstructionStateMachineSpec transfer.sender transfer.receiver
         offerCid <- create TokenTransferOffer with
           originalInstructionCid = None
           actionAuthorizers = adminApproved
-          availableActions = mkAvailableTransferActions adminApproved mintConfig receiverConfig
+          availableActions = mkAvailableActions spec adminApproved accountMap
           mintAmount = amount
           transfer = V2.Transfer with
             sender = mintAccount admin
@@ -675,12 +603,11 @@ data TokenRulesOfferMintResult = TokenRulesOfferMintResult with
 -- TransferOffer.
 token_transferFactory_transferImpl
   : Party
-  -> ContractId TransferEventsV2.EventLog
   -> [Party]
   -> V2.Transfer
   -> ExtraArgs
   -> Update V2.TransferInstructionResult
-token_transferFactory_transferImpl admin eventLogCid actors transfer extraArgs = do
+token_transferFactory_transferImpl admin actors transfer extraArgs = do
   require' ("transfer.instrumentId.admin", transfer.instrumentId.admin) isEqualR ("transferFactory.admin", admin)
 
   let offer = TokenTransferOffer with
@@ -690,20 +617,7 @@ token_transferFactory_transferImpl admin eventLogCid actors transfer extraArgs =
         originalInstructionCid = None
         transfer
 
-  authorizeTransferOfferAction offer None actors V2.TIA_Accept extraArgs $ do
-    senderChangeCids <- debitHoldings offer
-    tokenCid <- create Token with
-      holding = (senderHoldingFromTransfer transfer) with
-        account = transfer.receiver
-    logTransfer eventLogCid
-      transfer
-      senderChangeCids
-      [toInterfaceContractId tokenCid]
-    pure V2.TransferInstructionResult with
-      senderChangeCids
-      output = V2.TransferInstructionResult_Completed with
-        receiverHoldingCids = [toInterfaceContractId tokenCid]
-      meta = mkMetaTransferFrom transfer.sender.owner (reasonFromMeta transfer.meta)
+  applyTransferInstructionTransitions offer None actors V2.TIA_Accept extraArgs
 
 -- | Sum up and archive input holdings
 sumAndArchiveHoldings : V2.Transfer -> Update Decimal
@@ -821,7 +735,7 @@ token_allocationFactoryV2_allocateImpl
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
-token_allocationFactoryV2_allocateImpl tokenRules self arg = do
+token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token
     token <- fetch tokenCid
@@ -839,20 +753,7 @@ token_allocationFactoryV2_allocateImpl tokenRules self arg = do
       admin = tokenRules.admin
       requestedAt = arg.requestedAt
 
-  authorizeAllocationInstructionAction allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs do
-    [(accountConfig, _)] <- extractAccountConfigs tokenRules.admin arg.extraArgs [arg.allocation.authorizer]
-    (lockedTokens, authorizerChangeCids) <- splitAndLock (coerceContractId self) arg.allocation inputHoldingMap
-    allocationCid <- create TokenAllocationV2 with
-      originalAllocationCid = None
-      admin = tokenRules.admin
-      allocation = arg.allocation
-      availableActions = mkAvailableAllocationActions Map.empty arg.allocation.settlement.executors tokenRules.admin accountConfig
-      actionAuthorizers = Map.empty
-      ..
-    pure V2.AllocationInstructionResult with
-      output = V2.AllocationInstructionResult_Completed (coerceContractId allocationCid)
-      authorizerChangeCids
-      meta = emptyMetadata
+  applyAllocationInstructionTransitions allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs
 
 
 -- Utilities
