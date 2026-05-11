@@ -1,5 +1,7 @@
 # Tests
 
+See the [design document](https://docs.google.com/document/d/1rvAec6BuKx61TdJ6sY07QRAUA1p_WgedDIisgczFDPI) for upcoming changes.
+
 ## Ingestion
 
 The performance tests cover three stores. The Tests ingest update data relevant to each store

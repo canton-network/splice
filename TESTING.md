@@ -445,15 +445,7 @@ They are meant to provide a quick feedback loop and to offer additional protecti
 
 ## Performance Tests
 
-We have a performance test runner that can be used to run store ingestion performance tests locally. (In the future, also CI).
-To run it and see all options available, run this command in the root of the project:
-
-```
-sbt "apps-app/test:runMain org.lfdecentralizedtrust.splice.performance.SplicePerf"
-```
-
-See also the [design document](https://docs.google.com/document/d/1rvAec6BuKx61TdJ6sY07QRAUA1p_WgedDIisgczFDPI) for upcoming changes.
-
+Refer to [Performance Testing](PERFORMANCE.md) for details on how to run performance tests.
 
 ### Helm checks
 
