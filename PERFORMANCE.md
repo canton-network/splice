@@ -1,14 +1,14 @@
 # Tests
 
-See the [design document](https://docs.google.com/document/d/1rvAec6BuKx61TdJ6sY07QRAUA1p_WgedDIisgczFDPI) for upcoming changes.
+See the [design document](https://docs.google.com/document/d/1rvAec6BuKx61TdJ6sY07QRAUA1p_WgedDIisgczFDPI) for details and upcoming changes.
 
 ## Ingestion
 
 The performance tests cover three stores. The Tests ingest update data relevant to each store
 and measure the time taken for the ingestion process.
 
-| Store | Summary                         | Content                                                   |
-|---------------------|---------------------------------|------------------|
+| Store | Description | Content                        |
+|---------------------|-------------|------------------|
 | **`SvDsoStore`**    | DSO's internal governance data | ACS contracts  |
 | **`ScanStore`**     | DSO's public queryable data | ACS contracts    |
 | **`UpdateHistory`** | DSO's append-only audit log | Updates and associated-events (create/exercise)|
@@ -21,7 +21,7 @@ Tests are automated while you can also trigger them manually.
 
 ### automated
 
-Tests run daily on GHA on this : [workflow](.github/workflows/performance_tests.yml)
+Tests run daily on [GHA workflow](.github/workflows/performance_tests.yml)
 
 ### manually
 
@@ -121,11 +121,10 @@ but always verify the changes on CI, which is the baseline infrastructure we use
 
 ### 6. Validate on CI
 
-Push the branch and trigger the perf workflow manually:
-
-1. Trigger test manually - see [Running manually](#manually)
-2. Wait for the run to finish, then compare its metrics data (from Grafana or JSON) against recent `main` runs
-3. Merge the change once the CI-run metrics confirm the improvement and show no regression elsewhere
+1. Push the branch
+2. Trigger test manually - see [Running manually](#manually)
+3. Wait for the run to finish, then compare its metrics data (from Grafana or JSON) against recent `main` runs
+4. Merge the change once the CI-run metrics confirm the improvement and show no regression elsewhere
 
 ### 7. Finalize
 
