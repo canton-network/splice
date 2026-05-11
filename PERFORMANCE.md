@@ -7,11 +7,11 @@ See the [design document](https://docs.google.com/document/d/1rvAec6BuKx61TdJ6sY
 The performance tests cover three stores. The Tests ingest update data relevant to each store
 and measure the time taken for the ingestion process.
 
-| Store | Description | Content                        |
-|---------------------|-------------|------------------|
-| **`SvDsoStore`**    | DSO's internal governance data | ACS contracts  |
-| **`ScanStore`**     | DSO's public queryable data | ACS contracts    |
-| **`UpdateHistory`** | DSO's append-only audit log | Updates and associated-events (create/exercise)|
+| Store | Description | Content                                           |
+|---------------------|-------------|---------------------------------------------------|
+| **`SvDsoStore`**    | DSO's internal governance data | ACS contracts                                     |
+| **`ScanStore`**     | DSO's public queryable data | ACS contracts                                     |
+| **`UpdateHistory`** | DSO's append-only audit log | Updates and associated events (creates/exercises) |
 
 # How to run a test on branch
 
