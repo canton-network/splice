@@ -2,14 +2,14 @@
 
 ## Ingestion
 
-The performance tests cover three stores. The Tests ingest data relevant to each store
-and measure the time taken for the ingestion process
+The performance tests cover three stores. The Tests ingest update data relevant to each store
+and measure the time taken for the ingestion process.
 
 | Store | Summary                         | Content                                                   |
 |---------------------|---------------------------------|------------------|
-| **`SvDsoStore`**    | DSO's **internal governance data* | ACS contracts  |
-| **`ScanStore`**     | DSO's **public, queryable data** | ACS contracts    |
-| **`UpdateHistory`** | DSO's **append-only audit log** | Updates and associated-events (create/exercise)|
+| **`SvDsoStore`**    | DSO's internal governance data | ACS contracts  |
+| **`ScanStore`**     | DSO's public queryable data | ACS contracts    |
+| **`UpdateHistory`** | DSO's append-only audit log | Updates and associated-events (create/exercise)|
 
 ## Read (TODO)
 
