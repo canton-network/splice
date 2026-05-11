@@ -20,6 +20,8 @@ import scala.jdk.CollectionConverters.*
 
 trait TokenStandardV2TestUtil extends TestCommon {
 
+  protected val amuletInstrumentIdV2 = "Amulet"
+
   protected val tokenStandardV2TestDarPath =
     "token-standard/examples/splice-token-test-trading-app-v2/.daml/dist/splice-token-test-trading-app-v2-current.dar"
 
@@ -110,9 +112,15 @@ trait TokenStandardV2TestUtil extends TestCommon {
       bob: PartyId,
       bobTransferAmount: BigDecimal,
   ): tradingappv2.OTCTrade = {
-    val aliceLeg = mkTransferLeg("leg0", dso, alice, bob, aliceTransferAmount)
+    val aliceLeg = new tradingappv2.TradeLeg(
+      dso.toProtoPrimitive,
+      mkTransferLeg("leg0", alice, bob, aliceTransferAmount),
+    )
     // TODO(#561): swap against a token from the token reference implementation
-    val bobLeg = mkTransferLeg("leg1", dso, bob, alice, bobTransferAmount)
+    val bobLeg = new tradingappv2.TradeLeg(
+      dso.toProtoPrimitive,
+      mkTransferLeg("leg1", bob, alice, bobTransferAmount),
+    )
     new tradingappv2.OTCTrade(
       venue.toProtoPrimitive,
       Seq(aliceLeg, bobLeg).asJava,
@@ -127,7 +135,6 @@ trait TokenStandardV2TestUtil extends TestCommon {
 
   def mkTransferLeg(
       legId: String,
-      dso: PartyId,
       sender: PartyId,
       receiver: PartyId,
       amount: BigDecimal,
@@ -137,8 +144,38 @@ trait TokenStandardV2TestUtil extends TestCommon {
       basicAccount(sender),
       basicAccount(receiver),
       amount.bigDecimal,
-      new holdingv2.InstrumentId(dso.toProtoPrimitive, "Amulet"),
+      amuletInstrumentIdV2,
       new metadatav1.Metadata(java.util.Map.of("some_leg_meta", UUID.randomUUID().toString)),
     )
+
+  def transferLegSideForAuthorizer(
+      authorizer: PartyId,
+      transferLeg: allocationv2.TransferLeg,
+  ): allocationv2.TransferLegSide = {
+    val (side, otherside) =
+      if (transferLeg.sender.owner == authorizer.toProtoPrimitive) {
+        allocationv2.TransferSide.SENDERSIDE -> transferLeg.receiver
+      } else if (transferLeg.receiver.owner == authorizer.toProtoPrimitive) {
+        allocationv2.TransferSide.RECEIVERSIDE -> transferLeg.sender
+      } else {
+        throw new IllegalArgumentException(
+          s"Transfer leg `${transferLeg.transferLegId}` does not involve authorizer `${authorizer.toProtoPrimitive}`"
+        )
+      }
+
+    new allocationv2.TransferLegSide(
+      transferLeg.transferLegId,
+      side,
+      otherside,
+      transferLeg.amount,
+      transferLeg.instrumentId,
+      transferLeg.meta,
+    )
+  }
+
+  def transferLegsFromTrade(
+      otcTrade: tradingappv2.OTCTrade.Contract
+  ): Seq[allocationv2.TransferLeg] =
+    otcTrade.data.tradeLegs.asScala.map(_.leg).toSeq
 
 }

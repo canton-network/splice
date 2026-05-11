@@ -110,22 +110,17 @@ import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.{
   TransferTransactionSubtype,
 }
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2
 
 class UserWalletTxLogParser(
     override val loggerFactory: NamedLoggerFactory,
     endUserParty: PartyId,
-    dsoParty: PartyId,
 ) extends TxLogStore.Parser[TxLogEntry]
     with NamedLogging {
   import UserWalletTxLogParser.*
 
   private val endUserPartyProtoPrimitive = endUserParty.toProtoPrimitive
   // TODO (#4973): remove this if/when v1 and v2 InstrumentId are unified
-  private val amuletInstrumentIdV2 = new holdingv2.InstrumentId(
-    dsoParty.toProtoPrimitive,
-    "Amulet",
-  )
+  private val amuletInstrumentIdV2 = "Amulet"
 
   // ignoreUnexpectedAmuletCreateArchive disables the warning when we
   // hit a bare create/archive of an amulet contract.  We use this for

@@ -1241,7 +1241,14 @@ object HttpWalletAppClient {
       ): EitherT[Future, Either[
         Throwable,
         HttpResponse,
-      ], http.AllocateAmuletV2Response] =
+      ], http.AllocateAmuletV2Response] = {
+        // The internal wallet HTTP API still requires legacy V2 compatibility fields
+        // that are no longer present on the ledger AllocationSpecification.
+        // The handler ignores them when reconstructing the current ledger type, so keep
+        // them as transport-only timestamps rather than conflating them with the deadline.
+        val compatibilityRequestedAt = java.time.Instant.now()
+        val compatibilitySettleAt = compatibilityRequestedAt
+
         client.allocateAmuletV2(
           definitions.AllocateAmuletV2Request(
             definitions.AllocateAmuletV2Request.Settlement(
@@ -1250,26 +1257,35 @@ object HttpWalletAppClient {
                 spec.settlement.settlementRef.id,
                 spec.settlement.settlementRef.cid.map(_.contractId).toScala,
               ),
-              requestedAt =
-                Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.requestedAt)),
-              settleAt = Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.settleAt)),
+              requestedAt = Codec.encode(
+                CantonTimestamp.assertFromInstant(compatibilityRequestedAt)
+              ),
+              settleAt = Codec.encode(CantonTimestamp.assertFromInstant(compatibilitySettleAt)),
               settlementDeadline = spec.settlement.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
               meta = Some(spec.settlement.meta.values.asScala.toMap),
             ),
-            spec.transferLegs.asScala.map { transferLegs =>
+            spec.transferLegSides.asScala.map { transferLegSide =>
+              val (sender, receiver) = transferLegSide.side match {
+                case allocationv2.TransferSide.SENDERSIDE =>
+                  (spec.authorizer.owner, transferLegSide.otherside.owner)
+                case allocationv2.TransferSide.RECEIVERSIDE =>
+                  (transferLegSide.otherside.owner, spec.authorizer.owner)
+              }
+
               definitions.TransferLegV2(
-                transferLegs.transferLegId,
-                sender = transferLegs.sender.owner,
-                receiver = transferLegs.receiver.owner,
-                Codec.JavaBigDecimal.instance.encode(transferLegs.amount),
-                Some(transferLegs.meta.values.asScala.toMap),
+                transferLegSide.transferLegId,
+                sender = sender,
+                receiver = receiver,
+                Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
+                Some(transferLegSide.meta.values.asScala.toMap),
               )
             }.toVector,
           ),
           headers = headers,
         )
+      }
 
       override protected def handleOk()(implicit
           decoder: TemplateJsonDecoder
