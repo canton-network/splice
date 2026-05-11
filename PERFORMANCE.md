@@ -1,22 +1,27 @@
 # Tests
 
-The performance tests cover three stores.
-
 ## Ingestion
 
-| Store               | Summary                           | Content                                                                           |
-|---------------------|-----------------------------------|-----------------------------------------------------------------------------------|
-| **`SvDsoStore`**    | DSO's **internal governance data* | one ACS row per active contract                                                   |
-| **`ScanStore`**     | DSO's **public, queryable data**  | one ACS row per active contract
-| **`UpdateHistory`** | DSO's **append-only audit log**   | one row per update (reassignment/transaction) and one per event (create/exercise)
+The performance tests cover three stores. The Tests ingest data relevant to each store
+and measure the time taken for the ingestion process
+
+| Store | Summary                                       | Content                                                   |
+|---------------------|-----------------------------------------------|-----------------------------------------------------------|
+| **`SvDsoStore`**    | DSO's **internal governance data*             | ACS contracts                                             |
+| **`ScanStore`**     | DSO's **public, queryable data**              | ACS contracts
+| **`UpdateHistory`** | DSO's **append-only transactional audit log** | Updates (transaction) and events (create/exercise)
+
+## Read (TODO)
 
 # How to run a test on branch
 
 ## CI
 
+Tests are automated while you can also trigger them manually.
+
 ### automated
 
-Tests run daily on GHA using on this : [`workflow](.github/workflows/performance_tests.yml)
+Tests run daily on GHA on this : [`workflow](.github/workflows/performance_tests.yml)
 
 ### manually
 
@@ -25,6 +30,9 @@ Tests run daily on GHA using on this : [`workflow](.github/workflows/performance
 3) Click on "Run workflow" to start the tests.
 
 ## locally
+
+You can also run the tests locally, where you need to configure a Postgres instance and download the test data
+beforehand.
 
 ```bash
 export POSTGRES_HOST=localhost
@@ -39,7 +47,7 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U canton -c 'CREATE DATABASE sp
 # Download the test data (if not already done)
 gcloud storage cp gs://mainnet-history-dumps/mainnet_big_update.json /tmp/mainnet_big_update.json
 # Run the performance test
-sbt 'apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistoryRead -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnet_big_update.json'
+sbt '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
 ```
 
 # Test data
@@ -75,7 +83,7 @@ Grafana: https://grafana.splice.network.canton.global/d/splice-perf-ingestion/st
 When a regression is reported (or you're proactively trying to make a component
 faster), follow this loop.
 
-### 1. Start from a GHA run with metrics
+### 1. Start from a CI run with metrics
 
 - Pick a recent run of the affected workflow
 - Look at the per-test panels in Grafana
@@ -89,10 +97,10 @@ From the metrics, form a statement about why the code-path is slow, e.g:
 - CPU/wall ratio is ~0.2, so we're I/O-bound on Postgres, not on the app-side
 - Peak heap doubled, so a new code path added more processing in memory.
 
-### 3. Validate the hypothesis with the metrics
+### 3. Validate the hypothesis
 
 Before changing any code, confirm the hypothesis is consistent with what the
-metrics show. Run at least the tests two times and also cross-check at least two signals
+test metrics show. Run at least the tests two times and also cross-check at least two signals
 (e.g. ingestion total time and CPU/wall ratio).
 
 ### 4. Devise experiments
