@@ -25,7 +25,7 @@ Tests run daily on GHA on this : [workflow](.github/workflows/performance_tests.
 
 ### manually
 
-1) Go to GitHub -> Actions -> Store performance tests.
+1) Go to [GHA Performance Tests](https://github.com/canton-network/splice/actions/workflows/performance_tests.yml)
 2) Click on "Run workflow" and select the branch you want to test.
 3) Click on "Run workflow" to start the tests.
 
@@ -35,19 +35,14 @@ You can also run the tests locally, where you need to configure a Postgres insta
 beforehand.
 
 ```bash
-export POSTGRES_HOST=localhost
-export POSTGRES_USER=<user>
-export POSTGRES_PASSWORD=<pwd>
-export POSTGRES_PORT=5432
-
-# Run Postgres in a Docker container
-docker run --name perf-pg -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -p $POSTGRES_PORT:$POSTGRES_PORT -d postgres:14
-# Create the database
-PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U canton -c 'CREATE DATABASE splice_apps;'
+# Start Postgres in a Docker container
+./scripts/postgres.sh docker start
+# Create the `splice_apps` database
+./scripts/postgres.sh docker createdb splice_apps
 # Download the test data (if not already done)
-gcloud storage cp gs://mainnet-history-dumps/mainnet_big_update.json /tmp/mainnet_big_update.json
-# Run the performance test
-sbt '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+gcloud storage cp gs://mainnet-history-dumps/mainnetupdates.json /tmp/mainnetupdates.json
+# Run the performance test from the root of the repo
+sbt 'apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json'
 ```
 
 # Test data
