@@ -5,11 +5,11 @@
 The performance tests cover three stores. The Tests ingest data relevant to each store
 and measure the time taken for the ingestion process
 
-| Store | Summary                                       | Content                                                   |
-|---------------------|-----------------------------------------------|-----------------------------------------------------------|
-| **`SvDsoStore`**    | DSO's **internal governance data*             | ACS contracts                                             |
-| **`ScanStore`**     | DSO's **public, queryable data**              | ACS contracts
-| **`UpdateHistory`** | DSO's **append-only transactional audit log** | Updates (transaction) and events (create/exercise)
+| Store | Summary                         | Content                                                   |
+|---------------------|---------------------------------|------------------|
+| **`SvDsoStore`**    | DSO's **internal governance data* | ACS contracts  |
+| **`ScanStore`**     | DSO's **public, queryable data** | ACS contracts    |
+| **`UpdateHistory`** | DSO's **append-only audit log** | Updates and associated-events (create/exercise)|
 
 ## Read (TODO)
 
@@ -21,7 +21,7 @@ Tests are automated while you can also trigger them manually.
 
 ### automated
 
-Tests run daily on GHA on this : [`workflow](.github/workflows/performance_tests.yml)
+Tests run daily on GHA on this : [workflow](.github/workflows/performance_tests.yml)
 
 ### manually
 
@@ -56,7 +56,6 @@ We download test data from the main-net and upload it to the GCP bucket. This op
 automate it in the future.
 Test data dumps live in the GCP bucket [
 `gs://mainnet-history-dumps`](https://console.cloud.google.com/storage/browser/mainnet-history-dumps).
-Authenticate once with `gcloud auth login` (or `gcloud auth application-default login`).
 
 ```bash
 # List all files
