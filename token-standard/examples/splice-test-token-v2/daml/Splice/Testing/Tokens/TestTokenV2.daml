@@ -69,7 +69,6 @@ template TokenAllocationV2 with
       -- Note that the executors are controllers on these two choices.
       allocation_settleExtraObservers _arg = []
       allocation_cancelExtraObservers _arg = []
-      allocation_refreshExpiryExtraObservers _arg = []
 
       -- Add executors as extra observers so there is no extra view for the archival of the holding
       allocation_withdrawExtraObservers _arg = allocation.settlement.executors
@@ -82,9 +81,6 @@ template TokenAllocationV2 with
           with
             authorizerHoldingCids
             meta = emptyMetadata
-
-      allocation_refreshExpiryImpl _self _arg = do
-        abort "cannot refresh allocation that does not expire"
 
       allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
         archiveAndCheckActors self arg.actors [allocation.settlement.executors]

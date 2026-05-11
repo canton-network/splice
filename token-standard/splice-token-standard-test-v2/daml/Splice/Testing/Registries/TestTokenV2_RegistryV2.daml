@@ -49,7 +49,6 @@ instance RegistryApi TestTokenV2Registry where
   getSettlementFactory = registryApi_getSettlementFactory
   getAllocation_WithdrawContext = registryApi_getTokenRulesOnlyContext
   getAllocation_CancelContext = registryApi_getCancelContext
-  getAllocation_RefreshExpiryContext = registryApi_getTokenRulesOnlyContext
   getTransferInstruction_AcceptContext = registryApi_getTransferOfferContext
   getTransferInstruction_RejectContext = registryApi_getTransferOfferContext
   getTransferInstruction_WithdrawContext = registryApi_getTokenRulesOnlyContext

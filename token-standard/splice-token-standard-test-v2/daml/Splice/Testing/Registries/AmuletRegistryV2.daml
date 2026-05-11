@@ -91,7 +91,6 @@ instance RegistryApi AmuletRegistry where
   getAllocation_WithdrawContext app cid _meta =
     registryApi_getAllocation_abortTwoStepTransferContext app cid
   getAllocation_CancelContext app cid _meta = registryApi_getAllocation_abortTwoStepTransferContext app cid
-  getAllocation_RefreshExpiryContext app cid _meta = registryApi_getAllocation_refreshExpiryContext app cid
   getTransferInstruction_AcceptContext app cid _meta = registryApi_getTransferInstruction_AcceptContext app cid
   getTransferInstruction_RejectContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
   getTransferInstruction_WithdrawContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
@@ -331,14 +330,6 @@ registryApi_getAllocation_abortTwoStepTransferContext registry instrCid = do
         else
           pure expireLockC
 
-registryApi_getAllocation_refreshExpiryContext
-  : AmuletRegistry -> ContractId Allocation -> Script OpenApiChoiceContext
-registryApi_getAllocation_refreshExpiryContext registry _instrCid = do
-  transferC <- getExternalPartyConfigStateContext registry
-  lockedAmuletD <- getLockedAmuletForAllocationsD registry _instrCid
-  pure $ transferC <> OpenApiChoiceContext with
-    disclosures = lockedAmuletD
-    choiceContext = emptyOpenApiChoiceContext.choiceContext
 
 -- Internal functions
 ---------------------

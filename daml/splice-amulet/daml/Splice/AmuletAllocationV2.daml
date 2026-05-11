@@ -10,17 +10,15 @@ module Splice.AmuletAllocationV2 (
 ) where
 
 import DA.Action
-import DA.Assert (assertDeadlineExceeded, assertWithinDeadline)
+import DA.Assert (assertWithinDeadline)
 import DA.Foldable (forA_)
 import DA.Optional
 import DA.TextMap qualified as TextMap
 import DA.Time
-import DA.Traversable qualified as Traversable
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
-import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require)
 
 import Splice.Amulet
@@ -74,7 +72,6 @@ template AmuletAllocationV2
       -- Note that the executors are controllers on these two choices.
       allocation_settleExtraObservers _arg = []
       allocation_cancelExtraObservers _arg = []
-      allocation_refreshExpiryExtraObservers _arg = []
 
       -- Add executors as extra observers so there is no extra view for the archival of the holding
       allocation_withdrawExtraObservers _arg = allocation.settlement.executors
@@ -87,36 +84,6 @@ template AmuletAllocationV2
           with
             authorizerHoldingCids
             meta = emptyMetadata
-
-      -- FIXME: move expiry refresh choice to its own PR
-      allocation_refreshExpiryImpl self arg@(V2.Allocation_RefreshExpiry{..}) = do
-        archiveAndCheckActors self arg.actors [allocation.settlement.executors]
-        assertDeadlineExceeded "requestedAt" requestedAt
-        let newExpiresAt = computeAllocationExpiry requestedAt allocation.settlement
-        require' ("new expiresAt", newExpiresAt) isGreaterR ("current expiresAt", expiresAt)
-        -- refresh expiry of locked amulet
-        newLockedAmulet <- Traversable.forA lockedAmulet $ \cid -> do
-          lockedAmulet <- fetchAndArchive (ForOwner with dso; owner = allocation.authorizer.owner) cid
-          create lockedAmulet with
-            lock = lockedAmulet.lock with expiresAt = newExpiresAt
-        -- leg v2 tx history
-        (configStateCid, _) <- getExternalPartyConfigStateFromChoiceContext dso extraArgs.context
-        logNonEmptyChange (toInterfaceContractId configStateCid) TransferEventsV2.EventLog_HoldingsChange with
-          admin = dso
-          account = allocation.authorizer
-          inputHoldingCids = [toInterfaceContractId cid | Some cid <- [lockedAmulet]]
-          transferLegSides = []
-          outputHoldingCids = [toInterfaceContractId cid | Some cid <- [newLockedAmulet]]
-          observers = accountParties allocation.authorizer
-          extraArgs = ExtraArgs with
-            context = emptyChoiceContext
-            meta = reasonToMeta ("refresh expiry of allocation") emptyMetadata
-        allocationCid <- toInterfaceContractId <$> create this with
-          expiresAt = newExpiresAt
-          lockedAmulet = newLockedAmulet
-        pure V2.Allocation_RefreshExpiryResult with
-          allocationCid
-          meta = emptyMetadata
 
       allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
         archiveAndCheckActors self arg.actors [allocation.settlement.executors]

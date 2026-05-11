@@ -189,8 +189,7 @@ data AllocationView = AllocationView with
       -- authorizer after this time. Thereby recovering storage resources and
       -- protecting themselves from denial-of-service attacks.
       --
-      -- Apps CAN use the `Allocation_RefreshExpiry` choice to refresh the expiry
-      -- and keep the allocation alive if needed.
+      -- TODO(#5487): introduce explicit choice for `Allocation_RefreshExpiry` and mention it here.
       --
       -- Registries SHOULD avoid unnecessary refreshes by
       --   - making the expiry time as close to the settlement deadline as possible
@@ -235,12 +234,10 @@ interface Allocation where
   viewtype AllocationView
 
   allocation_settleImpl : ContractId Allocation -> Allocation_Settle -> Update Allocation_SettleResult
-  allocation_refreshExpiryImpl : ContractId Allocation -> Allocation_RefreshExpiry -> Update Allocation_RefreshExpiryResult
   allocation_cancelImpl : ContractId Allocation -> Allocation_Cancel -> Update Allocation_CancelResult
   allocation_withdrawImpl : ContractId Allocation -> Allocation_Withdraw -> Update Allocation_WithdrawResult
 
   allocation_settleExtraObservers : Allocation_Settle -> [Party]
-  allocation_refreshExpiryExtraObservers : Allocation_RefreshExpiry -> [Party]
   allocation_cancelExtraObservers : Allocation_Cancel -> [Party]
   allocation_withdrawExtraObservers : Allocation_Withdraw -> [Party]
 
@@ -281,30 +278,6 @@ interface Allocation where
     observer allocation_settleExtraObservers this arg
     controller actors
     do allocation_settleImpl this self arg
-
-  nonconsuming choice Allocation_RefreshExpiry : Allocation_RefreshExpiryResult
-    -- ^ Refresh the expiry of the allocation without executing any transfer.
-    --
-    -- This can be used by the executors to keep allocations that expire before
-    -- the settlement deadline alive until settlement (or the next settlement
-    -- iteration) can be executed.
-    with
-      actors : [Party]
-        -- ^ Parties executing the refresh.
-        --
-        -- Implementations MUST check these parties to avoid unauthorized refresh.
-        -- By default, they SHOULD require them to be equal to the `executors`.
-      requestedAt : Time
-        -- ^ The time at which the refresh was requested, which MUST be in the
-        -- past and SHOULD be used by the registry to determine the new expiry.
-        --
-        -- Registries SHOULD set the new expiry as close as possible the
-        -- settlement deadline.
-      extraArgs : ExtraArgs
-        -- ^ Additional context required in order to exercise the choice.
-    observer allocation_refreshExpiryExtraObservers this arg
-    controller actors
-    do allocation_refreshExpiryImpl this self arg
 
   nonconsuming choice Allocation_Cancel : Allocation_CancelResult
     -- ^ Cancel the allocation to release the funds and invalidate the approval
@@ -372,15 +345,6 @@ data Allocation_SettleResult = Allocation_SettleResult with
       -- ^ The new allocation created for the next settlement iteration, if any.
     meta : Metadata
       -- ^ Additional metadata specific to the settlement, used for extensibility.
-  deriving (Eq, Show)
-
--- | The result of refreshing the expiry of an allocation by exercising the
--- `Allocation_RefreshExpiry` choice.
-data Allocation_RefreshExpiryResult = Allocation_RefreshExpiryResult with
-    allocationCid : ContractId Allocation
-      -- ^ The contract id of the allocation with the refreshed expiry.
-    meta : Metadata
-      -- ^ Additional metadata specific to the expiry refresh, used for extensibility.
   deriving (Eq, Show)
 
 -- | The result of the `Allocation_Cancel` choice.
