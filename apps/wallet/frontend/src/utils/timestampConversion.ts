@@ -7,7 +7,7 @@ export const DAML_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}
 export function isValidDamlTimestamp(str: string): boolean {
   return DAML_TIMESTAMP_REGEX.test(str);
 }
-// only call this if the timestamp is valid
+// only call this if the timestamp is valid or produced by Daml JSON codec
 // this is necessary only because JS doesn't support microsecond precision
 export function damlTimestampToOpenApiTimestamp(str: string): number {
   const timestampWithMillisecondPrecision = new Date(str);
