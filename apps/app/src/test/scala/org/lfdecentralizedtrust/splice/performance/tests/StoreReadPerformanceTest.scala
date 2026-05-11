@@ -91,6 +91,12 @@ abstract class StoreReadPerformanceTest(
     val metricsJson = Json.arr(
       metric("total_time_ns", "Total read time in nanoseconds", metrics.totalTimeNs),
       metric(
+        "avg_item_time_ns",
+        "Average nanoseconds per read update (total_time_ns / num_updates)",
+        if (metrics.numUpdates > 0) metrics.totalTimeNs / BigDecimal(metrics.numUpdates)
+        else BigDecimal(0),
+      ),
+      metric(
         "completion_timestamp_seconds",
         "Epoch seconds when the test run completed",
         BigDecimal(completionEpochSec),

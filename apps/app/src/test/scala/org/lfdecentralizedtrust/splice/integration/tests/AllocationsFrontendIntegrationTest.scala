@@ -256,7 +256,40 @@ class AllocationsFrontendIntegrationTest
           },
         )
 
-      // TODO (#4915): test withdraw and reject like in the test below
+        val allocationRequestElement = clue("find the allocation request element") {
+          eventually() {
+            findAll(className("allocation-request")).toSeq.loneElement
+          }
+        }
+
+        actAndCheck(
+          "click on withdrawing the allocation", {
+            val allocationElement = findAll(className("allocation")).toSeq.loneElement
+            click on allocationElement
+              .findChildElement(className("allocation-withdraw"))
+              .valueOrFail("Could not find withdraw button for allocation")
+          },
+        )(
+          "the allocation is not shown anymore",
+          _ => {
+            findAll(className("allocation")).toSeq shouldBe empty withClue "Allocation Cards"
+          },
+        )
+
+        actAndCheck(
+          "click on rejecting the allocation request", {
+            click on allocationRequestElement
+              .findChildElement(className("allocation-request-reject"))
+              .valueOrFail("Could not find reject button for allocation request")
+          },
+        )(
+          "the allocation request is not shown anymore",
+          _ => {
+            findAll(
+              className("allocation-request")
+            ).toSeq shouldBe empty withClue "Allocation Request Cards"
+          },
+        )
       }
     }
 

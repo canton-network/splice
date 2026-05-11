@@ -114,6 +114,7 @@ lazy val root: Project = (project in file("."))
     `splice-api-token-metadata-v1-daml`,
     `splice-api-token-holding-v1-daml`,
     `splice-api-token-holding-v2-daml`,
+    `splice-api-token-transfer-events-v2-daml`,
     `splice-api-token-transfer-instruction-v1-daml`,
     `splice-api-token-transfer-instruction-v2-daml`,
     `splice-api-token-allocation-v1-daml`,
@@ -401,6 +402,17 @@ lazy val `splice-api-token-holding-v2-daml` =
         (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
     )
 
+lazy val `splice-api-token-transfer-events-v2-daml` =
+  project
+    .in(file("token-standard/splice-api-token-transfer-events-v2"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value,
+    )
+
 lazy val `splice-api-token-transfer-instruction-v1-daml` =
   project
     .in(file("token-standard/splice-api-token-transfer-instruction-v1"))
@@ -583,6 +595,7 @@ lazy val `splice-token-standard-utils-daml` =
         (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-request-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-v2-daml` / Compile / damlBuild).value ++
@@ -858,6 +871,7 @@ lazy val `splice-amulet-daml` =
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-instruction-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-v1-daml` / Compile / damlBuild).value ++
@@ -879,7 +893,8 @@ lazy val `splice-amulet-test-daml` =
       BuildCommon.damlSettings,
       Compile / damlDependencies :=
         (`splice-amulet-daml` / Compile / damlBuild).value ++
-          (`splice-token-standard-test-v1-daml` / Compile / damlBuild).value,
+          (`splice-token-standard-test-v1-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-test-v2-daml` / Compile / damlBuild).value,
       Compile / damlEnableJavaCodegen := false,
     )
 
@@ -1340,6 +1355,21 @@ lazy val `apps-scan` =
             ),
             modules = List("pekko-http-v1.0.0", "circe"),
             pkg = "org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1",
+          ),
+          ScalaServer(
+            new File(
+              "token-standard/splice-api-token-transfer-instruction-v2/openapi/transfer-instruction-v2.yaml"
+            ),
+            pkg = "org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2",
+            modules = List("pekko-http-v1.0.0", "circe"),
+            customExtraction = true,
+          ),
+          ScalaClient(
+            new File(
+              "token-standard/splice-api-token-transfer-instruction-v2/openapi/transfer-instruction-v2.yaml"
+            ),
+            modules = List("pekko-http-v1.0.0", "circe"),
+            pkg = "org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2",
           ),
           ScalaServer(
             new File(

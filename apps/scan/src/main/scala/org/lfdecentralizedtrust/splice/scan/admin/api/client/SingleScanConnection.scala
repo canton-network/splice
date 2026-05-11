@@ -31,7 +31,9 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
+  HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
 }
@@ -73,14 +75,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BftSequencer
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
 
 /** Connection to the admin API of CC Scan. This is used by other apps
   * to query for the DSO party id.
@@ -154,6 +155,23 @@ class SingleScanConnection private[client] (
         ownerPartyIds,
         recordTimeMatch,
         asOfRound,
+      ),
+    )
+  }
+
+  override def getHoldingsSummaryAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId],
+      recordTimeMatch: Option[HoldingsSummaryRequestV1.RecordTimeMatch],
+  )(implicit tc: TraceContext): Future[Option[HoldingsSummaryResponseV1]] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetHoldingsSummaryAtV1(
+        at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        migrationId,
+        ownerPartyIds,
+        recordTimeMatch,
       ),
     )
   }
@@ -586,7 +604,7 @@ class SingleScanConnection private[client] (
     )
 
   def getTransferInstructionAcceptContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -596,8 +614,19 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionAcceptContext(instructionCid),
     )
 
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionAcceptContextV2(instructionCid),
+    )
+
   def getTransferInstructionRejectContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -608,7 +637,7 @@ class SingleScanConnection private[client] (
     )
 
   def getTransferInstructionWithdrawContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -663,10 +692,24 @@ class SingleScanConnection private[client] (
           transferinstructionv1.TransferFactory.ContractId,
           transferinstructionv1.TransferFactory_Transfer,
         ],
-        TransferFactoryWithChoiceContext.TransferKind,
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
     )
   ] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactory(choiceArgs))
+
+  def getTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    (
+        FactoryChoiceWithDisclosures[
+          transferinstructionv2.TransferFactory.ContractId,
+          transferinstructionv2.TransferFactory_Transfer,
+        ],
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+    )
+  ] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryV2(choiceArgs))
 
   def getTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,

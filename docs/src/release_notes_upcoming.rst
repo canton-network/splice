@@ -7,19 +7,16 @@
 
 .. release-notes:: Upcoming
 
-    - Scan app
+    - Scan UI
 
-.. .. release-notes:: Upcoming
-
-        - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
-          This required clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
-          This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
-          Specifically the ``app_activity_records`` field will not contain the
-          data which has been provided for the events which happened between the ``0.5.18`` and this release.
-          Note that the ``app_activity_records`` data already provided for events during this period is correct
-          and the network explorers who have ingested this data should keep a copy of it.
+      - Bring back the governance page that was removed in release 0.5.18.
 
     - Token Standard V2 (CIP-112)
+
+      - Notable callouts for Amulet changes:
+          - add a ``meta : Optional Metadata`` field to the ``AmuletRules.TransferOutput`` type and
+            the ``TransferPreapproval_SendV2`` choice
+          - properly classify the burn of ANS in the V2 token standard transaction history
 
       - Add preview of the V2 token standard APIs and implement them for Amulet
 
