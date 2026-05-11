@@ -19,6 +19,8 @@ describe('damlTimestampToOpenApiTimestamp', () => {
     '2026-05-11T12:00:00.000000Z': may1126noon,
     '2026-05-11T12:00:00.123Z': may1126noon + 123000,
     '2026-05-11T12:00:00.123456Z': may1126noon + 123456,
+    // just drop after micros, Daml won't produce them anyway
+    '2026-05-11T12:00:00.123456789Z': may1126noon + 123456,
   };
 
   it.each(Object.entries(timestamps))('%s -> %d', (input, expected) => {
