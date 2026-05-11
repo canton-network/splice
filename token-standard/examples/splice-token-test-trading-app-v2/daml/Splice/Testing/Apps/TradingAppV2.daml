@@ -97,7 +97,7 @@ data SettlementBatch
 
 
 -- | Leg of a trade.
-data Tradeleg = Tradeleg with
+data TradeLeg = TradeLeg with
     admin : Party
       -- ^ Admin party of the instrument being transferred.
     leg : V2.TransferLeg
@@ -108,7 +108,7 @@ splitLegsBy : Ord k => (leg -> k) -> [leg] -> Map.Map k [leg]
 splitLegsBy f legs = Map.fromListWithR (<>) [ (f leg, [leg]) | leg <- legs ]
 
 -- | Group transfer legs by the account that needs to authorize them.
-splitTradeLegsByAuthorizer : [Tradeleg] -> Map.Map V2.Account [(Party, V2.TransferLegSide)]
+splitTradeLegsByAuthorizer : [TradeLeg] -> Map.Map V2.Account [(Party, V2.TransferLegSide)]
 splitTradeLegsByAuthorizer legs = Map.fromListWithR (++) $ do
   tradeleg <- legs
   (authorizer, leg) <- transferLegSidesWithAuthorizer tradeleg.leg
@@ -117,7 +117,7 @@ splitTradeLegsByAuthorizer legs = Map.fromListWithR (++) $ do
 -- | A matched trade ready to settle.
 template OTCTrade with
     venue : Party
-    tradeLegs : [Tradeleg] -- ^ Transfers to settle.
+    tradeLegs : [TradeLeg] -- ^ Transfers to settle.
     createdAt : Time -- ^ When the matched trade was created on-ledger.
     settleAt : Time -- ^ When the trade should be settled by.
     settlementDeadline : Optional Time -- ^ Deadline for when the settlement should be completed.
@@ -294,7 +294,7 @@ mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade = V2.SettlementInfo with
 -- That allocation is created by the sender, and settleed with the authority of sender
 -- and receiver
 expectedTradeAllocationsV1
-  : V1.SettlementInfo -> [Tradeleg] -> TextMap.TextMap V1.AllocationSpecification
+  : V1.SettlementInfo -> [TradeLeg] -> TextMap.TextMap V1.AllocationSpecification
 expectedTradeAllocationsV1 settlementInfo transferLegs =
   TextMap.fromList $ do
     leg <- transferLegs

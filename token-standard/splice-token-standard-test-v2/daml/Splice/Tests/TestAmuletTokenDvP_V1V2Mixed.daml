@@ -402,7 +402,7 @@ runTest mkTest = do
               amount
               instrumentId = iid.id
               meta = emptyMetadata
-        pure TradingAppV2.Tradeleg with
+        pure TradingAppV2.TradeLeg with
           leg
           admin = iid.admin
 
