@@ -612,12 +612,10 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
   }
 
   def simpleTopology1SvWithSimTime(testName: String): EnvironmentDefinition =
-    // TODO(DACH-NY/cn-test-failures#8276) Remove protocol version overwrite when this is fixed
-    simpleTopology1Sv(testName).withSimTime.withProtocolVersion(ProtocolVersion.v34)
+    simpleTopology1Sv(testName).withSimTime
 
   def simpleTopology4SvsWithSimTime(testName: String): EnvironmentDefinition =
-    // TODO(DACH-NY/cn-test-failures#8276) Remove protocol version overwrite when this is fixed
-    simpleTopology4Svs(testName).withSimTime.withProtocolVersion(ProtocolVersion.v34)
+    simpleTopology4Svs(testName).withSimTime
 
   def preflightTopology(testName: String): EnvironmentDefinition = {
     fromResource("preflight-topology.conf", testName).clearConfigTransforms()
