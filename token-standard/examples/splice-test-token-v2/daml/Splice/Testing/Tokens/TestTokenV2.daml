@@ -7,7 +7,7 @@ module Splice.Testing.Tokens.TestTokenV2 where
 import DA.Action (when)
 import DA.Assert
 import DA.Foldable (forA_)
-import DA.List (dedup, dedupSort)
+import DA.List (dedupSort)
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as T
@@ -401,7 +401,7 @@ transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TI
 
     let
       newActionAuthorizers =
-        Map.insertWith (\x y -> dedup (x ++ y)) V2.TIA_Accept actors this.actionAuthorizers
+        insertWithUnion V2.TIA_Accept actors this.actionAuthorizers
       spec = transferInstructionStateMachineSpec this.transfer.sender this.transfer.receiver
       state = getState spec newActionAuthorizers
 

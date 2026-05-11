@@ -254,7 +254,7 @@ acceptTransferOffer registries actor instrCid = do
   batch <- mkTransferInstruction_AcceptV2 registries actor instrCid
   extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
--- TODO: Switch to batching
+-- TODO(#5303): Switch to batching
 rejectTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
 rejectTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
@@ -273,7 +273,7 @@ rejectTransferOffer registries actor instrCid = do
     V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
     _ -> None
 
--- TODO: Switch to batching
+-- TODO(#5303): Switch to batching
 withdrawTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
 withdrawTransferOffer registries actor instrCid = do
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
@@ -363,7 +363,6 @@ acceptAllocationInstructionV2
   -> Script V2.AllocationInstructionResult
 acceptAllocationInstructionV2 registries actor (instrCid, instr) = do
   Some instrView <- queryInterfaceContractId @V2.AllocationInstruction actor instrCid
-  let firstTl::_ = instrView.allocation.transferLegs
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
   (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
@@ -377,7 +376,7 @@ acceptAllocationInstructionV2 registries actor (instrCid, instr) = do
   pure result
 
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
--- TODO: Use Batching
+-- TODO(#5303): Use Batching
 withdrawAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
   -> Script (Optional (ContractId V2.AllocationInstruction))
@@ -398,7 +397,7 @@ withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
     _ -> None
 
 -- | Simulate a V2 wallet withdrawing an allocation from a V2 app.
--- TODO: Use Batching
+-- TODO(#5303): Use Batching
 withdrawAllocationV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView)
   -> Script (Optional (ContractId V2.Allocation))

@@ -31,6 +31,10 @@ data PartyConfig = PartyConfig with
 -- Note: this is but one possible way to configure account authorization rules.
 -- It was built to demonstrate a non-trivial rule-set and test that the `V2.TransferInstruction` APIs
 -- are sufficient for wallets to interact with the assets.
+--
+-- This AccountConfig allows for around twenty different authorization flows just for a simple transfer.
+-- It is intended to test all the possibilities the CIP-0112 account model offers. For actual implementaions,
+-- consider a simpler option.
 template AccountConfig
   with
     admin : Party
@@ -40,7 +44,7 @@ template AccountConfig
   where
     signatory account.owner, account.provider
     -- In this example, the admin accepts any Account configs agreed between owner and 
-    -- provider. They are an observer in order to be able to serve account
+    -- provider. The admin is an observer in order to be able to serve account
     -- configs as choice context.
     observer admin
     ensure isValidAccountConfig this && isSome account.provider
@@ -58,8 +62,8 @@ template AccountConfig
       do 
         require' ("(actor, authorizer)", (actor, authorizer)) isMemberR ("authorizationTransfers", authorizationTransfers this)
         
-        trasferInstructionView <- view <$> fetch instrCid
-        requireMatchExpected ("trasferInstruction.transfer.instrumentId.admin", trasferInstructionView.transfer.instrumentId.admin) admin
+        transferInstructionView <- view <$> fetch instrCid
+        requireMatchExpected ("trasferInstruction.transfer.instrumentId.admin", transferInstructionView.transfer.instrumentId.admin) admin
         
         case action of
           V2.TIA_Accept -> exercise instrCid (V2.TransferInstruction_Accept [authorizer] extraArgs)
@@ -200,7 +204,7 @@ authorizationTransferFromState actors action state spec authState accountMap =
                     else error $ "Unexpected: the authority transfer form " <> show actor <> " to " <> show authorizer <> " does not fully authorizer action " <> show action
                 _ -> error $ "Unexpected: multiple authority transfers possible for action " <> show action <> " : " <> show ts
       _ -> None
-    -- Now check that we wouldn't accidentally authorize the next state transition.
+    -- Now check whether we also authorize the next state transition.
     res = case oTransitionAuth of
       Some (_actor, authorizer, _cid, nextState) ->
         case Map.lookup action <$> Map.lookup nextState spec of
@@ -398,8 +402,8 @@ tryAdvanceState spec authState fromState = resultState
 
 -- Utility function to reverse a map action->[[Party]] to [Party]->[Action]
 -- and vice versa
-reverseMap : (Ord a, Ord b) => Map.Map a [b] -> Map.Map b [a]
-reverseMap m =
+invertMap : (Ord a, Ord b) => Map.Map a [b] -> Map.Map b [a]
+invertMap m =
   Map.fromListWithR (++) $
   concatMap (\(x, ys) -> map (, [x]) ys) $
   Map.toList m
@@ -410,7 +414,7 @@ mkAvailableActions : (Ord actionType, Show actionType, Ord stateType, Enum state
   -> AuthState actionType
   -> AccountConfigMap
   -> Map.Map [Party] [actionType]
-mkAvailableActions spec authState accountMap = reverseMap (Map.fromList nextActors)
+mkAvailableActions spec authState accountMap = invertMap (Map.fromList nextActors)
   where
     state = getState spec authState
     oPossibleTransitions = Map.toList <$> Map.lookup state spec
@@ -420,6 +424,14 @@ mkAvailableActions spec authState accountMap = reverseMap (Map.fromList nextActo
         map (\(action, (_, authSpec)) -> 
           (action, getNextActors action authSpec authState accountMap))
         possibleTransitions
+
+-- Set theoretic union for sets represented as sorted deduplicated lists.
+union : (Ord a) => [a] -> [a] -> [a]
+union x y = dedupSort (x ++ y)
+
+-- Insert into a map with values that are sets represented as sorted deduplicated lists.
+insertWithUnion : (Ord k, Ord v) => k -> [v] -> Map.Map k [v] -> Map.Map k [v]
+insertWithUnion = Map.insertWith union
 
 -- Advances an on-ledger state machine by calling transition functions.
 applyStateMachineTransitions
@@ -452,16 +464,17 @@ applyStateMachineTransitions this oSelf actors action mkStateMachine accountMap 
     -- First check the actors are allowed to authorize the action.
   let
     availableActions = mkAvailableActions spec authState accountMap
-    reverseAvailableActions = reverseMap availableActions
-    Some possibleActors = Map.lookup action reverseAvailableActions
+    invertedAvailableActions = invertMap availableActions
+    possibleActors = fromSomeNote 
+      ("Unexpected: applyStateMachineTransitions called with unavailable action " <> show action) 
+      $ Map.lookup action invertedAvailableActions
 
   checkActors actors possibleActors
 
   -- Second apply the new authorization.
   let
     -- Compute the new available actions after adding the actors.
-    newAuthState =
-      Map.insertWith (\x y -> dedup (x ++ y)) action actors authState
+    newAuthState = insertWithUnion action actors authState
     stateAfter = getState spec newAuthState
     newAvailableActions = mkAvailableActions spec newAuthState accountMap
 
@@ -552,6 +565,7 @@ extractAccountConfigMap admin extraArgs as = do
   suppliedMap <- Map.fromList <$>
     mapA (\cid -> do
         config <- fetch @AccountConfig (coerceContractId cid)
+        requireMatchExpected ("admin on supplied AccountConfig", config.admin) admin 
         return (config.account, (config, Some (coerceContractId cid)))
       )
       cids
