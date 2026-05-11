@@ -10,3 +10,8 @@
     - Scan UI
 
       - Bring back the governance page that was removed in release 0.5.18.
+
+    - Wallet UI
+
+      - Fix a corner case in the wallet Allocations UI where invalid values would be passed to ``/v0/allocations`` when creating allocations from allocation requests.
+        This could manifest as a browser error when clicking ``Accept`` on an allocation request.
