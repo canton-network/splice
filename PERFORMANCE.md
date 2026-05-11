@@ -58,7 +58,7 @@ gcloud storage ls --long --recursive 'gs://mainnet-history-dumps/**'
 gcloud storage cp gs://mainnet-history-dumps/mainnet_big_update.json /tmp/mainnet_big_update.json
 
 # Upload a new test data file
-gcloud storage cp ./my_new_dump.json gs://mainnet-history-dumps/my_new_dump.json
+gcloud storage cp ./new_dump.json gs://mainnet-history-dumps/new_dump.json
 ```
 
 # Performance regression detection
@@ -67,7 +67,8 @@ Per-test thresholds are defined in [`.github/store-perf-thresholds.json`](.githu
 The GHA workflow creates GH issues when a test exceeds its threshold.
 The engineers on the CI monitoring rotation are responsible for triaging these issues and assigning them to the relevant
 teams.
-Historical performance data is available in Grafana: https://grafana.splice.network.canton.global/d/splice-perf-ingestion/store-ingestion-performance
+Historical performance data is available in
+Grafana: https://grafana.splice.network.canton.global/d/splice-perf-ingestion/store-ingestion-performance
 
 # Tuning performance
 
@@ -97,14 +98,13 @@ metrics show. Run at least the tests two times and also cross-check at least two
 ### 4. Devise experiments
 
 Translate the hypothesis into the smallest possible change that would prove or
-disprove it, e.g.:
+disprove it. Better change one variable per experiment so you can attribute any delta to a single
+cause. E.g. changes:
 
-- Batch the extra query.
-- Add an index, or remove a redundant one.
-- Increase / decrease DB `max-connections`, batch size, or parallelism.
-
-Better change one variable per experiment so you can attribute any delta to a single
-cause.
+- Batch the query
+- Add an index, or remove a redundant one
+- Increase / decrease DB `max-connections` or batch size
+- Enable / disable extra processing added in app code
 
 ### 5. Run the experiment locally
 
@@ -114,24 +114,21 @@ cause.
 3. Re-run the same test, with the same data file and the same Postgres
    container, Compare the new metrics JSON against the baseline.
 
-A local run is enough when:
-- the metric you're chasing moves clearly (well outside run-to-run noise), and
-- no other metric regresses.
+A local run give you enough signals if the metric you're chasing moves clearly,
+but always verify the changes on CI, which is the baseline infrastructure we use.
 
-### 6. If unsure, validate on GHA
+### 6. Validate on CI
 
 Push the branch and trigger the perf workflow manually:
 
 1. Trigger test manually - see [Running manually](#manually)
-2. Wait for the run to finish, then compare its Grafana panels against recent
-   `main` runs.
-3. Only land the change once the CI-run metrics confirm the improvement and
-   show no regression elsewhere.
+2. Wait for the run to finish, then compare its metrics data (from Grafana or JSON) against recent `main` runs
+3. Merge the change once the CI-run metrics confirm the improvement and show no regression elsewhere
 
-### 7. Lock it in
+### 7. Finalize
 
 - If the new numbers are meaningfully better, update the relevant threshold in
-  [`Thresholds`](.github/store-perf-thresholds.json) so
-  future regressions are caught against the new bar.
+  [`Thresholds`](.github/store-perf-thresholds.json) so future regressions
+  are caught against the new thresholds.
 - Mention the hypothesis, the experiment, and the before/after numbers in the
   PR description so the next person tuning this code has some context.
