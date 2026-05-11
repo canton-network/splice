@@ -10,8 +10,15 @@ import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
+import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
+import org.lfdecentralizedtrust.splice.codegen.java.splice.{
+  cometbft as cometbftCodegen,
+  dsorules as dsorulesCodegen,
+}
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
@@ -21,6 +28,9 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, StoreTestBase, TcsStore}
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
 import slick.jdbc.JdbcProfile
+
+import java.util.{Collections, Optional}
+import scala.jdk.CollectionConverters.*
 
 class DbScanRewardsReferenceStoreTest
     extends StoreTestBase
@@ -180,6 +190,54 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
+    "lookupSvParticipantIdsAsOf returns the SV participants from the DsoRules active at a given time" in {
+      val store = mkStore()
+      val sv1Pid = mkParticipantId("sv1")
+      val sv2Pid = mkParticipantId("sv2")
+      val sv3Pid = mkParticipantId("sv3")
+
+      val rulesV1 = dsoRules(
+        svs = Map(
+          userParty(11).toProtoPrimitive -> svInfo("sv1", sv1Pid),
+          userParty(12).toProtoPrimitive -> svInfo("sv2", sv2Pid),
+        )
+      ).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val rulesV2 = dsoRules(
+        svs = Map(
+          userParty(11).toProtoPrimitive -> svInfo("sv1", sv1Pid),
+          userParty(13).toProtoPrimitive -> svInfo("sv3", sv3Pid),
+        )
+      ).copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+
+        // Ingest v1 at t=100, swap to v2 at t=300.
+        _ <- sync1.create(rulesV1, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.archive(rulesV1, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(rulesV2, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+
+        // Before ingestion start
+        emptyResult <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(50))
+        _ = emptyResult shouldBe empty
+
+        atV1 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(100))
+        _ = atV1 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv2Pid.uid.toProtoPrimitive)
+
+        midV1 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(150))
+        _ = midV1 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv2Pid.uid.toProtoPrimitive)
+
+        atV2 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(300))
+        _ = atV2 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv3Pid.uid.toProtoPrimitive)
+      } yield succeed
+    }
+
     "lookupActiveOpenMiningRounds" in {
       val store = mkStore()
       // Timeline (ingestion start = 250, earliest archived_at):
@@ -251,6 +309,56 @@ class DbScanRewardsReferenceStoreTest
   private def ts(epochSecond: Long): CantonTimestamp =
     CantonTimestamp.ofEpochSecond(epochSecond)
 
+  private def svInfo(name: String, participant: ParticipantId): dsorulesCodegen.SvInfo =
+    new dsorulesCodegen.SvInfo(
+      name,
+      new Round(0L),
+      1L,
+      participant.toProtoPrimitive,
+    )
+
+  private def dsoRules(
+      svs: Map[String, dsorulesCodegen.SvInfo]
+  ) = {
+    val templateId = dsorulesCodegen.DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID
+    val newSynchronizerId = "new-domain-id"
+    val template = new dsorulesCodegen.DsoRules(
+      dsoParty.toProtoPrimitive,
+      1,
+      svs.asJava,
+      Collections.emptyMap(),
+      dsoParty.toProtoPrimitive,
+      new dsorulesCodegen.DsoRulesConfig(
+        1,
+        1,
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new decentralizedsynchronizerCodegen.SynchronizerNodeConfigLimits(
+          new cometbftCodegen.CometBftConfigLimits(1, 1, 1, 1, 1)
+        ),
+        1,
+        new decentralizedsynchronizerCodegen.DsoDecentralizedSynchronizerConfig(
+          Collections.emptyMap(),
+          newSynchronizerId,
+          newSynchronizerId,
+        ),
+        Optional.empty(),
+        Optional.empty(),
+        Optional.empty(),
+      ),
+      Collections.emptyMap(),
+      true,
+    )
+    contract(
+      identifier = templateId,
+      contractId = new dsorulesCodegen.DsoRules.ContractId(nextCid()),
+      payload = template,
+    )
+  }
+
   override lazy val profile: JdbcProfile = storage.api.jdbcProfile
 
   protected val sync1: SynchronizerId = SynchronizerId.tryFromString("domain1::domain")
@@ -259,7 +367,7 @@ class DbScanRewardsReferenceStoreTest
     val participantId = mkParticipantId("DbScanRewardsReferenceStoreTest")
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
-        DarResources.amulet.all
+        DarResources.amulet.all ++ DarResources.dsoGovernance.all
       )
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)

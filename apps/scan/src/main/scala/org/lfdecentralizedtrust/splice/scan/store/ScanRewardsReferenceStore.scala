@@ -60,6 +60,13 @@ trait ScanRewardsReferenceStore extends AppStore {
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Set[String]]
 
+  /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
+    * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.
+    */
+  def lookupSvParticipantIdsAsOf(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Set[String]]
+
   override lazy val acsContractFilter: MultiDomainAcsStore.ContractFilter[
     ScanRewardsReferenceStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
@@ -134,6 +141,9 @@ object ScanRewardsReferenceStore {
               featuredAppRightProvider =
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
+        },
+        mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
+          ScanRewardsReferenceStoreRowData(contract = contract)
         },
       ),
       interfaceFilters = Map.empty,

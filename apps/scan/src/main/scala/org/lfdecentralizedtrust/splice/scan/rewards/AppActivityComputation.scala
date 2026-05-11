@@ -75,12 +75,29 @@ class AppActivityComputation(
           case (summary, verdict, true) =>
             roundInfoByTime.get(summary.sequencingTime) match {
               case Some((roundNumber, roundOpensAt)) =>
-                rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(roundOpensAt).map { providers =>
-                  (
-                    summary,
-                    verdict,
-                    computeForSingleVerdict(summary, verdict, roundNumber, providers),
+                for {
+                  providers <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(roundOpensAt)
+                  svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
+                    roundOpensAt
                   )
+                } yield {
+                  if (svParticipantIds.isEmpty) {
+                    // We should never hit this; as we have round info in store and must have DsoRules also
+                    logger.error(
+                      s"No DsoRules data found as of roundOpensAt=$roundOpensAt, skipping activity record computation for sequencingTime=${summary.sequencingTime}"
+                    )
+                    (summary, verdict, None)
+                  } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
+                    // SV-submitted transactions don't burn traffic, so they
+                    // must not contribute to app activity.
+                    (summary, verdict, None)
+                  } else {
+                    (
+                      summary,
+                      verdict,
+                      computeForSingleVerdict(summary, verdict, roundNumber, providers),
+                    )
+                  }
                 }
               case None =>
                 // Skip activity record computation as we don't have the necessary round data ingested.

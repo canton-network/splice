@@ -9,7 +9,9 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
@@ -44,7 +46,7 @@ class DbScanRewardsReferenceStore(
       acsTableName = ScanRewardsReferenceTables.acsTableName,
       interfaceViewsTableNameOpt = None,
       acsStoreDescriptor = StoreDescriptor(
-        version = 1,
+        version = 2,
         name = "DbScanRewardsReferenceStore",
         party = key.dsoParty,
         participant = participantId,
@@ -109,6 +111,27 @@ class DbScanRewardsReferenceStore(
   )(implicit tc: TraceContext): Future[Set[String]] =
     lookupFeaturedAppRightsAsOf(asOf)
       .map(_.map(_.contract.payload.provider).toSet)
+
+  override def lookupSvParticipantIdsAsOf(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Set[String]] =
+    tcsStore.listAllContractsAsOf(DsoRules.COMPANION, asOf).map {
+      case Seq() => Set.empty[String]
+      case Seq(c) =>
+        import scala.jdk.CollectionConverters.*
+        c.contract.payload.svs.values().asScala.toSet[splice.dsorules.SvInfo].map { info =>
+          // svInfo.participantId is in the proto-primitive form accepted by
+          // ParticipantId.tryFromProtoPrimitive (with `PAR::` prefix), while
+          // verdict.submittingParticipantUid carries only the UID portion.
+          // Normalize to the latter for direct comparison.
+          ParticipantId.tryFromProtoPrimitive(info.participantId).uid.toProtoPrimitive
+        }
+      case multiple =>
+        throw new IllegalStateException(
+          s"Expected at most one active DsoRules contract as of $asOf, but found ${multiple.size}: " +
+            multiple.map(_.contract.contractId.contractId).mkString(", ")
+        )
+    }
 
   def lookupOpenMiningRoundsActiveWithin(
       lowerBoundIncl: CantonTimestamp,
