@@ -16,7 +16,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * table row that records when ingestion started and which versions
   * are running.
   *
-  * On the first batch that produces activity records, [[ensureIfReady]]
+  * On the first batch that produces activity records, [[ensure]]
   * creates the meta row storing the current code/user version and the
   * earliest ingested round. On subsequent batches it is a no-op. If a
   * version downgrade is detected, it returns [[DowngradeDetected]] so
