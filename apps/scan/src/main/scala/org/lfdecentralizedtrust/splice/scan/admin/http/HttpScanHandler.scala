@@ -180,6 +180,12 @@ class HttpScanHandler(
 
   private val store = storeWithIngestion.store
 
+  /** Returns true if the record time is at or after the completeness boundary.
+    * If no boundary is set (ingestion hasn't started), returns false.
+    */
+  private def isAfterCompletenessBoundary(recordTime: CantonTimestamp): Boolean =
+    appActivityStoreO.flatMap(_.startedIngestingAt).exists(recordTime.toMicros >= _)
+
   override protected val workflowId: String = this.getClass.getSimpleName
   override protected val votesStore: VotesStore = store
   override protected val validatorLicensesStore: AppStore = store
@@ -1029,10 +1035,10 @@ class HttpScanHandler(
           for {
             appActivityRecordO <-
               if (serveAppActivityRecordsAndTraffic)
-                verdictRowIdO match {
-                  case Some(rowId) =>
+                (verdictRowIdO, verdictWithViewsO) match {
+                  case (Some(rowId), Some((v, _))) if isAfterCompletenessBoundary(v.recordTime) =>
                     eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
-                  case None => Future.successful(None)
+                  case _ => Future.successful(None)
                 }
               else Future.successful(None)
           } yield {
@@ -1109,7 +1115,9 @@ class HttpScanHandler(
           limit = PageLimit.tryCreate(pageSize, updateHistoryMaxPageSize),
         )
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
-          verdictWithViewsO.map { case (v, _) => v.rowId }
+          verdictWithViewsO.collect {
+            case (v, _) if isAfterCompletenessBoundary(v.recordTime) => v.rowId
+          }
         }
         appActivityRecordMap <-
           if (serveAppActivityRecordsAndTraffic) eventStore.getAppActivityRecords(verdictRowIds)
