@@ -123,7 +123,7 @@ test_locked_funds = do
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let [_, settleResult] = result.allocationSettleResults
-  let Some aliceAllocationCid = settleResult.nextIterationAllocationCid
+  let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
 
   -- payout of 0.5 Amulet to alice, and 0.5 Amulet to the provider
   WalletClientV2.checkUnlockedBalance alice instrId 900.5
@@ -171,7 +171,7 @@ test_locked_funds = do
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let [_, settleResult] = result.allocationSettleResults
-  let Some aliceAllocationCid = settleResult.nextIterationAllocationCid
+  let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
 
   -- there is exactly one allocation for alice
   [(cid, Some aliceAllocView)] <- queryInterface @V2.Allocation alice
@@ -263,7 +263,7 @@ test_refresh_and_withdrawal = do
         result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
           exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
         let [settleResult] = result.allocationSettleResults
-        let Some aliceAllocationCid = settleResult.nextIterationAllocationCid
+        let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
         Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
         pure (aliceAllocationCid, aliceAllocView)
 

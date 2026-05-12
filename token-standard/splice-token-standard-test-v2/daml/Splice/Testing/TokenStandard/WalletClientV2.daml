@@ -57,6 +57,8 @@ module Splice.Testing.TokenStandard.WalletClientV2
     createBatchingUtility,
 
     -- ** Allocations
+    extractNextIterationAllocationCid,
+
     mkAllocationFactory_AllocateV1,
     mkAllocationFactory_AllocateV2,
     mkAllocationRequest_AcceptV2,
@@ -116,7 +118,6 @@ import Splice.Testing.TokenStandard.WalletClient qualified as WalletClientV1
 import Splice.Testing.Utils
 
 import Daml.Script
-import Splice.TokenStandard.Utils (allocationAdmin)
 
 -- | List all holdings of a specific instrument owned by a party.
 listHoldings : Party -> V2.InstrumentId -> Script [(ContractId V2.Holding, V2.HoldingView)]
@@ -348,6 +349,12 @@ listAllocationRequestsV2 tradingAccount actor = do
   reqs <- queryInterface @V2.AllocationRequest actor
   return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, tradingAccount == reqView.authorizer ]
 
+extractNextIterationAllocationCid : V2.AllocationResult -> Optional (ContractId V2.Allocation)
+extractNextIterationAllocationCid allocResult =
+  case allocResult.output of
+    V2.AllocationResult_Settled with nextIterationAllocationCid -> nextIterationAllocationCid
+    _ -> None
+
 -- | Simulate a V2 wallet accepting an allocation request from a V1 app.
 acceptAllocationRequestV1
   :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView
@@ -370,7 +377,7 @@ acceptAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
   -> Script V2.AllocationInstructionResult
 acceptAllocationInstructionV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
   (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
     submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
@@ -388,7 +395,7 @@ withdrawAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
   -> Script (Optional (ContractId V2.AllocationInstruction))
 withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
   context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
   (res, _change) <-
     extractAndCheckTxHistory (Map.keys registries) $
@@ -409,7 +416,7 @@ withdrawAllocationV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView)
   -> Script (Optional (ContractId V2.Allocation))
 withdrawAllocationV2 registries actor (allocCid, allocView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin allocView.allocation)
+  registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
   context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
   (res, _change) <-
     extractAndCheckTxHistory (Map.keys registries) $

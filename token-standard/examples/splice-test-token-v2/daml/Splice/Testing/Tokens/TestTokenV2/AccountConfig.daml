@@ -13,11 +13,9 @@ import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils (checkActors, requireMatchExpected, isMemberR, require', accountParties)
 import Splice.Api.Token.MetadataV1 (AnyValue(..), ExtraArgs)
 import DA.List (dedupSort, dedup, (\\))
-import DA.Assert ((===))
 import DA.Optional (whenSome, fromSomeNote, isSome, isNone, fromOptional)
 import qualified DA.TextMap as TextMap
 import DA.Action (foldlA)
-import DA.Foldable (forA_)
 import qualified DA.Traversable as Traversable
 
 
@@ -88,8 +86,8 @@ template AccountConfig
         assertMsg ("Authorization transfer from " <> show actor <> " to " <> show authorizer <> " is not allowed.")
           ((actor, authorizer) `elem` authorizationTransfers this)
 
-        allocation <- view <$> fetch allocationCid
-        forA_ allocation.allocation.transferLegs (\leg -> admin === leg.instrumentId.admin)
+        allocView <- view <$> fetch allocationCid
+        requireMatchExpected ("allocation.admin", allocView.allocation.admin) admin
 
         case action of
           V2.AA_Withdraw -> exercise allocationCid (V2.Allocation_Withdraw [authorizer] extraArgs)
@@ -111,8 +109,8 @@ template AccountConfig
         assertMsg ("Authorization transfer from " <> show actor <> " to " <> show authorizer <> " is not allowed.")
           ((actor, authorizer) `elem` authorizationTransfers this)
 
-        instr <- view <$> fetch instrCid
-        forA_ instr.allocation.transferLegs (\leg -> admin === leg.instrumentId.admin)
+        instrView <- view <$> fetch instrCid
+        requireMatchExpected ("allocation.admin", instrView.allocation.admin) admin
 
         case action of
           V2.AIA_Accept -> exercise instrCid (V2.AllocationInstruction_Accept [authorizer] extraArgs)
