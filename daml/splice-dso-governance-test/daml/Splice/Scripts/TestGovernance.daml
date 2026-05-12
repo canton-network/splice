@@ -25,6 +25,7 @@ import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
 import Splice.CometBft
 import Splice.DecentralizedSynchronizer
+import Splice.DSO.GovernanceVoter
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry.Parameters
@@ -33,6 +34,56 @@ import Splice.Testing.Utils
 
 -- Vote Requests
 ----------------
+
+-- | Tests the governance-voter binding lifecycle and authorization.
+testSvGovernanceVoterBindingLifecycle : Script ()
+testSvGovernanceVoterBindingLifecycle = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter <- allocateParty "governance-voter"
+  otherParty <- allocateParty "wrong-governance-voter"
+
+  -- Bootstrap/self-voting remains valid.
+  selfBindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = sv1
+  Some selfBinding <- queryContractId dso selfBindingCid
+  selfBinding.governanceVoter === sv1
+
+  -- The DSO party is never a valid governance voter.
+  submitMustFail sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = dso
+
+  -- Only the represented SV can declare the binding.
+  submitMustFail governanceVoter $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter
+
+  rotateResult <- submit sv1 $ exerciseCmd selfBindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter
+  None <- queryContractId dso selfBindingCid
+  Some rotatedBinding <- queryContractId dso rotateResult.bindingCid
+  rotatedBinding.governanceVoter === governanceVoter
+
+  -- No-op rotation is rejected.
+  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter
+
+  -- Rotation to the DSO party is rejected.
+  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = dso
+
+  -- Non-SV parties cannot rotate or clear the binding.
+  submitMustFail otherParty $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = otherParty
+  submitMustFail otherParty $ exerciseCmd rotateResult.bindingCid ClearGovernanceVoter
+
+  submit sv1 $ exerciseCmd rotateResult.bindingCid ClearGovernanceVoter
+  None <- queryContractId dso rotateResult.bindingCid
+  pure ()
 
 -- | Tests the Phase 1 governance-voter action taxonomy.
 testGovernanceVoterActionTaxonomy : Script ()

@@ -1,0 +1,41 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.DSO.GovernanceVoter where
+
+import Splice.Util
+
+data RotateGovernanceVoterResult = RotateGovernanceVoterResult with
+    bindingCid : ContractId SvGovernanceVoter
+  deriving (Eq, Show)
+
+data ClearGovernanceVoterResult = ClearGovernanceVoterResult
+  deriving (Eq, Show)
+
+template SvGovernanceVoter
+  with
+    dso : Party
+    sv : Party
+    governanceVoter : Party
+  where
+    signatory sv
+    observer dso, governanceVoter
+
+    ensure
+      sv /= dso
+        && governanceVoter /= dso
+
+    choice RotateGovernanceVoter : RotateGovernanceVoterResult
+      with
+        newGovernanceVoter : Party
+      controller sv
+      do
+        require "New governance voter must differ" (newGovernanceVoter /= governanceVoter)
+        require "Governance voter must not be dso" (newGovernanceVoter /= dso)
+        bindingCid <- create this with governanceVoter = newGovernanceVoter
+        pure RotateGovernanceVoterResult with ..
+
+    choice ClearGovernanceVoter : ClearGovernanceVoterResult
+      controller sv
+      do
+        pure ClearGovernanceVoterResult
