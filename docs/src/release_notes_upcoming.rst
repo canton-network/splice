@@ -7,6 +7,10 @@
 
 .. release-notes:: Upcoming
 
+    - Wallet & CNS UIs
+
+      - The wallet and CNS UIs now support optionally configuring the OAuth token scope, to support IAM providers that require doing so.
+
     - Scan UI
 
       - Bring back the governance page that was removed in release 0.5.18.
