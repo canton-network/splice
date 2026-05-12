@@ -357,12 +357,11 @@ acceptAllocationRequestV2 registries actor (reqCid, req) = do
   executeTSABatch registries actor batch
 
 -- | Simulate a V2 wallet accepting an allocation instruction from a V2 app.
--- TODO: Use Batching
+-- TODO(#5303): Use Batching
 acceptAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
   -> Script V2.AllocationInstructionResult
-acceptAllocationInstructionV2 registries actor (instrCid, instr) = do
-  Some instrView <- queryInterfaceContractId @V2.AllocationInstruction actor instrCid
+acceptAllocationInstructionV2 registries actor (instrCid, instrView) = do
   registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin instrView.allocation)
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
   (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
