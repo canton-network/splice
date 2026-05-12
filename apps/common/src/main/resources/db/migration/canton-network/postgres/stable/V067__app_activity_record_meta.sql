@@ -25,10 +25,11 @@ create table app_activity_record_meta
     )
 );
 
--- Truncate downstream reward-accounting tables. Data ingested before
--- this migration has no meta row; clearing the derived tables ensures
--- they are re-computed within the new completeness boundary.
-truncate table app_activity_party_totals,
+-- Truncate activity records and downstream reward-accounting tables.
+-- Data ingested before this migration has no meta row; clearing it
+-- ensures consistency between the meta and activity tables.
+truncate table app_activity_record_store,
+               app_activity_party_totals,
                app_activity_round_totals,
                app_reward_party_totals,
                app_reward_round_totals,
