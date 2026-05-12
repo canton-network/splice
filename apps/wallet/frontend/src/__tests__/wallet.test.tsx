@@ -1478,42 +1478,8 @@ function getAllocationRequestV2(): AllocationRequestViewV2 {
             instrumentId: 'Amulet',
             amount: '3',
             meta: { values: {} },
-            side: 'ReceiverSide',
-            otherside: { owner: alicePartyId, provider: null, id: '' },
-          },
-          {
-            transferLegId: 'acceptable',
-            instrumentId: 'Amulet',
-            amount: '3',
-            meta: { values: {} },
             side: 'SenderSide',
             otherside: { owner: bobPartyId, provider: null, id: '' },
-          },
-
-          {
-            transferLegId: 'different_sender',
-            instrumentId: 'Amulet',
-            amount: '3',
-            meta: { values: {} },
-            side: 'ReceiverSide',
-            otherside: { owner: bobPartyId, provider: null, id: '' },
-          },
-          {
-            transferLegId: 'different_sender',
-            instrumentId: 'Amulet',
-            amount: '3',
-            meta: { values: {} },
-            side: 'SenderSide',
-            otherside: { owner: alicePartyId, provider: null, id: '' },
-          },
-
-          {
-            transferLegId: 'different_instrument',
-            instrumentId: 'Another',
-            amount: '3',
-            meta: { values: {} },
-            side: 'ReceiverSide',
-            otherside: { owner: alicePartyId, provider: null, id: '' },
           },
           {
             transferLegId: 'different_instrument',
@@ -1526,7 +1492,7 @@ function getAllocationRequestV2(): AllocationRequestViewV2 {
         ],
       },
     ],
-    availableActions: emptyMap(),
+    availableActions: [],
     meta: { values: {} },
   };
 }
