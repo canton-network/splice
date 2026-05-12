@@ -1,14 +1,12 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.topology.PartyId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
-  TransferLeg as TransferLegV1
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg as TransferLegV1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2.{
   AllocationSpecification,
   SettlementInfo,
-  TransferLeg as TransferLegV2,
   Reference as SettlementReference,
+  TransferLeg as TransferLegV2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -16,6 +14,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestC
 import org.lfdecentralizedtrust.splice.util.{
   FrontendLoginUtil,
   SpliceUtil,
+  TokenStandardAccount,
   WalletFrontendTestUtil,
   WalletTestUtil,
 }
@@ -120,14 +119,14 @@ class AllocationsFrontendIntegrationTest
           eventuallyClickOn(id(s"create-allocation-transfer-leg-sender-$index"))
           setAnsField(
             textField(s"create-allocation-transfer-leg-sender-$index"),
-            transferLeg.sender.owner,
-            transferLeg.sender.owner,
+            TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
+            TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
           )
           eventuallyClickOn(id(s"create-allocation-transfer-leg-receiver-$index"))
           setAnsField(
             textField(s"create-allocation-transfer-leg-receiver-$index"),
-            transferLeg.receiver.owner,
-            transferLeg.receiver.owner,
+            TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.receiver),
+            TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.receiver),
           )
           eventuallyClickOn(id("create-allocation-0-amulet-amount"))
           numberField(s"create-allocation-$index-amulet-amount").value = ""
@@ -465,8 +464,8 @@ class AllocationsFrontendIntegrationTest
         legId = transferLeg.transferLegId,
         instrumentId = transferLeg.instrumentId,
         amount = transferLeg.amount,
-        sender = transferLeg.sender.owner,
-        receiver = transferLeg.receiver.owner,
+        sender = TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
+        receiver = TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.receiver),
       )
     }
   }

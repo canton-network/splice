@@ -31,7 +31,7 @@ import Splice.Testing.Tokens.TestTokenV2.AccountConfig (AccountConfig)
 import DA.Action (foldlA, when)
 import DA.Functor (void)
 import DA.Foldable (sequence_)
-import DA.Optional (fromSome)
+import DA.Optional (fromSome, fromSomeNote)
 
 
 -- Shared test setup
@@ -39,18 +39,19 @@ import DA.Optional (fromSome)
 
 make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
 make_account_if_missing env config = do
+  let owner = fromSomeNote ("Unexpected special account: " <> show config.account) config.account.owner
   -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
         id = "X"
         admin = env.testTokenV2.admin
 
-  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
+  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account owner instrX
 
   -- Create an AccountConfig contract as needed.
   case config.account.provider of
     None -> return ()
     Some provider -> do
-      oAccount <- queryFilter @AccountConfig config.account.owner (\ac -> ac.account == config.account)
+      oAccount <- queryFilter @AccountConfig owner (\ac -> ac.account == config.account)
       case oAccount of
         [(_, config')] -> assertMsg ("Account already exists with different config: " <> show config) (config' == config)
         [] -> do
@@ -58,7 +59,7 @@ make_account_if_missing env config = do
             createCmd AccountConfig.AccountProposal with
               config
 
-          submit config.account.owner do
+          submit owner do
             exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
 
           return ()
@@ -156,7 +157,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
   let
     accountConfig = mkac "authorizer" env.testTokenV2.admin authorizer provider
     voidAccount = V2.Account with
-      owner = fromSome $ partyFromText "void"
+      owner = Some $ fromSome $ partyFromText "void"
       provider = None
       id = ""
 

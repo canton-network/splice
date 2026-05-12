@@ -18,13 +18,14 @@ module Splice.TokenStandard.Utils.Internal.Events (
 
   logMint,
   logBurn,
-  logNonEmptyChange,
+  logHoldingsChange,
   logTransfer,
   logAllocationSettlement,
   logMergeSplit,
 ) where
 
 import DA.Action (void, unless)
+import DA.Optional (isNone)
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
@@ -57,13 +58,13 @@ burnAccountId = tokenStandardV2Namespace <> "burn"
 
 mintAccount : Party -> V2.Account
 mintAccount p = V2.Account with
-  owner = p
+  owner = None
   provider = None
   id = mintAccountId
 
 burnAccount : Party -> V2.Account
 burnAccount p = V2.Account with
-  owner = p
+  owner = None
   provider = None
   id = burnAccountId
 
@@ -76,56 +77,54 @@ allocationToTransferEventLegSide : AllocationV2.TransferLegSide -> TransferEvent
 allocationToTransferEventLegSide (AllocationV2.TransferLegSide with side; ..) =
   TransferEventsV2.TransferLegSide with side = allocationToTransferEventSide side; ..
 
--- | Convenience function to avoid logging change events that report neither a holdings change nor a transfer leg.
-logNonEmptyChange : ContractId TransferEventsV2.EventLog -> TransferEventsV2.EventLog_HoldingsChange -> Update ()
-logNonEmptyChange eventLogCid arg = do
-  unless (null arg.transferLegSides && null arg.inputHoldingCids && null arg.outputHoldingCids) $
+-- | Convenience function to avoid logging:
+--   - empty holding changes
+--   - holding chagnes for special accounts (e.g., mint and burn accounts)
+--
+-- Use this function instead of direct exercises on the event log.
+logHoldingsChange : ContractId TransferEventsV2.EventLog -> TransferEventsV2.EventLog_HoldingsChange -> Update ()
+logHoldingsChange eventLogCid arg = do
+  unless (null arg.transferLegSides && null arg.inputHoldingCids && null arg.outputHoldingCids || isNone arg.account.owner ) $
     void $ exercise eventLogCid arg
 
 logMint
   : ContractId TransferEventsV2.EventLog -> V2.Account -> Decimal -> V2.InstrumentId -> Metadata -> [ContractId V2.Holding]
-  -> Update TransferEventsV2.EventLog_HoldingsChangeResult
+  -> Update ()
 logMint factoryCid receiver amount instrumentId meta outputHoldingCids = do
   let leg = TransferEventsV2.TransferLegSide with
         transferLegId = "mint"
         side = TransferEventsV2.ReceiverSide
-        otherside = V2.Account with
-          owner = instrumentId.admin
-          provider = None
-          id = mintAccountId
+        otherside = mintAccount instrumentId.admin
         instrumentId = instrumentId.id
         amount
         meta
-  exercise factoryCid TransferEventsV2.EventLog_HoldingsChange with
+  logHoldingsChange factoryCid TransferEventsV2.EventLog_HoldingsChange with
     admin = instrumentId.admin
     account = receiver
     inputHoldingCids = []
     transferLegSides = [leg]
     outputHoldingCids
-    observers = accountParties receiver
+    observers = accountParties instrumentId.admin receiver
     extraArgs = emptyExtraArgs
 
 logBurn
   : ContractId TransferEventsV2.EventLog -> V2.Account -> Decimal -> V2.InstrumentId -> Metadata -> [ContractId V2.Holding]
-  -> Update TransferEventsV2.EventLog_HoldingsChangeResult
+  -> Update ()
 logBurn factoryCid sender amount instrumentId meta inputHoldingCids = do
   let leg = TransferEventsV2.TransferLegSide with
         transferLegId = "burn"
         side = TransferEventsV2.SenderSide
-        otherside = V2.Account with
-          owner = instrumentId.admin
-          provider = None
-          id = burnAccountId
+        otherside = burnAccount instrumentId.admin
         instrumentId = instrumentId.id
         amount
         meta
-  exercise factoryCid TransferEventsV2.EventLog_HoldingsChange with
+  logHoldingsChange factoryCid TransferEventsV2.EventLog_HoldingsChange with
     admin = instrumentId.admin
     account = sender
     inputHoldingCids
     transferLegSides = [leg]
     outputHoldingCids = []
-    observers = accountParties sender
+    observers = accountParties instrumentId.admin sender
     extraArgs = emptyExtraArgs
 
 -- | Log transfer events for the settlement of an allocation.
@@ -137,13 +136,13 @@ logAllocationSettlement
   -> Update ()
 logAllocationSettlement eventLogCid inputHoldingCids allocation outputHoldingCids = do
   let settlementId = allocation.settlement.settlementRef.id
-  void $ logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
     admin = allocation.admin
     account = allocation.authorizer
     inputHoldingCids
     transferLegSides = map allocationToTransferEventLegSide allocation.transferLegSides
     outputHoldingCids
-    observers = accountParties allocation.authorizer
+    observers = accountParties allocation.admin allocation.authorizer
     extraArgs = ExtraArgs with
       context = emptyChoiceContext
       meta = reasonToMeta "settle allocation" emptyMetadata
@@ -168,42 +167,42 @@ logTransfer eventLogCid transfer senderOutputHoldingCids receiverOutputHoldingCi
   let transferOut = leg TransferEventsV2.SenderSide transfer.receiver
   if transfer.sender == transfer.receiver
     then do
-      void $ exercise eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      void $ logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
         admin
         account = transfer.sender
         inputHoldingCids = transfer.inputHoldingCids
         transferLegSides = [transferOut, transferIn]
         outputHoldingCids = senderOutputHoldingCids ++ receiverOutputHoldingCids
-        observers = accountParties transfer.sender
+        observers = accountParties admin transfer.sender
         extraArgs = emptyExtraArgs
     else do
-      void $ exercise eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      void $ logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
         admin
         account = transfer.sender
         inputHoldingCids = transfer.inputHoldingCids
         transferLegSides = [transferOut]
         outputHoldingCids = senderOutputHoldingCids
-        observers = accountParties transfer.sender
+        observers = accountParties admin transfer.sender
         extraArgs = emptyExtraArgs
-      void $ exercise eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      void $ logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
         admin
         account = transfer.receiver
         inputHoldingCids = []
         transferLegSides = [transferIn]
         outputHoldingCids = receiverOutputHoldingCids
-        observers = accountParties transfer.receiver
+        observers = accountParties admin transfer.receiver
         extraArgs = emptyExtraArgs
 
 -- | Log an account-local holding change not associated with a transfer; e.g., the effect of unlocking a lock.
 logMergeSplit : ContractId TransferEventsV2.EventLog -> Party -> V2.Account -> [ContractId V2.Holding] -> Text -> [ContractId V2.Holding] -> Update ()
 logMergeSplit eventLogCid admin account inputHoldingCids reason outputHoldingCids =
-  logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
     admin
     account
     inputHoldingCids
     transferLegSides = []
     outputHoldingCids
-    observers = accountParties account
+    observers = accountParties admin account
     extraArgs = ExtraArgs with
       context = emptyChoiceContext
       meta = reasonToMeta reason emptyMetadata

@@ -24,7 +24,6 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 
 import Splice.TokenStandard.Utils
 
-
 -- | A request to a single trading account to authorize their legs to the trade.
 template OTCTradeAllocationRequest with
     authorizer : V2.Account
@@ -34,12 +33,12 @@ template OTCTradeAllocationRequest with
     allocations : [V2.RequestedAllocation]
   where
     signatory settlement.executors
-    observer accountParties authorizer
+    observer regularAccountParties authorizer
 
     interface instance V1.AllocationRequest for OTCTradeAllocationRequest where
       view = downcast (view @V2.AllocationRequest (toInterface this))
 
-      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (accountParties authorizer)
+      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (regularAccountParties authorizer)
       allocationRequest_WithdrawImpl = allocationRequestV1_withdrawDefaultImpl (toInterface this)
 
     interface instance V2.AllocationRequest for OTCTradeAllocationRequest where
@@ -51,15 +50,15 @@ template OTCTradeAllocationRequest with
         allocations
         authorizer
         availableActions = Map.fromList
-          [ ([p], [V2.ARA_Accept, V2.ARA_Reject]) | p <- accountParties authorizer ]
+          [ ([p], [V2.ARA_Accept, V2.ARA_Reject]) | p <- regularAccountParties authorizer ]
         meta = emptyMetadata
 
       allocationRequest_acceptExtraObservers = allocationRequestV2_acceptDefaultExtraObservers this
       allocationRequest_rejectExtraObservers = allocationRequestV2_rejectDefaultExtraObservers this
       allocationRequest_withdrawExtraObservers = allocationRequestV2_withdrawDefaultExtraObservers this
 
-      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- accountParties authorizer]
-      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- accountParties authorizer]
+      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- regularAccountParties authorizer]
+      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- regularAccountParties authorizer]
       allocationRequest_withdrawImpl = allocationRequestV2_withdrawDefaultImplUsingV1 (toInterface this)
 
 -- | A V1 allocation with enough context to settle or cancel it.

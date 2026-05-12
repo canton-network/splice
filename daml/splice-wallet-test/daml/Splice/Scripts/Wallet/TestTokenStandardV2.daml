@@ -192,7 +192,7 @@ testTokenStandardAllocateV2 = script do
     [(installCid, _)] <- query @WalletAppInstall actor
     forA_ reqs $ \(reqCid, req) -> do
       let [amuletAlloc] = req.allocations
-      let fundingAmount = negate $ netAmuletCreditAmount authorizer amuletAlloc.transferLegSides
+      let fundingAmount = negate $ netAmuletCreditAmount registry.dso authorizer amuletAlloc.transferLegSides
       inputHoldingCids <- if fundingAmount > 0.0
         then WalletClientV2.listUnlockedHoldingCidsFor authorizer actor amuletId
         else pure []

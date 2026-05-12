@@ -27,7 +27,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
 
   def basicAccount(party: PartyId): holdingv2.Account =
     new holdingv2.Account(
-      party.toProtoPrimitive,
+      java.util.Optional.of(party.toProtoPrimitive),
       java.util.Optional.empty(),
       "",
     )

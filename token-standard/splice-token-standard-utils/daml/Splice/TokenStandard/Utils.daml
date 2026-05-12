@@ -7,9 +7,14 @@ module Splice.TokenStandard.Utils (
   -- * Utilities for both allocation and transfer workflows
 
   -- ** Accounts
+  accountPrincipal,
+  accountParties,
+  isRegularAccount,
+  regularAccountParties,
+  regularAccountOwner,
+
   basicAccount,
   isBasicAccount,
-  accountParties,
 
   ensureBasicAccount,
   ensureNoAccountMeta,
@@ -80,7 +85,7 @@ module Splice.TokenStandard.Utils (
 
   logMint,
   logBurn,
-  logNonEmptyChange,
+  logHoldingsChange,
   logMergeSplit,
   logTransfer,
   logAllocationSettlement,

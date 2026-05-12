@@ -92,6 +92,7 @@ import org.lfdecentralizedtrust.splice.util.{
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
+  TokenStandardAccount,
   TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
@@ -1121,10 +1122,20 @@ class UserWalletTxLogParser(
                             ),
                             // The sending side should already be handled in AllocationFactoryV2Allocate,
                             // here we just need to handle the coin unlocking
-                            receivers =
-                              Seq(PartyAndAmount(transferLeg.receiver.owner, transferLeg.amount)),
-                            sender =
-                              Some(PartyAndAmount(transferLeg.sender.owner, -transferLeg.amount)),
+                            receivers = Seq(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(
+                                  transferLeg.receiver
+                                ),
+                                transferLeg.amount,
+                              )
+                            ),
+                            sender = Some(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
+                                -transferLeg.amount,
+                              )
+                            ),
                             date = Some(tree.getEffectiveAt),
                             // seems redundant but otherwise parsing fails
                             senderHoldingFees = BigDecimal(0.0),

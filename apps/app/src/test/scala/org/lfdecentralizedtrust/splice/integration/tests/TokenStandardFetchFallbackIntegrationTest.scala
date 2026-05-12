@@ -5,9 +5,6 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationv2, metadatav1}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2.{
-  Account as AccountV2
-}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -153,14 +150,14 @@ class TokenStandardFetchFallbackIntegrationTest
                   new metadatav1.Metadata(java.util.Map.of()),
                 ),
                 dsoParty.toProtoPrimitive,
-                new AccountV2(aliceParty.toProtoPrimitive, Optional.empty(), ""),
+                basicAccount(aliceParty),
                 java.util.List.of(
                   transferLegSideForAuthorizer(
                     aliceParty,
                     new allocationv2.TransferLeg(
                       UUID.randomUUID().toString,
-                      new AccountV2(aliceParty.toProtoPrimitive, Optional.empty(), ""),
-                      new AccountV2(bobParty.toProtoPrimitive, Optional.empty(), ""),
+                      basicAccount(aliceParty),
+                      basicAccount(bobParty),
                       BigDecimal(10).bigDecimal,
                       amuletInstrumentIdName,
                       new metadatav1.Metadata(java.util.Map.of()),

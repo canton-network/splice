@@ -86,9 +86,10 @@ mint registry account intrumentName amount = do
   -- offer mint
   [(tokenRulesCid, _)] <- query @TestTokenV2.TokenRules registry.admin
   now <- getTime
+  let admin = registry.admin
   receiverConfig <- case account.provider of
       None -> pure $ AccountConfig with
-        admin = registry.admin
+        admin
         account
         ownerConfig = PartyConfig True True
         providerConfig = PartyConfig False False
@@ -108,13 +109,13 @@ mint registry account intrumentName amount = do
   -- have receiver accept immediately
   let offerCid = toInterfaceContractId result.offerCid
   let accept = V2.TransferInstruction_Accept with
-        actors = accountParties account
+        actors = accountParties admin account
         extraArgs = ExtraArgs with
           context = emptyChoiceContext
           meta = emptyMetadata
   context <- registryApi_getTransferOfferContext registry offerCid emptyMetadata
   void $ WalletClientV2.extractAndCheckTxHistory [registry.admin] $
-    submitResultAndTree (foldMap actAs (accountParties account) <> discloseMany' context.disclosures) $
+    submitResultAndTree (foldMap actAs (accountParties admin account) <> discloseMany' context.disclosures) $
       exerciseCmd offerCid accept with
         extraArgs = ExtraArgs with
           context = context.choiceContext

@@ -228,9 +228,9 @@ registryApi_getTransferFactory registry arg = do
   transferC <- getExternalPartyConfigStateContext registry
   let isSelfTransfer = arg.transfer.sender.owner == arg.transfer.receiver.owner
   (optPreapproval, preapprovalC) <-
-    if isSelfTransfer
-      then pure (None, emptyOpenApiChoiceContext)
-      else lookupPreapprovalWithContext registry arg.transfer.receiver.owner
+    case arg.transfer.receiver.owner of
+      Some owner | not isSelfTransfer -> lookupPreapprovalWithContext registry owner
+      _ -> pure (None, emptyOpenApiChoiceContext)
   featuredAppRightC <- case optPreapproval of
     None -> pure emptyOpenApiChoiceContext
     Some preapproval -> getFeaturedAppRightContext registry preapproval.provider

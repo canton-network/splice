@@ -102,9 +102,11 @@ import Splice.Api.Token.AllocationInstructionV1 qualified as AllocationInstructi
 import Splice.Api.Token.AllocationInstructionV2 qualified as AllocationInstructionV2
 import Splice.Api.Token.AllocationRequestV1 qualified as AllocationRequestV1
 import Splice.Api.Token.AllocationRequestV2 qualified as AllocationRequestV2
+import Splice.Api.Token.AllocationV2 (AllocationResult(AllocationResult))
+
 import Splice.TokenStandard.Utils.Internal.Conversions
 import Splice.TokenStandard.Utils.Internal.Choices
-import Splice.Api.Token.AllocationV2 (AllocationResult(AllocationResult))
+import Splice.TokenStandard.Utils.Internal.Events
 
 
 -- Allocation utilities
@@ -144,15 +146,26 @@ requestedAllocationToSpecification settlement authorizer (AllocationRequestV2.Re
   AllocationV2.AllocationSpecification with ..
 
 -- | Net amounts of credit from an allocation's transfer leg sides.
-netAllocationCreditAmounts : HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
-netAllocationCreditAmounts authorizer transferLegSides =
+--
+-- Allocations for the sender of a mint do not result in a negative credit amount and
+-- allocations for the receiver of a burn do not result in a positive credit amount.
+-- Thereby allowing the instrument admin to use allocations to authorize mints and burns
+-- as part of settlement.
+netAllocationCreditAmounts : Party -> HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
+netAllocationCreditAmounts admin authorizer transferLegSides =
     TextMap.fromListWithR (+) $ map legAmount transferLegSides
   where
+    isMintAuthorizer = authorizer == mintAccount admin
+    isBurnAuthorizer = authorizer == burnAccount admin
     legAmount leg =
       ( leg.instrumentId
       , case leg.side of
-          AllocationV2.SenderSide -> negate leg.amount
-          AllocationV2.ReceiverSide -> leg.amount
+          AllocationV2.SenderSide
+            | isMintAuthorizer -> 0.0
+            | otherwise -> negate leg.amount
+          AllocationV2.ReceiverSide
+            | isBurnAuthorizer -> 0.0
+            | otherwise -> leg.amount
       )
 
 -- | Check basic invariants of a `V1.SettlementInfo`.
@@ -302,11 +315,11 @@ allocationV2_cancelDefaultImplUsingV1 this self (AllocationV2.Allocation_Cancel{
 
 -- | The default observers for a public asset are all acount parties of the transfer legs being settled.
 settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl
-  : AllocationV2.SettlementFactory_SettleBatch -> [Party]
-settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl arg =
+  : Party -> AllocationV2.SettlementFactory_SettleBatch -> [Party]
+settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin arg =
   -- Make all senders and receiver observers, so we get by with a single
   -- view for batch settlement of Amulet allocations
-  concatMap (\leg -> accountParties leg.sender <> accountParties leg.receiver) arg.transferLegs
+  concatMap (\leg -> accountParties admin leg.sender <> accountParties admin leg.receiver) arg.transferLegs
 
 -- | For a private asset there are no extra observers by default.
 settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl
@@ -425,8 +438,8 @@ instance BackwardCompatible AllocationV1.Reference AllocationV2.Reference where
 downcast_v2_v1_TransferLeg : Party -> AllocationV2.TransferLeg -> AllocationV1.TransferLeg
 downcast_v2_v1_TransferLeg admin (AllocationV2.TransferLeg with sender, receiver, amount, instrumentId, meta) =
     AllocationV1.TransferLeg with
-      sender = sender.owner
-      receiver = receiver.owner
+      sender = accountOwnerForV1 sender
+      receiver = accountOwnerForV1 receiver
       amount
       instrumentId = HoldingV1.InstrumentId with admin; id = instrumentId
       meta =
@@ -509,7 +522,7 @@ allocationV1_availableActionsDefault allocView = Map.fromList
 -- | Available actions for a V2 allocation that uses the default controllers for its actions.
 allocationV2_availableActionsDefault : AllocationV2.AllocationSpecification -> Map.Map [Party] [AllocationV2.AllocationAction]
 allocationV2_availableActionsDefault allocation = Map.fromList
-  [ ([allocation.authorizer.owner], [AllocationV2.AA_Withdraw])
+  [ ([accountPrincipal allocation.admin allocation.authorizer], [AllocationV2.AA_Withdraw])
   , (dedupSort allocation.settlement.executors, [AllocationV2.AA_Cancel])
   , (dedupSort (allocation.admin :: allocation.settlement.executors), [AllocationV2.AA_Settle])
   ]
@@ -705,16 +718,16 @@ instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationR
 -- created allocation.
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl arg =
-  arg.allocation.settlement.executors <> accountParties arg.allocation.authorizer
+  arg.allocation.settlement.executors <> accountParties arg.allocation.admin arg.allocation.authorizer
 
 -- | Default for private assets, where the settlement executors are only be
 -- observers of the allocation choice itself if no funding is required.
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
-    accountParties allocation.authorizer <>
+    accountParties allocation.admin allocation.authorizer <>
     (if all (>= 0.0) (textMapValues creditAmounts) then arg.allocation.settlement.executors else [])
   where
     allocation = arg.allocation
-    creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
+    creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
 
 

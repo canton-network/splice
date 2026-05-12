@@ -463,7 +463,8 @@ runTest mkTest = do
           Some (holdingCid, holding) -> do
             setTime settlementDeadline
             let cid = fromInterfaceContractId @LockedAmulet holdingCid
-            submit holding.account.owner $ exerciseCmd cid LockedAmulet_OwnerExpireLockV2
+            let owner = regularAccountOwner holding.account
+            submit owner $ exerciseCmd cid LockedAmulet_OwnerExpireLockV2
 
       -- withdraw allocations for the specified withdrawers
       forA_ withdrawers $ \withdrawer -> do
@@ -547,7 +548,7 @@ checkHoldings env description expectedHoldings = do
         pure (owner, [(amount, locked, mkInstrumentId env instrumentId)])
   forA_ env.allParties $ \owner -> do
     visibleHoldings <- WalletClientV2.listVisibleHoldings owner
-    let actualHoldings = filter (\(_, h) -> h.account.owner == owner) visibleHoldings
+    let actualHoldings = filter (\(_, h) -> h.account.owner == Some owner) visibleHoldings
     case Map.lookup owner holdingsByOwner of
       None -> unless (Prelude.null actualHoldings) $
         fail $ T.unlines $

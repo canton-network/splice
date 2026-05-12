@@ -11,9 +11,8 @@ export function transferLegSidesToTransferLegs(
   sides: TransferLegSide[]
 ): TransferLeg[] {
   return sides.map(side => {
-    const sender: Account =
-      side.side === 'SenderSide' ? authorizer : basicAccount(side.otherside.owner);
-    const receiver = side.side === 'ReceiverSide' ? authorizer : basicAccount(side.otherside.owner);
+    const sender: Account = side.side === 'SenderSide' ? authorizer : side.otherside;
+    const receiver = side.side === 'ReceiverSide' ? authorizer : side.otherside;
     return {
       transferLegId: side.transferLegId,
       sender,

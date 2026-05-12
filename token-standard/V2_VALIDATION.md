@@ -168,4 +168,12 @@ Cleanup and improvements applied so far:
     The allocation must instead be concluded by settlement, cancellation, or registry-specific expiry.
 - Remove the `defaultAllocation_*Controllers` helper functions, as the default controller
   sets have become straightforward enough to inline in implementations.
-
+- Introduce the notion of "special accounts" with `Account.owner = None`, which are under the control
+  of the instrument admin. These are intended to be used by registries to report
+  burns and mints as transfers. Registries can also use them for other purposes like for example
+  allowing allocations to refer to an "anonymous settlement counterparty
+  account" to enable trade settlement without disclosing the identity of the
+  settlement counterparties.
+  - adjust `TokenStandardUtils.netAllocationCreditAmounts` to not compute credits for the burn account as a receiver
+    and neither compute debits for the mint account as the sender
+  - test delivery-vs-burn and delivery-vs-mint scenarios using `TestTokenV2`
