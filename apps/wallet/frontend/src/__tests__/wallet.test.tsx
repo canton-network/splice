@@ -49,7 +49,7 @@ import {
 } from '../components/ListAllocationRequests';
 import { shortenPartyId } from '../utils/partyId';
 import * as damlTypes from '@daml/types';
-import { ContractId, emptyMap, Optional, Text } from '@daml/types';
+import { ContractId, Optional, Text } from '@daml/types';
 import { AnyContract } from '@daml.js/splice-api-token-metadata/lib/Splice/Api/Token/MetadataV1/module';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
