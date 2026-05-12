@@ -189,18 +189,16 @@ const V2AllocationRequestActionButton: React.FC<{
   dso: string;
 }> = ({ allocationRequest, userParty, allocations, dso }) => {
   const payload = allocationRequest.payload;
-  const amuletLegsForUser = payload.transferLegs.filter(
-    leg =>
-      (leg.sender.owner === userParty || leg.receiver.owner === userParty) &&
-      leg.instrumentId.id === 'Amulet' &&
-      leg.instrumentId.admin === dso
-  );
+  const amuletLegSidesForUser = payload.allocations
+    .filter(allocation => allocation.admin === dso)
+    .flatMap(allocation => allocation.transferLegSides)
+    .filter(side => side.instrumentId === 'Amulet');
   const isAuthorizer =
     payload.authorizer.owner === userParty &&
     (payload.authorizer.provider === null || payload.authorizer.provider === undefined) &&
     payload.authorizer.id === '';
   // basicAccount check: authorizer matches basicAccount(userParty)
-  const canAccept = amuletLegsForUser.length > 0 && isAuthorizer;
+  const canAccept = amuletLegSidesForUser.length > 0 && isAuthorizer;
 
   const correspondingAllocation = allocations.find(alloc =>
     isAllocationForRequest(alloc, allocationRequest)
@@ -211,7 +209,7 @@ const V2AllocationRequestActionButton: React.FC<{
   const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
-      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegsForUser);
+      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegSidesForUser);
       return await createAllocationV2(req);
     },
     onSuccess: () => {},
@@ -473,7 +471,20 @@ export function openApiV2RequestFromAllocationRequest(
 function v1RequestToV2Display(payload: AllocationRequestV1): {
   settlement: SettlementInfo;
   transferLegs: TransferLeg[];
-} {
+};
+function v2RequestToDisplay(payload: AllocationRequestV2): DisplayRequest {
+  const transferLegs = transferLegSidesToTransferLegs(
+    payload.authorizer,
+    payload.allocations.flatMap(allocation => allocation.transferLegSides)
+  );
+  return {
+    settlement: payload.settlement,
+    transferLegs,
+  };
+}
+
+/** Convert V1 AllocationRequest fields to V2 shapes for display */
+function v1RequestToDisplay(payload: AllocationRequestV1): DisplayRequest {
   return {
     settlement: {
       executors: [payload.settlement.executor],

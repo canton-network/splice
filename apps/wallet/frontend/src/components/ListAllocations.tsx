@@ -18,11 +18,14 @@ import {
 } from '../contexts/WalletServiceContext';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { ContractId } from '@daml/types';
+import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
+import { usePrimaryParty } from '../hooks';
 
 const ListAllocations: React.FC = () => {
+  const primaryPartyId = usePrimaryParty();
   const allocationsQuery = useAmuletAllocations();
 
-  if (allocationsQuery.isLoading) {
+  if (allocationsQuery.isLoading || !primaryPartyId) {
     return <Loading />;
   }
   if (allocationsQuery.isError) {
@@ -47,19 +50,26 @@ const ListAllocations: React.FC = () => {
         Allocations <Chip label={allocations.length} color="success" />
       </Typography>
       {allocations.map(allocation => (
-        <AllocationDisplay key={allocation.contractId} allocation={allocation} />
+        <AllocationDisplay
+          key={allocation.contractId}
+          allocation={allocation}
+          userParty={primaryPartyId}
+        />
       ))}
     </Stack>
   );
 };
 
 const AllocationDisplay: React.FC<{
-  allocation: Contract<AmuletAllocation | AmuletAllocationV2>;
-}> = ({ allocation }) => {
+  userParty: string;
+  allocation: Contract<AmuletAllocation>;
+}> = ({ userParty, allocation }) => {
   const { withdrawAllocation, withdrawAllocationV2 } = useWalletClient();
-  const v2 = isV2Allocation(allocation.payload);
-  const spec = getAllocationSpec(allocation.payload);
-  const { settlement, transferLegs } = spec;
+  const allocationPayload = allocation.payload;
+  const v2 = isV2Allocation(allocationPayload);
+  const spec = getAllocationSpec(userParty, allocationPayload);
+  const { settlement, transferLegSides } = spec;
+  const transferLegs = transferLegSidesToTransferLegs(spec.authorizer, transferLegSides);
   return (
     <Card className="allocation" variant="outlined">
       <CardContent
@@ -94,12 +104,19 @@ const AllocationDisplay: React.FC<{
   );
 };
 
-function getAllocationSpec(payload: AmuletAllocation): AllocationSpecification {
+function getAllocationSpec(
+  endUserParty: string,
+  payload: AmuletAllocation
+): AllocationSpecification {
   if (isV2Allocation(payload)) {
     return payload.allocation;
   }
   // V1: convert to V2 AllocationSpecification shape
   const v1 = payload.allocation;
+  const [transferLegSide, otherSideParty]: ['SenderSide' | 'ReceiverSide', string] =
+    v1.transferLeg.sender === endUserParty
+      ? ['SenderSide', v1.transferLeg.receiver]
+      : ['ReceiverSide', v1.transferLeg.sender];
   return {
     settlement: {
       executors: [v1.settlement.executor],
@@ -111,12 +128,12 @@ function getAllocationSpec(payload: AmuletAllocation): AllocationSpecification {
     },
     transferLegs: [
       {
-        transferLegId: v1.transferLegId,
-        sender: { owner: v1.transferLeg.sender, provider: null, id: '' },
-        receiver: { owner: v1.transferLeg.receiver, provider: null, id: '' },
-        amount: v1.transferLeg.amount,
-        instrumentId: v1.transferLeg.instrumentId,
-        meta: v1.transferLeg.meta,
+        transferLegId: payload.allocation.transferLegId,
+        meta: payload.allocation.transferLeg.meta,
+        side: transferLegSide,
+        otherside: { owner: otherSideParty, provider: null, id: '' },
+        amount: payload.allocation.transferLeg.amount,
+        instrumentId: payload.allocation.transferLeg.instrumentId.id,
       },
     ],
     authorizer: { owner: v1.transferLeg.sender, provider: null, id: '' },

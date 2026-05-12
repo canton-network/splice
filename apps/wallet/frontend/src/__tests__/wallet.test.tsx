@@ -1464,42 +1464,67 @@ function getAllocationRequestV2() {
       settlementDeadline: null as damlTypes.Optional<string>,
       meta: { values: {} },
     },
-    transferLegs: [
+    allocations: [
       {
-        transferLegId: 'acceptable',
-        sender: { owner: alicePartyId, provider: null, id: '' },
-        receiver: { owner: bobPartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Amulet',
-          admin: dsoPartyId,
-        },
+        admin: dsoPartyId,
         meta: { values: {} },
-      },
-      {
-        transferLegId: 'different_sender',
-        sender: { owner: bobPartyId, provider: null, id: '' },
-        receiver: { owner: alicePartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Amulet',
-          admin: dsoPartyId,
-        },
-        meta: { values: {} },
-      },
-      {
-        transferLegId: 'different_instrument',
-        sender: { owner: alicePartyId, provider: null, id: '' },
-        receiver: { owner: bobPartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Another',
-          admin: dsoPartyId,
-        },
-        meta: { values: {} },
+        committed: false,
+        nextIterationFunding: null,
+        transferLegSides: [
+          {
+            transferLegId: 'acceptable',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'acceptable',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+
+          {
+            transferLegId: 'different_sender',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'different_sender',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+
+          {
+            transferLegId: 'different_instrument',
+            instrumentId: 'Another',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'different_instrument',
+            instrumentId: 'Another',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+        ],
       },
     ],
-    availableActions: [] as [string[], { tag: string; value: object }[]][],
+    availableActions: emptyMap(),
     meta: { values: {} },
   };
 }
@@ -1516,12 +1541,23 @@ function getAllocationV2(
     dso: dsoPartyId,
     expiresAt: new Date().toISOString(),
     allocation: {
-      transferLegs: [
+      admin: dsoPartyId,
+      meta: { values: {} },
+      committed: false,
+      nextIterationFunding: null,
+      transferLegSides: [
         {
           transferLegId,
-          sender: { owner: alicePartyId, provider: null, id: '' },
-          receiver: { owner: receiver, provider: null, id: '' },
+          side: 'ReceiverSide',
+          instrumentId: 'Amulet',
+          meta: { values: {} },
+          otherside: { owner: alicePartyId, provider: null, id: '' },
           amount,
+        },
+        {
+          transferLegId,
+          side: 'SenderSide',
+          instrumentId: 'Amulet',
           meta: { values: {} },
           instrumentId: { id: 'Amulet', admin: dsoPartyId },
         },
