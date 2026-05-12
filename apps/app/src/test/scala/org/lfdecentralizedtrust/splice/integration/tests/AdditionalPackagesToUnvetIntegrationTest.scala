@@ -225,8 +225,7 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
   }
 }
 
-/** This test verifies that an SV can unvet all supported packages that are above the minimum initialization versions,
-  * but not the ones equal to the minimum initialization versions.
+/** This test verifies that an SV can unvet all supported packages.
   */
 class UnvetAllSupportedPackagesIntegrationTest
     extends AdditionalPackagesToUnvetIntegrationTestBase {
@@ -239,7 +238,7 @@ class UnvetAllSupportedPackagesIntegrationTest
   override val additionalPackagesToUnvetSv1Local: Seq[DarResource] =
     nonMinimalSupportedPackageVersions ++ minimalPackageVersions
 
-  "sv1 cannot unvet all vetted and supported packages" in { implicit env =>
+  "sv1 can unvet all supported packages" in { implicit env =>
     import env.executionContext
 
     startAllSync(
@@ -250,7 +249,7 @@ class UnvetAllSupportedPackagesIntegrationTest
     val synchronizerId =
       sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
 
-    clue(s"sv1 succeeds to unvets all packages but the minimal supported ones: ${additionalPackagesToUnvetSv1
+    clue(s"sv1 succeeds to unvet all packages but the minimal supported ones: ${additionalPackagesToUnvetSv1
         .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
       eventually() {
         val vettedPackageIds = getVettedPackageIds(
@@ -268,7 +267,7 @@ class UnvetAllSupportedPackagesIntegrationTest
     }
 
     clue(
-      s"sv1 fails to unvet the minimum required supported packages: ${additionalPackagesToUnvetSv1Local
+      s"sv1 then unvets all minimum required supported packages: ${additionalPackagesToUnvetSv1Local
           .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
     ) {
       startAllSync(
@@ -283,7 +282,7 @@ class UnvetAllSupportedPackagesIntegrationTest
         vettedPackageIds should contain noElementsOf nonMinimalSupportedPackageVersions.map(
           _.packageId
         )
-        vettedPackageIds should contain allElementsOf Seq(
+        vettedPackageIds should contain noElementsOf Seq(
           DarResources.amulet,
           DarResources.amuletNameService,
           DarResources.dsoGovernance,

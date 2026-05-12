@@ -139,14 +139,14 @@ Simulated S3 error
 # Shutdown issues
 Previous channel ManagedChannelImpl.* was garbage collected without being shut down!
 # TODO(#564) - check what's happening here during shutdown
-Timeout 10 seconds expired, but readers are still active. Shutting down forcibly.*LogicalSynchronizerUpgradeIntegrationTest
+Timeout 10 seconds expired, but readers are still active. Shutting down forcibly.*LsuIntegrationTest
 
 # Warnings in s3Mock log (which we redirect to our logs), that we don't care about
 \[s3Mock\].*Ignoring option --illegal-access=warn
 
 # SV-4 is the late-joining SV in this test. Ignoring here as otherwise we would need to suppress logs during the whole
 # SV-4 initialization.
-Not publishing sequencer successor as we are past upgrade time.*LsuNodeInitializer:LogicalSynchronizerUpgradeIntegrationTest.*SV=sv4
+Not publishing sequencer successor as we are past upgrade time.*LsuNodeInitializer:LsuIntegrationTest.*SV=sv4
 
 # Roll forward tests
 Failed to connect to scan of FAILED Seed URL.*RollForwardLsu.*IntegrationTest
@@ -159,3 +159,6 @@ Waiting for.*has not completed after
 Gave up waiting for.*as we are shutting down
 
 Ryuk has been disabled
+
+# Calls to this have retries; if the retries were not enough, we'll get a louder error.
+api/sv/v0/onboard/validator (POST) resulted in a timeout

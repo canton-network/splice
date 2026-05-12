@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { diff_match_patch as DiffMatchPatch } from '@dmsnell/diff-match-patch';
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as htmlFormatter from 'jsondiffpatch/formatters/html';
-import DiffMatchPatch from 'diff-match-patch';
 import DOMPurify from 'dompurify';
 import parse from 'html-react-parser';
 import React from 'react';
@@ -26,7 +26,7 @@ const jsondiffpatchInstance = jsondiffpatch.create({
 });
 
 const JsonDiffStyles = () => (
-  // original template: https://esm.sh/jsondiffpatch@0.6.0/lib/formatters/styles/html.css
+  // original template: https://esm.sh/jsondiffpatch@0.7.3/lib/formatters/styles/html.css
   <GlobalStyles
     styles={{
       '.jsondiffpatch-delta': {
