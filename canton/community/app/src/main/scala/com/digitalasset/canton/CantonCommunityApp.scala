@@ -23,7 +23,7 @@ object CantonCommunityApp extends CantonAppDriver {
   ): Either[CantonConfigError, CantonConfig] =
     CantonConfig.loadAndValidate(config, defaultPorts)
 
-  override protected def environmentFactory: EnvironmentFactory[CantonConfig, CantonEnvironment] =
+  override protected def environmentFactory: EnvironmentFactory[Config, E] =
     CommunityEnvironmentFactory
 
   override def withManualStart(config: CantonConfig): CantonConfig =
