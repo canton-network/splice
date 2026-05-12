@@ -1256,17 +1256,15 @@ object HttpWalletAppClient {
               meta = Some(spec.settlement.meta.values.asScala.toMap),
             ),
             spec.transferLegSides.asScala.map { transferLegSide =>
-              val (sender, receiver) = transferLegSide.side match {
-                case allocationv2.TransferSide.SENDERSIDE =>
-                  (spec.authorizer.owner, transferLegSide.otherside.owner)
-                case allocationv2.TransferSide.RECEIVERSIDE =>
-                  (transferLegSide.otherside.owner, spec.authorizer.owner)
-              }
-
-              definitions.TransferLegV2(
+              definitions.TransferLegSide(
                 transferLegSide.transferLegId,
-                sender = sender,
-                receiver = receiver,
+                side = transferLegSide.side match {
+                  case allocationv2.TransferSide.SENDERSIDE =>
+                    definitions.TransferLegSide.Side.Senderside
+                  case allocationv2.TransferSide.RECEIVERSIDE =>
+                    definitions.TransferLegSide.Side.Receiverside
+                },
+                otherSide = transferLegSide.otherside.owner,
                 Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
                 Some(transferLegSide.meta.values.asScala.toMap),
               )

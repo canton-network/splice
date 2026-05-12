@@ -50,7 +50,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.wallet.{UserWalletManager, UserWalletService}
 import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore}
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
-import TreasuryService.AmuletOperationDedupConfig
+import TreasuryService.{AmuletOperationDedupConfig, basicAccount}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
@@ -1195,27 +1195,26 @@ class HttpWalletHandler(
           body.settlement.settlementRef.cid.getOrElse(""),
         ) ++ body.settlement.executors,
       )
-      val transferLegSides = body.transferLegs.map { leg =>
-        val (side, otherside) =
-          if (leg.sender == authorizer.toProtoPrimitive) {
-            allocationv2.TransferSide.SENDERSIDE -> TreasuryService.basicAccount(leg.receiver)
-          } else if (leg.receiver == authorizer.toProtoPrimitive) {
-            allocationv2.TransferSide.RECEIVERSIDE -> TreasuryService.basicAccount(leg.sender)
-          } else {
-            throw Status.INVALID_ARGUMENT
-              .withDescription(
-                s"Transfer leg `${leg.transferLegId}` does not involve the wallet authorizer `${authorizer.toProtoPrimitive}`"
-              )
-              .asRuntimeException()
-          }
-
+      val transferLegSides = body.transferLegSides.map { side =>
         new allocationv2.TransferLegSide(
-          leg.transferLegId,
-          side,
-          otherside,
-          Codec.tryDecode(Codec.JavaBigDecimal)(leg.amount),
+          side.transferLegId,
+          side.side match {
+            case d0.TransferLegSide.Side.Receiverside =>
+              allocationv2.TransferSide.RECEIVERSIDE
+            case d0.TransferLegSide.Side.Senderside =>
+              allocationv2.TransferSide.SENDERSIDE
+            case other =>
+              throw Status.INVALID_ARGUMENT
+                .withDescription(
+                  s"$other is not a valid TransferLegSide. Must be one of ${d0.TransferLegSide.Side.values
+                      .map(_.value)}"
+                )
+                .asRuntimeException()
+          },
+          basicAccount(side.otherSide),
+          Codec.tryDecode(Codec.JavaBigDecimal)(side.amount),
           "Amulet",
-          new metadatav1.Metadata(leg.meta.getOrElse(Map.empty).asJava),
+          new metadatav1.Metadata(side.meta.getOrElse(Map.empty).asJava),
         )
       }
       val specification = new allocationv2.AllocationSpecification(
