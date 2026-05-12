@@ -28,7 +28,7 @@ import Splice.Tests.TestTokenV2.UnitTest_AccountConfig
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig (AccountConfig)
 import DA.Action (foldlA, when)
 import DA.Functor (void)
-import DA.Foldable (forA_)
+import DA.Foldable (sequence_)
 import DA.Optional (fromSome)
 
 
@@ -95,43 +95,44 @@ test_allocation_flows = do
     e1s = ([e1], V2.AA_Settle)
     ess = ([e1, e2], V2.AA_Settle)
 
+    tc i p es mkacc init aias aas succ =
+      test_allocation_flow env i p es mkacc init aias aas succ
+
 
   let
     test_cases = [
         -- Happy flows
-        (a, v, [e1], j, a, [vaia], [e1s], True),
-        (a, v, [e1, e2], j, a, [vaia], [ess], True),
-        (a, v, [e1], j, v, [aaia], [e1s], True),
-        (a, v, [e1, e2], j, v, [aaia], [ess], True),
-        (a, v, [e1], ic, a, [], [e1s], True),
-        (a, v, [e1], pc, a, [vaia], [e1s], True),
-        (a, v, [e1], p, v, [], [e1s], True),
-        (a, a, [e1], j, a, [], [e1s], True),
-        (a, a, [e1], sc, a, [], [e1s], True),
+        tc a v [e1] j a [vaia] [e1s] True,
+        tc a v [e1, e2] j a [vaia] [ess] True,
+        tc a v [e1] j v [aaia] [e1s] True,
+        tc a v [e1, e2] j v [aaia] [ess] True,
+        tc a v [e1] ic a [] [e1s] True,
+        tc a v [e1] pc a [vaia] [e1s] True,
+        tc a v [e1] p v [] [e1s] True,
+        tc a a [e1] j a [] [e1s] True,
+        tc a a [e1] sc a [] [e1s] True,
 
         -- Widhdrawals
-        (a, v, [e1, e2], j, v, [vaiw], [], False),
-        (a, v, [e1, e2], j, a, [aaiw], [], False),
-        (a, v, [e1, e2], j, v, [aaia], [aaw, vaw], False),
-        (a, v, [e1, e2], j, v, [aaia], [vaw, aaw], False),
-        (a, v, [e1], ic, a, [], [aaw], False),
-        (a, v, [e1], pc, a, [vaia], [aaw, vaw], False),
-        (a, v, [e1], p, v, [], [vaw], False),
-        (a, a, [e1], j, a, [], [aaw], False),
-        (a, a, [e1], sc, a, [], [aaw], False),
+        tc a v [e1, e2] j v [vaiw] [] False,
+        tc a v [e1, e2] j a [aaiw] [] False,
+        tc a v [e1, e2] j v [aaia] [aaw, vaw] False,
+        tc a v [e1, e2] j v [aaia] [vaw, aaw] False,
+        tc a v [e1] ic a [] [aaw] False,
+        tc a v [e1] pc a [vaia] [aaw, vaw] False,
+        tc a v [e1] p v [] [vaw] False,
+        tc a a [e1] j a [] [aaw] False,
+        tc a a [e1] sc a [] [aaw] False,
 
         -- Cancellations
-        (a, v, [e1], j, a, [vaia], [e1ac], False),
-        (a, v, [e1, e2], j, a, [vaia], [esac], False),
+        tc a v [e1] j a [vaia] [e1ac] False,
+        tc a v [e1, e2] j a [vaia] [esac] False,
 
         -- Cancellations and settlements with partial withdrawal
-        (a, v, [e1, e2], j, a, [vaia], [aaw, ess], True),
-        (a, v, [e1], j, a, [vaia], [aaw, e1s], True)
+        tc a v [e1, e2] j a [vaia] [aaw, ess] True,
+        tc a v [e1] j a [vaia] [aaw, e1s] True
       ]
 
-  forA_ test_cases (\(i, p, es, mkacc,init, aias, aas, succ) -> do
-    test_allocation_flow env i p es mkacc init aias aas succ
-    )
+  sequence_ test_cases
 
 
 test_allocation_flow : TestRegistries.Env

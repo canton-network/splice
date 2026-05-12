@@ -27,7 +27,7 @@ import Splice.Testing.Tokens.TestTokenV2.AccountConfig
 import DA.Action (foldlA, when)
 import DA.Functor (void)
 import DA.Optional (isNone)
-import DA.Foldable (forA_)
+import DA.Foldable (sequence_)
 
 -- Shared test setup
 --------------------
@@ -88,66 +88,67 @@ test_transfer_flows = do
     aw = (a, V2.TIA_Withdraw)
     vw = (v, V2.TIA_Withdraw)
 
+    tc i1 p1 i2 p2 mkacc1 mkacc2 init acts succ =
+      test_transfer_flow env i1 p1 i2 p2 mkacc1 mkacc2 init acts succ
+
   let test_cases = [
         -- Happy flows
-        (a, v, b, w, j, j, a, [va, ba, wa], True),
-        (a, v, b, w, j, j, v, [aa, ba, wa], True),
-        (a, v, b, w, j, j, a, [va, wa, ba], True),
-        (a, v, b, w, j, j, v, [aa, wa, ba], True),
+        tc a v b w j j a [va, ba, wa] True,
+        tc a v b w j j v [aa, ba, wa] True,
+        tc a v b w j j a [va, wa, ba] True,
+        tc a v b w j j v [aa, wa, ba] True,
         -- Partial withdrawals/rejects mixed in
-        (a, v, b, w, j, j, a, [va, aw, br, ba, wa], True),
-        (a, v, b, w, j, j, v, [aa, ba, vw, wa], True),
-        (a, v, b, w, j, j, a, [va, wa, wr, ba], True),
-        (a, v, b, w, j, j, v, [aa, br, aw, wa, ba], True),
+        tc a v b w j j a [va, aw, br, ba, wa] True,
+        tc a v b w j j v [aa, ba, vw, wa] True,
+        tc a v b w j j a [va, wa, wr, ba] True,
+        tc a v b w j j v [aa, br, aw, wa, ba] True,
         -- Withdrawals early, late, mixed, with partial rejects mixed in
-        (a, v, b, w, j, j, a, [aw], False),
-        (a, v, b, w, j, j, v, [aa, vw, aw], False),
-        (a, v, b, w, j, j, a, [va, vw, wr, wa, aw], False),
-        (a, v, b, w, j, j, v, [aa, wa, br, aw, vw], False),
+        tc a v b w j j a [aw] False,
+        tc a v b w j j v [aa, vw, aw] False,
+        tc a v b w j j a [va, vw, wr, wa, aw] False,
+        tc a v b w j j v [aa, wa, br, aw, vw] False,
         -- Rejects
-        (a, v, b, w, j, j, a, [va, br, wr], False),
-        (a, v, b, w, j, j, v, [aa, ba, wr, br], False),
-        (a, v, b, w, j, j, a, [va, wr, wa, br], False),
+        tc a v b w j j a [va, br, wr] False,
+        tc a v b w j j v [aa, ba, wr, br] False,
+        tc a v b w j j a [va, wr, wa, br] False,
 
         -- Now we test provider controlled flows
         -- Happy flow
-        (a, v, b, w, p, p, v, [wa], True),
+        tc a v b w p p v [wa] True,
         -- Withdrawals early & late
-        (a, v, b, w, p, p, v, [vw], False),
-        (a, v, b, w, p, j, v, [ba, vw], False),
+        tc a v b w p p v [vw] False,
+        tc a v b w p j v [ba, vw] False,
         -- Rejects
-        (a, v, b, w, p, p, v, [wr], False),
+        tc a v b w p p v [wr] False,
 
         -- Now we test investor controlled flows
         -- Happy flow
-        (a, v, b, w, ic, ic, a, [ba], True),
+        tc a v b w ic ic a [ba] True,
         -- Withdrawals early & late
-        (a, v, b, w, ic, ic, a, [aw], False),
-        (a, v, b, w, ic, j, a, [ba, aw], False),
+        tc a v b w ic ic a [aw] False,
+        tc a v b w ic j a [ba, aw] False,
         -- Rejects
-        (a, v, b, w, ic, ic, a, [br], False),
+        tc a v b w ic ic a [br] False,
 
         -- In provider confirmed, those flows work
         -- where the investors initiate
         -- Happy flows
-        (a, v, b, w, pc, pc, a, [va, ba, wa], True),
+        tc a v b w pc pc a [va, ba, wa] True,
         -- Partial withdrawals/rejects mixed in
-        (a, v, b, w, pc, pc, a, [va, aw, ba, wa], True),
-        (a, v, b, w, pc, pc, a, [va, br, ba, wa], True),
-        (a, v, b, w, pc, pc, a, [va, ba, aw, br, wa], True),
-        (a, v, b, w, pc, pc, a, [va, aw, ba, br, wa], True),
+        tc a v b w pc pc a [va, aw, ba, wa] True,
+        tc a v b w pc pc a [va, br, ba, wa] True,
+        tc a v b w pc pc a [va, ba, aw, br, wa] True,
+        tc a v b w pc pc a [va, aw, ba, br, wa] True,
         -- Withdrawals early, late, mixed, with partial rejects mixed in
-        (a, v, b, w, pc, pc, a, [aw], False),
-        (a, v, b, w, pc, pc, a, [va, aw, br, ba, vw], False),
+        tc a v b w pc pc a [aw] False,
+        tc a v b w pc pc a [va, aw, br, ba, vw] False,
         -- Rejects
-        (a, v, b, w, pc, pc, a, [va, br, wr], False),
-        (a, v, b, w, pc, pc, a, [va, ba, br, wr], False),
-        (a, v, b, w, pc, pc, a, [va, br, ba, wr], False)
+        tc a v b w pc pc a [va, br, wr] False,
+        tc a v b w pc pc a [va, ba, br, wr] False,
+        tc a v b w pc pc a [va, br, ba, wr] False
         ]
 
-  forA_ test_cases (\(i1, p1, i2, p2, mkacc1, mkacc2, init, acts, succ) ->
-    test_transfer_flow env i1 p1 i2 p2 mkacc1 mkacc2 init acts succ
-    )
+  sequence_ test_cases
 
 -- Split the test as the script otherwise gets too large.
 test_transfer_flows_2 : Script ()
@@ -179,59 +180,60 @@ test_transfer_flows_2 = do
     aw = (a, V2.TIA_Withdraw)
     vw = (v, V2.TIA_Withdraw)
 
+    tc i1 p1 i2 p2 mkacc1 mkacc2 init acts succ =
+      test_transfer_flow env i1 p1 i2 p2 mkacc1 mkacc2 init acts succ
+
   let test_cases =
         -- First test self-custodial setups.
         (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
             -- Happy flows
-            (a, a, b, b, acc, acc, a, [ba], True),
-            (a, v, b, b, j, acc, v, [aa, ba], True),
-            (a, a, b, w, acc, j, a, [wa, ba], True),
+            tc a a b b acc acc a [ba] True,
+            tc a v b b j acc v [aa, ba] True,
+            tc a a b w acc j a [wa, ba] True,
             -- Partial withdrawals/rejects mixed in
-            (a, a, b, w, acc, j, a, [br, ba, wa], True),
-            (a, a, b, w, acc, j, a, [ba, br, wa], True),
-            (a, v, b, b, j, acc, v, [aa, ba], True),
-            (a, v, b, b, j, acc, v, [aa, aw, ba], True),
+            tc a a b w acc j a [br, ba, wa] True,
+            tc a a b w acc j a [ba, br, wa] True,
+            tc a v b b j acc v [aa, ba] True,
+            tc a v b b j acc v [aa, aw, ba] True,
             -- Withdrawals early, late, mixed, with partial rejects mixed in
-            (a, a, b, b, acc, acc, a, [aw], False),
-            (a, a, b, w, acc, j, a, [aw], False),
-            (a, a, b, w, acc, j, a, [ba, br, aw], False),
-            (a, v, b, b, j, acc, a, [va, vw, aw], False),
+            tc a a b b acc acc a [aw] False,
+            tc a a b w acc j a [aw] False,
+            tc a a b w acc j a [ba, br, aw] False,
+            tc a v b b j acc a [va, vw, aw] False,
             -- Rejects
-            (a, a, b, b, acc, acc, a, [br], False),
-            (a, a, b, w, acc, j, a, [wr, br], False),
-            (a, v, b, b, j, acc, a, [va, br], False)
+            tc a a b b acc acc a [br] False,
+            tc a a b w acc j a [wr, br] False,
+            tc a v b b j acc a [va, br] False
           ])
           -- Special cases arise if the account providers on both sides are the same
           -- or indeed if the sender and receiver are the same.
           <> [
             -- A self-transfer between self-managed accounts goes straight through.
-            (a, a, a, a, j, sc, a, [], True),
+            tc a a a a j sc a [] True,
             -- A transfer within a provider is simplified
-            (a, v, b, v, j, j, a, [va, ba], True),
-            (a, v, b, v, j, j, a, [va, vw, vr, aw], False),
-            (a, v, b, v, j, j, a, [va, vw, vr, br], False),
+            tc a v b v j j a [va, ba] True,
+            tc a v b v j j a [va, vw, vr, aw] False,
+            tc a v b v j j a [va, vw, vr, br] False,
             -- Even simpler if it's between two accounts of the same owner
-            (a, v, a, v, j, pc, a, [va], True),
-            (a, a, a, v, sc, pc, a, [va], True),
-            (a, v, a, a, ic, sc, a, [], True),
-            (a, v, a, v, ic, ic, a, [], True),
+            tc a v a v j pc a [va] True,
+            tc a a a v sc pc a [va] True,
+            tc a v a a ic sc a [] True,
+            tc a v a v ic ic a [] True,
             -- Transfers across providers are also simplified
-            (a, v, a, w, j, j, a, [va, wa], True),
-            (a, v, a, w, j, j, a, [va, vw, wr, aw], False),
-            (a, v, b, w, j, j, a, [va, vw, wr, br], False),
+            tc a v a w j j a [va, wa] True,
+            tc a v a w j j a [va, vw, wr, aw] False,
+            tc a v b w j j a [va, vw, wr, br] False,
             -- Patholological cases can arise where a party switches between
             -- investor and provider slots
             -- FIXME: In this first case, b's authority could be taken from the
             -- AccountConfig. But the check in `tryUseAccountAuthority` is too
             -- strict.
-            (a, v, b, a, j, p, a, [va, ba], True),
-            (a, v, b, a, j, j, a, [va, ba], True),
-            (a, v, b, a, j, p, a, [va, aw, ba], True),
-            (a, v, b, a, j, p, a, [va, ar], False)
+            tc a v b a j p a [va, ba] True,
+            tc a v b a j j a [va, ba] True,
+            tc a v b a j p a [va, aw, ba] True,
+            tc a v b a j p a [va, ar] False
           ]
-  forA_ test_cases (\(i1, p1, i2, p2, mkacc1, mkacc2, init, acts, succ) ->
-    test_transfer_flow env i1 p1 i2 p2 mkacc1 mkacc2 init acts succ
-    )
+  sequence_ test_cases
 
 test_transfer_flow : TestRegistries.Env
   -> Party -> Party -> Party -> Party
@@ -240,7 +242,7 @@ test_transfer_flow : TestRegistries.Env
   -> [(Party, V2.TransferInstructionAction)]
   -> Bool
   -> Script ()
-test_transfer_flow env sender senderProvider receiver receiverProvider mkacSender mkacReceiver initiator actions expectSuccess = do  
+test_transfer_flow env sender senderProvider receiver receiverProvider mkacSender mkacReceiver initiator actions expectSuccess = do
   let registries = env.registries
   let instrX = V2.InstrumentId with
         id = "X"

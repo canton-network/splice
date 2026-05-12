@@ -3,7 +3,7 @@
 
 module Splice.Tests.TestTokenV2.UnitTest_AccountConfig where
 
-import DA.Foldable (forA_)
+import DA.Foldable (sequence_)
 import DA.Text qualified as T
 
 import Daml.Script
@@ -80,143 +80,145 @@ sc id admin owner provider =
    in acc with account.provider = None
 
 test_availableTransferInstructionActions : Script ()
-test_availableTransferInstructionActions = do 
+test_availableTransferInstructionActions = do
   let
+    tc s ps r pr mks mkr aa wa ra eaa ewa era state =
+      test_transfer_instruction_case s ps r pr mks mkr aa wa ra eaa ewa era state
+
     test_cases = [
 
       -- Start with Joint/Joint and all different parties
-      (a, v, b, w, j, j, [], [] ,[], [[a] ,[v], [a,v]], [], [], TIS_Init),
-      (a, v, b, w, j, j, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
-      (a, v, b, w, j, j, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
+      tc a v b w j j [] [] [] [[a] ,[v], [a,v]] [] [] TIS_Init,
+      tc a v b w j j [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w j j [v] [] [] [[a]] [[v]] [] TIS_Init,
       -- Now it's sender-authorized
-      (a, v, b, w, j, j, [a,v], [] ,[], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
+      tc a v b w j j [a,v] [] [] [[b], [w], [b,w]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
       -- Test withdrawing
-      (a, v, b, w, j, j, [a,v], [a] ,[], [[b], [w], [b,w]], [[v]], [[b], [w], [b,w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [v] ,[], [[b], [w], [b,w]], [[a]], [[b], [w], [b,w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
+      tc a v b w j j [a,v] [a] [] [[b], [w], [b,w]] [[v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [] [[b], [w], [b,w]] [[a]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
       -- Test rejecting
-      (a, v, b, w, j, j, [a,v], [] ,[b], [[b], [w], [b,w]], [[a], [v], [a,v]], [[w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [] ,[w], [[b], [w], [b,w]], [[a], [v], [a,v]], [[b]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
+      tc a v b w j j [a,v] [] [b] [[b], [w], [b,w]] [[a], [v], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [] [w] [[b], [w], [b,w]] [[a], [v], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w j j [a,v] [] [b, w] [] [] [] TIS_Rejected,
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, j, j, [a,v], [a] ,[b], [[b], [w], [b,w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [a] ,[w], [[b], [w], [b,w]], [[v]], [[b]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [v] ,[b], [[b], [w], [b,w]], [[a]], [[w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v], [v] ,[w], [[b], [w], [b,w]], [[a]], [[b]], TIS_Authorized),
+      tc a v b w j j [a,v] [a] [b] [[b], [w], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [a] [w] [[b], [w], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [b] [[b], [w], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [w] [[b], [w], [b,w]] [[a]] [[b]] TIS_Authorized,
       -- Test Accepting
-      (a, v, b, w, j, j, [a,v,b], [] ,[], [[w]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v,w], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [w], [b,w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
+      tc a v b w j j [a,v,b] [] [] [[w]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v,w] [] [] [[b]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v,b,w] [] [] [] [] [] TIS_Accepted,
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, j, j, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, j, j, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
+      tc a v b w j j [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, j, j, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, j, j, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, j, j, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
-      (a, v, b, w, j, j, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected),
+      tc a v b w j j [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w j j [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w j j [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w j j [a,v,w] [a] [b, w] [] [] [] TIS_Rejected,
 
       -- Do the same with provider controlled
-      (a, v, b, w, p, p, [], [] ,[], [[v], [a,v]], [], [], TIS_Init),
-      (a, v, b, w, p, p, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
-      (a, v, b, w, p, p, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
+      tc a v b w p p [] [] [] [[v], [a,v]] [] [] TIS_Init,
+      tc a v b w p p [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w p p [v] [] [] [[a]] [[v]] [] TIS_Init,
       -- Now it's sender-authorized
-      (a, v, b, w, p, p, [a,v], [] ,[], [[w], [b,w]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
+      tc a v b w p p [a,v] [] [] [[w], [b,w]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
       -- Test withdrawing
-      (a, v, b, w, p, p, [a,v], [a] ,[], [[w], [b,w]], [[v]], [[w], [b,w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [v] ,[], [[w], [b,w]], [[a]], [[w], [b,w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
+      tc a v b w p p [a,v] [a] [] [[w], [b,w]] [[v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [] [[w], [b,w]] [[a]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
       -- Test rejecting
-      (a, v, b, w, p, p, [a,v], [] ,[b], [[w], [b,w]], [[v], [a,v]], [[w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [] ,[w], [[w], [b,w]], [[v], [a,v]], [[b]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
+      tc a v b w p p [a,v] [] [b] [[w], [b,w]] [[v], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [] [w] [[w], [b,w]] [[v], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w p p [a,v] [] [b, w] [] [] [] TIS_Rejected,
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, p, p, [a,v], [a] ,[b], [[w], [b,w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [a] ,[w], [[w], [b,w]], [[v]], [[b]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [v] ,[b], [[w], [b,w]], [[a]], [[w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v], [v] ,[w], [[w], [b,w]], [[a]], [[b]], TIS_Authorized),
+      tc a v b w p p [a,v] [a] [b] [[w], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [a] [w] [[w], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [b] [[w], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [w] [[w], [b,w]] [[a]] [[b]] TIS_Authorized,
       -- Test Accepting
-      (a, v, b, w, p, p, [a,v,b], [] ,[], [[w]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v,w], [] ,[], [[b]], [[v], [a,v]], [[w], [b,w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
+      tc a v b w p p [a,v,b] [] [] [[w]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v,w] [] [] [[b]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v,b,w] [] [] [] [] [] TIS_Accepted,
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, p, p, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, p, p, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
+      tc a v b w p p [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, p, p, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, p, p, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, p, p, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
-      (a, v, b, w, p, p, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected)
+      tc a v b w p p [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w p p [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w p p [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w p p [a,v,w] [a] [b, w] [] [] [] TIS_Rejected
       ]
 
       -- We do not expect a difference between provider confirmed, investor controlled,
-      -- In both cases the investor authorizes first. 
+      -- In both cases the investor authorizes first.
       -- The second authorization from the provider is needed, but pulled in thorugh
       -- the accounts
-      <> (mconcat . (flip map) [pc, ic])  (\acc -> [        
-      (a, v, b, w, acc, acc, [], [] ,[], [[a] ,[a,v]], [], [], TIS_Init),
-      (a, v, b, w, acc, acc, [a], [] ,[], [[v]], [[a]], [], TIS_Init),
-      (a, v, b, w, acc, acc, [v], [] ,[], [[a]], [[v]], [], TIS_Init),
+      <> (mconcat . (flip map) [pc, ic])  (\acc -> [
+      tc a v b w acc acc [] [] [] [[a] ,[a,v]] [] [] TIS_Init,
+      tc a v b w acc acc [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w acc acc [v] [] [] [[a]] [[v]] [] TIS_Init,
       -- Now it's sender-authorized
-      (a, v, b, w, acc, acc, [a,v], [] ,[], [[b], [b,w]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
+      tc a v b w acc acc [a,v] [] [] [[b], [b,w]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
       -- Test withdrawing
-      (a, v, b, w, acc, acc, [a,v], [a] ,[], [[b], [b,w]], [[v]], [[b], [b,w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[], [[b], [b,w]], [[a]], [[b], [b,w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [a,v] ,[], [], [], [], TIS_Withdrawn),
+      tc a v b w acc acc [a,v] [a] [] [[b], [b,w]] [[v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [] [[b], [b,w]] [[a]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
       -- Test rejecting
-      (a, v, b, w, acc, acc, [a,v], [] ,[b], [[b], [b,w]], [[a], [a,v]], [[w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [] ,[w], [[b], [b,w]], [[a], [a,v]], [[b]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [] ,[b, w], [], [], [], TIS_Rejected),
+      tc a v b w acc acc [a,v] [] [b] [[b], [b,w]] [[a], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [] [w] [[b], [b,w]] [[a], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [] [b, w] [] [] [] TIS_Rejected,
       -- Test partial withdrawing/rejecting
-      (a, v, b, w, acc, acc, [a,v], [a] ,[b], [[b], [b,w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [a] ,[w], [[b], [b,w]], [[v]], [[b]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[b], [[b], [b,w]], [[a]], [[w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v], [v] ,[w], [[b], [b,w]], [[a]], [[b]], TIS_Authorized),
+      tc a v b w acc acc [a,v] [a] [b] [[b], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [a] [w] [[b], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [b] [[b], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [w] [[b], [b,w]] [[a]] [[b]] TIS_Authorized,
       -- Test Accepting
-      (a, v, b, w, acc, acc, [a,v,b], [] ,[], [[w]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v,w], [] ,[], [[b]], [[a], [a,v]], [[b], [b,w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v,b,w], [] ,[], [], [], [], TIS_Accepted),
+      tc a v b w acc acc [a,v,b] [] [] [[w]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,w] [] [] [[b]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,b,w] [] [] [] [] [] TIS_Accepted,
       -- Test Accepting during partial withdraw/reject
-      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b], [[w]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b], [[b]], [[v]], [[w]], TIS_Authorized),
-      (a, v, b, w, acc, acc, [a,v,b,w], [a] ,[b], [], [], [], TIS_Accepted),
+      tc a v b w acc acc [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
       -- Test Reject/Withdraw during partial accept
-      (a, v, b, w, acc, acc, [a,v,b], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, acc, acc, [a,v,w], [a,v] ,[b], [], [], [], TIS_Withdrawn),
-      (a, v, b, w, acc, acc, [a,v,b], [a] ,[b, w], [], [], [], TIS_Rejected),
-      (a, v, b, w, acc, acc, [a,v,w], [a] ,[b, w], [], [], [], TIS_Rejected)
+      tc a v b w acc acc [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w acc acc [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w acc acc [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w acc acc [a,v,w] [a] [b, w] [] [] [] TIS_Rejected
       ])
 
       -- In the self-custodial case, the extra steps fall away. This is equally true
       -- for other account types if investors are their own providers.
-      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [        
-      (a, a, b, b, acc, acc, [], [] ,[], [[a]], [], [], TIS_Init),
+      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
+      tc a a b b acc acc [] [] [] [[a]] [] [] TIS_Init,
       -- Now it's sender-authorized
-      (a, a, b, b, acc, acc, [a], [] ,[], [[b]], [[a]], [[b]], TIS_Authorized),
+      tc a a b b acc acc [a] [] [] [[b]] [[a]] [[b]] TIS_Authorized,
       -- Test withdrawing
-      (a, a, b, b, acc, acc, [a], [a] ,[], [], [], [], TIS_Withdrawn),
+      tc a a b b acc acc [a] [a] [] [] [] [] TIS_Withdrawn,
       -- Test rejecting
-      (a, a, b, b, acc, acc, [a], [] ,[b], [], [], [], TIS_Rejected),
+      tc a a b b acc acc [a] [] [b] [] [] [] TIS_Rejected,
       -- Test Accepting
-      (a, a, b, b, acc, acc, [a,b], [] ,[], [], [], [], TIS_Accepted)
+      tc a a b b acc acc [a,b] [] [] [] [] [] TIS_Accepted
       ])
 
       -- Special cases arise if the account providers on both sides are the same
       -- or indeed if the sender and receiver are the same.
       <> [
         -- A self-transfer between self-managed accounts goes straight through.
-        (a, a, a, a, j, j, [], [] ,[], [[a]], [], [], TIS_Init),
-        (a, a, a, a, j, j, [a], [] ,[], [], [], [], TIS_Accepted),
+        tc a a a a j j [] [] [] [[a]] [] [] TIS_Init,
+        tc a a a a j j [a] [] [] [] [] [] TIS_Accepted,
         -- A transfer within a provider is simplified
-        (a, v, b, v, j, j, [], [] ,[], [[a], [v], [a,v]], [], [], TIS_Init),
-        (a, v, b, v, j, j, [a,v], [] ,[], [[b]], [[a], [v], [a,v]], [[b], [v], [b,v]], TIS_Authorized),
-        (a, v, b, v, j, j, [a,v,b], [] ,[], [], [], [], TIS_Accepted)
+        tc a v b v j j [] [] [] [[a], [v], [a,v]] [] [] TIS_Init,
+        tc a v b v j j [a,v] [] [] [[b]] [[a], [v], [a,v]] [[b], [v], [b,v]] TIS_Authorized,
+        tc a v b v j j [a,v,b] [] [] [] [] [] TIS_Accepted
       ]
-      
-  forA_ test_cases (\(s, ps, r, pr, mks, mkr, aa, wa, ra, eaa, ewa, era, state) ->
-    test_transfer_instruction_case s ps r pr mks mkr aa wa ra eaa ewa era state)
+
+  sequence_ test_cases
 
 test_transfer_instruction_case : Party -> Party -> Party -> Party
   -> MkAccountConfig -> MkAccountConfig
@@ -225,7 +227,7 @@ test_transfer_instruction_case : Party -> Party -> Party -> Party
   -> TransferInstructionState
   -> Script ()
 test_transfer_instruction_case sender senderProvider receiver receiverProvider mkacSender mkacReceiver
-  acceptAuthorizers withdrawAuthorizers rejectAuthorizers 
+  acceptAuthorizers withdrawAuthorizers rejectAuthorizers
   expectedAcceptActors expectedWithdrawActors expectedRejectActors expectedState = do
   let
     senderAccount = mkacSender "sender" ad sender senderProvider
@@ -256,51 +258,53 @@ test_transfer_instruction_case sender senderProvider receiver receiverProvider m
 
 -- Allocation Instruction Tests
 test_availableAllocationInstructionActions : Script ()
-test_availableAllocationInstructionActions = do 
+test_availableAllocationInstructionActions = do
   let
+    tc authorizer provider mkacc aa wa eaa ewa state =
+      test_allocation_instruction_case authorizer provider mkacc aa wa eaa ewa state
+
     test_cases = [
       -- Start with Joint/Joint and all different parties
-      (a, v, j, [], [], [[a] ,[v], [a,v]], [], AIS_Init),
-      (a, v, j, [a], [], [[v]], [[a]], AIS_Init),
-      (a, v, j, [v], [], [[a]], [[v]], AIS_Init),
-      (a, v, j, [a,v], [], [], [], AIS_Accepted),
-      (a, v, j, [a], [a], [], [], AIS_Withdrawn),
-      (a, v, j, [v], [v], [], [], AIS_Withdrawn),
-      (a, v, p, [], [], [[a, v], [v]], [], AIS_Init),
-      (a, v, p, [v], [], [[a]], [[v]], AIS_Init),
-      (a, v, p, [a,v], [], [], [], AIS_Accepted),
-      (a, v, p, [v], [v], [], [], AIS_Withdrawn)
+      tc a v j [] [] [[a] ,[v], [a,v]] [] AIS_Init,
+      tc a v j [a] [] [[v]] [[a]] AIS_Init,
+      tc a v j [v] [] [[a]] [[v]] AIS_Init,
+      tc a v j [a,v] [] [] [] AIS_Accepted,
+      tc a v j [a] [a] [] [] AIS_Withdrawn,
+      tc a v j [v] [v] [] [] AIS_Withdrawn,
+      tc a v p [] [] [[a, v], [v]] [] AIS_Init,
+      tc a v p [v] [] [[a]] [[v]] AIS_Init,
+      tc a v p [a,v] [] [] [] AIS_Accepted,
+      tc a v p [v] [v] [] [] AIS_Withdrawn
       ]
       -- We do not expect a difference between provider confirmed, investor controlled,
-      -- In both cases the investor authorizes first. 
+      -- In both cases the investor authorizes first.
       -- The second authorization from the provider is needed, but pulled in thorugh
       -- the accounts
       <> (mconcat . (flip map) [pc, ic])  (\acc -> [
-      (a, v, acc, [], [], [[a], [a, v]], [], AIS_Init),
-      (a, v, acc, [a], [], [[v]], [[a]], AIS_Init),
-      (a, v, acc, [a,v], [], [], [], AIS_Accepted),
-      (a, v, acc, [a], [a], [], [], AIS_Withdrawn)
+      tc a v acc [] [] [[a], [a, v]] [] AIS_Init,
+      tc a v acc [a] [] [[v]] [[a]] AIS_Init,
+      tc a v acc [a,v] [] [] [] AIS_Accepted,
+      tc a v acc [a] [a] [] [] AIS_Withdrawn
       ])
 
             -- In the self-custodial case, the extra steps fall away. This is equally true
       -- for other account types if investors are their own providers.
-      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [        
-      (a, a, acc, [], [], [[a]], [], AIS_Init),
-      (a, a, acc, [a], [], [], [], AIS_Accepted)
+      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
+      tc a a acc [] [] [[a]] [] AIS_Init,
+      tc a a acc [a] [] [] [] AIS_Accepted
       ])
 
-  forA_ test_cases (\(authorizer, provider, mkacc, aa, wa, eaa, ewa, state) ->
-    test_allocation_instruction_case authorizer provider mkacc aa wa eaa ewa state)
+  sequence_ test_cases
 
 
 test_allocation_instruction_case : Party -> Party
-  -> MkAccountConfig 
+  -> MkAccountConfig
   -> [Party] -> [Party]
   -> [[Party]] -> [[Party]]
   -> AllocationInstructionState
   -> Script ()
 test_allocation_instruction_case authorizer provider mkacc
-  acceptAuthorizers withdrawAuthorizers  
+  acceptAuthorizers withdrawAuthorizers
   expectedAcceptActors expectedWithdrawActors expectedState = do
     let
       account = mkacc "authorizer" ad authorizer provider
@@ -331,40 +335,42 @@ test_allocation_instruction_case authorizer provider mkacc
 
 -- Allocation  Tests
 test_availableAllocationActions : Script ()
-test_availableAllocationActions = do 
+test_availableAllocationActions = do
   let
+    tc authorizer provider admin executor mkacc wa ca sa ewa eca esa state =
+      test_allocation_case authorizer provider admin executor mkacc wa ca sa ewa eca esa state
+
     test_cases = [
       -- Start with Joint and all different parties
-      (a, v, ad, [ex], j, [], [], [], [[a] ,[v], [a,v]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], j, [a], [], [], [[v]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], j, [v], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], j, [a,v], [], [], [], [], [], AS_Withdrawn),
-      (a, v, ad, [ex], j, [], [ex], [], [], [], [], AS_Cancelled),
-      (a, v, ad, [ex], j, [], [], [ad, ex], [], [], [], AS_Settled),
+      tc a v ad [ex] j [] [] [] [[a] ,[v], [a,v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [a] [] [] [[v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [v] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [a,v] [] [] [] [] [] AS_Withdrawn,
+      tc a v ad [ex] j [] [ex] [] [] [] [] AS_Cancelled,
+      tc a v ad [ex] j [] [] [ad, ex] [] [] [] AS_Settled,
 
       -- Other account types.
-      (a, a, ad, [ex], sc, [], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
-      (a, a, ad, [ex], j, [], [], [], [[a]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], ic, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], pc, [], [], [], [[a], [a, v]], [[ex]], [[ad, ex]], AS_Init),
-      (a, v, ad, [ex], p, [], [], [], [[a,v], [v]], [[ex]], [[ad, ex]], AS_Init),
+      tc a a ad [ex] sc [] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a a ad [ex] j [] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] ic [] [] [] [[a], [a, v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] pc [] [] [] [[a], [a, v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] p [] [] [] [[a,v], [v]] [[ex]] [[ad, ex]] AS_Init,
 
       -- Multiple executors
-      (a, v, ad, [ex,b], j, [], [], [], [[a] ,[v], [a,v]], [[b, ex]], [[ad, b, ex]], AS_Init),
+      tc a v ad [ex,b] j [] [] [] [[a] ,[v], [a,v]] [[b, ex]] [[ad, b, ex]] AS_Init,
 
       -- Admin as executor
-      (a, v, ad, [ad], j, [], [], [], [[a] ,[v], [a,v]], [[ad]], [[ad]], AS_Init),
+      tc a v ad [ad] j [] [] [] [[a] ,[v], [a,v]] [[ad]] [[ad]] AS_Init,
 
       -- Provider as executor
-      (a, v, ad, [v], j, [], [], [], [[a] ,[v], [a,v]], [[v]], [[ad, v]], AS_Init)
+      tc a v ad [v] j [] [] [] [[a] ,[v], [a,v]] [[v]] [[ad, v]] AS_Init
       ]
 
-  forA_ test_cases (\(authorizer, provider, admin, executor, mkacc, wa, ca, sa, ewa, eca, esa, state) ->
-    test_allocation_case authorizer provider admin executor mkacc wa ca sa ewa eca esa state)
+  sequence_ test_cases
 
 
 test_allocation_case : Party -> Party -> Party -> [Party]
-  -> MkAccountConfig 
+  -> MkAccountConfig
   -> [Party] -> [Party] -> [Party]
   -> [[Party]] -> [[Party]] -> [[Party]]
   -> AllocationState
