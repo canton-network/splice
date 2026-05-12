@@ -18,6 +18,7 @@ import {
 } from '../contexts/WalletServiceContext';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { ContractId } from '@daml/types';
+import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
 
 const ListAllocations: React.FC = () => {
   const allocationsQuery = useAmuletAllocations();
@@ -59,7 +60,8 @@ const AllocationDisplay: React.FC<{
   const { withdrawAllocation, withdrawAllocationV2 } = useWalletClient();
   const v2 = isV2Allocation(allocation.payload);
   const spec = getAllocationSpec(allocation.payload);
-  const { settlement, transferLegs } = spec;
+  const { settlement, transferLegSides } = spec;
+  const transferLegs = transferLegSidesToTransferLegs(transferLegSides);
   return (
     <Card className="allocation" variant="outlined">
       <CardContent
@@ -104,22 +106,32 @@ function getAllocationSpec(payload: AmuletAllocation): AllocationSpecification {
     settlement: {
       executors: [v1.settlement.executor],
       settlementRef: v1.settlement.settlementRef,
-      requestedAt: v1.settlement.requestedAt,
-      settleAt: v1.settlement.settleBefore,
       settlementDeadline: null,
       meta: v1.settlement.meta,
     },
-    transferLegs: [
+    transferLegSides: [
       {
-        transferLegId: v1.transferLegId,
-        sender: { owner: v1.transferLeg.sender, provider: null, id: '' },
-        receiver: { owner: v1.transferLeg.receiver, provider: null, id: '' },
-        amount: v1.transferLeg.amount,
-        instrumentId: v1.transferLeg.instrumentId,
-        meta: v1.transferLeg.meta,
+        transferLegId: payload.allocation.transferLegId,
+        meta: payload.allocation.transferLeg.meta,
+        side: 'ReceiverSide',
+        otherside: { owner: payload.allocation.transferLeg.sender, provider: null, id: '' },
+        amount: payload.allocation.transferLeg.amount,
+        instrumentId: payload.allocation.transferLeg.instrumentId.id,
+      },
+      {
+        transferLegId: payload.allocation.transferLegId,
+        meta: payload.allocation.transferLeg.meta,
+        side: 'SenderSide',
+        otherside: { owner: payload.allocation.transferLeg.receiver, provider: null, id: '' },
+        amount: payload.allocation.transferLeg.amount,
+        instrumentId: payload.allocation.transferLeg.instrumentId.id,
       },
     ],
     authorizer: { owner: v1.transferLeg.sender, provider: null, id: '' },
+    meta: { values: {} },
+    nextIterationFunding: null,
+    committed: false,
+    admin: payload.allocation.transferLeg.instrumentId.admin,
   };
 }
 

@@ -41,7 +41,10 @@ import {
   ListAllocationsResponse,
 } from '@lfdecentralizedtrust/wallet-openapi';
 import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
-import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
+import {
+  AllocationRequest as AllocationRequestV2,
+  AllocationRequestView as AllocationRequestViewV2,
+} from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
 import { mkContract } from './mocks/contract';
 import {
   openApiV1RequestFromTransferLeg,
@@ -49,7 +52,7 @@ import {
 } from '../components/ListAllocationRequests';
 import { shortenPartyId } from '../utils/partyId';
 import * as damlTypes from '@daml/types';
-import { ContractId, Optional, Text } from '@daml/types';
+import { ContractId, emptyMap, Optional, Text } from '@daml/types';
 import { AnyContract } from '@daml.js/splice-api-token-metadata/lib/Splice/Api/Token/MetadataV1/module';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
@@ -428,14 +431,12 @@ describe('Wallet user can', () => {
 
         acceptButtons[0].click();
         const calledWithBody = await createPromise;
-        const acceptableLegs = allocationRequest.transferLegs.filter(
-          leg =>
-            (leg.sender.owner === alicePartyId || leg.receiver.owner === alicePartyId) &&
-            leg.instrumentId.id === 'Amulet'
-        );
+        const acceptableSides = allocationRequest.allocations
+          .flatMap(alloc => alloc.transferLegSides)
+          .filter(side => side.transferLegId === 'acceptable');
         const expected = openApiV2RequestFromAllocationRequest(
           allocationRequest.settlement,
-          acceptableLegs
+          acceptableSides
         );
         expect(calledWithBody).toStrictEqual(expected);
       });
@@ -1450,8 +1451,11 @@ function getAllocationRequestV1() {
   };
 }
 
-function getAllocationRequestV2() {
+function getAllocationRequestV2(): AllocationRequestViewV2 {
   return {
+    originalRequestCid: null,
+    requestedAt: new Date().toISOString(),
+    settleAt: new Date().toISOString(),
     authorizer: { owner: alicePartyId, provider: null, id: '' },
     settlement: {
       executors: ['executor'],
@@ -1459,47 +1463,70 @@ function getAllocationRequestV2() {
         id: 'the_id',
         cid: null as damlTypes.Optional<ContractId<AnyContract>>,
       },
-      requestedAt: new Date().toISOString(),
-      settleAt: new Date().toISOString(),
       settlementDeadline: null as damlTypes.Optional<string>,
       meta: { values: {} },
     },
-    transferLegs: [
+    allocations: [
       {
-        transferLegId: 'acceptable',
-        sender: { owner: alicePartyId, provider: null, id: '' },
-        receiver: { owner: bobPartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Amulet',
-          admin: dsoPartyId,
-        },
+        admin: dsoPartyId,
         meta: { values: {} },
-      },
-      {
-        transferLegId: 'different_sender',
-        sender: { owner: bobPartyId, provider: null, id: '' },
-        receiver: { owner: alicePartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Amulet',
-          admin: dsoPartyId,
-        },
-        meta: { values: {} },
-      },
-      {
-        transferLegId: 'different_instrument',
-        sender: { owner: alicePartyId, provider: null, id: '' },
-        receiver: { owner: bobPartyId, provider: null, id: '' },
-        amount: '3',
-        instrumentId: {
-          id: 'Another',
-          admin: dsoPartyId,
-        },
-        meta: { values: {} },
+        committed: false,
+        nextIterationFunding: null,
+        transferLegSides: [
+          {
+            transferLegId: 'acceptable',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'acceptable',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+
+          {
+            transferLegId: 'different_sender',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'different_sender',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+
+          {
+            transferLegId: 'different_instrument',
+            instrumentId: 'Another',
+            amount: '3',
+            meta: { values: {} },
+            side: 'ReceiverSide',
+            otherside: { owner: alicePartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'different_instrument',
+            instrumentId: 'Another',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide',
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+        ],
       },
     ],
-    availableActions: [] as [string[], { tag: string; value: object }[]][],
+    availableActions: emptyMap(),
     meta: { values: {} },
   };
 }
@@ -1514,16 +1541,30 @@ function getAllocationV2(
   return {
     lockedAmulet: null as damlTypes.Optional<ContractId<LockedAmulet>>,
     dso: dsoPartyId,
+    createdAt: new Date().toISOString(),
     expiresAt: new Date().toISOString(),
+    numIterations: '0',
     allocation: {
-      transferLegs: [
+      admin: dsoPartyId,
+      meta: { values: {} },
+      committed: false,
+      nextIterationFunding: null,
+      transferLegSides: [
         {
           transferLegId,
-          sender: { owner: alicePartyId, provider: null, id: '' },
-          receiver: { owner: receiver, provider: null, id: '' },
-          amount,
+          side: 'ReceiverSide',
+          instrumentId: 'Amulet',
           meta: { values: {} },
-          instrumentId: { id: 'Amulet', admin: dsoPartyId },
+          otherside: { owner: alicePartyId, provider: null, id: '' },
+          amount,
+        },
+        {
+          transferLegId,
+          side: 'SenderSide',
+          instrumentId: 'Amulet',
+          meta: { values: {} },
+          otherside: { owner: receiver, provider: null, id: '' },
+          amount,
         },
       ],
       settlement: {
@@ -1532,8 +1573,6 @@ function getAllocationV2(
           id: settlementId,
           cid: null,
         },
-        requestedAt: new Date().toISOString(),
-        settleAt: new Date().toISOString(),
         settlementDeadline: null,
         meta: { values: {} },
       },

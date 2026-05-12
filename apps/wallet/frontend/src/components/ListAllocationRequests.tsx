@@ -31,11 +31,13 @@ import {
 import {
   SettlementInfo,
   TransferLeg,
+  TransferLegSide,
 } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { damlTimestampToOpenApiTimestamp } from '../utils/timestampConversion';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import UseGetAmuletRules from '../hooks/scan-proxy/useGetAmuletRules';
 import { ContractId } from '@daml/types';
+import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
 
 dayjs.extend(relativeTime);
 
@@ -99,8 +101,8 @@ const AllocationRequestDisplay: React.FC<{
   const payload = request.payload;
   const isV2 = isV2AllocationRequest(payload);
   const { settlement, transferLegs } = isV2
-    ? { settlement: payload.settlement, transferLegs: payload.transferLegs }
-    : v1RequestToV2Display(payload);
+    ? v2RequestToDisplay(payload)
+    : v1RequestToDisplay(payload);
   const requestMeta = payload.meta;
 
   const { rejectAllocationRequest } = useWalletClient();
@@ -189,18 +191,24 @@ const V2AllocationRequestActionButton: React.FC<{
   dso: string;
 }> = ({ allocationRequest, userParty, allocations, dso }) => {
   const payload = allocationRequest.payload;
-  const amuletLegsForUser = payload.transferLegs.filter(
-    leg =>
-      (leg.sender.owner === userParty || leg.receiver.owner === userParty) &&
-      leg.instrumentId.id === 'Amulet' &&
-      leg.instrumentId.admin === dso
+  const legIdsWhereUserIsInvolved = new Set(
+    payload.allocations
+      .filter(requestedAllocation => requestedAllocation.admin === dso)
+      .flatMap(requestedAllocation => requestedAllocation.transferLegSides)
+      .filter(side => side.instrumentId === 'Amulet' && side.otherside.owner === userParty)
+      .map(side => side.transferLegId)
+  );
+  const sidesForUser = payload.allocations.flatMap(requestedAllocation =>
+    requestedAllocation.transferLegSides.filter(side =>
+      legIdsWhereUserIsInvolved.has(side.transferLegId)
+    )
   );
   const isAuthorizer =
     payload.authorizer.owner === userParty &&
     (payload.authorizer.provider === null || payload.authorizer.provider === undefined) &&
     payload.authorizer.id === '';
   // basicAccount check: authorizer matches basicAccount(userParty)
-  const canAccept = amuletLegsForUser.length > 0 && isAuthorizer;
+  const canAccept = sidesForUser.length > 0 && isAuthorizer;
 
   const correspondingAllocation = allocations.find(alloc =>
     isAllocationForRequest(alloc, allocationRequest)
@@ -211,7 +219,7 @@ const V2AllocationRequestActionButton: React.FC<{
   const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
-      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegsForUser);
+      const req = openApiV2RequestFromAllocationRequest(payload.settlement, sidesForUser);
       return await createAllocationV2(req);
     },
     onSuccess: () => {},
@@ -396,7 +404,9 @@ function isAllocationForTransferLeg(
     sameExecutor = allocation.payload.allocation.settlement.executors.some(
       e => e === allocationRequest.payload.settlement.executor
     );
-    sameLegId = allocation.payload.allocation.transferLegs.some(leg => leg.transferLegId === legId);
+    sameLegId = allocation.payload.allocation.transferLegSides.some(
+      side => side.transferLegId === legId
+    );
   } else {
     sameExecutor =
       allocation.payload.allocation.settlement.executor ===
@@ -443,7 +453,7 @@ export function openApiV1RequestFromTransferLeg(
 /** V2: build AllocateAmuletV2Request from settlement + filtered transfer legs */
 export function openApiV2RequestFromAllocationRequest(
   settlement: SettlementInfo,
-  transferLegs: TransferLeg[]
+  transferLegSides: TransferLegSide[]
 ): AllocateAmuletV2Request {
   return {
     settlement: {
@@ -452,34 +462,45 @@ export function openApiV2RequestFromAllocationRequest(
         id: settlement.settlementRef.id,
         cid: settlement.settlementRef.cid as string,
       },
-      requested_at: damlTimestampToOpenApiTimestamp(settlement.requestedAt),
-      settle_at: damlTimestampToOpenApiTimestamp(settlement.settleAt),
       meta: settlement.meta.values,
       ...(settlement.settlementDeadline
         ? { settlement_deadline: damlTimestampToOpenApiTimestamp(settlement.settlementDeadline) }
         : {}),
     },
-    transfer_legs: transferLegs.map(leg => ({
-      transfer_leg_id: leg.transferLegId,
-      sender: leg.sender.owner,
-      receiver: leg.receiver.owner,
-      amount: leg.amount,
-      meta: leg.meta.values,
+    transfer_leg_sides: transferLegSides.map(side => ({
+      transfer_leg_id: side.transferLegId,
+      amount: side.amount,
+      other_side: side.otherside.owner,
+      side: side.side === 'SenderSide' ? 'SENDERSIDE' : 'RECEIVERSIDE',
+      meta: side.meta.values,
     })),
+    // TODO (#5498): make the FE specify these
+    committed: false,
+    next_iteration_funding: {},
+    meta: {},
+  };
+}
+
+type DisplayRequest = {
+  settlement: SettlementInfo;
+  transferLegs: TransferLeg[];
+};
+function v2RequestToDisplay(payload: AllocationRequestV2): DisplayRequest {
+  const transferLegs = transferLegSidesToTransferLegs(
+    payload.allocations.flatMap(allocation => allocation.transferLegSides)
+  );
+  return {
+    settlement: payload.settlement,
+    transferLegs,
   };
 }
 
 /** Convert V1 AllocationRequest fields to V2 shapes for display */
-function v1RequestToV2Display(payload: AllocationRequestV1): {
-  settlement: SettlementInfo;
-  transferLegs: TransferLeg[];
-} {
+function v1RequestToDisplay(payload: AllocationRequestV1): DisplayRequest {
   return {
     settlement: {
       executors: [payload.settlement.executor],
       settlementRef: payload.settlement.settlementRef,
-      requestedAt: payload.settlement.requestedAt,
-      settleAt: payload.settlement.settleBefore,
       settlementDeadline: null,
       meta: payload.settlement.meta,
     },
@@ -488,7 +509,7 @@ function v1RequestToV2Display(payload: AllocationRequestV1): {
       sender: { owner: leg.sender, provider: null, id: '' },
       receiver: { owner: leg.receiver, provider: null, id: '' },
       amount: leg.amount,
-      instrumentId: leg.instrumentId,
+      instrumentId: leg.instrumentId.id,
       meta: leg.meta,
     })),
   };

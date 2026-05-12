@@ -6,7 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import {
   AllocateAmuletV2Request,
   AllocateAmuletRequestSettlementSettlementRef,
-  TransferLegV2,
+  TransferLegSide,
 } from '@lfdecentralizedtrust/wallet-openapi';
 import {
   Alert,
@@ -352,22 +352,28 @@ function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV
   ) {
     return null;
   }
-  const validLegs: TransferLegV2[] = [];
+  const validLegSides: TransferLegSide[] = [];
   for (const leg of partial.transfer_legs) {
     if (!leg.transfer_leg_id || !leg.sender || !leg.receiver || !leg.amount) return null;
-    validLegs.push({
+    validLegSides.push({
       transfer_leg_id: leg.transfer_leg_id,
-      sender: leg.sender,
-      receiver: leg.receiver,
+      side: 'RECEIVERSIDE',
+      other_side: leg.sender,
+      meta: {},
+      amount: leg.amount,
+    });
+    validLegSides.push({
+      transfer_leg_id: leg.transfer_leg_id,
+      side: 'SENDERSIDE',
+      other_side: leg.receiver,
+      meta: {},
       amount: leg.amount,
     });
   }
-  if (validLegs.length === 0) return null;
+  if (validLegSides.length === 0) return null;
   return {
     settlement: {
       executors: partial.settlement.executors,
-      requested_at: damlTimestampToOpenApiTimestamp(partial.settlement.requested_at),
-      settle_at: damlTimestampToOpenApiTimestamp(partial.settlement.settle_at),
       settlement_deadline: partial.settlement.settlement_deadline
         ? damlTimestampToOpenApiTimestamp(partial.settlement.settlement_deadline)
         : undefined,
@@ -376,6 +382,10 @@ function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV
         cid: partial.settlement.settlement_ref.cid,
       },
     },
-    transfer_legs: validLegs,
+    transfer_leg_sides: validLegSides,
+    // TODO (#5498): make the FE specify these
+    committed: false,
+    meta: {},
+    next_iteration_funding: undefined,
   };
 }
