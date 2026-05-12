@@ -38,8 +38,7 @@ jobs:
           test_name: oss
           target: 'oss'
 
-      # Authenticate to GCP via Workload Identity Federation for read access go GCS
-      # GCS needs an OAuth2 access token
+      # Authenticate to GCP for read access to GCS
       - name: Authenticate to GCP (mainnet-history-dumps)
         id: gcp_auth
         uses: 'google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193' # v2.1.10
@@ -143,8 +142,7 @@ jobs:
           test_name: oss
           target: 'oss'
 
-      # Authenticate to GCP via Workload Identity Federation for read access go GCS
-      # GCS needs an OAuth2 access token
+      # Authenticate to GCP for read access to GCS
       - name: Authenticate to GCP (mainnet-history-dumps)
         id: gcp_auth
         uses: 'google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193' # v2.1.10
