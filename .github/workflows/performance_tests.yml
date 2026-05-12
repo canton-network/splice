@@ -45,7 +45,7 @@ jobs:
         uses: 'google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193' # v2.1.10
         with:
           workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
-          service_account: '${{ secrets.MAINNET_HISTORY_DUMPS_SA }}'
+          service_account: '${{ secrets.MAINNET_HISTORY_DUMPS_READER_SA }}'
           create_credentials_file: true
 
       - name: Run ingestion performance tests
@@ -150,7 +150,7 @@ jobs:
         uses: 'google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193' # v2.1.10
         with:
           workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
-          service_account: '${{ secrets.MAINNET_HISTORY_DUMPS_SA }}'
+          service_account: '${{ secrets.MAINNET_HISTORY_DUMPS_READER_SA }}'
           create_credentials_file: true
 
       - name: Run read performance tests
