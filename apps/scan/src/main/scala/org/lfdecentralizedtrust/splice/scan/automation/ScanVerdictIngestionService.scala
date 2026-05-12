@@ -323,8 +323,31 @@ class ScanVerdictIngestionService(
     }
   }
 
-  private def batchSource[T, Mat](source: Source[T, Mat]): Source[Seq[T], Mat] =
-    source.batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(_ :+ _)
+  private def batchSource[Mat](
+      source: Source[v30.Verdict, Mat]
+  )(implicit tc: TraceContext): Source[Seq[v30.Verdict], Mat] =
+    source
+      .batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(_ :+ _)
+      // TODO(DACH-NY/cn-test-failures#8281): Remove once we have figured out why we're getting duplicate data.
+      .map(batch => {
+        val duplicates = batch.zipWithIndex
+          .groupBy(_._1.updateId)
+          .filter(_._2.size > 1)
+
+        if (duplicates.nonEmpty) {
+          logger.info(
+            s"Received multiple verdicts with the same update id in the same batch. " +
+              s"Batch: ${batch.size} verdicts with record times ${batch.map(_.getRecordTime).map(CantonTimestamp.tryFromProtoTimestamp).mkString("[", ",", "]")}. " +
+              s"Duplicate verdicts: ${duplicates.values.flatten
+                  .map { case (verdict, index) =>
+                    s"${index} => ${verdict}"
+                  }
+                  .mkString("[\n", ",\n", "\n]")}"
+          )
+        }
+
+        batch
+      })
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = super
     .closeAsync()
