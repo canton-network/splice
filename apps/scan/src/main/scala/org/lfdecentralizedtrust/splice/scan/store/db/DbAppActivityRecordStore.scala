@@ -135,6 +135,11 @@ class DbAppActivityRecordStore(
     * round also has records. We return max_round - 1 because max_round
     * itself may still be receiving records.
     * Returns None if fewer than two consecutive rounds have been ingested.
+    *
+    * Unlike [[earliestRoundWithCompleteAppActivity]], this does not filter
+    * by ingestion version. The completeness boundary only constrains the
+    * start of ingestion — callers should pair this with
+    * `earliestRoundWithCompleteAppActivity` to get a valid range.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
