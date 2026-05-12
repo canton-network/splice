@@ -33,6 +33,67 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
+  /registry/allocation-instruction/v2/{allocationInstructionId}/choice-contexts/accept:
+    post:
+      operationId: "getAllocationInstructionAcceptContext"
+      description: |
+        Get the choice context to accept a allocation instruction.
+      parameters:
+        - name: allocationInstructionId
+          description: "The contract ID of the allocation instruction to accept."
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetChoiceContextRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChoiceContext"
+        "400":
+          $ref: "#/components/responses/400"
+        "404":
+          $ref: "#/components/responses/404"
+
+  /registry/allocation-instruction/v2/{allocationInstructionId}/choice-contexts/withdraw:
+    post:
+      operationId: "getAllocationInstructionWithdrawContext"
+      description: |
+        Get the choice context to withdraw a allocation instruction.
+      parameters:
+        - name: allocationInstructionId
+          description: "The contract ID of the allocation instruction to withdraw."
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetChoiceContextRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChoiceContext"
+        "400":
+          $ref: "#/components/responses/400"
+        "404":
+          $ref: "#/components/responses/404"
+
+
 components:
   responses:
     "400":
@@ -72,6 +133,23 @@ components:
           "choiceArguments",
         ]
 
+    GetChoiceContextRequest:
+      description: |
+        A request to get the context for executing a choice on a contract.
+      type: object
+      properties:
+        meta:
+          description: |
+            Metadata that will be passed to the choice, and should be incorporated
+            into the choice context. Provided for extensibility.
+          type: object
+          additionalProperties:
+            type: string
+        excludeDebugFields:
+          description: "If set to true, the response will not include fields prefixed with 'debug'. Useful to save bandwidth."
+          default: false
+          type: boolean
+
     FactoryWithChoiceContext:
       description: |
         A factory contract together with the choice context required to exercise the choice
@@ -96,7 +174,7 @@ components:
     ChoiceContext:
       description: |
         The context required to exercise a choice on a contract via an interface.
-        Used to retrieve additional reference date that is passed in via disclosed contracts,
+        Used to retrieve additional reference data that is passed in via disclosed contracts,
         which are in turn referred to via their contract ID in the `choiceContextData`.
 
         Asset implementations SHOULD avoid that this value depends on contract-ids passed
