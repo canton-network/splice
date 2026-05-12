@@ -43,6 +43,9 @@ class TokenStandardV2AllocationIntegrationTest
     with WalletTxLogTestUtil
     with TriggerTestUtil {
 
+  // TODO (#5499): restore once tx log parsing works for v2
+  override protected def runTokenStandardCliSanityCheck: Boolean = false
+
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
