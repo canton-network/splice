@@ -41,10 +41,7 @@ import {
   ListAllocationsResponse,
 } from '@lfdecentralizedtrust/wallet-openapi';
 import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
-import {
-  AllocationRequest as AllocationRequestV2,
-  AllocationRequestView as AllocationRequestViewV2,
-} from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
+import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
 import { mkContract } from './mocks/contract';
 import {
   openApiV1RequestFromTransferLeg,
@@ -1451,7 +1448,7 @@ function getAllocationRequestV1() {
   };
 }
 
-function getAllocationRequestV2(): AllocationRequestViewV2 {
+function getAllocationRequestV2() {
   return {
     originalRequestCid: null,
     requestedAt: new Date().toISOString(),
@@ -1516,14 +1513,6 @@ function getAllocationV2(
       committed: false,
       nextIterationFunding: null,
       transferLegSides: [
-        {
-          transferLegId,
-          side: 'ReceiverSide',
-          instrumentId: 'Amulet',
-          meta: { values: {} },
-          otherside: { owner: alicePartyId, provider: null, id: '' },
-          amount,
-        },
         {
           transferLegId,
           side: 'SenderSide',
