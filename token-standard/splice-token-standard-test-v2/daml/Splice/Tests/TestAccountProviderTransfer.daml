@@ -225,7 +225,7 @@ test_transfer_flows_2 = do
             tc a v b w j j a [va, vw, wr, br] False,
             -- Patholological cases can arise where a party switches between
             -- investor and provider slots
-            -- FIXME: In this first case, b's authority could be taken from the
+            -- TODO(tech-debt): In this first case, b's authority could be taken from the
             -- AccountConfig. But the check in `tryUseAccountAuthority` is too
             -- strict.
             tc a v b a j p a [va, ba] True,

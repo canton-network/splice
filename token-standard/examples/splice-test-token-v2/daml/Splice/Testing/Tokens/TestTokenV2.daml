@@ -2,6 +2,11 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | A mock implementation of a test token for the purpose of testing V2 token standard workflows.
+--
+-- Note that this token was built to validate the token standard V2 APIs. It supports a very
+-- rich and generic account authorization model. You probably want to remove that model or
+-- specialize it to your domain if you use TestTokenV2 as a template for your own token
+-- implementation.
 module Splice.Testing.Tokens.TestTokenV2 where
 
 import DA.Action (when)
@@ -94,7 +99,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
       extraArgs
       [this.allocation.authorizer]
 
-  let 
+  let
     mkStateMachine v = allocationInstructionStateMachineSpec v.allocation.authorizer
 
     mkPending newActionAuthorizers newAvailableActions = do
@@ -112,7 +117,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
       V2.AllocationInstructionResult_Pending instrCid ->
         tryUseAccountAuthorityForAIA' actors action instrCid authState accountMap extraArgs
       _ -> return None
-    
+
     transition fromState toState =  case (fromState, toState) of
 
       (AIS_Init, AIS_Withdrawn) ->
@@ -137,10 +142,10 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
 
       x -> abort $ "Unsupported state transition: " <> show x
 
-  applyStateMachineTransitions 
+  applyStateMachineTransitions
     this oSelf actors action mkStateMachine accountMap transition
     mkPending tryUseAuthority extraArgs
-  
+
 
 -- | Implementation of a V2-only allocation.
 template TokenAllocationV2 with
@@ -206,7 +211,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
       extraArgs
       [this.allocation.authorizer]
 
-  let 
+  let
     mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors (allocationAdmin v.allocation)
 
     mkPending newActionAuthorizers newAvailableActions = do
@@ -219,12 +224,12 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
               allocationCid = toInterfaceContractId pendingInstrCid
             authorizerHoldingCids = TextMap.empty
             meta = emptyMetadata
-    
+
     tryUseAuthority actors action result authState accountMap extraArgs = case result.output of
       V2.AllocationResult_Pending allocationCid ->
         tryUseAccountAuthorityForAA' actors action allocationCid authState accountMap extraArgs
       _ -> return None
-    
+
     transition fromState toState =  case (fromState, toState) of
 
       (AS_Init, AS_Withdrawn) -> do
@@ -234,7 +239,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
             output = V2.AllocationResult_Withdrawn
             authorizerHoldingCids
             meta = emptyMetadata
-      
+
       (AS_Init, AS_Cancelled) -> do
         authorizerHoldingCids <- unlockTokenAllocationV2 "allocation cancelled" this extraArgs
         pure V2.AllocationResult
@@ -297,10 +302,10 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
 
       x -> abort $ "Unsupported state transition: " <> show x
 
-  applyStateMachineTransitions 
-    this oSelf actors action mkStateMachine accountMap 
+  applyStateMachineTransitions
+    this oSelf actors action mkStateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
-  
+
 -- | Transfer instruction representing a token transfer offer.
 --
 -- Its input holdings reference the locked tokens.
@@ -354,14 +359,14 @@ template TokenTransferOffer with
       eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl transfer.instrumentId.admin
 
 -- The state transitions for a transfer offer
-transferInstructionTransition 
-  : TokenTransferOffer 
+transferInstructionTransition
+  : TokenTransferOffer
   -> Optional (ContractId V2.TransferInstruction)
   -> [Party]
   -> AccountConfigMap
-  -> ExtraArgs 
-  -> TransferInstructionState 
-  -> TransferInstructionState 
+  -> ExtraArgs
+  -> TransferInstructionState
+  -> TransferInstructionState
   -> Update V2.TransferInstructionResult
 transferInstructionTransition this _oSelf _actors _accountMap _extraArgs TIS_Init TIS_Withdrawn = do
   pure V2.TransferInstructionResult with
@@ -445,7 +450,7 @@ transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Auth
 transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Accepted = do
   transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized
 
-transferInstructionTransition _this _oSelf _actors _accountMap _extraArgs fromState toState = 
+transferInstructionTransition _this _oSelf _actors _accountMap _extraArgs fromState toState =
   abort $ "Unsupported state transition: " <> show (fromState, toState)
 
 applyTransferInstructionTransitions
@@ -462,7 +467,7 @@ applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors act
       extraArgs
       [transfer.sender, transfer.receiver]
 
-  let 
+  let
     mkStateMachine v = transferInstructionStateMachineSpec v.transfer.sender v.transfer.receiver
 
     mkPending newActionAuthorizers newAvailableActions = do
@@ -475,18 +480,18 @@ applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors act
               transferInstructionCid = toInterfaceContractId pendingInstrCid
             senderChangeCids = []
             meta = emptyMetadata
-    
+
     tryUseAuthority actors action result authState accountMap extraArgs = case result.output of
       V2.TransferInstructionResult_Pending instrCid ->
         tryUseAccountAuthorityForTIA' actors action instrCid authState accountMap extraArgs
       _ -> return None
-    
+
     transition = transferInstructionTransition this oSelf actors accountMap extraArgs
-    
-  applyStateMachineTransitions 
+
+  applyStateMachineTransitions
     this oSelf actors action mkStateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
-  
+
 -- | Template providing all the rules for how the tokens can be changed.
 --
 -- For this test token, they are given by the ones of the V2 token standard factories.
@@ -531,7 +536,6 @@ template TokenRules with
 
       settlementFactory_publicFetchImpl = publicFetchDefaultImpl this
 
-    -- FIXME: carry over the account authorization logic to the allocation factory and allocations once it has been reviewed
     interface instance V2.AllocationFactory for TokenRules where
       view = V2.AllocationFactoryView with
         admin
@@ -552,12 +556,6 @@ template TokenRules with
       do
         requireMatchExpected ("instrumentId.admin", instrumentId.admin) admin
         assertDeadlineExceeded "offeredAt" offeredAt
-        {- FIXME: extract account configs from context, if required
-
-        acs <- extractAccountConfigs admin extraArgs [receiver]
-        (receiverConfig, _oAccountCid) <- expectOneElement "receiver account config" show acs
-        -}
-        -- FIXME: move to 'AccountConfig' module
         let mintConfig = AccountConfig with
               admin
               account = mintAccount admin
