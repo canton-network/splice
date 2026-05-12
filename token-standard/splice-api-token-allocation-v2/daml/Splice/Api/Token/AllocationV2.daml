@@ -272,7 +272,7 @@ interface Allocation where
 -- Result Types
 ---------------
 
--- | The result of the `Allocation_Cancel` choice.
+-- | The result of a choice on an allocation.
 data AllocationResult = AllocationResult with
     output : AllocationResult_Output
       -- ^ The output of the action.
@@ -291,12 +291,11 @@ data AllocationResult_Output
         allocationCid : ContractId Allocation
           -- ^ Contract id of the allocation representing the pending state.
   | AllocationResult_Settled
-      -- | ^ The result of settling an allocation by exercising the `Allocation_Settle` choice.
+      -- ^ The result of settling an allocation by exercising the `Allocation_Settle` choice.
   | AllocationResult_Cancelled
-      -- | ^ The result of the `Allocation_Cancel` choice  when fully authorized.
+      -- ^ The result of the `Allocation_Cancel` choice  when fully authorized.
   | AllocationResult_Withdrawn
-      -- | ^ The result of the `Allocation_Withdraw` choice when fully authorized.
-
+      -- ^ The result of the `Allocation_Withdraw` choice when fully authorized.
   deriving (Show, Eq)
 
 

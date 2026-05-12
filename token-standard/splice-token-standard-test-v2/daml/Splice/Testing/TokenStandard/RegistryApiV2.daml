@@ -84,7 +84,7 @@ data GenericRegistry = GenericRegistry with
 
   ggetAllocation_CancelContext
     : ContractId V2.Allocation -> Metadata -> Script OpenApiChoiceContext
-  
+
   ggetAllocationInstruction_WithdrawContext
     : ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
 
