@@ -1,0 +1,404 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Tests.TestTokenV2.UnitTest_AccountConfig where
+
+import DA.Foldable (sequence_)
+import DA.Text qualified as T
+
+import Daml.Script
+
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig
+import DA.Optional (fromSome)
+import qualified DA.Map as Map
+import qualified Splice.Api.Token.TransferInstructionV2 as V2
+import qualified Splice.Api.Token.AllocationInstructionV2 as V2
+import qualified Splice.Api.Token.AllocationV2 as V2
+import DA.List (dedupSort)
+
+ad : Party = fromSome $ partyFromText "admin"
+ex : Party = fromSome $ partyFromText "executor"
+-- investor parties
+a : Party = fromSome $ partyFromText "a"
+b : Party = fromSome $ partyFromText "b"
+-- provider parties
+v : Party = fromSome $ partyFromText "v"
+w : Party = fromSome $ partyFromText "w"
+
+type MkAccountConfig = Text -> Party -> Party -> Party -> AccountConfig
+
+accountConfigs : Party -> Party -> Party -> Party -> Party
+  -> MkAccountConfig
+  -> MkAccountConfig
+  -> (AccountConfig, AccountConfig)
+accountConfigs admin i1 p1 i2 p2 mkac1 mkac2 = (mkac1 "sender" admin i1 p1, mkac2 "receiver" admin i2 p2)
+
+accountConfigFromPartyConfigs : Text -> Party -> Party -> Party -> PartyConfig -> PartyConfig -> AccountConfig
+accountConfigFromPartyConfigs id admin owner provider ownerConfig providerConfig =
+  AccountConfig with
+    admin
+    account = V2.Account with
+      owner
+      provider = Some provider
+      id = (id <> "/" <> show owner <> "/" <> show provider)
+    ownerConfig
+    providerConfig
+
+-- j for joint control
+j : MkAccountConfig
+j id admin owner provider =
+  accountConfigFromPartyConfigs (id <> "/j/") admin owner provider
+    PartyConfig with canInitiate = True; mustApprove = True
+    PartyConfig with canInitiate = True; mustApprove = True
+
+-- p for provider controlled
+p : MkAccountConfig
+p id admin owner provider =
+  accountConfigFromPartyConfigs (id <> "/p/") admin owner provider
+    PartyConfig with canInitiate = False; mustApprove = False
+    PartyConfig with canInitiate = True; mustApprove = True
+
+-- ic for investor controlled
+ic : MkAccountConfig
+ic id admin owner provider =
+  accountConfigFromPartyConfigs (id <> "/ic/") admin owner provider
+    PartyConfig with canInitiate = True; mustApprove = True
+    PartyConfig with canInitiate = False; mustApprove = False
+
+-- pc for provider confirmed
+pc : MkAccountConfig
+pc id admin owner provider =
+  accountConfigFromPartyConfigs (id <> "/pc/") admin owner provider
+    PartyConfig with canInitiate = True; mustApprove = False
+    PartyConfig with canInitiate = False; mustApprove = True
+
+-- sc for self-custodual/basic
+sc : MkAccountConfig
+sc id admin owner provider =
+  let acc = ic id admin owner provider
+   in acc with account.provider = None
+
+test_availableTransferInstructionActions : Script ()
+test_availableTransferInstructionActions = do
+  let
+    tc s ps r pr mks mkr aa wa ra eaa ewa era state =
+      test_transfer_instruction_case s ps r pr mks mkr aa wa ra eaa ewa era state
+
+    test_cases = [
+
+      -- Start with Joint/Joint and all different parties
+      tc a v b w j j [] [] [] [[a] ,[v], [a,v]] [] [] TIS_Init,
+      tc a v b w j j [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w j j [v] [] [] [[a]] [[v]] [] TIS_Init,
+      -- Now it's sender-authorized
+      tc a v b w j j [a,v] [] [] [[b], [w], [b,w]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
+      -- Test withdrawing
+      tc a v b w j j [a,v] [a] [] [[b], [w], [b,w]] [[v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [] [[b], [w], [b,w]] [[a]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
+      -- Test rejecting
+      tc a v b w j j [a,v] [] [b] [[b], [w], [b,w]] [[a], [v], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [] [w] [[b], [w], [b,w]] [[a], [v], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w j j [a,v] [] [b, w] [] [] [] TIS_Rejected,
+      -- Test partial withdrawing/rejecting
+      tc a v b w j j [a,v] [a] [b] [[b], [w], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [a] [w] [[b], [w], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [b] [[b], [w], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v] [v] [w] [[b], [w], [b,w]] [[a]] [[b]] TIS_Authorized,
+      -- Test Accepting
+      tc a v b w j j [a,v,b] [] [] [[w]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v,w] [] [] [[b]] [[a], [v], [a,v]] [[b], [w], [b,w]] TIS_Authorized,
+      tc a v b w j j [a,v,b,w] [] [] [] [] [] TIS_Accepted,
+      -- Test Accepting during partial withdraw/reject
+      tc a v b w j j [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w j j [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
+      -- Test Reject/Withdraw during partial accept
+      tc a v b w j j [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w j j [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w j j [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w j j [a,v,w] [a] [b, w] [] [] [] TIS_Rejected,
+
+      -- Do the same with provider controlled
+      tc a v b w p p [] [] [] [[v], [a,v]] [] [] TIS_Init,
+      tc a v b w p p [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w p p [v] [] [] [[a]] [[v]] [] TIS_Init,
+      -- Now it's sender-authorized
+      tc a v b w p p [a,v] [] [] [[w], [b,w]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
+      -- Test withdrawing
+      tc a v b w p p [a,v] [a] [] [[w], [b,w]] [[v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [] [[w], [b,w]] [[a]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
+      -- Test rejecting
+      tc a v b w p p [a,v] [] [b] [[w], [b,w]] [[v], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [] [w] [[w], [b,w]] [[v], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w p p [a,v] [] [b, w] [] [] [] TIS_Rejected,
+      -- Test partial withdrawing/rejecting
+      tc a v b w p p [a,v] [a] [b] [[w], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [a] [w] [[w], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [b] [[w], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v] [v] [w] [[w], [b,w]] [[a]] [[b]] TIS_Authorized,
+      -- Test Accepting
+      tc a v b w p p [a,v,b] [] [] [[w]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v,w] [] [] [[b]] [[v], [a,v]] [[w], [b,w]] TIS_Authorized,
+      tc a v b w p p [a,v,b,w] [] [] [] [] [] TIS_Accepted,
+      -- Test Accepting during partial withdraw/reject
+      tc a v b w p p [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w p p [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
+      -- Test Reject/Withdraw during partial accept
+      tc a v b w p p [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w p p [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w p p [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w p p [a,v,w] [a] [b, w] [] [] [] TIS_Rejected
+      ]
+
+      -- We do not expect a difference between provider confirmed, investor controlled,
+      -- In both cases the investor authorizes first.
+      -- The second authorization from the provider is needed, but pulled in thorugh
+      -- the accounts
+      <> (mconcat . (flip map) [pc, ic])  (\acc -> [
+      tc a v b w acc acc [] [] [] [[a] ,[a,v]] [] [] TIS_Init,
+      tc a v b w acc acc [a] [] [] [[v]] [[a]] [] TIS_Init,
+      tc a v b w acc acc [v] [] [] [[a]] [[v]] [] TIS_Init,
+      -- Now it's sender-authorized
+      tc a v b w acc acc [a,v] [] [] [[b], [b,w]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
+      -- Test withdrawing
+      tc a v b w acc acc [a,v] [a] [] [[b], [b,w]] [[v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [] [[b], [b,w]] [[a]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [a,v] [] [] [] [] TIS_Withdrawn,
+      -- Test rejecting
+      tc a v b w acc acc [a,v] [] [b] [[b], [b,w]] [[a], [a,v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [] [w] [[b], [b,w]] [[a], [a,v]] [[b]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [] [b, w] [] [] [] TIS_Rejected,
+      -- Test partial withdrawing/rejecting
+      tc a v b w acc acc [a,v] [a] [b] [[b], [b,w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [a] [w] [[b], [b,w]] [[v]] [[b]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [b] [[b], [b,w]] [[a]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v] [v] [w] [[b], [b,w]] [[a]] [[b]] TIS_Authorized,
+      -- Test Accepting
+      tc a v b w acc acc [a,v,b] [] [] [[w]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,w] [] [] [[b]] [[a], [a,v]] [[b], [b,w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,b,w] [] [] [] [] [] TIS_Accepted,
+      -- Test Accepting during partial withdraw/reject
+      tc a v b w acc acc [a,v,b] [a] [b] [[w]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,w] [a] [b] [[b]] [[v]] [[w]] TIS_Authorized,
+      tc a v b w acc acc [a,v,b,w] [a] [b] [] [] [] TIS_Accepted,
+      -- Test Reject/Withdraw during partial accept
+      tc a v b w acc acc [a,v,b] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w acc acc [a,v,w] [a,v] [b] [] [] [] TIS_Withdrawn,
+      tc a v b w acc acc [a,v,b] [a] [b, w] [] [] [] TIS_Rejected,
+      tc a v b w acc acc [a,v,w] [a] [b, w] [] [] [] TIS_Rejected
+      ])
+
+      -- In the self-custodial case, the extra steps fall away. This is equally true
+      -- for other account types if investors are their own providers.
+      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
+      tc a a b b acc acc [] [] [] [[a]] [] [] TIS_Init,
+      -- Now it's sender-authorized
+      tc a a b b acc acc [a] [] [] [[b]] [[a]] [[b]] TIS_Authorized,
+      -- Test withdrawing
+      tc a a b b acc acc [a] [a] [] [] [] [] TIS_Withdrawn,
+      -- Test rejecting
+      tc a a b b acc acc [a] [] [b] [] [] [] TIS_Rejected,
+      -- Test Accepting
+      tc a a b b acc acc [a,b] [] [] [] [] [] TIS_Accepted
+      ])
+
+      -- Special cases arise if the account providers on both sides are the same
+      -- or indeed if the sender and receiver are the same.
+      <> [
+        -- A self-transfer between self-managed accounts goes straight through.
+        tc a a a a j j [] [] [] [[a]] [] [] TIS_Init,
+        tc a a a a j j [a] [] [] [] [] [] TIS_Accepted,
+        -- A transfer within a provider is simplified
+        tc a v b v j j [] [] [] [[a], [v], [a,v]] [] [] TIS_Init,
+        tc a v b v j j [a,v] [] [] [[b]] [[a], [v], [a,v]] [[b], [v], [b,v]] TIS_Authorized,
+        tc a v b v j j [a,v,b] [] [] [] [] [] TIS_Accepted
+      ]
+
+  sequence_ test_cases
+
+test_transfer_instruction_case : Party -> Party -> Party -> Party
+  -> MkAccountConfig -> MkAccountConfig
+  -> [Party] -> [Party] -> [Party]
+  -> [[Party]] -> [[Party]] -> [[Party]]
+  -> TransferInstructionState
+  -> Script ()
+test_transfer_instruction_case sender senderProvider receiver receiverProvider mkacSender mkacReceiver
+  acceptAuthorizers withdrawAuthorizers rejectAuthorizers
+  expectedAcceptActors expectedWithdrawActors expectedRejectActors expectedState = do
+  let
+    senderAccount = mkacSender "sender" ad sender senderProvider
+    receiverAccount = mkacReceiver "receiver" ad receiver receiverProvider
+    actionAuthorizers = Map.fromList [(V2.TIA_Accept, acceptAuthorizers), (V2.TIA_Reject, rejectAuthorizers), (V2.TIA_Withdraw, withdrawAuthorizers)]
+    accountMap = Map.fromList [(senderAccount.account, (senderAccount, None)), (receiverAccount.account, (receiverAccount, None))]
+    spec = transferInstructionStateMachineSpec senderAccount.account receiverAccount.account
+    actualState = getState spec actionAuthorizers
+    availableActions = mkAvailableActions spec actionAuthorizers accountMap
+    invertedAvailableActions = invertMap availableActions
+    expectedAvailableActions = Map.fromList $
+      filter (\(_, x) -> not (null x)) [(V2.TIA_Accept, dedupSort expectedAcceptActors), (V2.TIA_Reject, dedupSort expectedRejectActors), (V2.TIA_Withdraw, dedupSort expectedWithdrawActors)]
+
+  assertMsg
+    (T.unlines [
+        "Unexpected available actions.",
+        "Sender account: " <> show senderAccount,
+        "Receiver account: " <> show receiverAccount,
+        "Existing authorizations: " <> show actionAuthorizers,
+        "Expected available actions: " <> show expectedAvailableActions,
+        "Actual available actions: " <> show invertedAvailableActions,
+        "Expected state: " <> show expectedState,
+        "Actual state: " <> show actualState
+    ])
+    (invertedAvailableActions == expectedAvailableActions)
+
+  return ()
+
+-- Allocation Instruction Tests
+test_availableAllocationInstructionActions : Script ()
+test_availableAllocationInstructionActions = do
+  let
+    tc authorizer provider mkacc aa wa eaa ewa state =
+      test_allocation_instruction_case authorizer provider mkacc aa wa eaa ewa state
+
+    test_cases = [
+      -- Start with Joint/Joint and all different parties
+      tc a v j [] [] [[a] ,[v], [a,v]] [] AIS_Init,
+      tc a v j [a] [] [[v]] [[a]] AIS_Init,
+      tc a v j [v] [] [[a]] [[v]] AIS_Init,
+      tc a v j [a,v] [] [] [] AIS_Accepted,
+      tc a v j [a] [a] [] [] AIS_Withdrawn,
+      tc a v j [v] [v] [] [] AIS_Withdrawn,
+      tc a v p [] [] [[a, v], [v]] [] AIS_Init,
+      tc a v p [v] [] [[a]] [[v]] AIS_Init,
+      tc a v p [a,v] [] [] [] AIS_Accepted,
+      tc a v p [v] [v] [] [] AIS_Withdrawn
+      ]
+      -- We do not expect a difference between provider confirmed, investor controlled,
+      -- In both cases the investor authorizes first.
+      -- The second authorization from the provider is needed, but pulled in thorugh
+      -- the accounts
+      <> (mconcat . (flip map) [pc, ic])  (\acc -> [
+      tc a v acc [] [] [[a], [a, v]] [] AIS_Init,
+      tc a v acc [a] [] [[v]] [[a]] AIS_Init,
+      tc a v acc [a,v] [] [] [] AIS_Accepted,
+      tc a v acc [a] [a] [] [] AIS_Withdrawn
+      ])
+
+            -- In the self-custodial case, the extra steps fall away. This is equally true
+      -- for other account types if investors are their own providers.
+      <> (mconcat . (flip map) [j, p, pc, ic, sc])  (\acc -> [
+      tc a a acc [] [] [[a]] [] AIS_Init,
+      tc a a acc [a] [] [] [] AIS_Accepted
+      ])
+
+  sequence_ test_cases
+
+
+test_allocation_instruction_case : Party -> Party
+  -> MkAccountConfig
+  -> [Party] -> [Party]
+  -> [[Party]] -> [[Party]]
+  -> AllocationInstructionState
+  -> Script ()
+test_allocation_instruction_case authorizer provider mkacc
+  acceptAuthorizers withdrawAuthorizers
+  expectedAcceptActors expectedWithdrawActors expectedState = do
+    let
+      account = mkacc "authorizer" ad authorizer provider
+      actionAuthorizers = Map.fromList [(V2.AIA_Accept, acceptAuthorizers), (V2.AIA_Withdraw, withdrawAuthorizers)]
+      accountMap = Map.fromList [(account.account, (account, None))]
+      spec = allocationInstructionStateMachineSpec account.account
+      actualState = getState spec actionAuthorizers
+      availableActions = mkAvailableActions spec actionAuthorizers accountMap
+      invertedAvailableActions = invertMap availableActions
+      expectedAvailableActions = Map.fromList $
+        filter (\(_, x) -> not (null x)) [(V2.AIA_Accept, dedupSort expectedAcceptActors), (V2.AIA_Withdraw, dedupSort expectedWithdrawActors)]
+
+    assertMsg
+      (T.unlines [
+          "Unexpected available actions.",
+          "Account: " <> show account,
+          "Existing authorizations: " <> show actionAuthorizers,
+          "Expected available actions: " <> show expectedAvailableActions,
+          "Actual available actions: " <> show invertedAvailableActions,
+          "Expected state: " <> show expectedState,
+          "Actual state: " <> show actualState
+      ])
+      (invertedAvailableActions == expectedAvailableActions)
+
+    return ()
+
+
+
+-- Allocation  Tests
+test_availableAllocationActions : Script ()
+test_availableAllocationActions = do
+  let
+    tc authorizer provider admin executor mkacc wa ca sa ewa eca esa state =
+      test_allocation_case authorizer provider admin executor mkacc wa ca sa ewa eca esa state
+
+    test_cases = [
+      -- Start with Joint and all different parties
+      tc a v ad [ex] j [] [] [] [[a] ,[v], [a,v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [a] [] [] [[v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [v] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] j [a,v] [] [] [] [] [] AS_Withdrawn,
+      tc a v ad [ex] j [] [ex] [] [] [] [] AS_Cancelled,
+      tc a v ad [ex] j [] [] [ad, ex] [] [] [] AS_Settled,
+
+      -- Other account types.
+      tc a a ad [ex] sc [] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a a ad [ex] j [] [] [] [[a]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] ic [] [] [] [[a], [a, v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] pc [] [] [] [[a], [a, v]] [[ex]] [[ad, ex]] AS_Init,
+      tc a v ad [ex] p [] [] [] [[a,v], [v]] [[ex]] [[ad, ex]] AS_Init,
+
+      -- Multiple executors
+      tc a v ad [ex,b] j [] [] [] [[a] ,[v], [a,v]] [[b, ex]] [[ad, b, ex]] AS_Init,
+
+      -- Admin as executor
+      tc a v ad [ad] j [] [] [] [[a] ,[v], [a,v]] [[ad]] [[ad]] AS_Init,
+
+      -- Provider as executor
+      tc a v ad [v] j [] [] [] [[a] ,[v], [a,v]] [[v]] [[ad, v]] AS_Init
+      ]
+
+  sequence_ test_cases
+
+
+test_allocation_case : Party -> Party -> Party -> [Party]
+  -> MkAccountConfig
+  -> [Party] -> [Party] -> [Party]
+  -> [[Party]] -> [[Party]] -> [[Party]]
+  -> AllocationState
+  -> Script ()
+test_allocation_case authorizer provider admin executors mkacc
+  withdrawAuthorizers cancelAuthorizers settleAuthorizers
+  expectedWithdrawActors expectedCancelActors expectedSettleActors expectedState = do
+    let
+      account = mkacc "authorizer" admin authorizer provider
+      actionAuthorizers = Map.fromList [(V2.AA_Withdraw, withdrawAuthorizers), (V2.AA_Cancel, cancelAuthorizers), (V2.AA_Settle, settleAuthorizers)]
+      accountMap = Map.fromList [(account.account, (account, None))]
+      spec = allocationStateMachineSpec account.account executors admin
+      availableActions = mkAvailableActions spec actionAuthorizers accountMap
+      actualState = getState spec actionAuthorizers
+      invertedAvailableActions = invertMap availableActions
+      expectedAvailableActions = Map.fromList $
+        filter (\(_, x) -> not (null x)) [(V2.AA_Withdraw, dedupSort expectedWithdrawActors), (V2.AA_Cancel, dedupSort expectedCancelActors), (V2.AA_Settle, dedupSort expectedSettleActors)]
+
+    assertMsg
+      (T.unlines [
+          "Unexpected available actions.",
+          "Account: " <> show account,
+          "Existing authorizations: " <> show actionAuthorizers,
+          "Expected available actions: " <> show expectedAvailableActions,
+          "Actual available actions: " <> show invertedAvailableActions,
+          "Expected state: " <> show expectedState,
+          "Actual state: " <> show actualState
+      ])
+      (invertedAvailableActions == expectedAvailableActions)
+
+    return ()

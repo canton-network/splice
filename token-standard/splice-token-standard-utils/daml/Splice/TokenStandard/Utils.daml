@@ -31,6 +31,8 @@ module Splice.TokenStandard.Utils (
   requireMatchExpected,
   requireUnique,
 
+  expectOneElement,
+
   -- ** Actors pattern
   checkActor,
   checkActors,
