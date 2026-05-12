@@ -1,7 +1,7 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- | A mock implementation of a test token for the purpose of testing V2 token standard workflows.
+-- | A reference implementation of a test token for the purpose of testing V2 token standard workflows.
 --
 -- Note that this token was built to validate the token standard V2 APIs. It supports a very
 -- rich and generic account authorization model. You probably want to remove that model or
