@@ -102,9 +102,7 @@ class DbAppActivityRecordStore(
               select 1
               from #${Tables.appActivityRecords} a
               where a.history_id = $historyId
-              and a.round_number = sub.min_round + 1
-              order by a.round_number asc
-              limit 1
+                and a.round_number > sub.min_round
             )
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
@@ -112,10 +110,10 @@ class DbAppActivityRecordStore(
   }
 
   /** Find the latest round with complete app activity.
-    * A round is complete when ingestion has moved past it, i.e., the next
+    * A round is complete when ingestion has moved past it, i.e., a later
     * round also has records. We return max_round - 1 because max_round
     * itself may still be receiving records.
-    * Returns None if fewer than two consecutive rounds have been ingested.
+    * Returns None if fewer than two distinct rounds have been ingested.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
@@ -136,18 +134,16 @@ class DbAppActivityRecordStore(
               select 1
               from #${Tables.appActivityRecords} a
               where a.history_id = $historyId
-              and a.round_number = sub.max_round - 1
-              order by a.round_number desc
-              limit 1
+                and a.round_number < sub.max_round
             )
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.latestRoundWithCompleteAppActivity",
     )
   }
 
-  /** Assert that activity records exist for rounds roundNumber - 1 and
-    * roundNumber + 1, proving ingestion completeness for roundNumber.
-    * Round N-1 proves ingestion was running before N; round N+1 proves
+  /** Assert that activity records exist for a round before and a round after
+    * roundNumber, proving ingestion completeness for roundNumber.
+    * A prior round proves ingestion was running before N; a later round proves
     * ingestion has moved past N, so all of N's records have been ingested.
     */
   def assertCompleteActivity(roundNumber: Long)(implicit
@@ -159,12 +155,12 @@ class DbAppActivityRecordStore(
           hasPrev <- sql"""select exists(
                              select 1 from #${Tables.appActivityRecords} a
                              where a.history_id = $historyId
-                               and a.round_number = ${roundNumber - 1}
+                               and a.round_number < $roundNumber
                            )""".as[Boolean].head
           hasNext <- sql"""select exists(
                              select 1 from #${Tables.appActivityRecords} a
                              where a.history_id = $historyId
-                               and a.round_number = ${roundNumber + 1}
+                               and a.round_number > $roundNumber
                            )""".as[Boolean].head
           _ = if (!hasPrev || !hasNext)
             throw Status.FAILED_PRECONDITION
