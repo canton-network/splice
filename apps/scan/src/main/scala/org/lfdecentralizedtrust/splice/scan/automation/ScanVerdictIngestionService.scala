@@ -40,9 +40,9 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbScanVerdictStore,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.{
+  Checked,
   DowngradeDetected,
-  InsertMeta,
-  Resume,
+  NotReady,
 }
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
@@ -251,25 +251,25 @@ class ScanVerdictIngestionService(
         }
 
         // Ensure meta row exists and versions match (first batch with activity records).
-        // ensure is only called when there are activity records to avoid inserting
-        // a meta row with invalid values; isChecked handles subsequent empty batches.
         activityIngestionStarted <- activityMetaCheckO match {
-          case Some(metaCheck) if metaCheck.isChecked =>
-            Future.successful(true)
-          case Some(metaCheck) if appActivityRecords.nonEmpty =>
-            val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
-              CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
-            )
-            val earliestRound = appActivityRecords
-              .map(_._2.roundNumber)
-              .foldLeft(Long.MaxValue)(math.min)
-            metaCheck.ensure(firstRecordTimeMicros, earliestRound).map {
-              case d: DowngradeDetected =>
+          case Some(metaCheck) =>
+            val ingestionStart = if (appActivityRecords.nonEmpty) {
+              val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
+                CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
+              )
+              val earliestRound = appActivityRecords
+                .map(_._2.roundNumber)
+                .foldLeft(Long.MaxValue)(math.min)
+              Some((firstRecordTimeMicros, earliestRound))
+            } else None
+            metaCheck.ensure(ingestionStart).map {
+              case Checked(d: DowngradeDetected) =>
                 logger.error(d.message)
                 sys.exit(1)
-              case InsertMeta | Resume => true
+              case NotReady => false
+              case Checked(_) => true
             }
-          case _ => Future.successful(false)
+          case None => Future.successful(false)
         }
 
         // After activity ingestion has started, every verdict must have a traffic summary.
