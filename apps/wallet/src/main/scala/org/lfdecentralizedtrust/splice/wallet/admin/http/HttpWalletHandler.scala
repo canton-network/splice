@@ -1234,9 +1234,13 @@ class HttpWalletHandler(
         userWallet.store.key.dsoParty.toProtoPrimitive,
         authorizerAccount,
         transferLegSides.asJava,
-        java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
-        false,
-        new metadatav1.Metadata(Map.empty[String, String].asJava),
+        body.nextIterationFunding
+          .map(_.map { case (instrument, amount) =>
+            instrument -> Codec.tryDecode(Codec.BigDecimal)(amount).bigDecimal
+          }.asJava)
+          .toJava,
+        body.committed,
+        new metadatav1.Metadata(body.meta.getOrElse(Map.empty).asJava),
       )
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,

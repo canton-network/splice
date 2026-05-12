@@ -30,8 +30,6 @@ class AmuletAllocationsIntegrationTest
       .simpleTopology1Sv(this.getClass.getSimpleName)
   }
 
-  private val someMetadata = new Metadata(java.util.Map.of("k1", "v1", "k2", "v2"))
-
   private def createAllocationV1(sender: PartyId)(implicit
       ev: SpliceTestConsoleEnvironment
   ) = {
@@ -47,7 +45,7 @@ class AmuletAllocationsIntegrationTest
         requestedAt.toInstant,
         allocateBefore.toInstant,
         settleBefore.toInstant,
-        someMetadata,
+        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
       "some_transfer_leg_id",
       new allocationv1.TransferLeg(
@@ -55,7 +53,7 @@ class AmuletAllocationsIntegrationTest
         receiver.toProtoPrimitive,
         BigDecimal(12).bigDecimal.setScale(10),
         new holdingv1.InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
-        someMetadata,
+        new Metadata(java.util.Map.of("k3", "v3")),
       ),
     )
 
@@ -75,7 +73,7 @@ class AmuletAllocationsIntegrationTest
         java.util.List.of(validatorPartyId.toProtoPrimitive),
         new allocationv2.Reference("some_reference", Optional.empty),
         java.util.Optional.of(settlementDeadline.toInstant),
-        someMetadata,
+        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
       dsoParty.toProtoPrimitive,
       basicAccount(sender),
@@ -88,13 +86,13 @@ class AmuletAllocationsIntegrationTest
             basicAccount(validatorPartyId),
             BigDecimal(12).bigDecimal.setScale(10),
             amuletInstrumentIdV2,
-            someMetadata,
+            new Metadata(java.util.Map.of("k3", "v3")),
           ),
         )
       ),
       java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
       false,
-      someMetadata,
+      new Metadata(java.util.Map.of("k4", "v4")),
     )
 
     val specification = wantedAllocationV2()

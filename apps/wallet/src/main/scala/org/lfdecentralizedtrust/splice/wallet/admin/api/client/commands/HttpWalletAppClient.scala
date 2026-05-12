@@ -1242,13 +1242,6 @@ object HttpWalletAppClient {
         Throwable,
         HttpResponse,
       ], http.AllocateAmuletV2Response] = {
-        // The internal wallet HTTP API still requires legacy V2 compatibility fields
-        // that are no longer present on the ledger AllocationSpecification.
-        // The handler ignores them when reconstructing the current ledger type, so keep
-        // them as transport-only timestamps rather than conflating them with the deadline.
-        val compatibilityRequestedAt = java.time.Instant.now()
-        val compatibilitySettleAt = compatibilityRequestedAt
-
         client.allocateAmuletV2(
           definitions.AllocateAmuletV2Request(
             definitions.AllocateAmuletV2Request.Settlement(
@@ -1257,10 +1250,6 @@ object HttpWalletAppClient {
                 spec.settlement.settlementRef.id,
                 spec.settlement.settlementRef.cid.map(_.contractId).toScala,
               ),
-              requestedAt = Codec.encode(
-                CantonTimestamp.assertFromInstant(compatibilityRequestedAt)
-              ),
-              settleAt = Codec.encode(CantonTimestamp.assertFromInstant(compatibilitySettleAt)),
               settlementDeadline = spec.settlement.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
@@ -1282,6 +1271,10 @@ object HttpWalletAppClient {
                 Some(transferLegSide.meta.values.asScala.toMap),
               )
             }.toVector,
+            nextIterationFunding = spec.nextIterationFunding.toScala
+              .map(_.asScala.toMap.view.mapValues(Codec.JavaBigDecimal.instance.encode).toMap),
+            committed = spec.committed,
+            meta = Some(spec.meta.values.asScala.toMap),
           ),
           headers = headers,
         )
