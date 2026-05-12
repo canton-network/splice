@@ -191,24 +191,16 @@ const V2AllocationRequestActionButton: React.FC<{
   dso: string;
 }> = ({ allocationRequest, userParty, allocations, dso }) => {
   const payload = allocationRequest.payload;
-  const legIdsWhereUserIsInvolved = new Set(
-    payload.allocations
-      .filter(requestedAllocation => requestedAllocation.admin === dso)
-      .flatMap(requestedAllocation => requestedAllocation.transferLegSides)
-      .filter(side => side.instrumentId === 'Amulet' && side.otherside.owner === userParty)
-      .map(side => side.transferLegId)
-  );
-  const sidesForUser = payload.allocations.flatMap(requestedAllocation =>
-    requestedAllocation.transferLegSides.filter(side =>
-      legIdsWhereUserIsInvolved.has(side.transferLegId)
-    )
-  );
+  const amuletLegSidesForUser = payload.allocations
+    .filter(allocation => allocation.admin === dso)
+    .flatMap(allocation => allocation.transferLegSides)
+    .filter(side => side.instrumentId === 'Amulet');
   const isAuthorizer =
     payload.authorizer.owner === userParty &&
     (payload.authorizer.provider === null || payload.authorizer.provider === undefined) &&
     payload.authorizer.id === '';
   // basicAccount check: authorizer matches basicAccount(userParty)
-  const canAccept = sidesForUser.length > 0 && isAuthorizer;
+  const canAccept = amuletLegSidesForUser.length > 0 && isAuthorizer;
 
   const correspondingAllocation = allocations.find(alloc =>
     isAllocationForRequest(alloc, allocationRequest)
@@ -219,7 +211,7 @@ const V2AllocationRequestActionButton: React.FC<{
   const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
-      const req = openApiV2RequestFromAllocationRequest(payload.settlement, sidesForUser);
+      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegSidesForUser);
       return await createAllocationV2(req);
     },
     onSuccess: () => {},
@@ -487,6 +479,7 @@ type DisplayRequest = {
 };
 function v2RequestToDisplay(payload: AllocationRequestV2): DisplayRequest {
   const transferLegs = transferLegSidesToTransferLegs(
+    payload.authorizer,
     payload.allocations.flatMap(allocation => allocation.transferLegSides)
   );
   return {

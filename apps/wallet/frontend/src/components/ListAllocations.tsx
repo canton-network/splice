@@ -55,13 +55,14 @@ const ListAllocations: React.FC = () => {
 };
 
 const AllocationDisplay: React.FC<{
-  allocation: Contract<AmuletAllocation | AmuletAllocationV2>;
+  allocation: Contract<AmuletAllocation>;
 }> = ({ allocation }) => {
   const { withdrawAllocation, withdrawAllocationV2 } = useWalletClient();
-  const v2 = isV2Allocation(allocation.payload);
-  const spec = getAllocationSpec(allocation.payload);
+  const allocationPayload = allocation.payload;
+  const v2 = isV2Allocation(allocationPayload);
+  const spec = getAllocationSpec(allocationPayload);
   const { settlement, transferLegSides } = spec;
-  const transferLegs = transferLegSidesToTransferLegs(transferLegSides);
+  const transferLegs = transferLegSidesToTransferLegs(spec.authorizer, transferLegSides);
   return (
     <Card className="allocation" variant="outlined">
       <CardContent
