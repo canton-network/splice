@@ -236,11 +236,6 @@ class ScanVerdictIngestionService(
         val recordTime = CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)
         summaryByTime.get(recordTime).map(_ -> v)
       }
-      // Insert verdicts, traffic summaries, and app activity records in a single transaction
-      val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
-        CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
-      )
-
       for {
         // Compute app activity records (before DB transaction).
         // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
@@ -256,12 +251,18 @@ class ScanVerdictIngestionService(
         }
 
         // Ensure meta row exists and versions match (first batch with activity records).
+        // ensure is only called when there are activity records to avoid inserting
+        // a meta row with invalid values; isChecked handles subsequent empty batches.
         activityIngestionStarted <- activityMetaCheckO match {
           case Some(metaCheck) if metaCheck.isChecked =>
             Future.successful(true)
           case Some(metaCheck) if appActivityRecords.nonEmpty =>
-            val earliestRound =
-              appActivityRecords.map(_._2.roundNumber).foldLeft(Long.MaxValue)(math.min)
+            val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
+              CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
+            )
+            val earliestRound = appActivityRecords
+              .map(_._2.roundNumber)
+              .foldLeft(Long.MaxValue)(math.min)
             metaCheck.ensure(firstRecordTimeMicros, earliestRound).map {
               case d: DowngradeDetected =>
                 logger.error(d.message)

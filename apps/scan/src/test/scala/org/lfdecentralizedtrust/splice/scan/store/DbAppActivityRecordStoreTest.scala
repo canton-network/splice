@@ -674,25 +674,16 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "be checked after successful ensure" in {
+    "return InsertMeta then Resume on subsequent calls" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(1000000L, 10L)
+        r1 <- check.ensure(1000000L, 10L)
+        r2 <- check.ensure(2000000L, 20L)
       } yield {
-        result shouldBe InsertMeta
+        r1 shouldBe InsertMeta
         check.isChecked shouldBe true
-      }
-    }
-
-    "remain checked on subsequent calls" in {
-      for {
-        (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        _ <- check.ensure(1000000L, 10L)
-        result <- check.ensure(2000000L, 20L)
-      } yield {
-        result shouldBe Resume
+        r2 shouldBe Resume
         check.isChecked shouldBe true
       }
     }
