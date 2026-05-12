@@ -34,6 +34,115 @@ import Splice.Testing.Utils
 -- Vote Requests
 ----------------
 
+-- | Tests the Phase 1 governance-voter action taxonomy.
+testGovernanceVoterActionTaxonomy : Script ()
+testGovernanceVoterActionTaxonomy = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  provider <- allocateParty "taxonomy-provider"
+  beneficiary <- allocateParty "taxonomy-beneficiary"
+  newSv <- allocateParty "taxonomy-new-sv"
+  now <- getTime
+  [(_, dsoRules)] <- query @DsoRules dso
+  [(_, amuletRules)] <- query @AmuletRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+  rightCid <- submit dso $ createCmd FeaturedAppRight with
+    dso
+    provider
+
+  forA_
+    [ ARC_DsoRules with
+        dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with provider
+    , ARC_DsoRules with
+        dsoAction = SRARC_RevokeFeaturedAppRight DsoRules_RevokeFeaturedAppRight with rightCid
+    , ARC_DsoRules with
+        dsoAction = SRARC_SetConfig DsoRules_SetConfig with
+          newConfig = dsoRules.config
+          baseConfig = Some dsoRules.config
+    , ARC_DsoRules with
+        dsoAction = SRARC_UpdateSvRewardWeight DsoRules_UpdateSvRewardWeight with
+          svParty = sv1
+          newRewardWeight = 1
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateUnallocatedUnclaimedActivityRecord DsoRules_CreateUnallocatedUnclaimedActivityRecord with
+          beneficiary
+          amount = 1.0
+          reason = "taxonomy test"
+          expiresAt = now `addRelTime` (days 1)
+    , ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+    , ARC_AmuletRules with
+        amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
+          newConfig = amuletRules.configSchedule.initialValue
+          baseConfig = amuletRules.configSchedule.initialValue
+    ]
+    (\action -> isGovernanceVoterAction action === True)
+
+  forA_
+    [ ARC_DsoRules with
+        dsoAction = SRARC_AddSv DsoRules_AddSv with
+          newSvParty = newSv
+          newSvName = "taxonomy-new-sv"
+          newSvRewardWeight = 1
+          newSvParticipantId = "taxonomy-participant"
+          joinedAsOfRound = openRound.round
+    , ARC_DsoRules with
+        dsoAction = SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding with
+          newSvParty = newSv
+          newSvName = "taxonomy-new-sv"
+          newParticipantId = "taxonomy-participant"
+          newSvRewardWeight = 1
+          reason = "taxonomy test"
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateExternalPartyAmuletRules DsoRules_CreateExternalPartyAmuletRules
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateTransferCommandCounter DsoRules_CreateTransferCommandCounter with
+          sender = provider
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
+    , ExtActionRequiringConformation with dummyUnitField = ()
+    ]
+    (\action -> isGovernanceVoterAction action === False)
+
+-- | Tests that vote updates keep one vote slot for the represented SV.
+testVoteUpdateKeepsOneSlotPerSv : Script ()
+testVoteUpdateKeepsOneSlotPerSv = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
+        sv = sv2
+    reason = Reason with url = ""; body = "taxonomy tally test"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  let initialRequestCid = result.voteRequest
+
+  Some initialRequest <- queryContractId dso initialRequestCid
+  Map.size initialRequest.votes === 1
+  case Map.lookup initialRequest.requester initialRequest.votes of
+    None -> fail "requester vote missing"
+    Some vote -> vote.sv === sv1
+
+  passTime (minutes 1)
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = initialRequestCid
+    vote = Vote with
+      sv = sv1
+      accept = False
+      reason = Reason with url = ""; body = "updated vote"
+      optCastAt = None
+
+  Some updatedRequest <- queryContractId dso result.voteRequest
+  Map.size updatedRequest.votes === 1
+  updatedRequest.trackingCid === Some initialRequestCid
+  case Map.lookup updatedRequest.requester updatedRequest.votes of
+    None -> fail "updated requester vote missing"
+    Some vote -> do
+      vote.sv === sv1
+      vote.accept === False
+
 -- | Tests vote request machinery on featured app right granting and revoking without effectivity.
 testVoteRequestAcceptanceWithoutEffectivity : Script ()
 testVoteRequestAcceptanceWithoutEffectivity = do

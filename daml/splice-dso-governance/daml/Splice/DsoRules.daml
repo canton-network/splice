@@ -124,6 +124,26 @@ data AnsEntryContext_ActionRequiringConfirmation
     -- ^ Automated action to reject initial payment of an ans entry.
   deriving (Eq, Show)
 
+-- | Phase 1 governance-voter action taxonomy.
+--
+-- This is deliberately an explicit allowlist. New action constructors are not
+-- governance-voter eligible unless they are reviewed and added here.
+isGovernanceVoterAction : ActionRequiringConfirmation -> Bool
+isGovernanceVoterAction action = case action of
+  ARC_DsoRules with dsoAction -> case dsoAction of
+    SRARC_OffboardSv _ -> True
+    SRARC_GrantFeaturedAppRight _ -> True
+    SRARC_RevokeFeaturedAppRight _ -> True
+    SRARC_SetConfig _ -> True
+    SRARC_UpdateSvRewardWeight _ -> True
+    SRARC_CreateUnallocatedUnclaimedActivityRecord _ -> True
+    _ -> False
+  ARC_AmuletRules with amuletRulesAction -> case amuletRulesAction of
+    CRARC_SetConfig _ -> True
+    _ -> False
+  ARC_AnsEntryContext _ _ -> False
+  ExtActionRequiringConformation _ -> False
+
 -- | Information about SVs relevant to DSO governance.
 data SvInfo = SvInfo with
     name : Text -- ^ Human-readable name; must be unique.
