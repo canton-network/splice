@@ -64,13 +64,19 @@ class ActivityIngestionMetaCheck(
                     earliestIngestedRound,
                   )
                   .map { _ =>
+                    activityStore.setStartedIngestingAt(firstRecordTimeMicros)
                     checked.set(true)
                     Checked(InsertMeta)
                   }
             }
           case Resume =>
-            checked.set(true)
-            Future.successful(Checked(Resume))
+            activityStore
+              .lookupActivityRecordMeta(versions.code, versions.user)
+              .map { metaO =>
+                metaO.foreach(m => activityStore.setStartedIngestingAt(m.startedIngestingAt))
+                checked.set(true)
+                Checked(Resume)
+              }
           case d: DowngradeDetected =>
             Future.successful(Checked(d))
         }

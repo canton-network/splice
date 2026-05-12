@@ -126,11 +126,7 @@ class ScanEventStore(
       tc: TraceContext
   ): Future[Map[Long, AppActivityRecordT]] =
     verdictStore.appActivityRecordStoreO match {
-      case Some(store) =>
-        for {
-          earliestRound <- store.earliestRoundWithCompleteAppActivity()
-          records <- store.getRecordsByVerdictRowIds(verdictRowIds, earliestRound)
-        } yield records
+      case Some(store) => store.getRecordsByVerdictRowIds(verdictRowIds)
       case None => Future.successful(Map.empty)
     }
 

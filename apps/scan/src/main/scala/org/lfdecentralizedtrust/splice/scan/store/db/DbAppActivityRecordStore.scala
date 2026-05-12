@@ -17,6 +17,7 @@ import slick.jdbc.{GetResult, PostgresProfile}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 
 object DbAppActivityRecordStore {
@@ -78,6 +79,20 @@ class DbAppActivityRecordStore(
   val profile: slick.jdbc.JdbcProfile = PostgresProfile
 
   override protected def timeouts = new ProcessingTimeout
+
+  /** Cached record time (microseconds since epoch) of the completeness boundary.
+    * Set by [[ActivityIngestionMetaCheck]] when the meta row is confirmed.
+    * Activity records before this time should not be served.
+    */
+  private val cachedStartedIngestingAt =
+    new AtomicReference[Option[Long]](None)
+
+  /** Set the completeness boundary. Called by ActivityIngestionMetaCheck. */
+  def setStartedIngestingAt(micros: Long): Unit =
+    cachedStartedIngestingAt.set(Some(micros))
+
+  /** The completeness boundary, if known. */
+  def startedIngestingAt: Option[Long] = cachedStartedIngestingAt.get()
 
   object Tables {
     val appActivityRecords = "app_activity_record_store"
@@ -217,21 +232,16 @@ class DbAppActivityRecordStore(
   }
 
   def getRecordsByVerdictRowIds(
-      verdictRowIds: Seq[Long],
-      earliestCompleteRound: Option[Long] = None,
+      verdictRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
     if (verdictRowIds.isEmpty) Future.successful(Map.empty)
     else {
-      val roundFilter = earliestCompleteRound match {
-        case Some(round) => sql" round_number >= $round and"
-        case None => sql""
-      }
       storage
         .query(
           (sql"""
           select verdict_row_id, round_number, app_provider_parties, app_activity_weights
           from #${Tables.appActivityRecords}
-          where""" ++ roundFilter ++ sql" " ++ inClause("verdict_row_id", verdictRowIds))
+          where """ ++ inClause("verdict_row_id", verdictRowIds))
             .as[AppActivityRecordT],
           "appActivity.getRecordsByVerdictRowIds",
         )
