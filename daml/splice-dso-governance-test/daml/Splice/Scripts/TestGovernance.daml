@@ -123,13 +123,18 @@ testVoteUpdateKeepsOneSlotPerSv = do
   Map.size initialRequest.votes === 1
   case Map.lookup initialRequest.requester initialRequest.votes of
     None -> fail "requester vote missing"
-    Some vote -> vote.sv === sv1
+    Some vote -> do
+      vote.sv === sv1
+      vote.castBy === sv1
+      vote.castByRole === VCR_Operator
 
   passTime (minutes 1)
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = initialRequestCid
     vote = Vote with
       sv = sv1
+      castBy = sv1
+      castByRole = VCR_Operator
       accept = False
       reason = Reason with url = ""; body = "updated vote"
       optCastAt = None
@@ -141,6 +146,8 @@ testVoteUpdateKeepsOneSlotPerSv = do
     None -> fail "updated requester vote missing"
     Some vote -> do
       vote.sv === sv1
+      vote.castBy === sv1
+      vote.castByRole === VCR_Operator
       vote.accept === False
 
 -- | Tests vote request machinery on featured app right granting and revoking without effectivity.
@@ -523,6 +530,8 @@ testRacingSvRemoval = do
       requestCid
       vote = Vote with
         sv = sv1
+        castBy = sv1
+        castByRole = VCR_Operator
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
@@ -530,6 +539,8 @@ testRacingSvRemoval = do
       requestCid = result1.voteRequest
       vote = Vote with
         sv = sv2
+        castBy = sv2
+        castByRole = VCR_Operator
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
@@ -537,6 +548,8 @@ testRacingSvRemoval = do
       requestCid = result2.voteRequest
       vote = Vote with
         sv = sv3
+        castBy = sv3
+        castByRole = VCR_Operator
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
@@ -544,6 +557,8 @@ testRacingSvRemoval = do
       requestCid = result3.voteRequest
       vote = Vote with
         sv = sv4
+        castBy = sv4
+        castByRole = VCR_Operator
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
@@ -650,6 +665,8 @@ testRacingSvRemoval = do
     requestCid = result5.voteRequest
     vote = Vote with
       sv = sv4
+      castBy = sv4
+      castByRole = VCR_Operator
       accept = True
       reason = Reason with url = ""; body = "yes, let me go please!"
       optCastAt = None
@@ -1181,6 +1198,8 @@ testVoteCastingCooldown  = do
     requestCid
     vote = Vote with
       sv = sv2
+      castBy = sv2
+      castByRole = VCR_Operator
       accept = False
       reason = Reason with url = ""; body = "noooo, let me stay on please!"
       optCastAt = None
@@ -1191,6 +1210,8 @@ testVoteCastingCooldown  = do
         requestCid
         vote = Vote with
           sv = sv2
+          castBy = sv2
+          castByRole = VCR_Operator
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
@@ -1200,6 +1221,8 @@ testVoteCastingCooldown  = do
         requestCid
         vote = Vote with
           sv = sv1
+          castBy = sv1
+          castByRole = VCR_Operator
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None
@@ -1212,6 +1235,8 @@ testVoteCastingCooldown  = do
         requestCid
         vote = Vote with
           sv = sv2
+          castBy = sv2
+          castByRole = VCR_Operator
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
@@ -1222,6 +1247,8 @@ testVoteCastingCooldown  = do
         requestCid
         vote = Vote with
           sv = sv1
+          castBy = sv1
+          castByRole = VCR_Operator
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None

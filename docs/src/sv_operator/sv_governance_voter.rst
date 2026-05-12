@@ -15,6 +15,10 @@ intended to be an alternate signer for the represented SV's vote on explicitly
 supported non-operational governance actions; it is not a new voting unit and
 does not add voting weight.
 
+Vote records carry the represented SV and the party/role that cast the vote.
+This attribution is accountability metadata for the authority path; tallying
+continues to use the represented SV's vote slot.
+
 The first contract slice uses a hardcoded Daml allowlist for governance-voter
 eligible actions. New ``ActionRequiringConfirmation`` constructors are rejected
 by default until reviewed and added deliberately. The proposed allowlist is

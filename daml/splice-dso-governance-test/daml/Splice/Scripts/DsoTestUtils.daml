@@ -356,6 +356,8 @@ initiateAndCastVote app (initiator::others) targetEffectiveAt action = do
           requestCid
           vote = Vote with
             sv
+            castBy = sv
+            castByRole = VCR_Operator
             accept = True
             reason = Reason with url = ""; body = "✓"
             optCastAt = None
@@ -379,6 +381,8 @@ initiateAndAcceptVote app (initiator::others) action = do
           requestCid
           vote = Vote with
             sv
+            castBy = sv
+            castByRole = VCR_Operator
             accept = True
             reason = Reason with url = ""; body = "✓"
             optCastAt = None
@@ -392,6 +396,8 @@ castVote app sv requestCid vote = do
         requestCid = requestCid
         vote = Vote with
             sv = sv
+            castBy = sv
+            castByRole = VCR_Operator
             accept = vote
             reason = Reason with
                 url = ""

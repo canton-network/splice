@@ -444,10 +444,17 @@ data VoteRequestOutcome
       dummyUnitField : ()
         --  ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
   deriving (Eq, Show)
+data VoteCastRole
+  = VCR_Operator
+  | VCR_GovernanceVoter
+  deriving(Eq, Show)
+
 --
--- | A vote cast by an SV.
+-- | A vote cast for an SV.
 data Vote = Vote with
-    sv : Party -- ^ The SV party used to submit the vote.
+    sv : Party -- ^ The represented SV whose vote slot is updated.
+    castBy : Party -- ^ The party that signed the vote command.
+    castByRole : VoteCastRole -- ^ The authority path used to cast the vote.
     accept : Bool
       -- ^ Whether the responder accepted the request to execute the action or not.
     reason : Reason
@@ -764,6 +771,8 @@ template DsoRules with
         require "There is some time to vote" (now < voteBefore)
         let requesterVote = Vote with
               sv = requester
+              castBy = requester
+              castByRole = VCR_Operator
               accept = True
               reason = Reason with url = ""; body = "I accept, as I requested the vote."
               optCastAt = Some now
@@ -802,8 +811,12 @@ template DsoRules with
           pastVote.optCastAt
         -- store vote
         now <- getTime
+        let recordedVote = vote with
+              castBy = vote.sv
+              castByRole = VCR_Operator
+              optCastAt = Some now
         voteRequest <- create request with
-          votes = Map.insert voterName (vote with optCastAt = Some now) request.votes
+          votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastVoteResult with ..
 
