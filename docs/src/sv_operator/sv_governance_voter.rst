@@ -25,6 +25,10 @@ keeps that invariant outside the template key space so reviewers can decide
 whether workflow validation is sufficient or whether a separate registry pattern
 is needed before an upstream design is finalized.
 
+Governance-voter vote submission fetches the binding by contract ID, validates
+the signer against the binding, checks the action allowlist, and writes the vote
+into the represented SV's vote slot.
+
 The first contract slice uses a hardcoded Daml allowlist for governance-voter
 eligible actions. New ``ActionRequiringConfirmation`` constructors are rejected
 by default until reviewed and added deliberately. The proposed allowlist is

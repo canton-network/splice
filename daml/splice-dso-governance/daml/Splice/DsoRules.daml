@@ -32,6 +32,7 @@ import Splice.Ans
 import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.GovernanceVoter
 import Splice.DSO.SvState
 import Splice.Schedule
 import Splice.Util
@@ -207,6 +208,9 @@ data DsoRules_RequestVoteResult = DsoRules_RequestVoteResult with
     voteRequest : ContractId VoteRequest
 
 data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
+    voteRequest : ContractId VoteRequest
+
+data DsoRules_CastGovernanceVoteResult = DsoRules_CastGovernanceVoteResult with
     voteRequest : ContractId VoteRequest
 
 data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult with
@@ -819,6 +823,44 @@ template DsoRules with
           votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastVoteResult with ..
+
+    -- Note that this choice can be used to both cast the initial governance-voter
+    -- vote, and update a vote for the represented SV.
+    nonconsuming choice DsoRules_CastGovernanceVote : DsoRules_CastGovernanceVoteResult
+      with
+        requestCid : ContractId VoteRequest
+        bindingCid : ContractId SvGovernanceVoter
+        vote : Vote
+      controller vote.castBy
+      do
+        -- validate vote parameters
+        requireWellformedVote config vote
+        binding <- fetch bindingCid
+        require "Binding dso must match rules dso" (binding.dso == dso)
+        require "Vote SV must match binding SV" (vote.sv == binding.sv)
+        require "Vote signer must match binding governance voter" (vote.castBy == binding.governanceVoter)
+        require "Vote signer role must be governance voter" (vote.castByRole == VCR_GovernanceVoter)
+        voterName <- case Map.lookup binding.sv svs of
+          None -> fail "Voter is not an SV"
+          Some info -> pure info.name
+        -- validate and archive request
+        request <- fetchAndArchive (ForDso with dso) requestCid
+        require "Action is not governance-voter eligible" (isGovernanceVoterAction request.action)
+        -- rate limit casting of votes by the same represented SV to avoid blocking progress
+        enforceCooldown ("voteCooldownTime for " <> partyToText binding.sv) (getVoteCooldownTime config) $ do
+          pastVote <- Map.lookup voterName request.votes
+          pastVote.optCastAt
+        -- store vote in the represented SV's vote slot
+        now <- getTime
+        let recordedVote = vote with
+              sv = binding.sv
+              castBy = binding.governanceVoter
+              castByRole = VCR_GovernanceVoter
+              optCastAt = Some now
+        voteRequest <- create request with
+          votes = Map.insert voterName recordedVote request.votes
+          trackingCid = Some (fromOptional requestCid request.trackingCid)
+        return DsoRules_CastGovernanceVoteResult with ..
 
     -- We expect the TxHistory log of the SV app to store the choice argument together
     -- with its result for historical reference.

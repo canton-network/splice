@@ -85,6 +85,128 @@ testSvGovernanceVoterBindingLifecycle = do
   None <- queryContractId dso rotateResult.bindingCid
   pure ()
 
+-- | Tests governance-voter casting while preserving represented-SV vote slots.
+testGovernanceVoterCastPath : Script ()
+testGovernanceVoterCastPath = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter1 <- allocateParty "cast-governance-voter-1"
+  governanceVoter2 <- allocateParty "cast-governance-voter-2"
+  wrongVoter <- allocateParty "wrong-cast-governance-voter"
+  newSv <- allocateParty "cast-new-sv"
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+  bindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter1
+
+  let governanceVote signer accept body = Vote with
+        sv = sv1
+        castBy = signer
+        castByRole = VCR_GovernanceVoter
+        accept
+        reason = Reason with url = ""; body
+        optCastAt = None
+  let operatorVote accept body = Vote with
+        sv = sv1
+        castBy = sv1
+        castByRole = VCR_Operator
+        accept
+        reason = Reason with url = ""; body
+        optCastAt = None
+  let requestOffboardSv = submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+        requester = sv1
+        action = ARC_DsoRules with
+          dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+        reason = Reason with url = ""; body = "cast path"
+        targetEffectiveAt = None
+        voteRequestTimeout = Some (days 7)
+
+  requestResult <- requestOffboardSv
+  passTime (minutes 1)
+  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = requestResult.voteRequest
+    bindingCid
+    vote = governanceVote governanceVoter1 False "governance voter update"
+  Some request <- queryContractId dso castResult.voteRequest
+  Map.size request.votes === 1
+  case Map.lookup request.requester request.votes of
+    None -> fail "represented SV vote missing"
+    Some vote -> do
+      vote.sv === sv1
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+
+  passTime (minutes 1)
+  operatorResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = castResult.voteRequest
+    vote = operatorVote True "operator overwrite"
+  Some request <- queryContractId dso operatorResult.voteRequest
+  case Map.lookup request.requester request.votes of
+    None -> fail "operator vote missing"
+    Some vote -> do
+      vote.castBy === sv1
+      vote.castByRole === VCR_Operator
+      vote.accept === True
+
+  passTime (minutes 1)
+  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = operatorResult.voteRequest
+    bindingCid
+    vote = governanceVote governanceVoter1 False "governance voter overwrite"
+  Some request <- queryContractId dso castResult.voteRequest
+  case Map.lookup request.requester request.votes of
+    None -> fail "governance-voter vote missing"
+    Some vote -> do
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+
+  unsupportedRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = newSv
+        newSvName = "cast-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "cast-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "unsupported action"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = unsupportedRequest.voteRequest
+    bindingCid
+    vote = governanceVote governanceVoter1 False "unsupported"
+
+  wrongVoterRequest <- requestOffboardSv
+  submitMustFail (actAs wrongVoter <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = wrongVoterRequest.voteRequest
+    bindingCid
+    vote = governanceVote wrongVoter False "wrong voter"
+
+  rotateResult <- submit sv1 $ exerciseCmd bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter2
+  rotatedRequest <- requestOffboardSv
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = rotatedRequest.voteRequest
+    bindingCid = rotateResult.bindingCid
+    vote = governanceVote governanceVoter1 False "rotated old voter"
+  passTime (minutes 1)
+  _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = rotatedRequest.voteRequest
+    bindingCid = rotateResult.bindingCid
+    vote = governanceVote governanceVoter2 False "rotated new voter"
+
+  _ <- submit sv1 $ exerciseCmd rotateResult.bindingCid ClearGovernanceVoter
+  clearedRequest <- requestOffboardSv
+  submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = clearedRequest.voteRequest
+    bindingCid = rotateResult.bindingCid
+    vote = governanceVote governanceVoter2 False "cleared binding"
+
 -- | Tests the Phase 1 governance-voter action taxonomy.
 testGovernanceVoterActionTaxonomy : Script ()
 testGovernanceVoterActionTaxonomy = do
