@@ -17,8 +17,9 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
+import Splice.TokenStandard.Utils (basicAccount)
+
 import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
-import Splice.TokenStandard.Utils
 
 import Splice.Testing.Utils
 import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
@@ -88,7 +89,6 @@ test_v2_transfer = do
       mkTransfer = WalletClientV2.mkTransferFactory_TransferV2' registries
       checkMetadata = True
 
-
 genericTestTransfers : TestSetup -> Script ()
 genericTestTransfers TestSetup {..} = do
   let mkParty name = do
@@ -107,22 +107,22 @@ genericTestTransfers TestSetup {..} = do
 
   -- test creating three outgoing transfers in on batch
   at1 <- mkTransfer SimpleTransfer with
-        sender = alice
-        receiver = bob
+        sender = basicAccount alice
+        receiver = basicAccount bob
         amount = 10.0
         instrumentId = instrX
         offerTime = days 1
         reason = "alice -> bob - test transfer 1"
   at2 <- mkTransfer SimpleTransfer with
-        sender = alice
-        receiver = charlie
+        sender = basicAccount alice
+        receiver = basicAccount charlie
         amount = 25.0
         instrumentId = instrY
         offerTime = days 1
         reason = "alice -> charlie - test transfer 2"
   at3 <- mkTransfer SimpleTransfer with
-        sender = alice
-        receiver = dora
+        sender = basicAccount alice
+        receiver = basicAccount dora
         amount = 10.0
         instrumentId = instrX
         offerTime = days 1
@@ -132,8 +132,8 @@ genericTestTransfers TestSetup {..} = do
   -- test accepting and forwarding a transfer using the holdings just received
   baccept <- acceptTransferOffers registries bob instrX
   bt1 <- mkTransfer SimpleTransfer with
-        sender = bob
-        receiver = dora
+        sender = basicAccount bob
+        receiver = basicAccount dora
         amount = 5.0
         instrumentId = instrX
         offerTime = days 1
@@ -144,8 +144,8 @@ genericTestTransfers TestSetup {..} = do
   -- dora accepts all transfers in one go, and merges them
   daccept <- acceptTransferOffers registries dora instrX
   doraMerge <- mkTransfer SimpleTransfer with
-        sender = dora
-        receiver = dora
+        sender = basicAccount dora
+        receiver = basicAccount dora
         amount = 15.0 -- TODO(#4875): implement a self-merge choice in the batching utility, so that this amount does not have to be precomputed by the wallet
         instrumentId = instrX
         offerTime = days 1

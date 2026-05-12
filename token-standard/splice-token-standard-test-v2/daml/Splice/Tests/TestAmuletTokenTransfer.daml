@@ -2,8 +2,6 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Daml script tests how to use token standard v2 transfer instructions.
---
--- TODO(#4540): test with an asset that allows the user to set account providers and ids.
 module Splice.Tests.TestAmuletTokenTransfer where
 
 import Splice.Api.Token.MetadataV1

@@ -22,15 +22,20 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 
 import Splice.TokenStandard.Utils
 
 import Splice.Testing.Tokens.TestTokenV2 as TestTokenV2
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig as AccountConfig
 import Splice.Testing.TokenStandard.RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 
 import Daml.Script
+import DA.List (dedup)
+import DA.Optional (catOptionals)
+import DA.Foldable (Foldable(foldMap))
 
 
 -- Registry representation
@@ -44,14 +49,16 @@ data TestTokenV2Registry = TestTokenV2Registry with
 -- | Note that all choice contexts will refer uniformly to the token rules, so that
 -- reuse of one choice context across multiple token standard choices is possible.
 instance RegistryApi TestTokenV2Registry where
-  getTransferFactory = registryApi_getFactory
-  getAllocationFactory = registryApi_getFactory
+  getTransferFactory = registryApi_getTransferFactory
+  getAllocationFactory = registryApi_getAllocationFactory
   getSettlementFactory = registryApi_getSettlementFactory
-  getAllocation_WithdrawContext = registryApi_getTokenRulesOnlyContext
+  getAllocation_WithdrawContext = registryApi_getWithdrawContext
   getAllocation_CancelContext = registryApi_getCancelContext
+  getAllocationInstruction_WithdrawContext = registryApi_getAllocationInstructionContext
+  getAllocationInstruction_AcceptContext = registryApi_getAllocationInstructionContext
   getTransferInstruction_AcceptContext = registryApi_getTransferOfferContext
   getTransferInstruction_RejectContext = registryApi_getTransferOfferContext
-  getTransferInstruction_WithdrawContext = registryApi_getTokenRulesOnlyContext
+  getTransferInstruction_WithdrawContext = registryApi_getTransferOfferContext
 
 
 -- Registry initialization
@@ -79,6 +86,17 @@ mint registry account intrumentName amount = do
   -- offer mint
   [(tokenRulesCid, _)] <- query @TestTokenV2.TokenRules registry.admin
   now <- getTime
+  receiverConfig <- case account.provider of
+      None -> pure $ AccountConfig with
+        admin = registry.admin
+        account
+        ownerConfig = PartyConfig True True
+        providerConfig = PartyConfig False False
+      Some _ -> do
+        optAccountConfig <- getAccountConfig' registry account
+        case optAccountConfig of
+          None -> abort $ "Cannot mint, as account config not found for account" <> show account
+          Some (_cid, config, _disclosures) -> pure config
   result <- submit registry.admin $ exerciseCmd tokenRulesCid TestTokenV2.TokenRules_OfferMint with
     receiver = account
     instrumentId = V2.InstrumentId with
@@ -86,16 +104,17 @@ mint registry account intrumentName amount = do
       admin = registry.admin
     amount = amount
     offeredAt = now
+    receiverConfig
   -- have receiver accept immediately
   let offerCid = toInterfaceContractId result.offerCid
   let accept = V2.TransferInstruction_Accept with
-        actors = [account.owner]
+        actors = accountParties account
         extraArgs = ExtraArgs with
           context = emptyChoiceContext
           meta = emptyMetadata
   context <- registryApi_getTransferOfferContext registry offerCid emptyMetadata
   void $ WalletClientV2.extractAndCheckTxHistory [registry.admin] $
-    submitResultAndTree (actAs account.owner <> discloseMany' context.disclosures) $
+    submitResultAndTree (foldMap actAs (accountParties account) <> discloseMany' context.disclosures) $
       exerciseCmd offerCid accept with
         extraArgs = ExtraArgs with
           context = context.choiceContext
@@ -107,50 +126,80 @@ mint registry account intrumentName amount = do
 -- Token standard registry methods
 ----------------------------------
 
-registryApi_getFactory : HasField "extraArgs" arg ExtraArgs => TestTokenV2Registry -> arg -> Script (EnrichedFactoryChoice factory arg)
-registryApi_getFactory registry arg = do
-  (tokenRulesCid, tokenRulesContext, tokenRulesD) <- getTokenRulesC registry
+registryApi_getTransferFactory : TestTokenV2Registry -> V2.TransferFactory_Transfer -> Script (EnrichedFactoryChoice factory V2.TransferFactory_Transfer)
+registryApi_getTransferFactory registry transfer = do
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [transfer.transfer.sender, transfer.transfer.receiver]
+  let
+    transfer' =
+      transfer with
+        extraArgs.context = context
+
   pure EnrichedFactoryChoice with
     factoryCid = coerceContractId tokenRulesCid
-    arg = arg with
-      extraArgs = ExtraArgs with
-        context = tokenRulesContext
-        meta = arg.extraArgs.meta
-    disclosures = tokenRulesD
+    arg = transfer'
+    disclosures
+
+registryApi_getAllocationFactory : TestTokenV2Registry -> V2.AllocationFactory_Allocate -> Script (EnrichedFactoryChoice factory V2.AllocationFactory_Allocate)
+registryApi_getAllocationFactory registry allocation = do
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [allocation.allocation.authorizer]
+  let
+    allocation' =
+      allocation with
+        extraArgs.context = context
+  pure EnrichedFactoryChoice with
+    factoryCid = coerceContractId tokenRulesCid
+    arg = allocation'
+    disclosures
 
 registryApi_getSettlementFactory
   : TestTokenV2Registry
   -> V2.SettlementFactory_SettleBatch
   -> Script (EnrichedFactoryChoice V2.SettlementFactory V2.SettlementFactory_SettleBatch)
 registryApi_getSettlementFactory registry arg = do
-  (tokenRulesCid, tokenRulesContext, tokenRulesD) <- getTokenRulesC registry
+  let accounts = dedup $ concatMap (\leg -> [leg.sender, leg.receiver]) arg.transferLegs
+  (tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry accounts
   lockedDs <- forA arg.allocationCids $ \allocCid -> do
     getLockedTokensForAllocationsD registry allocCid
+  let
+    arg' =
+      arg with
+        extraArgs.context = context
+
   pure EnrichedFactoryChoice with
     factoryCid = coerceContractId tokenRulesCid
-    arg = arg with
-      extraArgs = ExtraArgs with
-        context = tokenRulesContext
-        meta = arg.extraArgs.meta
-    disclosures = tokenRulesD <> mconcat lockedDs
-
-registryApi_getTokenRulesOnlyContext : TestTokenV2Registry -> ContractId t -> Metadata -> Script OpenApiChoiceContext
-registryApi_getTokenRulesOnlyContext registry _workflowCid _meta = do
-  (_, tokenRulesContext, tokenRulesD) <- getTokenRulesC registry
-  pure OpenApiChoiceContext with
-    disclosures = tokenRulesD
-    choiceContext = tokenRulesContext
+    arg = arg'
+    disclosures = disclosures <> mconcat lockedDs
 
 registryApi_getTransferOfferContext : TestTokenV2Registry -> ContractId V2.TransferInstruction -> Metadata -> Script OpenApiChoiceContext
 registryApi_getTransferOfferContext registry instrCid _meta = do
-  (_, tokenRulesContext, tokenRulesD) <- getTokenRulesC registry
   Some instrView <- queryInterfaceContractId @V2.TransferInstruction registry.admin instrCid
+  (_tokenRulesCid, context, disclosures) <- getAccountMapAndTokenRulesC registry [instrView.transfer.sender, instrView.transfer.receiver]
   lockedDs <- forA instrView.transfer.inputHoldingCids $ \holdingCid -> do
     let tokenCid = coerceContractId holdingCid : ContractId Token
     queryDisclosure' @Token registry.admin tokenCid
   pure OpenApiChoiceContext with
-    disclosures = mconcat lockedDs <> tokenRulesD
-    choiceContext = tokenRulesContext
+    disclosures = disclosures <> mconcat lockedDs
+    choiceContext = context
+
+registryApi_getAllocationInstructionContext : TestTokenV2Registry -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+registryApi_getAllocationInstructionContext registry instrCid _meta = do
+  Some instrView <- queryInterfaceContractId @V2.AllocationInstruction registry.admin instrCid
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [instrView.allocation.authorizer]
+  pure OpenApiChoiceContext with
+    disclosures
+    choiceContext
+
+registryApi_getWithdrawContext
+  : TestTokenV2Registry
+  -> ContractId V2.Allocation
+  -> Metadata
+  -> Script OpenApiChoiceContext
+registryApi_getWithdrawContext registry cid _meta = do
+  Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin cid
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [allocView.allocation.authorizer]
+  pure OpenApiChoiceContext with
+    disclosures
+    choiceContext
 
 registryApi_getCancelContext
   : TestTokenV2Registry
@@ -158,11 +207,12 @@ registryApi_getCancelContext
   -> Metadata
   -> Script OpenApiChoiceContext
 registryApi_getCancelContext registry cid _meta = do
+  Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin cid
+  (_tokenRulesCid, choiceContext, disclosures) <- getAccountMapAndTokenRulesC registry [allocView.allocation.authorizer]
   lockedTokensD <- getLockedTokensForAllocationsD registry cid
-  (_, tokenRulesContext, tokenRulesD) <- getTokenRulesC registry
   pure OpenApiChoiceContext with
-    disclosures = lockedTokensD <> tokenRulesD
-    choiceContext = tokenRulesContext
+    disclosures = disclosures <> lockedTokensD
+    choiceContext = choiceContext
 
 getTokenRules : TestTokenV2Registry -> Script (ContractId TestTokenV2.TokenRules, TestTokenV2.TokenRules)
 getTokenRules registry = getTokenRules' registry.admin
@@ -175,15 +225,6 @@ getTokenRules' admin = do
     [] -> fail $ "No TestTokenV2Rules found: did you initialize the TestTokenV2 registry?"
     _ -> fail "Multiple TestTokenV2Rules found: are you initializing the TestTokenV2 registry multiple times?"
 
-getTokenRulesC
-  : TestTokenV2Registry -> Script (ContractId TestTokenV2.TokenRules, ChoiceContext, Disclosures')
-getTokenRulesC registry = do
-  (tokenRulesCid, _) <- getTokenRules registry
-  tokenRulesD <- queryDisclosure' @TestTokenV2.TokenRules registry.admin tokenRulesCid
-  let context = ChoiceContext with
-        values = TextMap.fromList [(tokenRulesContextKey, AV_ContractId (toAnyContractId tokenRulesCid))]
-  pure (tokenRulesCid, context, tokenRulesD)
-
 getLockedTokensForAllocationsD : TestTokenV2Registry -> ContractId V2.Allocation -> Script Disclosures'
 getLockedTokensForAllocationsD registry allocCid = do
   Some allocView <- queryInterfaceContractId @V2.Allocation registry.admin allocCid
@@ -191,3 +232,34 @@ getLockedTokensForAllocationsD registry allocCid = do
     let tokenCid = coerceContractId holdingCid : ContractId Token
     queryDisclosure' @Token registry.admin tokenCid
   pure $ mconcat discs
+
+getAccountMapAndTokenRulesC
+  : TestTokenV2Registry -> [V2.Account] -> Script (ContractId TokenRules, ChoiceContext, Disclosures')
+getAccountMapAndTokenRulesC registry accounts = do
+  (tokenRulesCid, _) <- getTokenRules registry
+  tokenRulesD <- queryDisclosure' @TestTokenV2.TokenRules registry.admin tokenRulesCid
+  accountConfigs <- catOptionals <$> forA accounts (getAccountConfig registry)
+  let accountConfigsValue = AV_List (map (AV_ContractId . coerceContractId . fst) accountConfigs)
+  let choiceContext = ChoiceContext with
+        values = TextMap.fromList
+          [ (accountConfigsContextKey, accountConfigsValue)
+          , (tokenRulesContextKey, AV_ContractId (toAnyContractId tokenRulesCid))
+          ]
+  pure (tokenRulesCid, choiceContext, tokenRulesD <> foldMap snd accountConfigs)
+
+getAccountConfig : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, Disclosures'))
+getAccountConfig registry account = do
+  result <- getAccountConfig' registry account
+  case result of
+    Some (cid, _config, disclosures) -> return (Some (cid, disclosures))
+    None -> return None
+
+getAccountConfig' : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, AccountConfig.AccountConfig, Disclosures'))
+getAccountConfig' registry account = do
+  cids <- queryFilter @AccountConfig.AccountConfig registry.admin (\config -> config.account == account)
+  case cids of
+    [(cid, config)] -> do
+      disclosure <- queryDisclosure' @AccountConfig.AccountConfig registry.admin cid
+      return (Some (cid, config, disclosure))
+    [] -> return None
+    _ -> abort ("More than one account config found for " <> (show account))
