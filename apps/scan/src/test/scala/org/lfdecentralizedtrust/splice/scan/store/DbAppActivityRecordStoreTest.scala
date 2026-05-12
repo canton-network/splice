@@ -603,16 +603,26 @@ class DbAppActivityRecordStoreTest
 
   "ActivityIngestionMetaCheck.ensure" should {
 
+    "return NotReady when no meta row and no activity records" in {
+      for {
+        (store, _) <- newStore()
+        check = new ActivityIngestionMetaCheck(store, loggerFactory)
+        result <- check.ensure(None)
+      } yield {
+        result shouldBe NotReady
+      }
+    }
+
     "insert meta on first call and resume on second" in {
       for {
         (store, _) <- newStore()
         check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        r1 <- check.ensure(1000000L, 10L)
-        r2 <- check.ensure(2000000L, 20L)
+        r1 <- check.ensure(Some((1000000L, 10L)))
+        r2 <- check.ensure(None)
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        r1 shouldBe InsertMeta
-        r2 shouldBe Resume
+        r1 shouldBe Checked(InsertMeta)
+        r2 shouldBe Checked(Resume)
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
       }
@@ -623,10 +633,10 @@ class DbAppActivityRecordStoreTest
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(2000000L, 20L)
+        result <- check.ensure(Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        result shouldBe Resume
+        result shouldBe Checked(Resume)
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
       }
@@ -637,10 +647,10 @@ class DbAppActivityRecordStoreTest
         (store, _) <- newStore(DbAppActivityRecordStore.IngestionVersions(2, 0))
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(2000000L, 20L)
+        result <- check.ensure(Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
-        result shouldBe InsertMeta
+        result shouldBe Checked(InsertMeta)
         meta.value.codeVersion shouldBe 2
         meta.value.startedIngestingAt shouldBe 2000000L
         meta.value.earliestIngestedRound shouldBe 20L
@@ -652,52 +662,13 @@ class DbAppActivityRecordStoreTest
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
         check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(2000000L, 20L)
+        result <- check.ensure(Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
-        result shouldBe DowngradeDetected(1, 0, 2, 0)
+        result shouldBe Checked(DowngradeDetected(1, 0, 2, 0))
         meta.value.codeVersion shouldBe 2
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
-      }
-    }
-  }
-
-  "ActivityIngestionMetaCheck.ensure" should {
-
-    "not be checked before ensure is called" in {
-      for {
-        (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-      } yield {
-        check.isChecked shouldBe false
-      }
-    }
-
-    "return InsertMeta then Resume on subsequent calls" in {
-      for {
-        (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        r1 <- check.ensure(1000000L, 10L)
-        r2 <- check.ensure(2000000L, 20L)
-      } yield {
-        r1 shouldBe InsertMeta
-        check.isChecked shouldBe true
-        r2 shouldBe Resume
-        check.isChecked shouldBe true
-      }
-    }
-
-    "return downgrade on version mismatch" in {
-      for {
-        (store, _) <- newStore()
-        _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(2000000L, 20L)
-      } yield {
-        result shouldBe a[DowngradeDetected]
-        result.asInstanceOf[DowngradeDetected].message should include("downgrade")
-        check.isChecked shouldBe false
       }
     }
   }
