@@ -404,17 +404,6 @@ class DbAppActivityRecordStore(
 
   private val metaChecked = new AtomicBoolean(false)
 
-  /** Future-returning wrapper around [[ensureMetaDBIO]]. */
-  def ensureMeta(
-      ingestionStart: Option[(Long, Long)]
-  )(implicit tc: TraceContext): Future[EnsureResult] =
-    futureUnlessShutdownToFuture(
-      storage.queryAndUpdate(
-        ensureMetaDBIO(ingestionStart),
-        "appActivity.ensureMeta",
-      )
-    )
-
   /** DBIO action that checks/inserts the meta row.
     *
     * @param ingestionStart `Some((firstRecordTimeMicros, earliestRound))` when
