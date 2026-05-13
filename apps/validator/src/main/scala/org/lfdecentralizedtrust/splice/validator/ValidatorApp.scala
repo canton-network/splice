@@ -63,8 +63,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.setup.{NodeInitializer, ParticipantInitializer}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.ValidatorApp.OAuthRealms
 import org.lfdecentralizedtrust.splice.validator.admin.http.*
@@ -766,18 +765,6 @@ class ValidatorApp(
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
       )
-      validatorUpdateHistory = new UpdateHistory(
-        storage,
-        domainMigrationInfo,
-        store.storeName,
-        participantId,
-        store.acsContractFilter.ingestionFilter.primaryParty,
-        BackfillingRequirement.BackfillingNotRequired,
-        loggerFactory,
-        enableissue12777Workaround = false,
-        enableImportUpdateBackfill = false,
-        HistoryMetrics(retryProvider.metricsFactory, domainMigrationInfo.currentMigrationId),
-      )
       domainTimeAutomationService = new DomainTimeAutomationService(
         config.domains.global.alias,
         participantAdminConnection,
@@ -859,8 +846,6 @@ class ValidatorApp(
             config.walletSweep,
             config.autoAcceptTransfers,
             dedupDuration,
-            txLogBackfillEnabled = config.txLogBackfillEnabled,
-            txLogBackfillingBatchSize = config.txLogBackfillBatchSize,
             config.parameters,
           )
           Some(walletManager)
@@ -881,7 +866,6 @@ class ValidatorApp(
         domainParamsAutomationService.domainUnpausedSync,
         walletManagerOpt,
         store,
-        validatorUpdateHistory,
         storage,
         scanConnection,
         ledgerClient,

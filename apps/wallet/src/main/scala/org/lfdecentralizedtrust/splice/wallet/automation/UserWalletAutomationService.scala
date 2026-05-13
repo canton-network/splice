@@ -8,7 +8,6 @@ import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
   TransferFollowTrigger,
-  TxLogBackfillingTrigger,
   UnassignTrigger,
 }
 import AutomationServiceCompanion.{TriggerClass, aTrigger}
@@ -19,10 +18,9 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
-import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore}
+import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -35,7 +33,6 @@ import scala.concurrent.ExecutionContext
 
 class UserWalletAutomationService(
     store: UserWalletStore,
-    val updateHistory: UpdateHistory,
     treasury: TreasuryService,
     ledgerClient: SpliceLedgerClient,
     automationConfig: AutomationConfig,
@@ -50,8 +47,6 @@ class UserWalletAutomationService(
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     dedupDuration: DedupDuration,
-    txLogBackfillEnabled: Boolean,
-    txLogBackfillingBatchSize: Int,
     paramsConfig: SpliceParametersConfig,
 )(implicit
     ec: ExecutionContext,
@@ -70,8 +65,6 @@ class UserWalletAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService.type =
     UserWalletAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   registerTrigger(
     new ExpireTransferOfferTrigger(
@@ -176,17 +169,6 @@ class UserWalletAutomationService(
     new AmuletMetricsTrigger(triggerContext, store, scanConnection)
   )
 
-  if (txLogBackfillEnabled) {
-    registerTrigger(
-      new TxLogBackfillingTrigger(
-        store,
-        updateHistory,
-        txLogBackfillingBatchSize,
-        triggerContext,
-      )
-    )
-  }
-
   registerTrigger(
     new ExpireMintingDelegationTrigger(
       triggerContext,
@@ -224,7 +206,6 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[WalletPreapprovalSweepTrigger],
       aTrigger[AutoAcceptTransferOffersTrigger],
       aTrigger[AmuletMetricsTrigger],
-      aTrigger[TxLogBackfillingTrigger[TxLogEntry]],
       aTrigger[ExpireMintingDelegationTrigger],
       aTrigger[ExpireMintingDelegationProposalTrigger],
     )
