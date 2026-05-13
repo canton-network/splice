@@ -414,6 +414,8 @@ The response returns a list of objects, each of which may include an ``update`` 
 Traffic summary
 ^^^^^^^^^^^^^^^
 
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
+
 .. warning::
 
    This field is experimental while CIP-0104 traffic-based app rewards are in preview.
@@ -435,6 +437,8 @@ The ``traffic_summary`` object contains:
 
 App activity records
 ^^^^^^^^^^^^^^^^^^^^
+
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
 
 .. warning::
 
