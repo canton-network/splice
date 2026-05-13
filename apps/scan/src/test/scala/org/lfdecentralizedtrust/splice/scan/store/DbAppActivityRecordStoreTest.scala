@@ -7,10 +7,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  ActivityIngestionMetaCheck,
-  DbAppActivityRecordStore,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
@@ -600,13 +597,12 @@ class DbAppActivityRecordStoreTest
     }
   }
 
-  "ActivityIngestionMetaCheck.ensure" should {
+  "ensureMetaDBIO" should {
 
     "return NotReady when no meta row and no activity records" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(None)
+        result <- runEnsureMeta(store, None)
       } yield {
         result shouldBe NotReady
       }
@@ -615,9 +611,8 @@ class DbAppActivityRecordStoreTest
     "insert meta on first call and resume on second" in {
       for {
         (store, _) <- newStore()
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        r1 <- check.ensure(Some((1000000L, 10L)))
-        r2 <- check.ensure(None)
+        r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
+        r2 <- runEnsureMeta(store, None)
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         r1 shouldBe Checked(InsertMeta)
@@ -631,8 +626,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(Some((2000000L, 20L)))
+        result <- runEnsureMeta(store, Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         result shouldBe Checked(Resume)
@@ -645,8 +639,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore(DbAppActivityRecordStore.IngestionVersions(2, 0))
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(Some((2000000L, 20L)))
+        result <- runEnsureMeta(store, Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe Checked(InsertMeta)
@@ -660,8 +653,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L)
-        check = new ActivityIngestionMetaCheck(store, loggerFactory)
-        result <- check.ensure(Some((2000000L, 20L)))
+        result <- runEnsureMeta(store, Some((2000000L, 20L)))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe Checked(DowngradeDetected(1, 0, 2, 0))
@@ -791,6 +783,17 @@ class DbAppActivityRecordStoreTest
       roundNumber = roundNumber,
       appProviderParties = appProviderParties,
       appActivityWeights = appActivityWeights,
+    )
+
+  private def runEnsureMeta(
+      store: DbAppActivityRecordStore,
+      ingestionStart: Option[(Long, Long)],
+  ): Future[EnsureResult] =
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        store.ensureMetaDBIO(ingestionStart),
+        "test.ensureMeta",
+      )
     )
 
   private val testDomain = SynchronizerId.tryFromString("test::domain")
