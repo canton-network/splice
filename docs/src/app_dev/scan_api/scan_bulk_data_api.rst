@@ -417,7 +417,8 @@ Traffic summary
 .. warning::
 
    This field is experimental while CIP-0104 traffic-based app rewards are in preview.
-   It will be stabilised once CIP-0104 exits the preview phase and is fully enabled on mainnet.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
 
 Each event includes a ``traffic_summary`` field containing traffic cost data
 from the sequencer for the confirmation request corresponding to the event.
