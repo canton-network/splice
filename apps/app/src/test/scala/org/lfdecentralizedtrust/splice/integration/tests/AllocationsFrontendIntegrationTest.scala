@@ -20,7 +20,6 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Optional
@@ -64,7 +63,6 @@ class AllocationsFrontendIntegrationTest
       .now()
       .truncatedTo(ChronoUnit.MICROS)
       .toInstant(ZoneOffset.UTC)
-    val requestedAt = now.minusSeconds(1800)
     val settleBefore = now.plusSeconds(3600 * 2)
     val wantedTransferLegs = Seq(
       new TransferLegV2(
@@ -137,21 +135,6 @@ class AllocationsFrontendIntegrationTest
             transferLeg.amount.toString
           )
         }
-
-        val allocationTimestampFormat =
-          DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")
-        textField("create-allocation-settlement-requested-at").underlying
-          .sendKeys(
-            allocationTimestampFormat.format(
-              requestedAt.atOffset(ZoneOffset.UTC)
-            )
-          )
-        textField("create-allocation-settlement-settle-at").underlying
-          .sendKeys(
-            allocationTimestampFormat.format(
-              settleBefore.atOffset(ZoneOffset.UTC)
-            )
-          )
 
         eventuallyClickOn(id("create-allocation-submit-button"))
       },

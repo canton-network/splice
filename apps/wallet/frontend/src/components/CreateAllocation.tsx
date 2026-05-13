@@ -176,32 +176,6 @@ const CreateAllocation: React.FC = () => {
             <Button startIcon={<Add />} size="small" onClick={addExecutor}>
               Add Executor
             </Button>
-            <Typography variant="h6">Requested at ({DAML_TIMESTAMP_FORMAT})</Typography>
-            <TextField
-              id="create-allocation-settlement-requested-at"
-              placeholder={DAML_TIMESTAMP_FORMAT}
-              value={allocation.settlement.requested_at || ''}
-              error={!isValidDamlTimestamp(allocation.settlement.requested_at)}
-              onChange={event =>
-                setAllocation({
-                  ...allocation,
-                  settlement: { ...allocation.settlement, requested_at: event.target.value },
-                })
-              }
-            />
-            <Typography variant="h6">Settle at ({DAML_TIMESTAMP_FORMAT})</Typography>
-            <TextField
-              id="create-allocation-settlement-settle-at"
-              placeholder={DAML_TIMESTAMP_FORMAT}
-              value={allocation.settlement.settle_at || ''}
-              error={!isValidDamlTimestamp(allocation.settlement.settle_at)}
-              onChange={event =>
-                setAllocation({
-                  ...allocation,
-                  settlement: { ...allocation.settlement, settle_at: event.target.value },
-                })
-              }
-            />
             <Typography variant="h6">
               Settlement deadline (optional, {DAML_TIMESTAMP_FORMAT})
             </Typography>
@@ -319,8 +293,6 @@ interface PartialAllocateAmuletV2Request {
   settlement: {
     executors: string[];
     settlement_ref: AllocateAmuletRequestSettlementSettlementRef;
-    requested_at: string;
-    settle_at: string;
     settlement_deadline?: string;
   };
   transfer_legs: PartialTransferLeg[];
@@ -334,8 +306,6 @@ function emptyForm(): PartialAllocateAmuletV2Request {
   return {
     settlement: {
       executors: [''],
-      requested_at: '',
-      settle_at: '',
       settlement_deadline: undefined,
       settlement_ref: { id: '', cid: undefined },
     },
@@ -351,7 +321,6 @@ function validatedForm(
     !partial.settlement.executors.length ||
     partial.settlement.executors.some(e => !e) ||
     !partial.settlement.settlement_ref?.id ||
-    ![partial.settlement.requested_at, partial.settlement.settle_at].every(isValidDamlTimestamp) ||
     (partial.settlement.settlement_deadline &&
       !isValidDamlTimestamp(partial.settlement.settlement_deadline))
   ) {
