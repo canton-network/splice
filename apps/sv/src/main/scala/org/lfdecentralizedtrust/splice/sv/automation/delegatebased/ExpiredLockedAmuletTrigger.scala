@@ -104,13 +104,7 @@ class ExpiredLockedAmuletTrigger(
           }
         }
       // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
-      // we need to explicitly pass the corresponding governance package so that it doesn't use latest
-      preferredPackageIds = supports24hSubmissionDelay.packageIds ++
-        (if (supports24hSubmissionDelay.supported) Nil
-         else
-           supports24hSubmissionDelay.packageIds.flatMap(
-             svTaskContext.packageVersionSupport.amuletToGovFallback.get
-           ))
+      preferredPackageIds = supports24hSubmissionDelay.packageIds
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(

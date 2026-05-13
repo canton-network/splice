@@ -125,6 +125,7 @@ class AmuletWithMinimalVersionExpiryIntegrationTest
         }
       }
 
+      // Multi-host alice on sv1Participant to be able to create bare Amulet and LockedAmulet contracts
       actAndCheck(
         "Multi-host alice on sv1Participant (alice keeps her old host)",
         eventuallySucceeds() {
