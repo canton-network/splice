@@ -1,9 +1,13 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  metadatav1,
+  transferinstructionv2,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAllScanAppConfigs_,
@@ -319,7 +323,105 @@ class TokenStandardV2TransferIntegrationTest
       }
     }
 
-    // TODO (#5415): port "locked amulet is expired before withdraw" from v1 test
+    "locked amulet is expired before withdraw" in { implicit env =>
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      aliceWalletClient.tap(100.0)
+
+      val expiration = CantonTimestamp.now().plusSeconds(5L)
+
+      val trackingId = UUID.randomUUID().toString
+
+      val offerResponse = aliceWalletClient.createTokenStandardTransferV2(
+        bobParty,
+        10,
+        "transfer offer description",
+        expiration,
+        trackingId,
+      )
+      val offer = inside(offerResponse.output) { case members.TransferInstructionPending(value) =>
+        new transferinstructionv2.TransferInstruction.ContractId(value.transferInstructionCid)
+      }
+      val locked = aliceWalletClient.list().lockedAmulets.loneElement
+      // Wait until expiry is reached. A time-based test would be a bit cleaner but
+      // environment setup is slower than sleeping for 5s so we do it here anyway.
+      Threading.sleep(5000)
+      // We don't have a locked expiry trigger atm so trigger expiry manually.
+      actAndCheck(
+        "Alice expires locked amulet",
+        ownerExpireLock(aliceParty, locked.contract.contractId),
+      )(
+        "Scan ingests update",
+        _ => {
+          val context = sv1ScanBackend.getTransferInstructionWithdrawContextV2(offer)
+          context.choiceContext.values.get("expire-lock") shouldBe new metadatav1.anyvalue.AV_Bool(
+            false
+          )
+        },
+      )
+      aliceWalletClient.withdrawTokenStandardTransferV2(offer)
+
+      val (aliceTxs, bobTxs) = clue("Alice and Bob parse all tx log entries") {
+        eventually() {
+          val aliceTxs = aliceWalletClient.listTransactions(None, 1000)
+          // tap + transfer instruction + unlock + withdraw
+          aliceTxs should have size 4 withClue "aliceTxs"
+          val bobTxs = bobWalletClient.listTransactions(None, 1000)
+          // transfer instruction + withdraw
+          bobTxs should have size 2 withClue "bobTxs"
+          (aliceTxs, bobTxs)
+        }
+      }
+
+      checkTxHistory(
+        aliceWalletClient,
+        Seq(
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
+            logEntry.transferInstructionCid shouldBe offer.contractId
+            logEntry.amount shouldBe 0
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.LockedAmuletOwnerExpired.toProto
+            logEntry.amount shouldBe (10)
+          },
+          { case logEntry: TransferTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
+            logEntry.transferInstructionCid shouldBe offer.contractId
+            logEntry.transferInstructionReceiver shouldBe bobParty.toProtoPrimitive
+            logEntry.transferInstructionAmount shouldBe Some(BigDecimal(10))
+            logEntry.description shouldBe "transfer offer description"
+            // No balance is transferred here so receivers is empty
+            logEntry.receivers shouldBe empty withClue "receivers"
+            // The wallet counts moving the balance to a locked amulet as a negative balance change
+            logEntry.sender.value.amount shouldBe (BigDecimal(-10))
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+          },
+        ),
+      )
+
+      checkTxHistory(
+        bobWalletClient,
+        Seq(
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
+            logEntry.transferInstructionCid shouldBe offer.contractId
+            logEntry.amount shouldBe 0
+          },
+          { case logEntry: TransferTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
+            logEntry.transferInstructionCid shouldBe offer.contractId
+            logEntry.transferInstructionReceiver shouldBe bobParty.toProtoPrimitive
+            logEntry.transferInstructionAmount shouldBe Some(BigDecimal(10))
+            logEntry.description shouldBe "transfer offer description"
+            logEntry.receivers shouldBe Seq(PartyAndAmount(bobParty.toProtoPrimitive, 0))
+            logEntry.sender.value.amount shouldBe 0
+          },
+        ),
+      )
+    }
 
     "prevent duplicate transfer creation" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
