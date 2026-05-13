@@ -18,7 +18,12 @@ import org.lfdecentralizedtrust.splice.scan.util
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 import org.lfdecentralizedtrust.splice.util.{AmuletConfigSchedule, Contract, DarResourcesUtil}
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.{Resource, definitions}
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2.Resource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2.definitions.{
+  GetChoiceContextRequest,
+  GetFactoryRequest,
+}
 
 import java.time.ZoneOffset
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,6 +39,7 @@ class HttpTokenStandardTransferInstructionHandler(
     ec: ExecutionContext,
     tracer: Tracer,
 ) extends v1.Handler[TraceContext]
+    with v2.Handler[TraceContext]
     with Spanning
     with NamedLogging {
 
@@ -42,7 +48,7 @@ class HttpTokenStandardTransferInstructionHandler(
   private val workflowId = this.getClass.getSimpleName
 
   override def getTransferFactory(respond: v1.Resource.GetTransferFactoryResponse.type)(
-      body: definitions.GetFactoryRequest
+      body: v1.definitions.GetFactoryRequest
   )(extracted: TraceContext): Future[v1.Resource.GetTransferFactoryResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getTransferFactory") { _ => _ =>
@@ -80,12 +86,12 @@ class HttpTokenStandardTransferInstructionHandler(
         }
       } yield {
         val kind =
-          if (isSelfTransfer) definitions.TransferFactoryWithChoiceContext.TransferKind.Self
+          if (isSelfTransfer) v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Self
           else if (optTransferPreapproval.isDefined)
-            definitions.TransferFactoryWithChoiceContext.TransferKind.Direct
-          else definitions.TransferFactoryWithChoiceContext.TransferKind.Offer
+            v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Direct
+          else v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Offer
         v1.Resource.GetTransferFactoryResponseOK(
-          definitions.TransferFactoryWithChoiceContext(
+          v1.definitions.TransferFactoryWithChoiceContext(
             externalPartyAmuletRules.contractId.contractId,
             kind,
             choiceContext = choiceContextBuilder
@@ -102,10 +108,10 @@ class HttpTokenStandardTransferInstructionHandler(
   }
 
   override def getTransferInstructionAcceptContext(
-      respond: Resource.GetTransferInstructionAcceptContextResponse.type
-  )(transferInstructionId: String, body: definitions.GetChoiceContextRequest)(
+      respond: v1.Resource.GetTransferInstructionAcceptContextResponse.type
+  )(transferInstructionId: String, body: v1.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[Resource.GetTransferInstructionAcceptContextResponse] = {
+  ): Future[v1.Resource.GetTransferInstructionAcceptContextResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getTransferInstructionAcceptContext") { _ => _ =>
       for {
@@ -121,10 +127,10 @@ class HttpTokenStandardTransferInstructionHandler(
   }
 
   override def getTransferInstructionRejectContext(
-      respond: Resource.GetTransferInstructionRejectContextResponse.type
-  )(transferInstructionId: String, body: definitions.GetChoiceContextRequest)(
+      respond: v1.Resource.GetTransferInstructionRejectContextResponse.type
+  )(transferInstructionId: String, body: v1.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[Resource.GetTransferInstructionRejectContextResponse] = {
+  ): Future[v1.Resource.GetTransferInstructionRejectContextResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getTransferInstructionRejectContext") { _ => _ =>
       for {
@@ -140,10 +146,10 @@ class HttpTokenStandardTransferInstructionHandler(
   }
 
   override def getTransferInstructionWithdrawContext(
-      respond: Resource.GetTransferInstructionWithdrawContextResponse.type
-  )(transferInstructionId: String, body: definitions.GetChoiceContextRequest)(
+      respond: v1.Resource.GetTransferInstructionWithdrawContextResponse.type
+  )(transferInstructionId: String, body: v1.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[Resource.GetTransferInstructionWithdrawContextResponse] = {
+  ): Future[v1.Resource.GetTransferInstructionWithdrawContextResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getTransferInstructionWithdrawContext") { _ => _ =>
       for {
@@ -157,6 +163,28 @@ class HttpTokenStandardTransferInstructionHandler(
       }
     }
   }
+
+  override def getTransferFactory(respond: Resource.GetTransferFactoryResponse.type)(
+      body: GetFactoryRequest
+  )(extracted: TraceContext): Future[Resource.GetTransferFactoryResponse] = ???
+
+  override def getTransferInstructionAcceptContext(
+      respond: Resource.GetTransferInstructionAcceptContextResponse.type
+  )(transferInstructionId: String, body: GetChoiceContextRequest)(
+      extracted: TraceContext
+  ): Future[Resource.GetTransferInstructionAcceptContextResponse] = ???
+
+  override def getTransferInstructionRejectContext(
+      respond: Resource.GetTransferInstructionRejectContextResponse.type
+  )(transferInstructionId: String, body: GetChoiceContextRequest)(
+      extracted: TraceContext
+  ): Future[Resource.GetTransferInstructionRejectContextResponse] = ???
+
+  override def getTransferInstructionWithdrawContext(
+      respond: Resource.GetTransferInstructionWithdrawContextResponse.type
+  )(transferInstructionId: String, body: GetChoiceContextRequest)(
+      extracted: TraceContext
+  ): Future[Resource.GetTransferInstructionWithdrawContextResponse] = ???
 
   private def getAmuletRulesTransferContext(excludeDebugFields: Boolean)(implicit
       tc: TraceContext
@@ -203,7 +231,7 @@ class HttpTokenStandardTransferInstructionHandler(
       excludeDebugFields: Boolean,
   )(implicit
       tc: TraceContext
-  ): Future[definitions.ChoiceContext] = {
+  ): Future[v1.definitions.ChoiceContext] = {
     for {
       amuletInstr <- contractFetcher
         .lookupContractById(
@@ -221,8 +249,8 @@ class HttpTokenStandardTransferInstructionHandler(
           )
         )
       context <- util.ChoiceContextBuilder.getTwoStepTransferContext[
-        definitions.DisclosedContract,
-        definitions.ChoiceContext,
+        v1.definitions.DisclosedContract,
+        v1.definitions.ChoiceContext,
         ChoiceContextBuilder,
       ](
         s"AmuletTransferInstruction '$transferInstructionId'",
@@ -245,12 +273,12 @@ object HttpTokenStandardTransferInstructionHandler {
   final class ChoiceContextBuilder(activeSynchronizerId: String, excludeDebugFields: Boolean)(
       implicit elc: ErrorLoggingContext
   ) extends util.ChoiceContextBuilder[
-        definitions.DisclosedContract,
-        definitions.ChoiceContext,
+        v1.definitions.DisclosedContract,
+        v1.definitions.ChoiceContext,
         ChoiceContextBuilder,
       ](activeSynchronizerId, excludeDebugFields) {
 
-    def build(): definitions.ChoiceContext = definitions.ChoiceContext(
+    def build(): v1.definitions.ChoiceContext = v1.definitions.ChoiceContext(
       choiceContextData = io.circe.parser
         .parse(
           new metadatav1.ChoiceContext(contextEntries.asJava).toJson
@@ -266,9 +294,9 @@ object HttpTokenStandardTransferInstructionHandler {
         contract: Contract[TCId, T],
         synchronizerId: String,
         excludeDebugFields: Boolean,
-    ): definitions.DisclosedContract = {
+    ): v1.definitions.DisclosedContract = {
       val asHttp = contract.toHttp
-      definitions.DisclosedContract(
+      v1.definitions.DisclosedContract(
         templateId = asHttp.templateId,
         contractId = asHttp.contractId,
         createdEventBlob = asHttp.createdEventBlob,

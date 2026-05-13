@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ListDevelopmentFundCouponHistoryResponse,
   ListMintingDelegationProposalsResponse,
   ListMintingDelegationsResponse,
-  TransferInstructionResultResponse as TransferInstructionV1ResultResponse,
+  TransferInstructionResultResponse,
   WithdrawDevelopmentFundCouponResponse,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
@@ -45,6 +45,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 
 abstract class WalletAppReference(
@@ -519,7 +520,7 @@ abstract class WalletAppReference(
       description: String,
       expiresAt: CantonTimestamp,
       trackingId: String,
-  ): TransferInstructionV1ResultResponse =
+  ): TransferInstructionResultResponse =
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard
@@ -537,11 +538,11 @@ abstract class WalletAppReference(
       description: String,
       expiresAt: CantonTimestamp,
       trackingId: String,
-  ): TransferInstructionV1ResultResponse =
+  ): TransferInstructionResultResponse =
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard
-          .CreateTransfer(receiver, amount, description, expiresAt, trackingId)
+          .CreateTransferV2(receiver, amount, description, expiresAt, trackingId)
       )
     }
 
@@ -549,10 +550,21 @@ abstract class WalletAppReference(
   @Help.Description("Accept a specific offer for a Token Standard transfer.")
   def acceptTokenStandardTransfer(
       contractId: transferinstructionv1.TransferInstruction.ContractId
-  ): TransferInstructionV1ResultResponse =
+  ): TransferInstructionResultResponse =
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.AcceptTransfer(contractId)
+      )
+    }
+
+  @Help.Summary("Accepts a transfer created via the token standard")
+  @Help.Description("Accept a specific offer for a Token Standard transfer.")
+  def acceptTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.AcceptTransferV2(contractId)
       )
     }
 
@@ -560,7 +572,7 @@ abstract class WalletAppReference(
   @Help.Description("Reject a specific offer for a Token Standard transfer.")
   def rejectTokenStandardTransfer(
       contractId: transferinstructionv1.TransferInstruction.ContractId
-  ): TransferInstructionV1ResultResponse =
+  ): TransferInstructionResultResponse =
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.RejectTransfer(contractId)
@@ -571,7 +583,7 @@ abstract class WalletAppReference(
   @Help.Description("Withdraw a specific offer for a Token Standard transfer.")
   def withdrawTokenStandardTransfer(
       contractId: transferinstructionv1.TransferInstruction.ContractId
-  ): TransferInstructionV1ResultResponse =
+  ): TransferInstructionResultResponse =
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.WithdrawTransfer(contractId)

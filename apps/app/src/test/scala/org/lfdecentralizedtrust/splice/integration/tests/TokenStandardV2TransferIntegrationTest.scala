@@ -3,7 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAllScanAppConfigs_,
@@ -59,7 +59,6 @@ class TokenStandardV2TransferIntegrationTest
 
   "Token Standard Transfers should" should {
 
-    // TODO (#5414): port reject and withdraw cases
     "support create, list, accept, reject and withdraw" in { implicit env =>
       val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val bobUserParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
@@ -88,7 +87,7 @@ class TokenStandardV2TransferIntegrationTest
       val cids = responses.map { response =>
         response.output match {
           case members.TransferInstructionPending(value) =>
-            new TransferInstruction.ContractId(value.transferInstructionCid)
+            new transferinstructionv2.TransferInstruction.ContractId(value.transferInstructionCid)
           case _ => fail("The transfers were expected to be pending.")
         }
       }
@@ -134,7 +133,7 @@ class TokenStandardV2TransferIntegrationTest
 
         actAndCheck(
           "Bob accepts one transfer offer",
-          bobWalletClient.acceptTokenStandardTransfer(toAccept),
+          bobWalletClient.acceptTokenStandardTransferV2(toAccept),
         )(
           "The offer is removed and bob's balance is updated",
           result => {
@@ -330,7 +329,7 @@ class TokenStandardV2TransferIntegrationTest
 
       val trackingId = UUID.randomUUID().toString
 
-      val created = aliceWalletClient.createTokenStandardTransfer(
+      val created = aliceWalletClient.createTokenStandardTransferV2(
         bobUserParty,
         10,
         "ok",
@@ -340,7 +339,7 @@ class TokenStandardV2TransferIntegrationTest
 
       assertThrows[CommandFailure](
         loggerFactory.assertLogs(
-          aliceWalletClient.createTokenStandardTransfer(
+          aliceWalletClient.createTokenStandardTransferV2(
             bobUserParty,
             10,
             "not ok, resubmitted same trackingId so should be rejected",

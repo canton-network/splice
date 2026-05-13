@@ -48,6 +48,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 
 import scala.concurrent.Future
@@ -1098,6 +1099,49 @@ object HttpWalletAppClient {
       }
     }
 
+    final case class CreateTransferV2(
+        receiver: PartyId,
+        amount: BigDecimal,
+        description: String,
+        expiresAt: CantonTimestamp,
+        trackingId: String,
+    ) extends InternalBaseCommand[
+          http.CreateTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.CreateTokenStandardTransferV2Response] =
+        client.createTokenStandardTransferV2(
+          definitions.CreateTokenStandardTransferRequest(
+            Codec.encode(receiver),
+            Codec.encode(amount),
+            description,
+            Codec.encode(expiresAt),
+            trackingId,
+          ),
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.CreateTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = {
+        case http.CreateTokenStandardTransferV2Response.OK(value) =>
+          Right(value)
+        case http.CreateTokenStandardTransferV2Response.Conflict(value) =>
+          Left(value.error)
+        case http.CreateTokenStandardTransferV2Response.TooManyRequests(value) =>
+          Left(value.error)
+      }
+    }
+
     final case class AcceptTransfer(
         contractId: transferinstructionv1.TransferInstruction.ContractId
     ) extends InternalBaseCommand[
@@ -1122,6 +1166,34 @@ object HttpWalletAppClient {
         String,
         definitions.TransferInstructionResultResponse,
       ]] = { case http.AcceptTokenStandardTransferResponse.OK(value) =>
+        Right(value)
+      }
+    }
+
+    final case class AcceptTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.AcceptTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.AcceptTokenStandardTransferV2Response] =
+        client.acceptTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.AcceptTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.AcceptTokenStandardTransferV2Response.OK(value) =>
         Right(value)
       }
     }
