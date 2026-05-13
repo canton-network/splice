@@ -6,7 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import {
   AllocateAmuletV2Request,
   AllocateAmuletRequestSettlementSettlementRef,
-  TransferLegV2,
+  TransferLegSide,
 } from '@lfdecentralizedtrust/wallet-openapi';
 import {
   Alert,
@@ -27,12 +27,14 @@ import {
   damlTimestampToOpenApiTimestamp,
   isValidDamlTimestamp,
 } from '../utils/timestampConversion';
+import { usePrimaryParty } from '../hooks';
 
 const CreateAllocation: React.FC = () => {
   const { createAllocationV2 } = useWalletClient();
+  const userParty = usePrimaryParty();
   const [error, setError] = useState<object | null>(null);
   const [allocation, setAllocation] = useState<PartialAllocateAmuletV2Request>(emptyForm());
-  const validated = validatedForm(allocation);
+  const validated = validatedForm(userParty!, allocation);
   const createAllocationMutation = useMutation({
     mutationFn: async () => {
       return validated && (await createAllocationV2(validated));
@@ -174,32 +176,6 @@ const CreateAllocation: React.FC = () => {
             <Button startIcon={<Add />} size="small" onClick={addExecutor}>
               Add Executor
             </Button>
-            <Typography variant="h6">Requested at ({DAML_TIMESTAMP_FORMAT})</Typography>
-            <TextField
-              id="create-allocation-settlement-requested-at"
-              placeholder={DAML_TIMESTAMP_FORMAT}
-              value={allocation.settlement.requested_at || ''}
-              error={!isValidDamlTimestamp(allocation.settlement.requested_at)}
-              onChange={event =>
-                setAllocation({
-                  ...allocation,
-                  settlement: { ...allocation.settlement, requested_at: event.target.value },
-                })
-              }
-            />
-            <Typography variant="h6">Settle at ({DAML_TIMESTAMP_FORMAT})</Typography>
-            <TextField
-              id="create-allocation-settlement-settle-at"
-              placeholder={DAML_TIMESTAMP_FORMAT}
-              value={allocation.settlement.settle_at || ''}
-              error={!isValidDamlTimestamp(allocation.settlement.settle_at)}
-              onChange={event =>
-                setAllocation({
-                  ...allocation,
-                  settlement: { ...allocation.settlement, settle_at: event.target.value },
-                })
-              }
-            />
             <Typography variant="h6">
               Settlement deadline (optional, {DAML_TIMESTAMP_FORMAT})
             </Typography>
@@ -317,8 +293,6 @@ interface PartialAllocateAmuletV2Request {
   settlement: {
     executors: string[];
     settlement_ref: AllocateAmuletRequestSettlementSettlementRef;
-    requested_at: string;
-    settle_at: string;
     settlement_deadline?: string;
   };
   transfer_legs: PartialTransferLeg[];
@@ -332,8 +306,6 @@ function emptyForm(): PartialAllocateAmuletV2Request {
   return {
     settlement: {
       executors: [''],
-      requested_at: '',
-      settle_at: '',
       settlement_deadline: undefined,
       settlement_ref: { id: '', cid: undefined },
     },
@@ -341,33 +313,45 @@ function emptyForm(): PartialAllocateAmuletV2Request {
   };
 }
 
-function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV2Request | null {
+function validatedForm(
+  userParty: string,
+  partial: PartialAllocateAmuletV2Request
+): AllocateAmuletV2Request | null {
   if (
     !partial.settlement.executors.length ||
     partial.settlement.executors.some(e => !e) ||
     !partial.settlement.settlement_ref?.id ||
-    ![partial.settlement.requested_at, partial.settlement.settle_at].every(isValidDamlTimestamp) ||
     (partial.settlement.settlement_deadline &&
       !isValidDamlTimestamp(partial.settlement.settlement_deadline))
   ) {
     return null;
   }
-  const validLegs: TransferLegV2[] = [];
+  const validLegSides: TransferLegSide[] = [];
   for (const leg of partial.transfer_legs) {
     if (!leg.transfer_leg_id || !leg.sender || !leg.receiver || !leg.amount) return null;
-    validLegs.push({
+    let side: 'SENDERSIDE' | 'RECEIVERSIDE';
+    let otherside: string;
+    if (userParty === leg.sender) {
+      side = 'SENDERSIDE';
+      otherside = leg.receiver;
+    } else if (userParty === leg.receiver) {
+      side = 'RECEIVERSIDE';
+      otherside = leg.sender;
+    } else {
+      return null;
+    }
+    validLegSides.push({
       transfer_leg_id: leg.transfer_leg_id,
-      sender: leg.sender,
-      receiver: leg.receiver,
+      side,
+      otherside,
+      meta: {},
       amount: leg.amount,
     });
   }
-  if (validLegs.length === 0) return null;
+  if (validLegSides.length === 0) return null;
   return {
     settlement: {
       executors: partial.settlement.executors,
-      requested_at: damlTimestampToOpenApiTimestamp(partial.settlement.requested_at),
-      settle_at: damlTimestampToOpenApiTimestamp(partial.settlement.settle_at),
       settlement_deadline: partial.settlement.settlement_deadline
         ? damlTimestampToOpenApiTimestamp(partial.settlement.settlement_deadline)
         : undefined,
@@ -376,6 +360,10 @@ function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV
         cid: partial.settlement.settlement_ref.cid,
       },
     },
-    transfer_legs: validLegs,
+    transfer_leg_sides: validLegSides,
+    // TODO (#5498): make the FE specify these
+    committed: false,
+    meta: {},
+    next_iteration_funding: undefined,
   };
 }

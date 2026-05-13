@@ -15,7 +15,8 @@ gen_project_docs () (
     dpm docs --index-template "$DOCS_DIR/api-templates/$2-index-template.rst" "${DAML_FILES[@]}" --exclude-modules '**.Scripts.**' -f rst -o "$DOCS_DIR/src/app_dev/api/$2"
     # Workaround for https://github.com/digital-asset/daml/pull/20889/files so we get toctrees again
     # shellcheck disable=SC2016
-    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst' -exec sed -i 's/^* :doc:`\(.*\)`$/   \1/g' {} +
+    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst' -exec sed -i.bak -e 's/^\* :doc:`\(.*\)`$/   \1/g' {} +
+    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst.bak' -delete
 )
 
 # We explicitly exclude from the generated docs API packages that were released and must remain stable (thus are also not compiled any more)
