@@ -58,6 +58,7 @@ class ExpiredAmuletTrigger(
       )
       cmds <-
         if (supports24hSubmissionDelay.supported) {
+          println("A")
           store.getExternalPartyConfigStatesPair().map { externalPartyConfigStates =>
             task.work.expiredContracts.flatMap(co =>
               dsoRules
@@ -78,6 +79,7 @@ class ExpiredAmuletTrigger(
             )
           }
         } else {
+          println("B")
           store.getLatestActiveOpenMiningRound().map { round =>
             task.work.expiredContracts.flatMap(co =>
               dsoRules
@@ -112,6 +114,7 @@ class ExpiredAmuletTrigger(
           ),
           CantonTimestamp.now(),
         )
+      _ = println(preferredPackages)
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(

@@ -119,6 +119,7 @@ class ExpiredLockedAmuletTrigger(
           ),
           CantonTimestamp.now(),
         )
+      _ = println(s"[LockedExpire] preferredPackages=$preferredPackages")
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(
