@@ -419,7 +419,7 @@ Traffic summary
    This field is experimental while CIP-0104 traffic-based app rewards are in preview.
    It will be stabilised once CIP-0104 exits the preview phase and is fully enabled on mainnet.
 
-Each event may include a ``traffic_summary`` field containing traffic cost data
+Each event includes a ``traffic_summary`` field containing traffic cost data
 from the sequencer for the confirmation request corresponding to the event.
 
 The ``traffic_summary`` object contains:
