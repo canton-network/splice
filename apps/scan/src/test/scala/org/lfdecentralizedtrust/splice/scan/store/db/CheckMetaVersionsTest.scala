@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.digitalasset.canton.BaseTest
-import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.scalatest.wordspec.AnyWordSpec
 
 class CheckMetaVersionsTest extends AnyWordSpec with BaseTest {

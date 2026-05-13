@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
@@ -85,39 +85,4 @@ class ActivityIngestionMetaCheck(
   }
 }
 
-object ActivityIngestionMetaCheck {
-
-  sealed trait EnsureResult
-  case class Checked(result: MetaCheckResult) extends EnsureResult
-  case object NotReady extends EnsureResult
-
-  sealed trait MetaCheckResult
-  case object InsertMeta extends MetaCheckResult
-  case object Resume extends MetaCheckResult
-  final case class DowngradeDetected(
-      runningCode: Int,
-      runningUser: Int,
-      storedCode: Int,
-      storedUser: Int,
-  ) extends MetaCheckResult {
-    def message: String =
-      s"Activity ingestion version downgrade detected: " +
-        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser). " +
-        s"Shutting down to prevent data corruption."
-  }
-
-  def checkMetaVersions(
-      existing: Option[(Int, Int)],
-      runningCode: Int,
-      runningUser: Int,
-  ): MetaCheckResult = existing match {
-    case None => InsertMeta
-    case Some((storedCode, storedUser)) =>
-      if (runningCode < storedCode || runningUser < storedUser)
-        DowngradeDetected(runningCode, runningUser, storedCode, storedUser)
-      else if (runningCode > storedCode || runningUser > storedUser)
-        InsertMeta
-      else
-        Resume
-  }
-}
+object ActivityIngestionMetaCheck

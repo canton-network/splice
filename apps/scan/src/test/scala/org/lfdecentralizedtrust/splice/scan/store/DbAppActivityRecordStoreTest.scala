@@ -11,8 +11,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   ActivityIngestionMetaCheck,
   DbAppActivityRecordStore,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.*
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement

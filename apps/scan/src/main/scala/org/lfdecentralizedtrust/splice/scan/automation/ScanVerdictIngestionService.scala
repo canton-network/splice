@@ -39,7 +39,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   ActivityIngestionMetaCheck,
   DbScanVerdictStore,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck.{
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.{
   Checked,
   DowngradeDetected,
   NotReady,
