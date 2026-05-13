@@ -1226,6 +1226,34 @@ object HttpWalletAppClient {
       }
     }
 
+    final case class RejectTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.RejectTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.RejectTokenStandardTransferV2Response] =
+        client.rejectTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.RejectTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.RejectTokenStandardTransferV2Response.OK(value) =>
+        Right(value)
+      }
+    }
+
     final case class WithdrawTransfer(
         contractId: transferinstructionv1.TransferInstruction.ContractId
     ) extends InternalBaseCommand[
@@ -1250,6 +1278,34 @@ object HttpWalletAppClient {
         String,
         definitions.TransferInstructionResultResponse,
       ]] = { case http.WithdrawTokenStandardTransferResponse.OK(value) =>
+        Right(value)
+      }
+    }
+
+    final case class WithdrawTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.WithdrawTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.WithdrawTokenStandardTransferV2Response] =
+        client.withdrawTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.WithdrawTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.WithdrawTokenStandardTransferV2Response.OK(value) =>
         Right(value)
       }
     }

@@ -11,7 +11,11 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem.TransactionType as HttpTransactionType
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{ReceiverAmount, Transfer}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  AbortTransferInstruction,
+  ReceiverAmount,
+  Transfer,
+}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
@@ -92,44 +96,44 @@ class TokenStandardV2TransferIntegrationTest
         }
       }
 
-      // TODO (#5414): implement
-//      clue("Scan sees all the transfers") {
-//        cids.foreach { cid =>
-//          eventuallySucceeds() {
-//            sv1ScanBackend.getTransferInstructionRejectContext(cid)
-//          }
-//        }
-//      }
+      clue("Scan sees all the transfers") {
+        cids.foreach { cid =>
+          eventuallySucceeds() {
+            sv1ScanBackend.getTransferInstructionAcceptContextV2(cid)
+            sv1ScanBackend.getTransferInstructionRejectContextV2(cid)
+            sv1ScanBackend.getTransferInstructionWithdrawContextV2(cid)
+          }
+        }
+      }
 
-      inside(cids.toList) { case _toReject :: _toWithdraw :: toAccept :: _toIgnore :: Nil =>
-        // TODO (#5414): implement reject and withdraw
-//        actAndCheck(
-//          "Bob rejects one transfer offer",
-//          bobWalletClient.rejectTokenStandardTransfer(toReject),
-//        )(
-//          "The offer is removed, no change to Bob's balance",
-//          result => {
-//            inside(result.output) { case members.TransferInstructionFailed(_) => () }
-//            Seq(aliceWalletClient, bobWalletClient).foreach(
-//              _.listTokenStandardTransfers() should have size (cids.length.toLong - 1L) withClue "TokenStandardTransfers"
-//            )
-//            bobWalletClient.balance().unlockedQty should be(BigDecimal(0))
-//          },
-//        )
-//
-//        actAndCheck(
-//          "Alice withdraws one transfer offer",
-//          aliceWalletClient.withdrawTokenStandardTransfer(toWithdraw),
-//        )(
-//          "The offer is removed, no change to Bob's balance",
-//          result => {
-//            inside(result.output) { case members.TransferInstructionFailed(_) => () }
-//            Seq(aliceWalletClient, bobWalletClient).foreach(
-//              _.listTokenStandardTransfers() should have size (cids.length.toLong - 2L) withClue "TokenStandardTransfers"
-//            )
-//            bobWalletClient.balance().unlockedQty should be(BigDecimal(0))
-//          },
-//        )
+      inside(cids.toList) { case toReject :: toWithdraw :: toAccept :: _toIgnore :: Nil =>
+        actAndCheck(
+          "Bob rejects one transfer offer",
+          bobWalletClient.rejectTokenStandardTransferV2(toReject),
+        )(
+          "The offer is removed, no change to Bob's balance",
+          result => {
+            inside(result.output) { case members.TransferInstructionFailed(_) => () }
+            Seq(aliceWalletClient, bobWalletClient).foreach(
+              _.listTokenStandardTransfers() should have size (cids.length.toLong - 1L) withClue "TokenStandardTransfers"
+            )
+            bobWalletClient.balance().unlockedQty should be(BigDecimal(0))
+          },
+        )
+
+        actAndCheck(
+          "Alice withdraws one transfer offer",
+          aliceWalletClient.withdrawTokenStandardTransferV2(toWithdraw),
+        )(
+          "The offer is removed, no change to Bob's balance",
+          result => {
+            inside(result.output) { case members.TransferInstructionFailed(_) => () }
+            Seq(aliceWalletClient, bobWalletClient).foreach(
+              _.listTokenStandardTransfers() should have size (cids.length.toLong - 2L) withClue "TokenStandardTransfers"
+            )
+            bobWalletClient.balance().unlockedQty should be(BigDecimal(0))
+          },
+        )
 
         actAndCheck(
           "Bob accepts one transfer offer",
@@ -139,7 +143,7 @@ class TokenStandardV2TransferIntegrationTest
           result => {
             inside(result.output) { case members.TransferInstructionCompleted(_) => () }
             Seq(aliceWalletClient, bobWalletClient).foreach(
-              _.listTokenStandardTransfers() should have size (cids.length.toLong - 1L) withClue "TokenStandardTransfers"
+              _.listTokenStandardTransfers() should have size (cids.length.toLong - 3L) withClue "TokenStandardTransfers"
             )
             bobWalletClient.balance().unlockedQty should be > BigDecimal(0)
           },
@@ -149,18 +153,18 @@ class TokenStandardV2TransferIntegrationTest
       val (aliceTxs, bobTxs) = clue("Alice and Bob parse all tx log entries") {
         eventually() {
           val aliceTxs = aliceWalletClient.listTransactions(None, 1000)
-          // tap + 4 transfer instructions + accept + (TODO (#5414) withdraw + reject)
-          aliceTxs should have size 6 withClue "aliceTxs"
+          // tap + 4 transfer instructions + accept + withdraw + reject
+          aliceTxs should have size 8 withClue "aliceTxs"
           val bobTxs = bobWalletClient.listTransactions(None, 1000)
-          // 4 transfer instructions + accept + (TODO (#5414) withdraw + reject)
-          bobTxs should have size 5 withClue "bobTxs"
+          // 4 transfer instructions + accept + withdraw + reject
+          bobTxs should have size 7 withClue "bobTxs"
           (aliceTxs, bobTxs)
         }
       }
 
       // Thanks to zero fees we can check the exact balances w/o complex fee calculations.
-      val aliceExpectedUnlocked = BigDecimal(19960.0)
-      val aliceExpectedLocked = BigDecimal(30.0)
+      val aliceExpectedUnlocked = BigDecimal(19980.0)
+      val aliceExpectedLocked = BigDecimal(10.0)
       clue("Check the exact balances of alice ") {
         val balances = aliceWalletClient.balance()
         balances.unlockedQty shouldBe aliceExpectedUnlocked
@@ -186,18 +190,17 @@ class TokenStandardV2TransferIntegrationTest
               PartyAndAmount(bobUserParty.toProtoPrimitive, BigDecimal(10.0))
             )
             logEntry.sender.value.amount shouldBe (BigDecimal(0.0))
-          }
-          // TODO (#5414): restore these
-//          { case logEntry: BalanceChangeTxLogEntry =>
-//            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
-//            logEntry.transferInstructionCid shouldBe cids(1).contractId
-//            logEntry.amount shouldBe BigDecimal(10.0)
-//          },
-//          { case logEntry: BalanceChangeTxLogEntry =>
-//            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Reject.toProto
-//            logEntry.transferInstructionCid shouldBe cids(0).contractId
-//            logEntry.amount shouldBe BigDecimal(10.0)
-//          },
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
+            logEntry.transferInstructionCid shouldBe cids(1).contractId
+            logEntry.amount shouldBe BigDecimal(10.0)
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Reject.toProto
+            logEntry.transferInstructionCid shouldBe cids(0).contractId
+            logEntry.amount shouldBe BigDecimal(10.0)
+          },
         ) ++ (1 to 4).zip(cids).reverse.map[CheckTxHistoryFn] {
           case (n, cid) => { case logEntry: TransferTxLogEntry =>
             logEntry.subtype.value shouldBe TxLogEntry.TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
@@ -228,18 +231,17 @@ class TokenStandardV2TransferIntegrationTest
               PartyAndAmount(bobUserParty.toProtoPrimitive, BigDecimal(10.0))
             )
             logEntry.sender.value.amount shouldBe (BigDecimal(0.0))
-          }
-          // TODO (#5414): restore these
-//          { case logEntry: BalanceChangeTxLogEntry =>
-//            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
-//            logEntry.transferInstructionCid shouldBe cids(1).contractId
-//            logEntry.amount shouldBe 0
-//          },
-//          { case logEntry: BalanceChangeTxLogEntry =>
-//            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Reject.toProto
-//            logEntry.transferInstructionCid shouldBe cids(0).contractId
-//            logEntry.amount shouldBe 0
-//          },
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Withdraw.toProto
+            logEntry.transferInstructionCid shouldBe cids(1).contractId
+            logEntry.amount shouldBe 0
+          },
+          { case logEntry: BalanceChangeTxLogEntry =>
+            logEntry.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.TransferInstruction_Reject.toProto
+            logEntry.transferInstructionCid shouldBe cids(0).contractId
+            logEntry.amount shouldBe 0
+          },
         ) ++
           (1 to 4).zip(cids).reverse.map[CheckTxHistoryFn] {
             case (n, cid) => { case logEntry: TransferTxLogEntry =>
@@ -261,8 +263,8 @@ class TokenStandardV2TransferIntegrationTest
         val activityTxs = sv1ScanBackend
           .listActivity(None, 1000)
           .filter(t => t.transfer.isDefined || t.abortTransferInstruction.isDefined)
-        // 4 transfer instructions + accept + (withdraw + reject)
-        activityTxs should have size (5) withClue "activityTxs"
+        // 4 transfer instructions + accept + withdraw + reject
+        activityTxs should have size (7) withClue "activityTxs"
         activityTxs
       }
 
@@ -279,46 +281,45 @@ class TokenStandardV2TransferIntegrationTest
         )
       }
 
-    // TODO (#5414): restore these
-//      clue("TransferInstruction withdraw") {
-//        activityTxs(1).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
-//        val abort = activityTxs(1).abortTransferInstruction.value
-//        abort.transferInstructionCid shouldBe cids(1).contractId
-//        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Withdraw
-//        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
-//      }
-//      clue("TransferInstruction reject") {
-//        activityTxs(2).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
-//        val abort = activityTxs(2).abortTransferInstruction.value
-//        abort.transferInstructionCid shouldBe cids(0).contractId
-//        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Reject
-//        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
-//      }
-//      forAll(Seq(3, 4, 5, 6)) { i =>
-//        val transferInstructionNumber = 7 - i
-//        clue(s"Transfer #$transferInstructionNumber") {
-//          activityTxs(i).transactionType shouldBe HttpTransactionType.Transfer
-//          val transfer = activityTxs(i).transfer.value
-//          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
-//          transfer.transferInstructionCid shouldBe Some(
-//            cids(transferInstructionNumber - 1).contractId
-//          )
-//          transfer.description shouldBe Some(
-//            s"Transfer #$transferInstructionNumber"
-//          )
-//          transfer.transferInstructionReceiver shouldBe Some(bobUserParty.toProtoPrimitive)
-//          transfer.transferKind shouldBe Some(
-//            Transfer.TransferKind.members.CreateTransferInstruction
-//          )
-//          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
-//          val receiver = transfer.receivers.loneElement
-//          receiver.party shouldBe aliceUserParty.toProtoPrimitive
-//          BigDecimal(receiver.amount) shouldBe (BigDecimal(10))
-//        }
-//      }
+      clue("TransferInstruction withdraw") {
+        activityTxs(1).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
+        val abort = activityTxs(1).abortTransferInstruction.value
+        abort.transferInstructionCid shouldBe cids(1).contractId
+        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Withdraw
+        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
+      }
+      clue("TransferInstruction reject") {
+        activityTxs(2).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
+        val abort = activityTxs(2).abortTransferInstruction.value
+        abort.transferInstructionCid shouldBe cids(0).contractId
+        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Reject
+        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
+      }
+      forAll(Seq(3, 4, 5, 6)) { i =>
+        val transferInstructionNumber = 7 - i
+        clue(s"Transfer #$transferInstructionNumber") {
+          activityTxs(i).transactionType shouldBe HttpTransactionType.Transfer
+          val transfer = activityTxs(i).transfer.value
+          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
+          transfer.transferInstructionCid shouldBe Some(
+            cids(transferInstructionNumber - 1).contractId
+          )
+          transfer.description shouldBe Some(
+            s"Transfer #$transferInstructionNumber"
+          )
+          transfer.transferInstructionReceiver shouldBe Some(bobUserParty.toProtoPrimitive)
+          transfer.transferKind shouldBe Some(
+            Transfer.TransferKind.members.CreateTransferInstruction
+          )
+          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
+          val receiver = transfer.receivers.loneElement
+          receiver.party shouldBe aliceUserParty.toProtoPrimitive
+          BigDecimal(receiver.amount) shouldBe (BigDecimal(10))
+        }
+      }
     }
 
-    // TODO (#5414): port "locked amulet is expired before withdraw" from v1 test
+    // TODO (#5415): port "locked amulet is expired before withdraw" from v1 test
 
     "prevent duplicate transfer creation" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)

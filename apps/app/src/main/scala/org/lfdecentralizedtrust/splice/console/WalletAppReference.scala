@@ -579,6 +579,17 @@ abstract class WalletAppReference(
       )
     }
 
+  @Help.Summary("Rejects a transfer created via the token standard V2")
+  @Help.Description("Reject a specific offer for a Token Standard V2 transfer.")
+  def rejectTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.RejectTransferV2(contractId)
+      )
+    }
+
   @Help.Summary("Withdraws a transfer created via the token standard")
   @Help.Description("Withdraw a specific offer for a Token Standard transfer.")
   def withdrawTokenStandardTransfer(
@@ -587,6 +598,17 @@ abstract class WalletAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.WithdrawTransfer(contractId)
+      )
+    }
+
+  @Help.Summary("Withdraws a transfer created via the token standard V2")
+  @Help.Description("Withdraw a specific offer for a Token Standard V2 transfer.")
+  def withdrawTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.WithdrawTransferV2(contractId)
       )
     }
 
