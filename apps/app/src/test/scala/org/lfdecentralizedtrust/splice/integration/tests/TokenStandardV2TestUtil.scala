@@ -20,7 +20,7 @@ import scala.jdk.CollectionConverters.*
 
 trait TokenStandardV2TestUtil extends TestCommon {
 
-  protected val amuletInstrumentIdV2 = "Amulet"
+  protected val amuletInstrumentIdName = "Amulet"
 
   protected val tokenStandardV2TestDarPath =
     "token-standard/examples/splice-token-test-trading-app-v2/.daml/dist/splice-token-test-trading-app-v2-current.dar"
@@ -144,7 +144,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
       basicAccount(sender),
       basicAccount(receiver),
       amount.bigDecimal,
-      amuletInstrumentIdV2,
+      amuletInstrumentIdName,
       new metadatav1.Metadata(java.util.Map.of("some_leg_meta", UUID.randomUUID().toString)),
     )
 

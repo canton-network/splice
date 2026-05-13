@@ -72,7 +72,7 @@ class AllocationsFrontendIntegrationTest
         basicAccount(sender),
         basicAccount(validatorPartyId),
         BigDecimal(12).bigDecimal.setScale(10),
-        amuletInstrumentIdV2,
+        amuletInstrumentIdName,
         new Metadata(java.util.Map.of("k3", "v3")),
       ),
       new TransferLegV2(
@@ -80,7 +80,7 @@ class AllocationsFrontendIntegrationTest
         basicAccount(validatorPartyId),
         basicAccount(sender),
         BigDecimal(6).bigDecimal.setScale(10),
-        amuletInstrumentIdV2,
+        amuletInstrumentIdName,
         new Metadata(java.util.Map.of("k3", "v3")),
       ),
     )
