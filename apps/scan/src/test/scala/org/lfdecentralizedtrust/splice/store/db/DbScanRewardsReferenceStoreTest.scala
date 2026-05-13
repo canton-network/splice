@@ -294,9 +294,9 @@ class DbScanRewardsReferenceStoreTest
         result.get(ts(30)) shouldBe None // before earliest archived_at
         result.get(ts(150)) shouldBe None // before earliest archived_at
         result.get(ts(220)) shouldBe None // before earliest archived_at
-        result(ts(250)) shouldBe (4L, ts(200)) // exactly at earliest archived_at
-        result(ts(275)) shouldBe (4L, ts(200))
-        result(ts(350)) shouldBe (4L, ts(200)) // round5 not yet open (opensAt=400)
+        result.get(ts(250)) shouldBe None // round4.opensAt before earliest archived_at
+        result.get(ts(275)) shouldBe None // round4.opensAt before earliest archived_at
+        result.get(ts(350)) shouldBe None // round4.opensAt before earliest archived_at
         result.get(ts(375)) shouldBe None // gap: round4 archived, round5 not yet open
         result(ts(400)) shouldBe (5L, ts(400))
         result.get(ts(401)) shouldBe None // 401 was not present in request
