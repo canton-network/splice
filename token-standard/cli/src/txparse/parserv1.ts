@@ -41,7 +41,7 @@ import {
   JsTransaction,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
 
-export class TransactionParser {
+export class V1TransactionParser {
   private readonly ledgerClient: LedgerJsonApi;
   private readonly partyId: string;
   private readonly transaction: JsTransaction;

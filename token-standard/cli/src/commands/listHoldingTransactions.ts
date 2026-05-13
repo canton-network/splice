@@ -6,7 +6,7 @@ import {
 } from "../apis/ledger-api-utils";
 import { TokenStandardTransactionInterfaces } from "../constants";
 import { CommandOptions } from "../token-standard-cli";
-import { TransactionParser } from "../txparse/parser";
+import { V1TransactionParser } from "../txparse/parserv1";
 import { validateStrict } from "../txparse/strict";
 import { renderTransaction, Transaction } from "../txparse/types";
 import {
@@ -77,7 +77,7 @@ async function toPrettyTransactions(
       .filter((update) => !!update.update?.Transaction?.value)
       .map(async (update) => {
         const tx = update.update!.Transaction.value!;
-        const parser = new TransactionParser(tx, ledgerClient, partyId);
+        const parser = new V1TransactionParser(tx, ledgerClient, partyId);
 
         return await parser.parseTransaction();
       }),

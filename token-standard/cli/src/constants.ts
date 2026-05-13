@@ -43,7 +43,6 @@ export const TransferInstructionInterface = buildInterfaceId(
   "TransferInstruction",
 );
 
-// TODO (#563): include allocations
 export const TokenStandardTransactionInterfaces = [
   HoldingInterface,
   TransferFactoryInterface,

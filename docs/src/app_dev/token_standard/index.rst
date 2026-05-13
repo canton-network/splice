@@ -281,7 +281,7 @@ and continue by passing the offset of the last transaction from the previous res
 Parsing the history
 ^^^^^^^^^^^^^^^^^^^
 
-Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parser.ts>`_.
+Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv1.ts>`_.
 It extracts a user-readable wallet history by parsing transactions involving the ``Holding`` and ``TransferInstruction`` interfaces.
 
 The endpoint returns transaction trees as an array.
