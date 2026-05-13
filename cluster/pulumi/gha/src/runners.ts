@@ -336,7 +336,8 @@ function installK8sRunnerScaleSet(
 ): Release {
   const podConfigMapName = `${name}-pod-config`;
   // A configMap that will be mounted to runner pods and provide additional pod spec for the workflow pods
-  const workflowPodConfigMap = new k8s.core.v1.ConfigMap(
+  const workflowPodConfigMap = cachePvcName.apply(cachePvcName =>
+    new k8s.core.v1.ConfigMap(
     podConfigMapName,
     {
       metadata: {
@@ -412,7 +413,7 @@ function installK8sRunnerScaleSet(
     {
       dependsOn: runnersNamespace,
     }
-  );
+    ));
 
   const runnerImage = `${DOCKER_REPO}/splice-test-runner-hook:${ghaConfig.runnerHookVersion}`;
 
