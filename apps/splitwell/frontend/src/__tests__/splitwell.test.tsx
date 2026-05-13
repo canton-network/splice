@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import {
   ListAcceptedGroupInvitesResponse,
   ListBalanceUpdatesResponse,
@@ -83,26 +83,28 @@ describe('alice can', () => {
     server.resetHandlers();
     server.use(
       // simulating 2 failures here. react-query will retry these
-      rest.post(exerciseEndpoint, (_, res, ctx) => {
-        return res.once(ctx.status(400), ctx.json(domainDisconnectErrorResponse));
+      http.post(
+        exerciseEndpoint,
+        () => HttpResponse.json(domainDisconnectErrorResponse, { status: 400 }),
+        { once: true }
+      ),
+      http.post(
+        exerciseEndpoint,
+        () => HttpResponse.json(domainDisconnectErrorResponse, { status: 400 }),
+        { once: true }
+      ),
+      http.post(exerciseEndpoint, () => {
+        return HttpResponse.json(exerciseCreateInviteResponse);
       }),
-      rest.post(exerciseEndpoint, (_, res, ctx) => {
-        return res.once(ctx.status(400), ctx.json(domainDisconnectErrorResponse));
-      }),
-      rest.post(exerciseEndpoint, (_, res, ctx) => {
-        return res(ctx.json(exerciseCreateInviteResponse));
-      }),
-      rest.get(`${window.splice_config.services.splitwell.url}/group-invites`, (_, res, ctx) => {
-        return res(
-          ctx.json<ListGroupInvitesResponse>({
-            group_invites: [
-              {
-                contract: fakeGroupInvite,
-                domain_id: splitwellDomainId,
-              },
-            ],
-          })
-        );
+      http.get(`${window.splice_config.services.splitwell.url}/group-invites`, () => {
+        return HttpResponse.json<ListGroupInvitesResponse>({
+          group_invites: [
+            {
+              contract: fakeGroupInvite,
+              domain_id: splitwellDomainId,
+            },
+          ],
+        });
       })
     );
 
@@ -118,23 +120,13 @@ describe('alice can', () => {
     render(<AppWithConfig />);
 
     server.use(
-      rest.get(
-        `${window.splice_config.services.splitwell.url}/accepted-group-invites`,
-        (_, res, ctx) => {
-          return res(
-            ctx.json<ListAcceptedGroupInvitesResponse>({
-              accepted_group_invites: [
-                makeAcceptedGroupInvite(
-                  splitwellProviderPartyId,
-                  alicePartyId,
-                  bobPartyId,
-                  groupName
-                ),
-              ],
-            })
-          );
-        }
-      )
+      http.get(`${window.splice_config.services.splitwell.url}/accepted-group-invites`, () => {
+        return HttpResponse.json<ListAcceptedGroupInvitesResponse>({
+          accepted_group_invites: [
+            makeAcceptedGroupInvite(splitwellProviderPartyId, alicePartyId, bobPartyId, groupName),
+          ],
+        });
+      })
     );
 
     await expect(screen.findByRole('button', { name: 'Add' })).resolves.toBeDefined();
@@ -144,55 +136,53 @@ describe('alice can', () => {
     render(<AppWithConfig />);
 
     server.use(
-      rest.get(`${window.splice_config.services.splitwell.url}/balance-updates`, (_, res, ctx) => {
-        return res(
-          ctx.json<ListBalanceUpdatesResponse>({
-            balance_updates: [
-              makeBalanceUpdate(
-                splitwellProviderPartyId,
-                alicePartyId,
-                groupName,
-                {
-                  tag: 'ExternalPayment',
-                  value: {
-                    payer: alicePartyId,
-                    description: 'expenses',
-                    amount: '30.0',
-                  },
+      http.get(`${window.splice_config.services.splitwell.url}/balance-updates`, () => {
+        return HttpResponse.json<ListBalanceUpdatesResponse>({
+          balance_updates: [
+            makeBalanceUpdate(
+              splitwellProviderPartyId,
+              alicePartyId,
+              groupName,
+              {
+                tag: 'ExternalPayment',
+                value: {
+                  payer: alicePartyId,
+                  description: 'expenses',
+                  amount: '30.0',
                 },
-                'cid3'
-              ),
-              makeBalanceUpdate(
-                splitwellProviderPartyId,
-                alicePartyId,
-                groupName,
-                {
-                  tag: 'Transfer',
-                  value: {
-                    sender: bobPartyId,
-                    receiver: alicePartyId,
-                    amount: '40.0',
-                  },
+              },
+              'cid3'
+            ),
+            makeBalanceUpdate(
+              splitwellProviderPartyId,
+              alicePartyId,
+              groupName,
+              {
+                tag: 'Transfer',
+                value: {
+                  sender: bobPartyId,
+                  receiver: alicePartyId,
+                  amount: '40.0',
                 },
-                'cid2'
-              ),
-              makeBalanceUpdate(
-                splitwellProviderPartyId,
-                alicePartyId,
-                groupName,
-                {
-                  tag: 'ExternalPayment',
-                  value: {
-                    payer: alicePartyId,
-                    description: 'dinner',
-                    amount: '15.0',
-                  },
+              },
+              'cid2'
+            ),
+            makeBalanceUpdate(
+              splitwellProviderPartyId,
+              alicePartyId,
+              groupName,
+              {
+                tag: 'ExternalPayment',
+                value: {
+                  payer: alicePartyId,
+                  description: 'dinner',
+                  amount: '15.0',
                 },
-                'cid1'
-              ),
-            ],
-          })
-        );
+              },
+              'cid1'
+            ),
+          ],
+        });
       })
     );
 

@@ -64,6 +64,10 @@ spec:
               optional: false
         - name: SPLICE_APP_UI_AUTH_AUDIENCE
           value: {{ .Values.auth.audience | quote }}
+        {{- if .Values.auth.scope }}
+        - name: SPLICE_APP_UI_AUTH_SCOPE
+          value: {{ .Values.auth.scope | quote }}
+        {{- end }}
         - name: SPLICE_APP_UI_AUTH_CLIENT_ID
           valueFrom:
             secretKeyRef:

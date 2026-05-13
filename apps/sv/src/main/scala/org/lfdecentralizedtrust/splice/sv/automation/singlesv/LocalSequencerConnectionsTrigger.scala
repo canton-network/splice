@@ -3,9 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
+import cats.syntax.either.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.{SequencerAlias, SynchronizerAlias}
-import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.{
@@ -41,6 +41,7 @@ class LocalSequencerConnectionsTrigger(
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
     migrationId: Long,
     reconnectOnSynchronizerConfigurationChange: Boolean,
+    useInternalSequencerApi: Boolean,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -77,11 +78,34 @@ class LocalSequencerConnectionsTrigger(
               )
               Future.unit
             } { _ =>
+              // connect to the sequencer with internal client config here instead of the public url to avoid
+              // - installing loopback in each SV namespace to work around traffic being blocked by cluster whitelisting
+              // - network traffic going all the way through cluster load balancer / ingress routing while the sequencer is in the same namespace
+              val localSequencerConnection = if (useInternalSequencerApi) {
+                val localEndpoint =
+                  LocalSynchronizerNode.toEndpoint(localSynchronizerNode.sequencerInternalConfig)
+                new GrpcSequencerConnection(
+                  NonEmpty.mk(Set, localEndpoint),
+                  transportSecurity =
+                    localSynchronizerNode.sequencerInternalConfig.tlsConfig.isDefined,
+                  customTrustCertificates = None,
+                  SequencerAlias.Default,
+                  sequencerId = None,
+                )
+              } else {
+                GrpcSequencerConnection
+                  .create(
+                    localSynchronizerNode.config.sequencer.externalPublicApiUrl
+                  )
+                  .valueOr(err =>
+                    throw new IllegalArgumentException(s"Failed to create sequencer config: $err")
+                  )
+              }
               participantAdminConnection.modifySynchronizerConnectionConfigAndReconnect(
                 decentralizedSynchronizerAlias,
                 reconnectOnSynchronizerConfigurationChange,
                 setLocalSequencerConnection(
-                  localSynchronizerNode.sequencerInternalConfig
+                  localSequencerConnection
                 ),
               )
             }
@@ -91,27 +115,15 @@ class LocalSequencerConnectionsTrigger(
   }
 
   private def setLocalSequencerConnection(
-      internalSequencerClientConfig: ClientConfig
+      connection: GrpcSequencerConnection
   )(implicit
       traceContext: TraceContext
   ): SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig] =
     conf =>
       conf.sequencerConnections.default match {
         case _: GrpcSequencerConnection =>
-          // connect to the sequencer with internal client config here instead of the public url to avoid
-          // - installing loopback in each SV namespace to work around traffic being blocked by cluster whitelisting
-          // - network traffic going all the way through cluster load balancer / ingress routing while the sequencer is in the same namespace
-          val localEndpoint = LocalSynchronizerNode.toEndpoint(internalSequencerClientConfig)
-          val localSequencerConnection =
-            new GrpcSequencerConnection(
-              NonEmpty.mk(Set, localEndpoint),
-              transportSecurity = internalSequencerClientConfig.tlsConfig.isDefined,
-              customTrustCertificates = None,
-              SequencerAlias.Default,
-              sequencerId = None,
-            )
           val newConnections = SequencerConnections.tryMany(
-            Seq(localSequencerConnection),
+            Seq(connection),
             // We only have a single connection here.
             PositiveInt.tryCreate(1),
             sequencerLivenessMargin = NonNegativeInt.zero,
