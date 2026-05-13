@@ -214,19 +214,58 @@ class HttpTokenStandardTransferInstructionHandler(
       respond: v2.Resource.GetTransferInstructionAcceptContextResponse.type
   )(transferInstructionId: String, body: v2.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[v2.Resource.GetTransferInstructionAcceptContextResponse] = ???
+  ): Future[v2.Resource.GetTransferInstructionAcceptContextResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getTransferInstructionAcceptContextV2") { _ => _ =>
+      for {
+        choiceContext <- getTransferInstructionChoiceContextV2(
+          transferInstructionId,
+          requireLockedAmulet = true,
+          excludeDebugFields = body.excludeDebugFields.getOrElse(false),
+        )
+      } yield {
+        v2.Resource.GetTransferInstructionAcceptContextResponseOK(choiceContext)
+      }
+    }
+  }
 
   override def getTransferInstructionRejectContext(
       respond: v2.Resource.GetTransferInstructionRejectContextResponse.type
   )(transferInstructionId: String, body: v2.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[v2.Resource.GetTransferInstructionRejectContextResponse] = ???
+  ): Future[v2.Resource.GetTransferInstructionRejectContextResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getTransferInstructionRejectContextV2") { _ => _ =>
+      for {
+        choiceContext <- getTransferInstructionChoiceContextV2(
+          transferInstructionId,
+          requireLockedAmulet = false,
+          excludeDebugFields = body.excludeDebugFields.getOrElse(false),
+        )
+      } yield {
+        v2.Resource.GetTransferInstructionRejectContextResponseOK(choiceContext)
+      }
+    }
+  }
 
   override def getTransferInstructionWithdrawContext(
       respond: v2.Resource.GetTransferInstructionWithdrawContextResponse.type
   )(transferInstructionId: String, body: v2.definitions.GetChoiceContextRequest)(
       extracted: TraceContext
-  ): Future[v2.Resource.GetTransferInstructionWithdrawContextResponse] = ???
+  ): Future[v2.Resource.GetTransferInstructionWithdrawContextResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getTransferInstructionWithdrawContextV2") { _ => _ =>
+      for {
+        choiceContext <- getTransferInstructionChoiceContextV2(
+          transferInstructionId,
+          requireLockedAmulet = false,
+          excludeDebugFields = body.excludeDebugFields.getOrElse(false),
+        )
+      } yield {
+        v2.Resource.GetTransferInstructionWithdrawContextResponseOK(choiceContext)
+      }
+    }
+  }
 
   private def buildTransferFactory[FactoryResponse](
       sender: PartyId,
@@ -349,21 +388,7 @@ class HttpTokenStandardTransferInstructionHandler(
       tc: TraceContext
   ): Future[v1.definitions.ChoiceContext] = {
     for {
-      amuletInstr <- contractFetcher
-        .lookupContractById(
-          splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION
-        )(
-          new splice.amulettransferinstruction.AmuletTransferInstruction.ContractId(
-            transferInstructionId
-          )
-        )
-        .map(
-          _.getOrElse(
-            throw io.grpc.Status.NOT_FOUND
-              .withDescription(s"AmuletTransferInstruction '$transferInstructionId' not found.")
-              .asRuntimeException()
-          )
-        )
+      amuletInstr <- getAmuletTransferInstruction(transferInstructionId)
       context <- util.ChoiceContextBuilder.getTwoStepTransferContext[
         v1.definitions.DisclosedContract,
         v1.definitions.ChoiceContext,
@@ -380,6 +405,53 @@ class HttpTokenStandardTransferInstructionHandler(
         new V1ChoiceContextBuilder(_, excludeDebugFields),
       )
     } yield context
+  }
+
+  private def getTransferInstructionChoiceContextV2(
+      transferInstructionId: String,
+      requireLockedAmulet: Boolean,
+      excludeDebugFields: Boolean,
+  )(implicit
+      tc: TraceContext
+  ): Future[v2.definitions.ChoiceContext] = {
+    for {
+      amuletInstr <- getAmuletTransferInstruction(transferInstructionId)
+      context <- util.ChoiceContextBuilder.getTwoStepTransferContext[
+        v2.definitions.DisclosedContract,
+        v2.definitions.ChoiceContext,
+        V2ChoiceContextBuilder,
+      ](
+        s"AmuletTransferInstruction '$transferInstructionId'",
+        Some(amuletInstr.payload.lockedAmulet),
+        Some(amuletInstr.payload.transfer.executeBefore),
+        requireLockedAmulet,
+        None,
+        store,
+        contractFetcher,
+        clock,
+        new V2ChoiceContextBuilder(_, excludeDebugFields),
+      )
+    } yield context
+  }
+
+  private def getAmuletTransferInstruction(
+      transferInstructionId: String
+  )(implicit tc: TraceContext) = {
+    contractFetcher
+      .lookupContractById(
+        splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION
+      )(
+        new splice.amulettransferinstruction.AmuletTransferInstruction.ContractId(
+          transferInstructionId
+        )
+      )
+      .map(
+        _.getOrElse(
+          throw io.grpc.Status.NOT_FOUND
+            .withDescription(s"AmuletTransferInstruction '$transferInstructionId' not found.")
+            .asRuntimeException()
+        )
+      )
   }
 
 }
