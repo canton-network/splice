@@ -5,6 +5,8 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.{NonEmptyList, OptionT}
 import cats.implicits.*
+import com.daml.metrics.api.MetricHandle.Timer.TimerHandle
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
@@ -686,23 +688,30 @@ class BftScanConnection(
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[T] = {
     val connections = scanList.scanConnections
+
+    def markBftFailure(): Unit = connectionMetrics.foreach(_.bftCallFailures.mark())
+    def startTimer(): Option[TimerHandle] =
+      connectionMetrics.map(_.bftReadLatency.startAsync())
+    def stopTimer(t: Option[TimerHandle]): Unit = t.foreach(_.stop())
+
     if (!callConfig.enoughAvailableScans) {
       val totalNumber = connections.totalNumber
       val msg =
-        s"Only ${callConfig.connections.size} scan instances can be used (out of $totalNumber configured ones), which are fewer than the necessary ${callConfig.targetSuccess} to achieve BFT guarantees."
-      val exception = HttpErrorWithHttpCode(
-        StatusCodes.BadGateway,
-        msg,
-      )
+        s"Only ${callConfig.connections.size} scan instances can be used " +
+          s"(out of $totalNumber configured ones), which are fewer than the necessary " +
+          s"${callConfig.targetSuccess} to achieve BFT guarantees."
+      val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
       LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
+      markBftFailure()
       Future.failed(exception)
     } else {
-      val timer = connectionMetrics match {
-        case Some(metrics) => Some(metrics.bftReadLatency.startAsync())
-        case None => None
-      }
+      val timer = startTimer()
+
       retryProvider
         .retryForClientCalls(
           "bft_call",
@@ -717,19 +726,19 @@ class BftScanConnection(
           logger,
           (_: String) => ConsensusNotReachedRetryable,
         )
-        .andThen { case _ =>
-          timer match {
-            case Some(t) => t.stop()
-            case None =>
-          }
-        }
         .recoverWith { case c: ConsensusNotReached =>
-          val httpError = HttpErrorWithHttpCode(
-            StatusCodes.BadGateway,
-            s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, requiring ${callConfig.targetSuccess} matching responses.",
+          LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
+          Future.failed(
+            HttpErrorWithHttpCode(
+              StatusCodes.BadGateway,
+              s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, " +
+                s"requiring ${callConfig.targetSuccess} matching responses.",
+            )
           )
-          LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, s"Consensus not reached.", c)
-          Future.failed(httpError)
+        }
+        .andThen {
+          case Failure(_) => markBftFailure(); stopTimer(timer)
+          case Success(_) => stopTimer(timer)
         }
     }
   }

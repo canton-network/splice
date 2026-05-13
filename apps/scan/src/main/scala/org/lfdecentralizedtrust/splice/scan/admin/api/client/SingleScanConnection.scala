@@ -6,7 +6,6 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 import cats.data.OptionT
 import cats.syntax.either.*
 import com.daml.metrics.api.MetricsContext
-import com.daml.metrics.api.MetricsContext.Implicits.empty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
@@ -131,7 +130,7 @@ class SingleScanConnection private[client] (
     connectionMetrics match {
       case Some(metrics) =>
         MetricsContext.withExtraMetricLabels(
-          ("scan_connection", url.scheme),
+          ("scan_connection", url.authority.host.address()),
           ("request", command.fullName),
         ) { m =>
           val timer = metrics.latencyPerConnection.startAsync()(m)
@@ -873,6 +872,7 @@ object SingleScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(f: SingleScanConnection => Future[T])(implicit
       ec: ExecutionContextExecutor,
       traceContext: TraceContext,
@@ -888,6 +888,7 @@ object SingleScanConnection {
         retryProvider,
         loggerFactory,
         retryConnectionOnInitialFailure = true,
+        connectionMetrics,
       )
       r <- f(scanConnection).andThen { _ => scanConnection.close() }
     } yield r
