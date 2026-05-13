@@ -60,6 +60,40 @@ object DbAppActivityRecordStore {
   )
 
   final case class IngestionVersions(code: Int, user: Int)
+
+  sealed trait EnsureResult
+  case class Checked(result: MetaCheckResult) extends EnsureResult
+  case object NotReady extends EnsureResult
+
+  sealed trait MetaCheckResult
+  case object InsertMeta extends MetaCheckResult
+  case object Resume extends MetaCheckResult
+  final case class DowngradeDetected(
+      runningCode: Int,
+      runningUser: Int,
+      storedCode: Int,
+      storedUser: Int,
+  ) extends MetaCheckResult {
+    def message: String =
+      s"Activity ingestion version downgrade detected: " +
+        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser). " +
+        s"Shutting down to prevent data corruption."
+  }
+
+  def checkMetaVersions(
+      existing: Option[(Int, Int)],
+      runningCode: Int,
+      runningUser: Int,
+  ): MetaCheckResult = existing match {
+    case None => InsertMeta
+    case Some((storedCode, storedUser)) =>
+      if (runningCode < storedCode || runningUser < storedUser)
+        DowngradeDetected(runningCode, runningUser, storedCode, storedUser)
+      else if (runningCode > storedCode || runningUser > storedUser)
+        InsertMeta
+      else
+        Resume
+  }
 }
 
 class DbAppActivityRecordStore(
