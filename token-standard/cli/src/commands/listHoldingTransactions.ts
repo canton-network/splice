@@ -18,6 +18,7 @@ import fs from "fs";
 export async function listHoldingTransactions(
   partyId: string,
   opts: CommandOptions & {
+    standardVersion: "V1" | "V2";
     afterOffset?: string;
     debugPath?: string;
     strict?: boolean;
@@ -50,7 +51,12 @@ export async function listHoldingTransactions(
     if (opts.debugPath) {
       fs.writeFileSync(opts.debugPath, JSON.stringify(updates, null, 2));
     }
-    const result = await toPrettyTransactions(updates, partyId, ledgerClient);
+    const result = await toPrettyTransactions(
+      updates,
+      partyId,
+      opts.standardVersion,
+      ledgerClient,
+    );
     if (opts.strict) {
       validateStrict(result, opts.strictIgnore || []);
     }
@@ -64,6 +70,7 @@ export async function listHoldingTransactions(
 async function toPrettyTransactions(
   updates: JsGetUpdatesResponse[],
   partyId: string,
+  standardVersion: "V1" | "V2",
   ledgerClient: LedgerJsonApi,
 ): Promise<PrettyTransactions> {
   const offsetCheckpoints: number[] = updates
@@ -77,7 +84,14 @@ async function toPrettyTransactions(
       .filter((update) => !!update.update?.Transaction?.value)
       .map(async (update) => {
         const tx = update.update!.Transaction.value!;
-        const parser = new V1TransactionParser(tx, ledgerClient, partyId);
+        let parser;
+        switch (standardVersion) {
+          case "V1":
+            parser = new V1TransactionParser(tx, ledgerClient, partyId);
+            break;
+          case "V2":
+            throw new Error("Unsupported yet.");
+        }
 
         return await parser.parseTransaction();
       }),
