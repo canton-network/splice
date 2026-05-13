@@ -261,10 +261,10 @@ function installDockerRunnerScaleSets(
   repo: string
 ): void {
   const configMap = new k8s.core.v1.ConfigMap(
-    'gha-runner-config',
+    `gha-runner-config-${repo}`,
     {
       metadata: {
-        name: 'gha-runner-config',
+        name: `gha-runner-config-${repo}`,
         namespace: runnersNamespace.metadata.name,
       },
       data: {
