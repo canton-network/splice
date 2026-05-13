@@ -753,7 +753,7 @@ export function installRunnerScaleSets(controller: k8s.helm.v3.Release, repo: st
   // For security reasons, we isolate the caches of different repos
   const cachePvc = createCachePvc(runnersNamespace, repo);
 
-  const saName = 'k8s-runners';
+  const saName = `k8s-runners-${repo}`;
   installRunnersServiceAccount(runnersNamespace, saName);
 
   const performanceTestsDb = repo === 'splice' ? createCloudSQLInstanceForPerformanceTests(exactNs) : undefined;
