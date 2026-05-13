@@ -74,6 +74,9 @@ template TokenAllocationInstructionV2 with
         requestedAt
         inputHoldingCids = Foldable.concat inputHoldingCids
         availableActions
+        expiresAt =
+          -- Note: in prod you would probably want to limit the maximal TTL to avoid a storage leak
+          allocation.settlement.settlementDeadline
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -347,6 +350,9 @@ template TokenTransferOffer with
         originalInstructionCid = originalInstructionCid
         transfer
         availableActions
+        expiresAt =
+          -- Note: in prod you would probably want to limit the maximal TTL to avoid a storage leak
+          Some transfer.executeBefore
         meta = emptyMetadata
 
       transferInstruction_acceptExtraObservers = transferInstruction_acceptDefaultExtraObservers this

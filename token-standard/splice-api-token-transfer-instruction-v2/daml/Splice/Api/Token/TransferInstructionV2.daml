@@ -115,6 +115,16 @@ data TransferInstructionView = TransferInstructionView with
       -- updates to its state.
     transfer : Transfer
       -- ^ The transfer specified by the transfer instruction.
+    expiresAt : Optional Time
+      -- ^ The time at which the transfer instruction expires if inactive.
+      --
+      -- Registries MAY expire the transfer instruction after this time. Thereby
+      -- recovering storage resources and protecting themselves from
+      -- denial-of-service attacks.
+      --
+      -- Registries SHOULD avoid unnecessary expiries by
+      --   - making the expiry time as close to the transfer's executeBefore as possible
+      --   - bumping expiry on every action on the transfer instruction
     availableActions : Map.Map [Party] [TransferInstructionAction]
       -- ^ The actions that the wallet can present to the user to advance the transfer instruction.
       --
@@ -123,6 +133,7 @@ data TransferInstructionView = TransferInstructionView with
       --
       -- Supports multiple parties for actions that require joint authorization. Executing them
       -- will require appropriate, registry-specific delegation contracts to be in place.
+      --
     meta : Metadata
       -- ^ Additional metadata specific to the transfer instruction, used for extensibility; e.g., more detailed status information.
   deriving (Show, Eq)
