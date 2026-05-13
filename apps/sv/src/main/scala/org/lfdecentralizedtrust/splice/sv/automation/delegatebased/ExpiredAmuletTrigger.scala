@@ -12,7 +12,6 @@ import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAmuletTrigger.*
-import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -58,7 +57,6 @@ class ExpiredAmuletTrigger(
       )
       cmds <-
         if (supports24hSubmissionDelay.supported) {
-          println("A")
           store.getExternalPartyConfigStatesPair().map { externalPartyConfigStates =>
             task.work.expiredContracts.flatMap(co =>
               dsoRules
@@ -79,7 +77,6 @@ class ExpiredAmuletTrigger(
             )
           }
         } else {
-          println("B")
           store.getLatestActiveOpenMiningRound().map { round =>
             task.work.expiredContracts.flatMap(co =>
               dsoRules
@@ -100,21 +97,13 @@ class ExpiredAmuletTrigger(
           }
         }
       // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
-      synchronizerId <- store.getDsoRules().map(_.domain)
-      preferredPackages <- svTaskContext
-        .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
-        .getSupportedPackageVersion(
-          synchronizerId,
-          Seq(
-            (
-              "splice-amulet",
-              Seq(store.key.dsoParty, store.key.svParty) ++ task.work.expiredContracts
-                .map(c => PartyId.tryFromProtoPrimitive(c.payload.owner)),
-            )
-          ),
-          CantonTimestamp.now(),
-        )
-      _ = println(preferredPackages)
+      // we need to explicitly pass the corresponding governance package so that it doesn't use latest
+      preferredPackageIds = supports24hSubmissionDelay.packageIds ++
+        (if (supports24hSubmissionDelay.supported) Nil
+         else
+           supports24hSubmissionDelay.packageIds.flatMap(
+             svTaskContext.packageVersionSupport.amuletToGovFallback.get
+           ))
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(
@@ -123,7 +112,7 @@ class ExpiredAmuletTrigger(
           update = cmds,
         )
         .noDedup
-        .withPreferredPackage(preferredPackages.map(_.packageId))
+        .withPreferredPackage(preferredPackageIds)
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
     } yield TaskSuccess("archived expired amulet")

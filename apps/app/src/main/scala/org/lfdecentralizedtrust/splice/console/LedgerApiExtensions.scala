@@ -11,7 +11,6 @@ import com.daml.ledger.api.v2.transaction_filter.TransactionShape
 import com.daml.ledger.javaapi
 import com.daml.ledger.javaapi.data.Transaction as JavaTransaction
 import com.daml.ledger.javaapi.data.codegen.{ContractId, Exercised, Update}
-import com.digitalasset.canton.LfPackageId
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.NonNegativeDuration
@@ -38,7 +37,6 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import org.scalatest.AppendedClues
 import org.scalatest.matchers.should.Matchers
-
 import scala.annotation.nowarn
 import scala.jdk.CollectionConverters.*
 
@@ -75,7 +73,6 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             userId: String = LedgerApiCommands.defaultUserId,
             disclosedContracts: Seq[CommandsOuterClass.DisclosedContract] = Seq.empty,
             includeCreatedEventBlob: Boolean = false,
-            packageIdSelectionPreference: Seq[LfPackageId] = Seq.empty,
         ): JavaTransaction = {
           val tx = ledgerApi.consoleEnvironment.run {
             ledgerApi.ledgerApiCommand(
@@ -97,7 +94,7 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
                   .map(DisclosedContract.fromJavaProto),
                 synchronizerId = synchronizerId,
                 userId = userId,
-                packageIdSelectionPreference = packageIdSelectionPreference,
+                packageIdSelectionPreference = Seq.empty,
                 transactionShape = TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
                 includeCreatedEventBlob = includeCreatedEventBlob,
                 optTimeout = None,
@@ -255,7 +252,6 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             commandId: Option[String] = None,
             synchronizerId: Option[SynchronizerId] = None,
             disclosedContracts: Seq[CommandsOuterClass.DisclosedContract] = Seq.empty,
-            packageIdSelectionPreference: Seq[LfPackageId] = Seq.empty,
         ): T = {
           val tree = submitJava(
             actAs,
@@ -265,7 +261,6 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             readAs = readAs,
             userId = userId,
             disclosedContracts = disclosedContracts,
-            packageIdSelectionPreference = packageIdSelectionPreference,
           )
           SpliceLedgerConnection.decodeExerciseResult(
             update,

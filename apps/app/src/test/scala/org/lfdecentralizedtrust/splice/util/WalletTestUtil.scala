@@ -1,6 +1,5 @@
 package org.lfdecentralizedtrust.splice.util
 
-import com.digitalasset.canton.LfPackageId
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
@@ -902,7 +901,6 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       round: Long = 0,
       holdingFee: BigDecimal = BigDecimal(0.01),
       synchronizerId: Option[SynchronizerId] = None,
-      packageIdSelectionPreference: Seq[LfPackageId] = Seq.empty,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): amuletCodegen.Amulet.ContractId = {
@@ -923,7 +921,6 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
         readAs = Seq.empty,
         update = amulet,
         synchronizerId = synchronizerId,
-        packageIdSelectionPreference = packageIdSelectionPreference,
       )
     created.contractId
   }
@@ -939,7 +936,6 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       round: Long = 0,
       holdingFee: BigDecimal = BigDecimal(0.01),
       synchronizerId: Option[SynchronizerId] = None,
-      packageIdSelectionPreference: Seq[LfPackageId] = Seq.empty,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): amuletCodegen.LockedAmulet.ContractId = {
@@ -970,7 +966,6 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
         readAs = Seq.empty,
         update = lockedAmulet.create(),
         synchronizerId = synchronizerId,
-        packageIdSelectionPreference = packageIdSelectionPreference,
       )
     created.contractId
   }

@@ -18,6 +18,11 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait PackageVersionSupport extends NamedLogging {
 
+  val amuletToGovFallback: Map[String, String] = Map(
+    DarResources.amulet_0_1_15.packageId -> DarResources.dsoGovernance_0_1_21.packageId,
+    DarResources.amulet_0_1_16.packageId -> DarResources.dsoGovernance_0_1_22.packageId,
+  )
+
   def supportsMergeDuplicatedValidatorLicense(
       dsoGovernanceParties: Seq[PartyId],
       amuletParties: Seq[PartyId],

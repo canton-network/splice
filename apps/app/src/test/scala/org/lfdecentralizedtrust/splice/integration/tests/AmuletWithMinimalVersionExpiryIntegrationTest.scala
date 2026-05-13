@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.LfPackageId
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
@@ -25,19 +24,17 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   UpdateExternalPartyConfigStateTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.*
-import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.slf4j.event.Level
 
 import scala.concurrent.duration.*
 import java.time.Duration
 
 /** Same scenario as `AmuletExpiryIntegrationTest`, but the dust amulets are owned by `alice`,
-  * whose validator (`aliceValidator`) is stuck at `splice-amulet 0.1.16` — even though the DSO
+  * whose validator (`aliceValidator`) is stuck at the minimal initialize amulet — even though the DSO
   * (running on sv1) has been upgraded to 0.1.17. The expiry triggers must therefore fall back
   * to the V1 choices.
   */
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_17
-class AmuletExpiryWithOldPackageIntegrationTest
+class AmuletWithMinimalVersionExpiryIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
@@ -54,6 +51,7 @@ class AmuletExpiryWithOldPackageIntegrationTest
       .groupBy(_.metadata.name)
       .map { case (name, resources) => name -> resources.map(_.metadata.version).toSet }
 
+  // have alice vet only the minimal required package versions
   private val unvetOnAlice = supportedPackagesToUnvet(
     DarResourcesUtil.supportedPackageVersions
       .filterNot(DarResourcesUtil.minimalPackageVersions.contains(_))
@@ -63,6 +61,7 @@ class AmuletExpiryWithOldPackageIntegrationTest
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
+      .withTrafficTopupsDisabled
       .addConfigTransforms(
         (_, c) =>
           ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(c),
@@ -89,10 +88,8 @@ class AmuletExpiryWithOldPackageIntegrationTest
       .addConfigTransforms((_, c) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.copy(enableAutomaticRewardsCollectionAndAmuletMerging = false)
-            .withPausedTrigger[TopupMemberTrafficTrigger]
         )(c)
       )
-      .withTrafficTopupsDisabled
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(delegatelessAutomationExpiredAmuletBatchSize = 2)
@@ -168,8 +165,6 @@ class AmuletExpiryWithOldPackageIntegrationTest
                 aliceParty,
                 amount = amuletAmount,
                 holdingFee = amuletAmount,
-                packageIdSelectionPreference =
-                  Seq(LfPackageId.assertFromString(DarResources.amulet_0_1_15.packageId)),
               )
               createLockedAmulet(
                 sv1Backend.participantClientWithAdminToken,
@@ -179,8 +174,6 @@ class AmuletExpiryWithOldPackageIntegrationTest
                 amount = amuletAmount,
                 holdingFee = amuletAmount,
                 expiredDuration = Duration.ofSeconds(1),
-                packageIdSelectionPreference =
-                  Seq(LfPackageId.assertFromString(DarResources.amulet_0_1_15.packageId)),
               )
             }
           },

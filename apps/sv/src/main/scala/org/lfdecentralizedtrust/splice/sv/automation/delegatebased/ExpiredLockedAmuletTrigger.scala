@@ -13,7 +13,6 @@ import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredLockedAmuletTrigger.*
-import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
@@ -105,21 +104,13 @@ class ExpiredLockedAmuletTrigger(
           }
         }
       // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
-      synchronizerId <- store.getDsoRules().map(_.domain)
-      preferredPackages <- svTaskContext
-        .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
-        .getSupportedPackageVersion(
-          synchronizerId,
-          Seq(
-            (
-              "splice-amulet",
-              Seq(store.key.dsoParty, store.key.svParty) ++ task.work.expiredContracts
-                .map(c => PartyId.tryFromProtoPrimitive(c.payload.amulet.owner)),
-            )
-          ),
-          CantonTimestamp.now(),
-        )
-      _ = println(s"[LockedExpire] preferredPackages=$preferredPackages")
+      // we need to explicitly pass the corresponding governance package so that it doesn't use latest
+      preferredPackageIds = supports24hSubmissionDelay.packageIds ++
+        (if (supports24hSubmissionDelay.supported) Nil
+         else
+           supports24hSubmissionDelay.packageIds.flatMap(
+             svTaskContext.packageVersionSupport.amuletToGovFallback.get
+           ))
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(
@@ -128,7 +119,7 @@ class ExpiredLockedAmuletTrigger(
           update = cmds,
         )
         .noDedup
-        .withPreferredPackage(preferredPackages.map(_.packageId))
+        .withPreferredPackage(preferredPackageIds)
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
     } yield TaskSuccess(s"archived expired locked amulet")
