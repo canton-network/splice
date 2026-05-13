@@ -254,6 +254,15 @@ object SqlIndexInitializationTrigger {
           where external_transaction_hash is not null
         """,
       ),
+    IndexAction
+      .Create(
+        indexName = "scan_txlog_store_sid_en_vot",
+        createAction = sqlu"""
+          create index concurrently if not exists scan_txlog_store_sid_en_vot
+          on scan_txlog_store (store_id, entry_number desc)
+          where entry_type = 'vot'
+        """,
+      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting

@@ -253,62 +253,65 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
   replacementCreateFee: string
 ): string {
   const mock = `
-    <div
+<div
   class="jsondiffpatch-delta jsondiffpatch-node jsondiffpatch-child-node-type-object"><ul
     class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-      data-key="decentralizedSynchronizer"
-      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"><div
-        class="jsondiffpatch-property-name">decentralizedSynchronizer</div><ul
+      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+      data-key="transferConfig"><div
+        class="jsondiffpatch-property-name">transferConfig</div><ul
         class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-      data-key="activeSynchronizer" class="jsondiffpatch-unchanged"><div
-        class="jsondiffpatch-property-name">activeSynchronizer</div><div
-        class="jsondiffpatch-value"><pre>"global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"</pre></div></li><li
-      data-key="fees" class="jsondiffpatch-unchanged"><div
-        class="jsondiffpatch-property-name">fees</div><div
-        class="jsondiffpatch-value"><pre>{
-  "baseRateTrafficLimits": {
-    "burstAmount": "400000",
-    "burstWindow": {
-      "microseconds": "1200000000"
+          class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+          data-key="createFee"><div
+            class="jsondiffpatch-property-name">createFee</div><ul
+            class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
+              class="jsondiffpatch-modified" data-key="fee"><div
+                class="jsondiffpatch-property-name">fee</div><div
+                class="jsondiffpatch-value jsondiffpatch-left-value"><pre>"${originalCreateFee}"</pre></div><div
+                class="jsondiffpatch-value jsondiffpatch-right-value"><pre>"${replacementCreateFee}"</pre></div></li></ul></li><li
+          class="jsondiffpatch-unchanged" data-key="holdingFee"><div
+            class="jsondiffpatch-property-name">holdingFee</div><div
+            class="jsondiffpatch-value"><pre>{
+  "rate": "0.0000190259"
+}</pre></div></li><li class="jsondiffpatch-unchanged"
+          data-key="transferFee"><div
+            class="jsondiffpatch-property-name">transferFee</div><div
+            class="jsondiffpatch-value"><pre>{
+  "initialRate": "0.01",
+  "steps": [
+    {
+      "_1": "100.0",
+      "_2": "0.001"
+    },
+    {
+      "_1": "1000.0",
+      "_2": "0.0001"
+    },
+    {
+      "_1": "1000000.0",
+      "_2": "0.00001"
     }
-  },
-  "extraTrafficPrice": "16.67",
-  "readVsWriteScalingFactor": "4",
-  "minTopupAmount": "200000"
-}</pre></div></li><li data-key="requiredSynchronizers"
-      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"><div
-        class="jsondiffpatch-property-name">requiredSynchronizers</div><ul
-        class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-      data-key="map" class="jsondiffpatch-modified"><div
-        class="jsondiffpatch-property-name">map</div><div
-        class="jsondiffpatch-value jsondiffpatch-left-value"><pre>[
-  [
-    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
-    {}
   ]
-]</pre></div><div class="jsondiffpatch-value jsondiffpatch-right-value"><pre>{
-  "_kvs": [
-    [
-      "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
-      {}
-    ]
-  ],
-  "_keys": [
-    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"
-  ],
-  "_values": [
-    {}
-  ]
-}</pre></div></li></ul></li></ul></li><li data-key="externalPartyConfigStateTickDuration"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">externalPartyConfigStateTickDuration</div><div
-      class="jsondiffpatch-value"><pre>null</pre></div></li><li data-key="featuredAppActivityMarkerAmount"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">featuredAppActivityMarkerAmount</div><div
-      class="jsondiffpatch-value"><pre>null</pre></div></li><li
-    data-key="issuanceCurve" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">issuanceCurve</div><div
-      class="jsondiffpatch-value"><pre>{
+}</pre></div></li><li class="jsondiffpatch-unchanged"
+          data-key="lockHolderFee"><div
+            class="jsondiffpatch-property-name">lockHolderFee</div><div
+            class="jsondiffpatch-value"><pre>{
+  "fee": "0.005"
+}</pre></div></li><li class="jsondiffpatch-unchanged"
+          data-key="extraFeaturedAppRewardAmount"><div
+            class="jsondiffpatch-property-name">extraFeaturedAppRewardAmount</div><div
+            class="jsondiffpatch-value"><pre>"1.0"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="maxNumInputs"><div
+            class="jsondiffpatch-property-name">maxNumInputs</div><div
+            class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="maxNumOutputs"><div
+            class="jsondiffpatch-property-name">maxNumOutputs</div><div
+            class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="maxNumLockHolders"><div
+            class="jsondiffpatch-property-name">maxNumLockHolders</div><div
+            class="jsondiffpatch-value"><pre>"50"</pre></div></li></ul></li><li
+      class="jsondiffpatch-unchanged" data-key="issuanceCurve"><div
+        class="jsondiffpatch-property-name">issuanceCurve</div><div
+        class="jsondiffpatch-value"><pre>{
   "initialValue": {
     "amuletToIssuePerYear": "40000000000.0",
     "validatorRewardPercentage": "0.05",
@@ -381,80 +384,81 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       }
     }
   ]
-}</pre></div></li><li data-key="optDevelopmentFundManager"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">optDevelopmentFundManager</div><div
-      class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      data-key="packageConfig" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">packageConfig</div><div
-      class="jsondiffpatch-value"><pre>{
+}</pre></div></li><li
+      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+      data-key="decentralizedSynchronizer"><div
+        class="jsondiffpatch-property-name">decentralizedSynchronizer</div><ul
+        class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
+          class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+          data-key="requiredSynchronizers"><div
+            class="jsondiffpatch-property-name">requiredSynchronizers</div><ul
+            class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
+              class="jsondiffpatch-modified" data-key="map"><div
+                class="jsondiffpatch-property-name">map</div><div
+                class="jsondiffpatch-value jsondiffpatch-left-value"><pre>[
+  [
+    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
+    {}
+  ]
+]</pre></div><div class="jsondiffpatch-value jsondiffpatch-right-value"><pre>{
+  "_kvs": [
+    [
+      "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
+      {}
+    ]
+  ],
+  "_keys": [
+    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"
+  ],
+  "_values": [
+    {}
+  ]
+}</pre></div></li></ul></li><li class="jsondiffpatch-unchanged"
+          data-key="activeSynchronizer"><div
+            class="jsondiffpatch-property-name">activeSynchronizer</div><div
+            class="jsondiffpatch-value"><pre>"global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="fees"><div
+            class="jsondiffpatch-property-name">fees</div><div
+            class="jsondiffpatch-value"><pre>{
+  "baseRateTrafficLimits": {
+    "burstAmount": "400000",
+    "burstWindow": {
+      "microseconds": "1200000000"
+    }
+  },
+  "extraTrafficPrice": "16.67",
+  "readVsWriteScalingFactor": "4",
+  "minTopupAmount": "200000"
+}</pre></div></li></ul></li><li class="jsondiffpatch-unchanged"
+      data-key="tickDuration"><div
+        class="jsondiffpatch-property-name">tickDuration</div><div
+        class="jsondiffpatch-value"><pre>{
+  "microseconds": "600000000"
+}</pre></div></li><li class="jsondiffpatch-unchanged"
+      data-key="packageConfig"><div
+        class="jsondiffpatch-property-name">packageConfig</div><div
+        class="jsondiffpatch-value"><pre>{
   "amulet": "0.1.8",
   "amuletNameService": "0.1.8",
   "dsoGovernance": "0.1.11",
   "validatorLifecycle": "0.1.2",
   "wallet": "0.1.8",
   "walletPayments": "0.1.8"
-}</pre></div></li><li data-key="tickDuration"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">tickDuration</div><div
-      class="jsondiffpatch-value"><pre>{
-  "microseconds": "600000000"
-}</pre></div></li><li data-key="transferConfig"
-    class="jsondiffpatch-node jsondiffpatch-child-node-type-object"><div
-      class="jsondiffpatch-property-name">transferConfig</div><ul
-      class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-    data-key="createFee"
-    class="jsondiffpatch-node jsondiffpatch-child-node-type-object"><div
-      class="jsondiffpatch-property-name">createFee</div><ul
-      class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-    data-key="fee" class="jsondiffpatch-modified"><div
-      class="jsondiffpatch-property-name">fee</div><div
-      class="jsondiffpatch-value jsondiffpatch-left-value"><pre>"${originalCreateFee}"</pre></div><div
-      class="jsondiffpatch-value jsondiffpatch-right-value"><pre>"${replacementCreateFee}"</pre></div></li></ul></li><li
-    data-key="extraFeaturedAppRewardAmount" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">extraFeaturedAppRewardAmount</div><div
-      class="jsondiffpatch-value"><pre>"1.0"</pre></div></li><li
-    data-key="holdingFee" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">holdingFee</div><div
-      class="jsondiffpatch-value"><pre>{
-  "rate": "0.0000190259"
-}</pre></div></li><li data-key="lockHolderFee"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">lockHolderFee</div><div
-      class="jsondiffpatch-value"><pre>{
-  "fee": "0.005"
-}</pre></div></li><li data-key="maxNumInputs"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">maxNumInputs</div><div
-      class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
-    data-key="maxNumLockHolders" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">maxNumLockHolders</div><div
-      class="jsondiffpatch-value"><pre>"50"</pre></div></li><li
-    data-key="maxNumOutputs" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">maxNumOutputs</div><div
-      class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
-    data-key="transferFee" class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">transferFee</div><div
-      class="jsondiffpatch-value"><pre>{
-  "initialRate": "0.01",
-  "steps": [
-    {
-      "_1": "100.0",
-      "_2": "0.001"
-    },
-    {
-      "_1": "1000.0",
-      "_2": "0.0001"
-    },
-    {
-      "_1": "1000000.0",
-      "_2": "0.00001"
-    }
-  ]
-}</pre></div></li></ul></li><li data-key="transferPreapprovalFee"
-    class="jsondiffpatch-unchanged"><div
-      class="jsondiffpatch-property-name">transferPreapprovalFee</div><div
-      class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
+}</pre></div></li><li class="jsondiffpatch-unchanged"
+      data-key="transferPreapprovalFee"><div
+        class="jsondiffpatch-property-name">transferPreapprovalFee</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="featuredAppActivityMarkerAmount"><div
+        class="jsondiffpatch-property-name">featuredAppActivityMarkerAmount</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="optDevelopmentFundManager"><div
+        class="jsondiffpatch-property-name">optDevelopmentFundManager</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="externalPartyConfigStateTickDuration"><div
+        class="jsondiffpatch-property-name">externalPartyConfigStateTickDuration</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;
 }

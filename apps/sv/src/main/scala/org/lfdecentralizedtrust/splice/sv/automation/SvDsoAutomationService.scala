@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation
 
 import cats.implicits.catsSyntaxOptionId
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -12,6 +13,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
@@ -48,17 +50,15 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.*
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.scan.AggregatingScanConnection
 import org.lfdecentralizedtrust.splice.sv.config.{SequencerPruningConfig, SvAppBackendConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{
-  LogicalSynchronizerUpgradeAnnouncementTrigger,
-  LogicalSynchronizerUpgradeSequencingTestTrigger,
-  LogicalSynchronizerUpgradeTrigger,
-  LogicalSyncUpgradeTransferTrafficTrigger,
+  LsuAnnouncementTrigger,
+  LsuSequencingTestTrigger,
+  LsuTransferTrafficTrigger,
+  LsuTrigger,
 }
-import org.lfdecentralizedtrust.splice.sv.migration.DecentralizedSynchronizerMigrationTrigger
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import java.nio.file.Path
 import scala.concurrent.ExecutionContextExecutor
 
 class SvDsoAutomationService(
@@ -75,6 +75,7 @@ class SvDsoAutomationService(
     upgradesConfig: UpgradesConfig,
     spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
     override protected val loggerFactory: NamedLoggerFactory,
+    grpcClientMetrics: GrpcClientMetrics,
     packageVersionSupport: PackageVersionSupport,
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
@@ -85,6 +86,7 @@ class SvDsoAutomationService(
     tracer: Tracer,
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
+    esf: ExecutionSequencerFactory,
 ) extends SpliceAppAutomationService(
       config.automation,
       clock,
@@ -192,7 +194,7 @@ class SvDsoAutomationService(
       )
     )
     registerTrigger(
-      new SvOnboardingPromoteParticipantToSubmitterTrigger(
+      new SvClearOnboardingFlagTrigger(
         onboardingTriggerContext,
         dsoStore,
         participantAdminConnection,
@@ -229,58 +231,6 @@ class SvDsoAutomationService(
       )
     )
 
-    config.domainMigrationDumpPath match {
-      case Some(dumpPath) =>
-        registerTrigger(
-          new DecentralizedSynchronizerMigrationTrigger(
-            config.domainMigrationId,
-            triggerContext,
-            config.domains.global.alias,
-            synchronizerNodeService.nodes.current,
-            dsoStore,
-            connection(SpliceLedgerConnectionPriority.High),
-            participantAdminConnection,
-            dumpPath: Path,
-            enabledFeatures,
-          )
-        )
-      case _ => ()
-    }
-
-    synchronizerNodeService.nodes.successor match {
-      case Some(successorSynchronizerNode) =>
-        registerTrigger(
-          new LogicalSynchronizerUpgradeTrigger(
-            triggerContext,
-            synchronizerNodeReconciler,
-            synchronizerNodeService.nodes,
-            successorSynchronizerNode,
-            participantAdminConnection,
-            store,
-            config.domainMigrationDumpPath.getOrElse(
-              throw new IllegalArgumentException("Domain migration dump path must be set for LSU")
-            ),
-            config.bftSequencerConnection,
-          )
-        )
-        registerTrigger(
-          new LogicalSyncUpgradeTransferTrafficTrigger(
-            triggerContext,
-            synchronizerNodeService.nodes.current,
-            successorSynchronizerNode,
-          )
-        )
-        registerTrigger(
-          new LogicalSynchronizerUpgradeSequencingTestTrigger(
-            config,
-            triggerContext,
-            synchronizerNodeService.nodes.current,
-            successorSynchronizerNode,
-          )
-        )
-      case _ => ()
-    }
-
     registerTrigger(
       new ReconcileDynamicSynchronizerParametersTrigger(
         triggerContext,
@@ -291,7 +241,7 @@ class SvDsoAutomationService(
     )
 
     registerTrigger(
-      new LogicalSynchronizerUpgradeAnnouncementTrigger(
+      new LsuAnnouncementTrigger(
         triggerContext,
         dsoStore,
         participantAdminConnection,
@@ -331,6 +281,42 @@ class SvDsoAutomationService(
 
     registerTriggersForSynchronizers(synchronizerNodeService.nodes.current)
     synchronizerNodeService.nodes.successor.foreach(registerTriggersForSynchronizers)
+  }
+
+  def registerLsuTriggers() = {
+    synchronizerNodeService.nodes.successor match {
+      case Some(successorSynchronizerNode) =>
+        registerTrigger(
+          new LsuTrigger(
+            triggerContext,
+            synchronizerNodeReconciler,
+            synchronizerNodeService.nodes,
+            successorSynchronizerNode,
+            participantAdminConnection,
+            store,
+            config.domainMigrationDumpPath.getOrElse(
+              throw new IllegalArgumentException("Domain migration dump path must be set for LSU")
+            ),
+            config.bftSequencerConnection,
+          )
+        )
+        registerTrigger(
+          new LsuTransferTrafficTrigger(
+            triggerContext,
+            synchronizerNodeService.nodes.current,
+            successorSynchronizerNode,
+          )
+        )
+        registerTrigger(
+          new LsuSequencingTestTrigger(
+            config,
+            triggerContext,
+            synchronizerNodeService.nodes.current,
+            successorSynchronizerNode,
+          )
+        )
+      case _ => ()
+    }
   }
 
   def registerTrafficReconciliationTriggers(): Unit = {
@@ -505,6 +491,7 @@ class SvDsoAutomationService(
         config.domainMigrationId,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
+        useInternalSequencerApi = config.useInternalSequencerApi,
       )
     )
   }
@@ -527,8 +514,10 @@ class SvDsoAutomationService(
           sequencerContext.mediatorAdminConnection,
           clock,
           pruningConfig.retentionPeriod,
+          pruningConfig.pruningSafetyCheckPercentage,
           participantAdminConnection,
           config.domainMigrationId,
+          grpcClientMetrics,
         )
       )
     }
@@ -574,11 +563,10 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[SvOffboardingSequencerTrigger],
       aTrigger[ReconcileSequencerLimitWithMemberTrafficTrigger],
       aTrigger[SvNamespaceMembershipTrigger],
-      aTrigger[SvOnboardingPromoteParticipantToSubmitterTrigger],
+      aTrigger[SvClearOnboardingFlagTrigger],
       aTrigger[SvOnboardingPartyToParticipantProposalTrigger],
       aTrigger[SvOnboardingSequencerTrigger],
       aTrigger[SvOnboardingMediatorProposalTrigger],
-      aTrigger[DecentralizedSynchronizerMigrationTrigger],
       aTrigger[PublishLocalCometBftNodeConfigTrigger],
       aTrigger[PublishScanConfigTrigger],
       aTrigger[ReconcileCometBftNetworkConfigWithDsoRulesTrigger],
@@ -595,9 +583,9 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
-      aTrigger[LogicalSynchronizerUpgradeTrigger],
-      aTrigger[LogicalSynchronizerUpgradeAnnouncementTrigger],
-      aTrigger[LogicalSyncUpgradeTransferTrafficTrigger],
-      aTrigger[LogicalSynchronizerUpgradeSequencingTestTrigger],
+      aTrigger[LsuTrigger],
+      aTrigger[LsuAnnouncementTrigger],
+      aTrigger[LsuTransferTrafficTrigger],
+      aTrigger[LsuSequencingTestTrigger],
     )
 }

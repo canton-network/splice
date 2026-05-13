@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse, PathParams } from 'msw';
 import { LookupTransferPreapprovalByPartyResponse } from '@lfdecentralizedtrust/scan-openapi';
 import { test, expect, describe } from 'vitest';
 import { vi } from 'vitest';
@@ -54,13 +54,11 @@ function featureSupportHandler(
   tokenStandardSupported: boolean,
   transferPreapprovalDescriptionSupported: boolean
 ) {
-  return rest.get(`${walletUrl}/v0/feature-support`, async (_, res, ctx) => {
-    return res(
-      ctx.json({
-        token_standard: tokenStandardSupported,
-        transfer_preapproval_description: transferPreapprovalDescriptionSupported,
-      })
-    );
+  return http.get(`${walletUrl}/v0/feature-support`, async () => {
+    return HttpResponse.json({
+      token_standard: tokenStandardSupported,
+      transfer_preapproval_description: transferPreapprovalDescriptionSupported,
+    });
   });
 }
 
@@ -130,18 +128,16 @@ describe('Wallet user can', () => {
     expect(requestMocks.createTransferPreapproval).toHaveBeenCalled();
     // Mock the request to fetch the created pre-approval
     server.use(
-      rest.get(
+      http.get(
         `${window.splice_config.services.validator.url}/v0/scan-proxy/transfer-preapprovals/by-party/:party`,
-        (req, res, ctx) => {
-          const { party } = req.params;
+        ({ params }) => {
+          const { party } = params;
           if (party === alicePartyId) {
-            return res(
-              ctx.json<LookupTransferPreapprovalByPartyResponse>({
-                transfer_preapproval: aliceTransferPreapproval,
-              })
-            );
+            return HttpResponse.json<LookupTransferPreapprovalByPartyResponse>({
+              transfer_preapproval: aliceTransferPreapproval,
+            });
           } else {
-            return res(ctx.status(404), ctx.json({}));
+            return HttpResponse.json({}, { status: 404 });
           }
         }
       )
@@ -233,16 +229,14 @@ describe('Wallet user can', () => {
           )
         );
         server.use(
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: allocations.map(allocationPayload => {
-                  return {
-                    contract: mkContract(AmuletAllocation, allocationPayload),
-                  };
-                }),
-              })
-            );
+          http.get(`${walletUrl}/v0/allocations`, () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: allocations.map(allocationPayload => {
+                return {
+                  contract: mkContract(AmuletAllocation, allocationPayload),
+                };
+              }),
+            });
           })
         );
 
@@ -274,24 +268,17 @@ describe('Wallet user can', () => {
           resolve => (calledCreate = resolve)
         );
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract: mkContract(AllocationRequest, contract) };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: [],
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract: mkContract(AllocationRequest, contract) };
+              }),
+            });
+          }),
+          http.get(`${walletUrl}/v0/allocations`, () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
           })
         );
 
@@ -320,20 +307,23 @@ describe('Wallet user can', () => {
         expect(acceptButtons.length).toBe(1);
 
         server.use(
-          rest.post(`${walletUrl}/v0/allocations`, async (req, res, ctx) => {
-            const body = await req.json();
-            calledCreate(body);
-            const response: AllocateAmuletResponse = {
-              output: {
-                allocation_instruction_cid: 'alloc_instr_cid',
-                allocation_cid: 'alloc_cid',
-                dummy: {},
-              },
-              sender_change_cids: ['whatever'],
-              meta: {},
-            };
-            return res(ctx.json(response));
-          })
+          http.post<PathParams, AllocateAmuletRequest>(
+            `${walletUrl}/v0/allocations`,
+            async ({ request }) => {
+              const body = await request.json();
+              calledCreate(body);
+              const response: AllocateAmuletResponse = {
+                output: {
+                  allocation_instruction_cid: 'alloc_instr_cid',
+                  allocation_cid: 'alloc_cid',
+                  dummy: {},
+                },
+                sender_change_cids: ['whatever'],
+                meta: {},
+              };
+              return HttpResponse.json(response);
+            }
+          )
         );
 
         acceptButtons[0].click();
@@ -365,35 +355,26 @@ describe('Wallet user can', () => {
         const calledWithdrawArgs: string[] = [];
 
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: allocations.map(contract => {
-                  return { contract };
-                }),
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
           }),
-          rest.post(`${walletUrl}/v0/allocations/:cid/withdraw`, (req, res, ctx) => {
-            calledWithdrawArgs.push(req.params.cid.toString());
-            return res(
-              ctx.json<AmuletAllocationWithdrawResult>({
-                sender_holding_cids: [],
-                meta: {},
-              })
-            );
+          http.get(`${walletUrl}/v0/allocations`, () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: allocations.map(contract => {
+                return { contract };
+              }),
+            });
+          }),
+          http.post<{ cid: string }>(`${walletUrl}/v0/allocations/:cid/withdraw`, ({ params }) => {
+            calledWithdrawArgs.push(params.cid);
+            return HttpResponse.json<AmuletAllocationWithdrawResult>({
+              sender_holding_cids: [],
+              meta: {},
+            });
           })
         );
 
@@ -432,34 +413,25 @@ describe('Wallet user can', () => {
         const calledRejectArgs: string[] = [];
 
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: [],
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
           }),
-          rest.post(
+          http.get(`${walletUrl}/v0/allocations`, () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
+          }),
+          http.post<{ cid: string }>(
             `${walletUrl}/v0/wallet/token-standard/allocation-requests/:cid/reject`,
-            (req, res, ctx) => {
-              calledRejectArgs.push(req.params.cid.toString());
-              return res(
-                ctx.json<ChoiceExecutionMetadata>({
-                  meta: {},
-                })
-              );
+            ({ params }) => {
+              calledRejectArgs.push(params.cid);
+              return HttpResponse.json<ChoiceExecutionMetadata>({
+                meta: {},
+              });
             }
           )
         );
@@ -636,11 +608,11 @@ describe('Wallet user can', () => {
     server.use(featureSupportHandler(true, true));
     // Override endpoints to return empty lists
     server.use(
-      rest.get(`${walletUrl}/v0/wallet/minting-delegations`, (_, res, ctx) => {
-        return res(ctx.json({ delegations: [] }));
+      http.get(`${walletUrl}/v0/wallet/minting-delegations`, () => {
+        return HttpResponse.json({ delegations: [] });
       }),
-      rest.get(`${walletUrl}/v0/wallet/minting-delegation-proposals`, (_, res, ctx) => {
-        return res(ctx.json({ proposals: [] }));
+      http.get(`${walletUrl}/v0/wallet/minting-delegation-proposals`, () => {
+        return HttpResponse.json({ proposals: [] });
       })
     );
 
@@ -675,10 +647,13 @@ describe('Wallet user can', () => {
     // Track the cancel API call
     const calledCancelArgs: string[] = [];
     server.use(
-      rest.post(`${walletUrl}/v0/wallet/minting-delegations/:cid/reject`, (req, res, ctx) => {
-        calledCancelArgs.push(req.params.cid.toString());
-        return res(ctx.status(200));
-      })
+      http.post<{ cid: string }>(
+        `${walletUrl}/v0/wallet/minting-delegations/:cid/reject`,
+        ({ params }) => {
+          calledCancelArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
+        }
+      )
     );
 
     const user = userEvent.setup();
@@ -703,7 +678,7 @@ describe('Wallet user can', () => {
     await user.click(proceedButton);
 
     // Assert the cancel API was called once
-    expect(calledCancelArgs).toHaveLength(1);
+    await waitFor(() => expect(calledCancelArgs).toHaveLength(1));
   });
 
   test("can 'accept' a minting delegation proposal", async () => {
@@ -711,11 +686,11 @@ describe('Wallet user can', () => {
 
     const calledArgs: string[] = [];
     server.use(
-      rest.post(
+      http.post<{ cid: string }>(
         `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`,
-        (req, res, ctx) => {
-          calledArgs.push(req.params.cid.toString());
-          return res(ctx.status(200));
+        ({ params }) => {
+          calledArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
         }
       )
     );
@@ -739,7 +714,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test("can 'reject' a minting delegation proposal", async () => {
@@ -747,11 +722,11 @@ describe('Wallet user can', () => {
 
     const calledArgs: string[] = [];
     server.use(
-      rest.post(
+      http.post<{ cid: string }>(
         `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/reject`,
-        (req, res, ctx) => {
-          calledArgs.push(req.params.cid.toString());
-          return res(ctx.status(200));
+        ({ params }) => {
+          calledArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
         }
       )
     );
@@ -775,7 +750,7 @@ describe('Wallet user can', () => {
     const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
-    expect(calledArgs).toHaveLength(1);
+    await waitFor(() => expect(calledArgs).toHaveLength(1));
   });
 
   test('shows replacement dialog when accepting proposal for beneficiary with existing delegation', async () => {
@@ -783,11 +758,11 @@ describe('Wallet user can', () => {
 
     const calledAcceptArgs: string[] = [];
     server.use(
-      rest.post(
+      http.post<{ cid: string }>(
         `${walletUrl}/v0/wallet/minting-delegation-proposals/:cid/accept`,
-        (req, res, ctx) => {
-          calledAcceptArgs.push(req.params.cid.toString());
-          return res(ctx.status(200));
+        ({ params }) => {
+          calledAcceptArgs.push(params.cid);
+          return new HttpResponse(null, { status: 200 });
         }
       )
     );
@@ -827,7 +802,7 @@ describe('Wallet user can', () => {
     await user.click(proceedButton);
 
     // Verify accept was called (backend handles replacement automatically)
-    expect(calledAcceptArgs).toHaveLength(1);
+    await waitFor(() => expect(calledAcceptArgs).toHaveLength(1));
   });
 
   test('transfer preapproval (without token standard) does not show nor send description if not supported', async () => {

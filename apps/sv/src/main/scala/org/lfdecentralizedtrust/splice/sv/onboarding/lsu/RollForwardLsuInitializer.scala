@@ -11,6 +11,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.environment.{
   ParticipantAdminConnection,
@@ -45,6 +46,7 @@ class RollForwardLsuInitializer(
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     override protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
+    override protected val grpcClientMetrics: GrpcClientMetrics,
     newJoiningNodeInitializer: Option[SvOnboardingConfig.JoinWithKey] => JoiningNodeInitializer,
     rollForwardConfig: SvOnboardingConfig.RollForwardLsu,
 )(implicit
@@ -165,6 +167,7 @@ class RollForwardLsuInitializer(
               now = clock.now,
               // Upgrade time is used to publish the sequencer sucessor which we don't care about for roll-forward LSUs.
               upgradeTime = None,
+              ignorePsidCheck = true,
             )
             trafficState <- legacyNode.sequencerAdminConnection.getLsuTrafficControlState(ts =
               rollForwardConfig.exportTimes.map(_.trafficExportTime.getTimestamp())

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import { UserStatusResponse } from '@lfdecentralizedtrust/wallet-openapi';
 
@@ -14,15 +14,13 @@ import { server } from './setup/setup';
 const walletUrl = window.splice_config.services.validator.url;
 
 function userStatusHandler(user_onboarded: boolean) {
-  return rest.get(`${walletUrl}/v0/wallet/user-status`, (_, res, ctx) => {
-    return res(
-      ctx.json<UserStatusResponse>({
-        party_id: alicePartyId,
-        user_onboarded: user_onboarded,
-        user_wallet_installed: true,
-        has_featured_app_right: false,
-      })
-    );
+  return http.get(`${walletUrl}/v0/wallet/user-status`, () => {
+    return HttpResponse.json<UserStatusResponse>({
+      party_id: alicePartyId,
+      user_onboarded: user_onboarded,
+      user_wallet_installed: true,
+      has_featured_app_right: false,
+    });
   });
 }
 
@@ -72,8 +70,8 @@ describe('Logout button appears', () => {
 
   test('when the api is not responding', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/wallet/user-status`, (_, res, ctx) => {
-        return res(ctx.status(404));
+      http.get(`${walletUrl}/v0/wallet/user-status`, () => {
+        return new HttpResponse(null, { status: 404 });
       })
     );
     const user = userEvent.setup();

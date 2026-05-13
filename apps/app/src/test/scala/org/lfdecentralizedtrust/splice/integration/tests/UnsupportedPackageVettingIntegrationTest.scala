@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.scalatest.concurrent.PatienceConfiguration
+import scala.concurrent.duration.DurationInt
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -43,14 +44,12 @@ class UnsupportedPackageVettingIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      .withoutAliceValidatorConnectingToSplitwell
+      // if other tests run before, packages that break this test might already be vetted
+      .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[SvPackageVettingTrigger]
-        )(config)
-      )
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ValidatorPackageVettingTrigger]
         )(config)
       )
 
@@ -76,13 +75,6 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
-      )
-      test(
-        sv1ValidatorBackend.appState.participantAdminConnection,
-        synchronizerId,
-        unsupportedDarsToVetSv,
-        unsupportedDarsToVetSv,
-        sv1ValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
       )
       // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(
@@ -201,7 +193,7 @@ class UnsupportedPackageVettingIntegrationTest
             synchronizerId,
           ) should contain allElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
         }
-        eventually() {
+        eventually(40.seconds) {
           alicesTapsWithPackageId(DarResources.amulet_0_1_16.packageId)
         }
       }

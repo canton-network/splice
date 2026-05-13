@@ -952,7 +952,7 @@
         "secretRef": {
           "name": "github"
         },
-        "url": "https://github.com/hyperledger-labs/splice"
+        "url": "https://github.com/canton-network/splice"
       }
     },
     "name": "splice-node-active-base",
@@ -1040,7 +1040,7 @@
         "secretRef": {
           "name": "github"
         },
-        "url": "https://github.com/hyperledger-labs/splice"
+        "url": "https://github.com/canton-network/splice"
       }
     },
     "name": "splice-node-active",
@@ -1057,256 +1057,7 @@
         "labels": {
           "notifications": "false"
         },
-        "name": "splice-node-migration-1-base",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "commit": "981227e62011e386cca3cdb5f00b472cf05a12c4"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-1-base",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "true"
-        },
-        "name": "splice-node-migration-1",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "include": [
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-1.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-1-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-1.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-1.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-1-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-1.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-1.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-1-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-1.mock.yaml"
-          }
-        ],
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "commit": "981227e62011e386cca3cdb5f00b472cf05a12c4"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-1",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "false"
-        },
-        "name": "splice-node-migration-2-base",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "name": "refs/heads/release-line-0.3.19"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-2-base",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "true"
-        },
-        "name": "splice-node-migration-2",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "include": [
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-2.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-2-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-2.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-2.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-2-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-2.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-2.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-2-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-2.mock.yaml"
-          }
-        ],
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "name": "refs/heads/release-line-0.3.19"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-2",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "false"
-        },
-        "name": "splice-node-migration-3-base",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "name": "refs/heads/release-line-0.3.20"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-3-base",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "true"
-        },
-        "name": "splice-node-migration-3",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "include": [
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-3.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-3-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-3.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-3.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-3-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-3.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-3.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-3-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-3.mock.yaml"
-          }
-        ],
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "name": "refs/heads/release-line-0.3.20"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/hyperledger-labs/splice"
-      }
-    },
-    "name": "splice-node-migration-3",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "false"
-        },
-        "name": "splice-node-migration-4-base",
+        "name": "splice-node-migration-10-base",
         "namespace": "operator"
       },
       "spec": {
@@ -1319,10 +1070,10 @@
         "secretRef": {
           "name": "github"
         },
-        "url": "https://github.com/hyperledger-labs/splice"
+        "url": "https://github.com/canton-network/splice"
       }
     },
-    "name": "splice-node-migration-4-base",
+    "name": "splice-node-migration-10-base",
     "provider": "",
     "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
   },
@@ -1336,32 +1087,32 @@
         "labels": {
           "notifications": "true"
         },
-        "name": "splice-node-migration-4",
+        "name": "splice-node-migration-10",
         "namespace": "operator"
       },
       "spec": {
         "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
         "include": [
           {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-4.mock.yaml",
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-10.mock.yaml",
             "repository": {
-              "name": "splice-node-migration-4-base"
+              "name": "splice-node-migration-10-base"
             },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-4.mock.yaml"
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-10.mock.yaml"
           },
           {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-4.mock.yaml",
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-10.mock.yaml",
             "repository": {
-              "name": "splice-node-migration-4-base"
+              "name": "splice-node-migration-10-base"
             },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-4.mock.yaml"
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-10.mock.yaml"
           },
           {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-4.mock.yaml",
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-10.mock.yaml",
             "repository": {
-              "name": "splice-node-migration-4-base"
+              "name": "splice-node-migration-10-base"
             },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-4.mock.yaml"
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-10.mock.yaml"
           }
         ],
         "interval": "5m",
@@ -1372,10 +1123,259 @@
         "secretRef": {
           "name": "github"
         },
-        "url": "https://github.com/hyperledger-labs/splice"
+        "url": "https://github.com/canton-network/splice"
       }
     },
-    "name": "splice-node-migration-4",
+    "name": "splice-node-migration-10",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "false"
+        },
+        "name": "splice-node-migration-7-base",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "commit": "981227e62011e386cca3cdb5f00b472cf05a12c4"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-7-base",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "true"
+        },
+        "name": "splice-node-migration-7",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "include": [
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-7.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-7.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-7.mock.yaml"
+          }
+        ],
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "commit": "981227e62011e386cca3cdb5f00b472cf05a12c4"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-7",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "false"
+        },
+        "name": "splice-node-migration-8-base",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "name": "refs/heads/release-line-0.3.19"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-8-base",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "true"
+        },
+        "name": "splice-node-migration-8",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "include": [
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-8.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-8-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-8.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-8.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-8-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-8.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-8.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-8-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-8.mock.yaml"
+          }
+        ],
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "name": "refs/heads/release-line-0.3.19"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-8",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "false"
+        },
+        "name": "splice-node-migration-9-base",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "name": "refs/heads/release-line-0.3.20"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-9-base",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "true"
+        },
+        "name": "splice-node-migration-9",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "include": [
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-9.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-9-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-9.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-9.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-9-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-9.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-9.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-9-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-9.mock.yaml"
+          }
+        ],
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "name": "refs/heads/release-line-0.3.20"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-9",
     "provider": "",
     "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
   },
@@ -1676,11 +1676,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-1-sa",
+        "name": "sv-canton.sv-1-migration-10-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-1-migration-1-sa",
+    "name": "sv-canton.sv-1-migration-10-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -1698,12 +1698,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-1-sa",
+          "name": "sv-canton.sv-1-migration-10-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-1:cluster-admin",
+    "name": "sv-canton.sv-1-migration-10:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -1721,12 +1721,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-1-sa",
+          "name": "sv-canton.sv-1-migration-10-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-1:system:auth-delegator",
+    "name": "sv-canton.sv-1-migration-10:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -1737,587 +1737,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-1",
-        "namespace": "operator"
-      },
-      "spec": {
-        "backend": "gs://da-cn-pulumi-dev-stacks",
-        "continueResyncOnCommitMatch": false,
-        "destroyOnFinalize": false,
-        "envRefs": {
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "DEPLOYMENT_DIR": {
-            "literal": {
-              "value": "/share/source/cluster/deployment"
-            },
-            "type": "Literal"
-          },
-          "GCP_CLUSTER_BASENAME": {
-            "literal": {
-              "value": "mock"
-            },
-            "type": "Literal"
-          },
-          "PULUMI_VERSION": {
-            "literal": {
-              "value": "0.0.0"
-            },
-            "type": "Literal"
-          },
-          "SLACK_ACCESS_TOKEN": {
-            "secret": {
-              "key": "SLACK_ACCESS_TOKEN",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "SPLICE_MIGRATION_ID": {
-            "literal": {
-              "value": "1"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_ROOT": {
-            "literal": {
-              "value": "/share/source/splice"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_SV": {
-            "literal": {
-              "value": "sv-1"
-            },
-            "type": "Literal"
-          }
-        },
-        "fluxSource": {
-          "dir": "splice/cluster/pulumi/sv-canton",
-          "sourceRef": {
-            "apiVersion": "source.toolkit.fluxcd.io/v1",
-            "kind": "GitRepository",
-            "name": "splice-node-migration-1"
-          }
-        },
-        "retryMaxBackoffDurationSeconds": 600,
-        "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-1-migration-1-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-1-migration-1.mock",
-        "updateTemplate": {
-          "spec": {
-            "parallel": 64
-          }
-        },
-        "useLocalStackOnly": true,
-        "workspaceTemplate": {
-          "metadata": {
-            "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-1-migration-1",
-            "namespace": "operator"
-          },
-          "spec": {
-            "env": [
-              {
-                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
-                "value": "true"
-              },
-              {
-                "name": "SPLICE_OPERATOR_DEPLOYMENT",
-                "value": "true"
-              },
-              {
-                "name": "GITHUB_TOKEN",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "password",
-                    "name": "github"
-                  }
-                }
-              },
-              {
-                "name": "CLOUDSDK_CORE_PROJECT",
-                "value": "da-cn-devnet"
-              },
-              {
-                "name": "CLOUDSDK_COMPUTE_REGION",
-                "value": "europe-west6"
-              },
-              {
-                "name": "GOOGLE_APPLICATION_CREDENTIALS",
-                "value": "/app/gcp-credentials.json"
-              },
-              {
-                "name": "GOOGLE_CREDENTIALS",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "googleCredentials",
-                    "name": "gke-credentials"
-                  }
-                }
-              }
-            ],
-            "image": "pulumi/pulumi:0.0.0-nonroot",
-            "podTemplate": {
-              "spec": {
-                "affinity": {
-                  "nodeAffinity": {
-                    "requiredDuringSchedulingIgnoredDuringExecution": {
-                      "nodeSelectorTerms": [
-                        {
-                          "matchExpressions": [
-                            {
-                              "key": "cn_infra",
-                              "operator": "Exists"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "containers": [
-                  {
-                    "name": "pulumi",
-                    "volumeMounts": [
-                      {
-                        "mountPath": "/app/gcp-credentials.json",
-                        "name": "gcp-credentials",
-                        "subPath": "googleCredentials"
-                      }
-                    ]
-                  }
-                ],
-                "terminationGracePeriodSeconds": 1800,
-                "tolerations": [
-                  {
-                    "effect": "NoSchedule",
-                    "key": "cn_infra",
-                    "operator": "Exists"
-                  }
-                ],
-                "volumes": [
-                  {
-                    "name": "gcp-credentials",
-                    "secret": {
-                      "optional": false,
-                      "secretName": "gke-credentials"
-                    }
-                  }
-                ]
-              }
-            },
-            "resources": {
-              "requests": {
-                "memory": "2Gi"
-              }
-            }
-          }
-        }
-      }
-    },
-    "name": "sv-canton.sv-1-migration-1",
-    "provider": "",
-    "type": "kubernetes:pulumi.com/v1:Stack"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-1-migration-2-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-1-migration-2-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-2-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-2:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-2-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-2:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "pulumi.com/v1",
-      "kind": "Stack",
-      "metadata": {
-        "name": "sv-canton.sv-1-migration-2",
-        "namespace": "operator"
-      },
-      "spec": {
-        "backend": "gs://da-cn-pulumi-dev-stacks",
-        "continueResyncOnCommitMatch": false,
-        "destroyOnFinalize": false,
-        "envRefs": {
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "DEPLOYMENT_DIR": {
-            "literal": {
-              "value": "/share/source/cluster/deployment"
-            },
-            "type": "Literal"
-          },
-          "GCP_CLUSTER_BASENAME": {
-            "literal": {
-              "value": "mock"
-            },
-            "type": "Literal"
-          },
-          "PULUMI_VERSION": {
-            "literal": {
-              "value": "0.0.0"
-            },
-            "type": "Literal"
-          },
-          "SLACK_ACCESS_TOKEN": {
-            "secret": {
-              "key": "SLACK_ACCESS_TOKEN",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "SPLICE_MIGRATION_ID": {
-            "literal": {
-              "value": "2"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_ROOT": {
-            "literal": {
-              "value": "/share/source/splice"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_SV": {
-            "literal": {
-              "value": "sv-1"
-            },
-            "type": "Literal"
-          }
-        },
-        "fluxSource": {
-          "dir": "splice/cluster/pulumi/sv-canton",
-          "sourceRef": {
-            "apiVersion": "source.toolkit.fluxcd.io/v1",
-            "kind": "GitRepository",
-            "name": "splice-node-migration-2"
-          }
-        },
-        "retryMaxBackoffDurationSeconds": 600,
-        "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-1-migration-2-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-1-migration-2.mock",
-        "updateTemplate": {
-          "spec": {
-            "parallel": 64
-          }
-        },
-        "useLocalStackOnly": true,
-        "workspaceTemplate": {
-          "metadata": {
-            "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-1-migration-2",
-            "namespace": "operator"
-          },
-          "spec": {
-            "env": [
-              {
-                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
-                "value": "true"
-              },
-              {
-                "name": "SPLICE_OPERATOR_DEPLOYMENT",
-                "value": "true"
-              },
-              {
-                "name": "GITHUB_TOKEN",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "password",
-                    "name": "github"
-                  }
-                }
-              },
-              {
-                "name": "CLOUDSDK_CORE_PROJECT",
-                "value": "da-cn-devnet"
-              },
-              {
-                "name": "CLOUDSDK_COMPUTE_REGION",
-                "value": "europe-west6"
-              },
-              {
-                "name": "GOOGLE_APPLICATION_CREDENTIALS",
-                "value": "/app/gcp-credentials.json"
-              },
-              {
-                "name": "GOOGLE_CREDENTIALS",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "googleCredentials",
-                    "name": "gke-credentials"
-                  }
-                }
-              }
-            ],
-            "image": "pulumi/pulumi:0.0.0-nonroot",
-            "podTemplate": {
-              "spec": {
-                "affinity": {
-                  "nodeAffinity": {
-                    "requiredDuringSchedulingIgnoredDuringExecution": {
-                      "nodeSelectorTerms": [
-                        {
-                          "matchExpressions": [
-                            {
-                              "key": "cn_infra",
-                              "operator": "Exists"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "containers": [
-                  {
-                    "name": "pulumi",
-                    "volumeMounts": [
-                      {
-                        "mountPath": "/app/gcp-credentials.json",
-                        "name": "gcp-credentials",
-                        "subPath": "googleCredentials"
-                      }
-                    ]
-                  }
-                ],
-                "terminationGracePeriodSeconds": 1800,
-                "tolerations": [
-                  {
-                    "effect": "NoSchedule",
-                    "key": "cn_infra",
-                    "operator": "Exists"
-                  }
-                ],
-                "volumes": [
-                  {
-                    "name": "gcp-credentials",
-                    "secret": {
-                      "optional": false,
-                      "secretName": "gke-credentials"
-                    }
-                  }
-                ]
-              }
-            },
-            "resources": {
-              "requests": {
-                "memory": "2Gi"
-              }
-            }
-          }
-        }
-      }
-    },
-    "name": "sv-canton.sv-1-migration-2",
-    "provider": "",
-    "type": "kubernetes:pulumi.com/v1:Stack"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-1-migration-3-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-1-migration-3-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-3-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-3:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-3-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-3:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "pulumi.com/v1",
-      "kind": "Stack",
-      "metadata": {
-        "name": "sv-canton.sv-1-migration-3",
+        "name": "sv-canton.sv-1-migration-10",
         "namespace": "operator"
       },
       "spec": {
@@ -2406,7 +1826,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "3"
+              "value": "10"
             },
             "type": "Literal"
           },
@@ -2428,13 +1848,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-3"
+            "name": "splice-node-migration-10"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-1-migration-3-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-1-migration-3.mock",
+        "serviceAccountName": "sv-canton.sv-1-migration-10-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-1-migration-10.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -2444,7 +1864,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-1-migration-3",
+            "name": "sv-canton-sv-1-migration-10",
             "namespace": "operator"
           },
           "spec": {
@@ -2547,7 +1967,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-1-migration-3",
+    "name": "sv-canton.sv-1-migration-10",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -2558,11 +1978,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-4-sa",
+        "name": "sv-canton.sv-1-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-1-migration-4-sa",
+    "name": "sv-canton.sv-1-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -2580,12 +2000,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-4-sa",
+          "name": "sv-canton.sv-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-4:cluster-admin",
+    "name": "sv-canton.sv-1-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2603,12 +2023,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-4-sa",
+          "name": "sv-canton.sv-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-4:system:auth-delegator",
+    "name": "sv-canton.sv-1-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2619,7 +2039,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-4",
+        "name": "sv-canton.sv-1-migration-7",
         "namespace": "operator"
       },
       "spec": {
@@ -2681,18 +2101,6 @@
             },
             "type": "Literal"
           },
-          "PRIVATE_CONFIGS_PATH": {
-            "literal": {
-              "value": "/share/source/cluster/configs/configs-private"
-            },
-            "type": "Literal"
-          },
-          "PUBLIC_CONFIGS_PATH": {
-            "literal": {
-              "value": "/share/source/cluster/configs/configs"
-            },
-            "type": "Literal"
-          },
           "PULUMI_VERSION": {
             "literal": {
               "value": "0.0.0"
@@ -2708,7 +2116,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "4"
+              "value": "7"
             },
             "type": "Literal"
           },
@@ -2730,13 +2138,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-4"
+            "name": "splice-node-migration-7"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-1-migration-4-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-1-migration-4.mock",
+        "serviceAccountName": "sv-canton.sv-1-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-1-migration-7.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -2746,7 +2154,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-1-migration-4",
+            "name": "sv-canton-sv-1-migration-7",
             "namespace": "operator"
           },
           "spec": {
@@ -2849,7 +2257,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-1-migration-4",
+    "name": "sv-canton.sv-1-migration-7",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -2860,11 +2268,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-1-sa",
+        "name": "sv-canton.sv-1-migration-8-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-da-1-migration-1-sa",
+    "name": "sv-canton.sv-1-migration-8-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -2882,12 +2290,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-1-sa",
+          "name": "sv-canton.sv-1-migration-8-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-1:cluster-admin",
+    "name": "sv-canton.sv-1-migration-8:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2905,12 +2313,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-1-sa",
+          "name": "sv-canton.sv-1-migration-8-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-1:system:auth-delegator",
+    "name": "sv-canton.sv-1-migration-8:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2921,7 +2329,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-1",
+        "name": "sv-canton.sv-1-migration-8",
         "namespace": "operator"
       },
       "spec": {
@@ -2998,7 +2406,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "1"
+              "value": "8"
             },
             "type": "Literal"
           },
@@ -3010,7 +2418,7 @@
           },
           "SPLICE_SV": {
             "literal": {
-              "value": "sv-da-1"
+              "value": "sv-1"
             },
             "type": "Literal"
           }
@@ -3020,13 +2428,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-1"
+            "name": "splice-node-migration-8"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-da-1-migration-1-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-1.mock",
+        "serviceAccountName": "sv-canton.sv-1-migration-8-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-1-migration-8.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -3036,7 +2444,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-da-1-migration-1",
+            "name": "sv-canton-sv-1-migration-8",
             "namespace": "operator"
           },
           "spec": {
@@ -3139,7 +2547,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-da-1-migration-1",
+    "name": "sv-canton.sv-1-migration-8",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -3150,11 +2558,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-2-sa",
+        "name": "sv-canton.sv-1-migration-9-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-da-1-migration-2-sa",
+    "name": "sv-canton.sv-1-migration-9-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -3172,12 +2580,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-2-sa",
+          "name": "sv-canton.sv-1-migration-9-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-2:cluster-admin",
+    "name": "sv-canton.sv-1-migration-9:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -3195,12 +2603,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-2-sa",
+          "name": "sv-canton.sv-1-migration-9-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-2:system:auth-delegator",
+    "name": "sv-canton.sv-1-migration-9:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -3211,297 +2619,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-2",
-        "namespace": "operator"
-      },
-      "spec": {
-        "backend": "gs://da-cn-pulumi-dev-stacks",
-        "continueResyncOnCommitMatch": false,
-        "destroyOnFinalize": false,
-        "envRefs": {
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
-            "secret": {
-              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "DEPLOYMENT_DIR": {
-            "literal": {
-              "value": "/share/source/cluster/deployment"
-            },
-            "type": "Literal"
-          },
-          "GCP_CLUSTER_BASENAME": {
-            "literal": {
-              "value": "mock"
-            },
-            "type": "Literal"
-          },
-          "PULUMI_VERSION": {
-            "literal": {
-              "value": "0.0.0"
-            },
-            "type": "Literal"
-          },
-          "SLACK_ACCESS_TOKEN": {
-            "secret": {
-              "key": "SLACK_ACCESS_TOKEN",
-              "name": "deployment-env"
-            },
-            "type": "Secret"
-          },
-          "SPLICE_MIGRATION_ID": {
-            "literal": {
-              "value": "2"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_ROOT": {
-            "literal": {
-              "value": "/share/source/splice"
-            },
-            "type": "Literal"
-          },
-          "SPLICE_SV": {
-            "literal": {
-              "value": "sv-da-1"
-            },
-            "type": "Literal"
-          }
-        },
-        "fluxSource": {
-          "dir": "splice/cluster/pulumi/sv-canton",
-          "sourceRef": {
-            "apiVersion": "source.toolkit.fluxcd.io/v1",
-            "kind": "GitRepository",
-            "name": "splice-node-migration-2"
-          }
-        },
-        "retryMaxBackoffDurationSeconds": 600,
-        "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-da-1-migration-2-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-2.mock",
-        "updateTemplate": {
-          "spec": {
-            "parallel": 64
-          }
-        },
-        "useLocalStackOnly": true,
-        "workspaceTemplate": {
-          "metadata": {
-            "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-da-1-migration-2",
-            "namespace": "operator"
-          },
-          "spec": {
-            "env": [
-              {
-                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
-                "value": "true"
-              },
-              {
-                "name": "SPLICE_OPERATOR_DEPLOYMENT",
-                "value": "true"
-              },
-              {
-                "name": "GITHUB_TOKEN",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "password",
-                    "name": "github"
-                  }
-                }
-              },
-              {
-                "name": "CLOUDSDK_CORE_PROJECT",
-                "value": "da-cn-devnet"
-              },
-              {
-                "name": "CLOUDSDK_COMPUTE_REGION",
-                "value": "europe-west6"
-              },
-              {
-                "name": "GOOGLE_APPLICATION_CREDENTIALS",
-                "value": "/app/gcp-credentials.json"
-              },
-              {
-                "name": "GOOGLE_CREDENTIALS",
-                "valueFrom": {
-                  "secretKeyRef": {
-                    "key": "googleCredentials",
-                    "name": "gke-credentials"
-                  }
-                }
-              }
-            ],
-            "image": "pulumi/pulumi:0.0.0-nonroot",
-            "podTemplate": {
-              "spec": {
-                "affinity": {
-                  "nodeAffinity": {
-                    "requiredDuringSchedulingIgnoredDuringExecution": {
-                      "nodeSelectorTerms": [
-                        {
-                          "matchExpressions": [
-                            {
-                              "key": "cn_infra",
-                              "operator": "Exists"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "containers": [
-                  {
-                    "name": "pulumi",
-                    "volumeMounts": [
-                      {
-                        "mountPath": "/app/gcp-credentials.json",
-                        "name": "gcp-credentials",
-                        "subPath": "googleCredentials"
-                      }
-                    ]
-                  }
-                ],
-                "terminationGracePeriodSeconds": 1800,
-                "tolerations": [
-                  {
-                    "effect": "NoSchedule",
-                    "key": "cn_infra",
-                    "operator": "Exists"
-                  }
-                ],
-                "volumes": [
-                  {
-                    "name": "gcp-credentials",
-                    "secret": {
-                      "optional": false,
-                      "secretName": "gke-credentials"
-                    }
-                  }
-                ]
-              }
-            },
-            "resources": {
-              "requests": {
-                "memory": "2Gi"
-              }
-            }
-          }
-        }
-      }
-    },
-    "name": "sv-canton.sv-da-1-migration-2",
-    "provider": "",
-    "type": "kubernetes:pulumi.com/v1:Stack"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-da-1-migration-3-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-da-1-migration-3-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-3-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-da-1-migration-3:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-3-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-da-1-migration-3:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "pulumi.com/v1",
-      "kind": "Stack",
-      "metadata": {
-        "name": "sv-canton.sv-da-1-migration-3",
+        "name": "sv-canton.sv-1-migration-9",
         "namespace": "operator"
       },
       "spec": {
@@ -3590,7 +2708,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "3"
+              "value": "9"
             },
             "type": "Literal"
           },
@@ -3602,7 +2720,7 @@
           },
           "SPLICE_SV": {
             "literal": {
-              "value": "sv-da-1"
+              "value": "sv-1"
             },
             "type": "Literal"
           }
@@ -3612,13 +2730,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-3"
+            "name": "splice-node-migration-9"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-da-1-migration-3-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-3.mock",
+        "serviceAccountName": "sv-canton.sv-1-migration-9-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-1-migration-9.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -3628,7 +2746,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-da-1-migration-3",
+            "name": "sv-canton-sv-1-migration-9",
             "namespace": "operator"
           },
           "spec": {
@@ -3731,7 +2849,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-da-1-migration-3",
+    "name": "sv-canton.sv-1-migration-9",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -3742,11 +2860,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-4-sa",
+        "name": "sv-canton.sv-da-1-migration-10-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-da-1-migration-4-sa",
+    "name": "sv-canton.sv-da-1-migration-10-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -3764,12 +2882,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-4-sa",
+          "name": "sv-canton.sv-da-1-migration-10-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-4:cluster-admin",
+    "name": "sv-canton.sv-da-1-migration-10:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -3787,12 +2905,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-4-sa",
+          "name": "sv-canton.sv-da-1-migration-10-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-4:system:auth-delegator",
+    "name": "sv-canton.sv-da-1-migration-10:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -3803,7 +2921,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-4",
+        "name": "sv-canton.sv-da-1-migration-10",
         "namespace": "operator"
       },
       "spec": {
@@ -3892,7 +3010,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "4"
+              "value": "10"
             },
             "type": "Literal"
           },
@@ -3914,13 +3032,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-4"
+            "name": "splice-node-migration-10"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-da-1-migration-4-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-4.mock",
+        "serviceAccountName": "sv-canton.sv-da-1-migration-10-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-10.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -3930,7 +3048,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-da-1-migration-4",
+            "name": "sv-canton-sv-da-1-migration-10",
             "namespace": "operator"
           },
           "spec": {
@@ -4033,7 +3151,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-da-1-migration-4",
+    "name": "sv-canton.sv-da-1-migration-10",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -4044,11 +3162,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-migration-1-sa",
+        "name": "sv-canton.sv-da-1-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-migration-1-sa",
+    "name": "sv-canton.sv-da-1-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -4066,12 +3184,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-1-sa",
+          "name": "sv-canton.sv-da-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-1:cluster-admin",
+    "name": "sv-canton.sv-da-1-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4089,12 +3207,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-1-sa",
+          "name": "sv-canton.sv-da-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-1:system:auth-delegator",
+    "name": "sv-canton.sv-da-1-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4105,12 +3223,12 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-migration-1",
+        "name": "sv-canton.sv-da-1-migration-7",
         "namespace": "operator"
       },
       "spec": {
         "backend": "gs://da-cn-pulumi-dev-stacks",
-        "continueResyncOnCommitMatch": true,
+        "continueResyncOnCommitMatch": false,
         "destroyOnFinalize": false,
         "envRefs": {
           "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
@@ -4182,7 +3300,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "1"
+              "value": "7"
             },
             "type": "Literal"
           },
@@ -4194,7 +3312,7 @@
           },
           "SPLICE_SV": {
             "literal": {
-              "value": "sv"
+              "value": "sv-da-1"
             },
             "type": "Literal"
           }
@@ -4204,15 +3322,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-1"
+            "name": "splice-node-migration-7"
           }
         },
-        "refresh": true,
-        "resyncFrequencySeconds": 300,
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-migration-1-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-migration-1.mock",
+        "serviceAccountName": "sv-canton.sv-da-1-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-7.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -4222,7 +3338,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-migration-1",
+            "name": "sv-canton-sv-da-1-migration-7",
             "namespace": "operator"
           },
           "spec": {
@@ -4325,7 +3441,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-migration-1",
+    "name": "sv-canton.sv-da-1-migration-7",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -4336,11 +3452,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-migration-2-sa",
+        "name": "sv-canton.sv-da-1-migration-8-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-migration-2-sa",
+    "name": "sv-canton.sv-da-1-migration-8-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -4358,12 +3474,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-2-sa",
+          "name": "sv-canton.sv-da-1-migration-8-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-2:cluster-admin",
+    "name": "sv-canton.sv-da-1-migration-8:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4381,12 +3497,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-2-sa",
+          "name": "sv-canton.sv-da-1-migration-8-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-2:system:auth-delegator",
+    "name": "sv-canton.sv-da-1-migration-8:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4397,12 +3513,12 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-migration-2",
+        "name": "sv-canton.sv-da-1-migration-8",
         "namespace": "operator"
       },
       "spec": {
         "backend": "gs://da-cn-pulumi-dev-stacks",
-        "continueResyncOnCommitMatch": true,
+        "continueResyncOnCommitMatch": false,
         "destroyOnFinalize": false,
         "envRefs": {
           "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
@@ -4474,7 +3590,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "2"
+              "value": "8"
             },
             "type": "Literal"
           },
@@ -4486,7 +3602,7 @@
           },
           "SPLICE_SV": {
             "literal": {
-              "value": "sv"
+              "value": "sv-da-1"
             },
             "type": "Literal"
           }
@@ -4496,15 +3612,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-2"
+            "name": "splice-node-migration-8"
           }
         },
-        "refresh": true,
-        "resyncFrequencySeconds": 300,
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-migration-2-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-migration-2.mock",
+        "serviceAccountName": "sv-canton.sv-da-1-migration-8-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-8.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -4514,7 +3628,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-migration-2",
+            "name": "sv-canton-sv-da-1-migration-8",
             "namespace": "operator"
           },
           "spec": {
@@ -4617,7 +3731,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-migration-2",
+    "name": "sv-canton.sv-da-1-migration-8",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -4628,11 +3742,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-migration-3-sa",
+        "name": "sv-canton.sv-da-1-migration-9-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-migration-3-sa",
+    "name": "sv-canton.sv-da-1-migration-9-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -4650,12 +3764,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-3-sa",
+          "name": "sv-canton.sv-da-1-migration-9-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-3:cluster-admin",
+    "name": "sv-canton.sv-da-1-migration-9:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4673,12 +3787,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-3-sa",
+          "name": "sv-canton.sv-da-1-migration-9-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-3:system:auth-delegator",
+    "name": "sv-canton.sv-da-1-migration-9:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4689,7 +3803,309 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-migration-3",
+        "name": "sv-canton.sv-da-1-migration-9",
+        "namespace": "operator"
+      },
+      "spec": {
+        "backend": "gs://da-cn-pulumi-dev-stacks",
+        "continueResyncOnCommitMatch": false,
+        "destroyOnFinalize": false,
+        "envRefs": {
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "DEPLOYMENT_DIR": {
+            "literal": {
+              "value": "/share/source/cluster/deployment"
+            },
+            "type": "Literal"
+          },
+          "GCP_CLUSTER_BASENAME": {
+            "literal": {
+              "value": "mock"
+            },
+            "type": "Literal"
+          },
+          "PRIVATE_CONFIGS_PATH": {
+            "literal": {
+              "value": "/share/source/cluster/configs/configs-private"
+            },
+            "type": "Literal"
+          },
+          "PUBLIC_CONFIGS_PATH": {
+            "literal": {
+              "value": "/share/source/cluster/configs/configs"
+            },
+            "type": "Literal"
+          },
+          "PULUMI_VERSION": {
+            "literal": {
+              "value": "0.0.0"
+            },
+            "type": "Literal"
+          },
+          "SLACK_ACCESS_TOKEN": {
+            "secret": {
+              "key": "SLACK_ACCESS_TOKEN",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "SPLICE_MIGRATION_ID": {
+            "literal": {
+              "value": "9"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_ROOT": {
+            "literal": {
+              "value": "/share/source/splice"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_SV": {
+            "literal": {
+              "value": "sv-da-1"
+            },
+            "type": "Literal"
+          }
+        },
+        "fluxSource": {
+          "dir": "splice/cluster/pulumi/sv-canton",
+          "sourceRef": {
+            "apiVersion": "source.toolkit.fluxcd.io/v1",
+            "kind": "GitRepository",
+            "name": "splice-node-migration-9"
+          }
+        },
+        "retryMaxBackoffDurationSeconds": 600,
+        "retryOnUpdateConflict": true,
+        "serviceAccountName": "sv-canton.sv-da-1-migration-9-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-9.mock",
+        "updateTemplate": {
+          "spec": {
+            "parallel": 64
+          }
+        },
+        "useLocalStackOnly": true,
+        "workspaceTemplate": {
+          "metadata": {
+            "deletionGracePeriodSeconds": 1800,
+            "name": "sv-canton-sv-da-1-migration-9",
+            "namespace": "operator"
+          },
+          "spec": {
+            "env": [
+              {
+                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
+                "value": "true"
+              },
+              {
+                "name": "SPLICE_OPERATOR_DEPLOYMENT",
+                "value": "true"
+              },
+              {
+                "name": "GITHUB_TOKEN",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "password",
+                    "name": "github"
+                  }
+                }
+              },
+              {
+                "name": "CLOUDSDK_CORE_PROJECT",
+                "value": "da-cn-devnet"
+              },
+              {
+                "name": "CLOUDSDK_COMPUTE_REGION",
+                "value": "europe-west6"
+              },
+              {
+                "name": "GOOGLE_APPLICATION_CREDENTIALS",
+                "value": "/app/gcp-credentials.json"
+              },
+              {
+                "name": "GOOGLE_CREDENTIALS",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "googleCredentials",
+                    "name": "gke-credentials"
+                  }
+                }
+              }
+            ],
+            "image": "pulumi/pulumi:0.0.0-nonroot",
+            "podTemplate": {
+              "spec": {
+                "affinity": {
+                  "nodeAffinity": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                      "nodeSelectorTerms": [
+                        {
+                          "matchExpressions": [
+                            {
+                              "key": "cn_infra",
+                              "operator": "Exists"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "containers": [
+                  {
+                    "name": "pulumi",
+                    "volumeMounts": [
+                      {
+                        "mountPath": "/app/gcp-credentials.json",
+                        "name": "gcp-credentials",
+                        "subPath": "googleCredentials"
+                      }
+                    ]
+                  }
+                ],
+                "terminationGracePeriodSeconds": 1800,
+                "tolerations": [
+                  {
+                    "effect": "NoSchedule",
+                    "key": "cn_infra",
+                    "operator": "Exists"
+                  }
+                ],
+                "volumes": [
+                  {
+                    "name": "gcp-credentials",
+                    "secret": {
+                      "optional": false,
+                      "secretName": "gke-credentials"
+                    }
+                  }
+                ]
+              }
+            },
+            "resources": {
+              "requests": {
+                "memory": "2Gi"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "sv-canton.sv-da-1-migration-9",
+    "provider": "",
+    "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-migration-10-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-migration-10-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-10-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-10:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-10-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-10:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "pulumi.com/v1",
+      "kind": "Stack",
+      "metadata": {
+        "name": "sv-canton.sv-migration-10",
         "namespace": "operator"
       },
       "spec": {
@@ -4778,7 +4194,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "3"
+              "value": "10"
             },
             "type": "Literal"
           },
@@ -4800,15 +4216,15 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-3"
+            "name": "splice-node-migration-10"
           }
         },
         "refresh": true,
         "resyncFrequencySeconds": 300,
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-migration-3-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-migration-3.mock",
+        "serviceAccountName": "sv-canton.sv-migration-10-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-migration-10.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -4818,7 +4234,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-migration-3",
+            "name": "sv-canton-sv-migration-10",
             "namespace": "operator"
           },
           "spec": {
@@ -4921,7 +4337,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-migration-3",
+    "name": "sv-canton.sv-migration-10",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },
@@ -4932,11 +4348,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-migration-4-sa",
+        "name": "sv-canton.sv-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-migration-4-sa",
+    "name": "sv-canton.sv-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -4954,12 +4370,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-4-sa",
+          "name": "sv-canton.sv-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-4:cluster-admin",
+    "name": "sv-canton.sv-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4977,12 +4393,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-4-sa",
+          "name": "sv-canton.sv-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-4:system:auth-delegator",
+    "name": "sv-canton.sv-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4993,7 +4409,591 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-migration-4",
+        "name": "sv-canton.sv-migration-7",
+        "namespace": "operator"
+      },
+      "spec": {
+        "backend": "gs://da-cn-pulumi-dev-stacks",
+        "continueResyncOnCommitMatch": true,
+        "destroyOnFinalize": false,
+        "envRefs": {
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "DEPLOYMENT_DIR": {
+            "literal": {
+              "value": "/share/source/cluster/deployment"
+            },
+            "type": "Literal"
+          },
+          "GCP_CLUSTER_BASENAME": {
+            "literal": {
+              "value": "mock"
+            },
+            "type": "Literal"
+          },
+          "PULUMI_VERSION": {
+            "literal": {
+              "value": "0.0.0"
+            },
+            "type": "Literal"
+          },
+          "SLACK_ACCESS_TOKEN": {
+            "secret": {
+              "key": "SLACK_ACCESS_TOKEN",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "SPLICE_MIGRATION_ID": {
+            "literal": {
+              "value": "7"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_ROOT": {
+            "literal": {
+              "value": "/share/source/splice"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_SV": {
+            "literal": {
+              "value": "sv"
+            },
+            "type": "Literal"
+          }
+        },
+        "fluxSource": {
+          "dir": "splice/cluster/pulumi/sv-canton",
+          "sourceRef": {
+            "apiVersion": "source.toolkit.fluxcd.io/v1",
+            "kind": "GitRepository",
+            "name": "splice-node-migration-7"
+          }
+        },
+        "refresh": true,
+        "resyncFrequencySeconds": 300,
+        "retryMaxBackoffDurationSeconds": 600,
+        "retryOnUpdateConflict": true,
+        "serviceAccountName": "sv-canton.sv-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-migration-7.mock",
+        "updateTemplate": {
+          "spec": {
+            "parallel": 64
+          }
+        },
+        "useLocalStackOnly": true,
+        "workspaceTemplate": {
+          "metadata": {
+            "deletionGracePeriodSeconds": 1800,
+            "name": "sv-canton-sv-migration-7",
+            "namespace": "operator"
+          },
+          "spec": {
+            "env": [
+              {
+                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
+                "value": "true"
+              },
+              {
+                "name": "SPLICE_OPERATOR_DEPLOYMENT",
+                "value": "true"
+              },
+              {
+                "name": "GITHUB_TOKEN",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "password",
+                    "name": "github"
+                  }
+                }
+              },
+              {
+                "name": "CLOUDSDK_CORE_PROJECT",
+                "value": "da-cn-devnet"
+              },
+              {
+                "name": "CLOUDSDK_COMPUTE_REGION",
+                "value": "europe-west6"
+              },
+              {
+                "name": "GOOGLE_APPLICATION_CREDENTIALS",
+                "value": "/app/gcp-credentials.json"
+              },
+              {
+                "name": "GOOGLE_CREDENTIALS",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "googleCredentials",
+                    "name": "gke-credentials"
+                  }
+                }
+              }
+            ],
+            "image": "pulumi/pulumi:0.0.0-nonroot",
+            "podTemplate": {
+              "spec": {
+                "affinity": {
+                  "nodeAffinity": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                      "nodeSelectorTerms": [
+                        {
+                          "matchExpressions": [
+                            {
+                              "key": "cn_infra",
+                              "operator": "Exists"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "containers": [
+                  {
+                    "name": "pulumi",
+                    "volumeMounts": [
+                      {
+                        "mountPath": "/app/gcp-credentials.json",
+                        "name": "gcp-credentials",
+                        "subPath": "googleCredentials"
+                      }
+                    ]
+                  }
+                ],
+                "terminationGracePeriodSeconds": 1800,
+                "tolerations": [
+                  {
+                    "effect": "NoSchedule",
+                    "key": "cn_infra",
+                    "operator": "Exists"
+                  }
+                ],
+                "volumes": [
+                  {
+                    "name": "gcp-credentials",
+                    "secret": {
+                      "optional": false,
+                      "secretName": "gke-credentials"
+                    }
+                  }
+                ]
+              }
+            },
+            "resources": {
+              "requests": {
+                "memory": "2Gi"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "sv-canton.sv-migration-7",
+    "provider": "",
+    "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-migration-8-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-migration-8-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-8:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-8:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "pulumi.com/v1",
+      "kind": "Stack",
+      "metadata": {
+        "name": "sv-canton.sv-migration-8",
+        "namespace": "operator"
+      },
+      "spec": {
+        "backend": "gs://da-cn-pulumi-dev-stacks",
+        "continueResyncOnCommitMatch": true,
+        "destroyOnFinalize": false,
+        "envRefs": {
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET": {
+            "secret": {
+              "key": "AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "DEPLOYMENT_DIR": {
+            "literal": {
+              "value": "/share/source/cluster/deployment"
+            },
+            "type": "Literal"
+          },
+          "GCP_CLUSTER_BASENAME": {
+            "literal": {
+              "value": "mock"
+            },
+            "type": "Literal"
+          },
+          "PULUMI_VERSION": {
+            "literal": {
+              "value": "0.0.0"
+            },
+            "type": "Literal"
+          },
+          "SLACK_ACCESS_TOKEN": {
+            "secret": {
+              "key": "SLACK_ACCESS_TOKEN",
+              "name": "deployment-env"
+            },
+            "type": "Secret"
+          },
+          "SPLICE_MIGRATION_ID": {
+            "literal": {
+              "value": "8"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_ROOT": {
+            "literal": {
+              "value": "/share/source/splice"
+            },
+            "type": "Literal"
+          },
+          "SPLICE_SV": {
+            "literal": {
+              "value": "sv"
+            },
+            "type": "Literal"
+          }
+        },
+        "fluxSource": {
+          "dir": "splice/cluster/pulumi/sv-canton",
+          "sourceRef": {
+            "apiVersion": "source.toolkit.fluxcd.io/v1",
+            "kind": "GitRepository",
+            "name": "splice-node-migration-8"
+          }
+        },
+        "refresh": true,
+        "resyncFrequencySeconds": 300,
+        "retryMaxBackoffDurationSeconds": 600,
+        "retryOnUpdateConflict": true,
+        "serviceAccountName": "sv-canton.sv-migration-8-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-migration-8.mock",
+        "updateTemplate": {
+          "spec": {
+            "parallel": 64
+          }
+        },
+        "useLocalStackOnly": true,
+        "workspaceTemplate": {
+          "metadata": {
+            "deletionGracePeriodSeconds": 1800,
+            "name": "sv-canton-sv-migration-8",
+            "namespace": "operator"
+          },
+          "spec": {
+            "env": [
+              {
+                "name": "CN_PULUMI_LOAD_ENV_CONFIG_FILE",
+                "value": "true"
+              },
+              {
+                "name": "SPLICE_OPERATOR_DEPLOYMENT",
+                "value": "true"
+              },
+              {
+                "name": "GITHUB_TOKEN",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "password",
+                    "name": "github"
+                  }
+                }
+              },
+              {
+                "name": "CLOUDSDK_CORE_PROJECT",
+                "value": "da-cn-devnet"
+              },
+              {
+                "name": "CLOUDSDK_COMPUTE_REGION",
+                "value": "europe-west6"
+              },
+              {
+                "name": "GOOGLE_APPLICATION_CREDENTIALS",
+                "value": "/app/gcp-credentials.json"
+              },
+              {
+                "name": "GOOGLE_CREDENTIALS",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "googleCredentials",
+                    "name": "gke-credentials"
+                  }
+                }
+              }
+            ],
+            "image": "pulumi/pulumi:0.0.0-nonroot",
+            "podTemplate": {
+              "spec": {
+                "affinity": {
+                  "nodeAffinity": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                      "nodeSelectorTerms": [
+                        {
+                          "matchExpressions": [
+                            {
+                              "key": "cn_infra",
+                              "operator": "Exists"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "containers": [
+                  {
+                    "name": "pulumi",
+                    "volumeMounts": [
+                      {
+                        "mountPath": "/app/gcp-credentials.json",
+                        "name": "gcp-credentials",
+                        "subPath": "googleCredentials"
+                      }
+                    ]
+                  }
+                ],
+                "terminationGracePeriodSeconds": 1800,
+                "tolerations": [
+                  {
+                    "effect": "NoSchedule",
+                    "key": "cn_infra",
+                    "operator": "Exists"
+                  }
+                ],
+                "volumes": [
+                  {
+                    "name": "gcp-credentials",
+                    "secret": {
+                      "optional": false,
+                      "secretName": "gke-credentials"
+                    }
+                  }
+                ]
+              }
+            },
+            "resources": {
+              "requests": {
+                "memory": "2Gi"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "sv-canton.sv-migration-8",
+    "provider": "",
+    "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-migration-9-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-migration-9-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-9-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-9:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-9-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-9:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "pulumi.com/v1",
+      "kind": "Stack",
+      "metadata": {
+        "name": "sv-canton.sv-migration-9",
         "namespace": "operator"
       },
       "spec": {
@@ -5082,7 +5082,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "4"
+              "value": "9"
             },
             "type": "Literal"
           },
@@ -5104,15 +5104,15 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-4"
+            "name": "splice-node-migration-9"
           }
         },
         "refresh": true,
         "resyncFrequencySeconds": 300,
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-migration-4-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-migration-4.mock",
+        "serviceAccountName": "sv-canton.sv-migration-9-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-migration-9.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -5122,7 +5122,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-migration-4",
+            "name": "sv-canton-sv-migration-9",
             "namespace": "operator"
           },
           "spec": {
@@ -5225,7 +5225,7 @@
         }
       }
     },
-    "name": "sv-canton.sv-migration-4",
+    "name": "sv-canton.sv-migration-9",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
   },

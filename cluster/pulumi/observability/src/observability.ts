@@ -852,6 +852,10 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 monitoringConfig.alerting.alerts.delegatelessContention.thresholdPerNamespace.toString()
               )
               .replaceAll(
+                '$NON_LOCAL_CONTENTION_ERRORS_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
+                monitoringConfig.alerting.alerts.delegatelessNonLocalContention.thresholdPerNamespace.toString()
+              )
+              .replaceAll(
                 '$INGESTION_ENTRIES_PER_BATCH_THRESHOLD',
                 monitoringConfig.alerting.alerts.ingestion.thresholdEntriesPerBatch.toString()
               ),
@@ -955,6 +959,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
+            ).replace(
+              '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
+              monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
             ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
