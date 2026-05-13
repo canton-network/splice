@@ -38,3 +38,17 @@
 
         - Splice Info endpoint now includes ``/runtime/status.json`` which provides status of core components (sv, scan and mediator at this moment) refreshed
           every 60 seconds. ``splice-info`` helm chart now requires ``runtimeDetails.migrationId`` to be specified.
+
+    - Scan
+
+      - The app activity records computation has been modified to exclude the transactions submitted by SVs,
+        as the SVs don't burn traffic and transactions submitted by them should not generate
+        traffic-based app rewards as specified in CIP-0104.
+
+        The data provided by the experimental ``app_activity_records`` field of ``GET /v0/events/{update-id}``
+        and ``POST /v0/events`` endpoints prior to this release may have attributed app-activity to
+        SV submitted transactions, and such app activity records should be considered incorrect.
+        App activity records data provided for other transactions is valid.
+
+        The ``app_activity_record_store`` table has been truncated to remove the records computed with the earlier logic,
+        and both the endpoints will not provide app ``app_activity_records`` for events prior to this release.
