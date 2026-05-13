@@ -94,11 +94,11 @@ class DbScanRewardsReferenceStore(
               }
               openRounds
                 .minByOption(_.contract.payload.round.number)
-                .map { r =>
-                  recordTime -> (
-                    r.contract.payload.round.number.toLong,
-                    CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
-                  )
+                .flatMap { r =>
+                  val opensAt = CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
+                  Option.when(opensAt >= ingestionStart) {
+                    recordTime -> (r.contract.payload.round.number.toLong, opensAt)
+                  }
                 }
             }.toMap
           }
