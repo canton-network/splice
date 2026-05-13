@@ -807,9 +807,8 @@ object UserWalletStore {
           UserWalletAcsStoreRowData(contract)
         },
         mkFilter(amuletallocationv2.AmuletAllocationV2.COMPANION) { co =>
-          co.payload.allocation.transferLegs.asScala.exists { transferLeg =>
-            transferLeg.instrumentId.admin == dso && transferLeg.sender.owner == endUser
-          }
+          co.payload.allocation.admin == dso &&
+          co.payload.allocation.authorizer.owner == endUser
         } { contract =>
           UserWalletAcsStoreRowData(contract)
         },
@@ -845,9 +844,8 @@ object UserWalletStore {
           }
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
         mkFilterInterface(allocationrequestv2.AllocationRequest.INTERFACE)(co =>
-          co.payload.transferLegs.asScala.exists { transferLeg =>
-            transferLeg.instrumentId.admin == dso && (transferLeg.sender.owner == endUser || transferLeg.receiver.owner == endUser)
-          }
+          co.payload.authorizer.owner == endUser &&
+            co.payload.allocations.asScala.exists(_.admin == dso)
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
       ),
     )

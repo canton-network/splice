@@ -2483,7 +2483,7 @@ object HttpScanAppClient {
         val args = new allocationv2.SettlementFactory_SettleBatch(
           choiceArgs.settlement,
           choiceArgs.transferLegs,
-          choiceArgs.allocationCids,
+          choiceArgs.allocations,
           choiceArgs.actors,
           new metadatav1.ExtraArgs(
             choiceContext,

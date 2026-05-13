@@ -1241,7 +1241,7 @@ object HttpWalletAppClient {
       ): EitherT[Future, Either[
         Throwable,
         HttpResponse,
-      ], http.AllocateAmuletV2Response] =
+      ], http.AllocateAmuletV2Response] = {
         client.allocateAmuletV2(
           definitions.AllocateAmuletV2Request(
             definitions.AllocateAmuletV2Request.Settlement(
@@ -1250,26 +1250,33 @@ object HttpWalletAppClient {
                 spec.settlement.settlementRef.id,
                 spec.settlement.settlementRef.cid.map(_.contractId).toScala,
               ),
-              requestedAt =
-                Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.requestedAt)),
-              settleAt = Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.settleAt)),
               settlementDeadline = spec.settlement.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
               meta = Some(spec.settlement.meta.values.asScala.toMap),
             ),
-            spec.transferLegs.asScala.map { transferLegs =>
-              definitions.TransferLegV2(
-                transferLegs.transferLegId,
-                sender = transferLegs.sender.owner,
-                receiver = transferLegs.receiver.owner,
-                Codec.JavaBigDecimal.instance.encode(transferLegs.amount),
-                Some(transferLegs.meta.values.asScala.toMap),
+            spec.transferLegSides.asScala.map { transferLegSide =>
+              definitions.TransferLegSide(
+                transferLegSide.transferLegId,
+                side = transferLegSide.side match {
+                  case allocationv2.TransferSide.SENDERSIDE =>
+                    definitions.TransferLegSide.Side.Senderside
+                  case allocationv2.TransferSide.RECEIVERSIDE =>
+                    definitions.TransferLegSide.Side.Receiverside
+                },
+                otherside = transferLegSide.otherside.owner,
+                Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
+                Some(transferLegSide.meta.values.asScala.toMap),
               )
             }.toVector,
+            nextIterationFunding = spec.nextIterationFunding.toScala
+              .map(_.asScala.toMap.view.mapValues(Codec.JavaBigDecimal.instance.encode).toMap),
+            committed = spec.committed,
+            meta = Some(spec.meta.values.asScala.toMap),
           ),
           headers = headers,
         )
+      }
 
       override protected def handleOk()(implicit
           decoder: TemplateJsonDecoder

@@ -50,7 +50,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.wallet.{UserWalletManager, UserWalletService}
 import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore}
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
-import TreasuryService.AmuletOperationDedupConfig
+import TreasuryService.{AmuletOperationDedupConfig, basicAccount}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
@@ -73,7 +73,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   allocationv2,
   holdingv1,
-  holdingv2,
   metadatav1,
   transferinstructionv1,
   transferinstructionv2,
@@ -1187,6 +1186,7 @@ class HttpWalletHandler(
     withSpan(s"$workflowId.allocateAmuletV2") { _ => _ =>
       val now = walletManager.clock.now.toInstant
       val authorizer = userWallet.store.key.endUserParty
+      val authorizerAccount = TreasuryService.basicAccount(authorizer)
       val commandId = CommandId(
         "org.lfdecentralizedtrust.splice.wallet.allocateAmulet",
         Seq(authorizer),
@@ -1195,6 +1195,28 @@ class HttpWalletHandler(
           body.settlement.settlementRef.cid.getOrElse(""),
         ) ++ body.settlement.executors,
       )
+      val transferLegSides = body.transferLegSides.map { side =>
+        new allocationv2.TransferLegSide(
+          side.transferLegId,
+          side.side match {
+            case d0.TransferLegSide.Side.Receiverside =>
+              allocationv2.TransferSide.RECEIVERSIDE
+            case d0.TransferLegSide.Side.Senderside =>
+              allocationv2.TransferSide.SENDERSIDE
+            case other =>
+              throw Status.INVALID_ARGUMENT
+                .withDescription(
+                  s"$other is not a valid TransferLegSide. Must be one of ${d0.TransferLegSide.Side.values
+                      .map(_.value)}"
+                )
+                .asRuntimeException()
+          },
+          basicAccount(side.otherside),
+          Codec.tryDecode(Codec.JavaBigDecimal)(side.amount),
+          "Amulet",
+          new metadatav1.Metadata(side.meta.getOrElse(Map.empty).asJava),
+        )
+      }
       val specification = new allocationv2.AllocationSpecification(
         new allocationv2.SettlementInfo(
           body.settlement.executors.asJava,
@@ -1202,25 +1224,22 @@ class HttpWalletHandler(
             body.settlement.settlementRef.id,
             body.settlement.settlementRef.cid.map(cid => new AnyContract.ContractId(cid)).toJava,
           ),
-          Codec.tryDecode(Codec.Timestamp)(body.settlement.requestedAt).toInstant,
-          Codec.tryDecode(Codec.Timestamp)(body.settlement.settleAt).toInstant,
           body.settlement.settlementDeadline
             .map(Codec.tryDecode(Codec.Timestamp))
             .map(_.toInstant)
             .toJava,
           new metadatav1.Metadata(body.settlement.meta.getOrElse(Map.empty).asJava),
         ),
-        body.transferLegs.map { leg =>
-          new allocationv2.TransferLeg(
-            leg.transferLegId,
-            TreasuryService.basicAccount(leg.sender),
-            TreasuryService.basicAccount(leg.receiver),
-            Codec.tryDecode(Codec.JavaBigDecimal)(leg.amount),
-            new holdingv2.InstrumentId(userWallet.store.key.dsoParty.toProtoPrimitive, "Amulet"),
-            new metadatav1.Metadata(leg.meta.getOrElse(Map.empty).asJava),
-          )
-        }.asJava,
-        /*authorizer=*/ TreasuryService.basicAccount(authorizer),
+        userWallet.store.key.dsoParty.toProtoPrimitive,
+        authorizerAccount,
+        transferLegSides.asJava,
+        body.nextIterationFunding
+          .map(_.map { case (instrument, amount) =>
+            instrument -> Codec.tryDecode(Codec.BigDecimal)(amount).bigDecimal
+          }.asJava)
+          .toJava,
+        body.committed,
+        new metadatav1.Metadata(body.meta.getOrElse(Map.empty).asJava),
       )
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,
