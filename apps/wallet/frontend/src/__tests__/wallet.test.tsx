@@ -55,6 +55,7 @@ import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllo
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { LockedAmulet } from '@daml.js/splice-amulet/lib/Splice/Amulet';
+import { TransferSide } from '@daml.js/splice-api-token-allocation-v2-1.0.0/lib/Splice/Api/Token/AllocationV2';
 
 const dsoEntry = nameServiceEntries.find(e => e.name.startsWith('dso'))!;
 
@@ -1475,7 +1476,7 @@ function getAllocationRequestV2() {
             instrumentId: 'Amulet',
             amount: '3',
             meta: { values: {} },
-            side: 'SenderSide',
+            side: 'SenderSide' as TransferSide,
             otherside: { owner: bobPartyId, provider: null, id: '' },
           },
           {
@@ -1483,7 +1484,7 @@ function getAllocationRequestV2() {
             instrumentId: 'Another',
             amount: '3',
             meta: { values: {} },
-            side: 'SenderSide',
+            side: 'SenderSide' as TransferSide,
             otherside: { owner: bobPartyId, provider: null, id: '' },
           },
         ],

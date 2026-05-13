@@ -399,6 +399,7 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
             }
           } catch (e) {
             console.error('Unsupported AllocationRequest', e, ar);
+            throw e;
           }
         });
       },
