@@ -45,12 +45,17 @@ and request contract IDs together with the necessary disclosed contracts when
 exercising the cast choice. SV-hosted submission or relay remains a valid
 deployment option but is not required by this design.
 
-Alignment with the dApp standard (CIP-0103) is still an open review item. The
-contract surface — fetching the binding and request by contract ID, no contract
-key on the binding, the action allowlist gate, and explicit ``castBy`` /
-``castByRole`` attribution — was chosen to be compatible with an
-explicit-disclosure flow, but a deliberate review against CIP-0103 is needed
-before this prototype is promoted out of draft.
+The dApp standard (CIP-0103) defines the client-side API between a dApp and a
+Wallet rather than any on-ledger contract pattern, so it does not prescribe the
+shape of these templates. The contract surface in this slice is intentionally
+compatible with a CIP-0103 external-party submission flow: the cast choice is
+controlled by the governance-voter party, takes ``requestCid`` and
+``bindingCid`` as plain contract IDs, and the binding is observable by the
+governance voter so it can be supplied as a disclosed contract. A
+CIP-0103-conforming Wallet can therefore submit the cast via ``prepareExecute``
+with the relevant disclosed contracts, and the remaining alignment work — the
+governance-voter dApp client, Scan-based discovery, and Wallet/signing-provider
+choice — lives downstream of this PR.
 
 The first contract slice uses a hardcoded Daml allowlist for governance-voter
 eligible actions. New ``ActionRequiringConfirmation`` constructors are rejected
