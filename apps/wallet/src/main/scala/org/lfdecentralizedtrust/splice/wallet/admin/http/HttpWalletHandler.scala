@@ -963,7 +963,7 @@ class HttpWalletHandler(
         contractId
       )
       for {
-        choiceContext <- scanConnection.getTransferInstructionAcceptContext(requestCid)
+        choiceContext <- scanConnection.getTransferInstructionAcceptContextV2(requestCid)
         outcome <- exerciseWalletAction((installCid, _) => {
           Future.successful(
             installCid
@@ -1091,7 +1091,7 @@ class HttpWalletHandler(
         contractId
       )
       for {
-        choiceContext <- scanConnection.getTransferInstructionAcceptContext(requestCid)
+        choiceContext <- scanConnection.getTransferInstructionAcceptContextV2(requestCid)
         outcome <- exerciseWalletAction((installCid, _) => {
           Future.successful(
             installCid
@@ -1116,16 +1116,72 @@ class HttpWalletHandler(
   override def rejectTokenStandardTransferV2(
       respond: WalletResource.RejectTokenStandardTransferV2Response.type
   )(contractId: String)(
-      extracted: WalletUserRequest
-  ): Future[WalletResource.RejectTokenStandardTransferV2Response] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5415").asRuntimeException())
+      tUser: WalletUserRequest
+  ): Future[WalletResource.RejectTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(_, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.rejectTokenStandardTransfer") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionRejectContextV2(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Reject(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Reject(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.RejectTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
 
   override def withdrawTokenStandardTransferV2(
       respond: WalletResource.WithdrawTokenStandardTransferV2Response.type
   )(contractId: String)(
-      extracted: WalletUserRequest
-  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5415").asRuntimeException())
+      tUser: WalletUserRequest
+  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(_, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.withdrawTokenStandardTransferV2") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionWithdrawContextV2(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Withdraw(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Withdraw(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.WithdrawTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
 
   override def allocateAmulet(respond: WalletResource.AllocateAmuletResponse.type)(
       body: AllocateAmuletRequest

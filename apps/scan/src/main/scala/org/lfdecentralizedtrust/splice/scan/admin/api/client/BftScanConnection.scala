@@ -564,13 +564,13 @@ class BftScanConnection(
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     bftCall(_.getTransferFactoryRaw(arg))
 
-  def getTransferInstructionAcceptContext(
+  def getTransferInstructionAcceptContextV2(
       instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionAcceptContext(instructionCid)
   )
 
-  def getTransferInstructionAcceptContext(
+  def getTransferInstructionAcceptContextV2(
       instructionCid: transferinstructionv2.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionAcceptContextV2(instructionCid)
@@ -582,10 +582,22 @@ class BftScanConnection(
     _.getTransferInstructionRejectContext(instructionCid)
   )
 
+  def getTransferInstructionRejectContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionRejectContextV2(instructionCid)
+  )
+
   def getTransferInstructionWithdrawContext(
       instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionWithdrawContext(instructionCid)
+  )
+
+  def getTransferInstructionWithdrawContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionWithdrawContextV2(instructionCid)
   )
 
   def getTransferInstructionAcceptContextRaw(

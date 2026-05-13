@@ -39,7 +39,8 @@ import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchro
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.http.v0.scanStream.ScanStreamResource
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStandardMetadataResource
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionV1Resource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2.Resource as TokenStandardTransferInstructionV2Resource
 import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationV1Resource
 import org.lfdecentralizedtrust.tokenstandard.allocation.v2.Resource as TokenStandardAllocationV2Resource
 import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionV1Resource
@@ -513,9 +514,13 @@ class ScanApp(
                 scanStreamHandler,
                 buildRouteForOperation(_, "scan_stream"),
               ),
-              TokenStandardTransferInstructionResource.routes(
+              TokenStandardTransferInstructionV1Resource.routes(
                 tokenStandardTransferInstructionHandler,
-                buildRouteForOperation(_, "token_standard_transfer_instruction"),
+                buildRouteForOperation(_, "token_standard_transfer_instruction_v1"),
+              ),
+              TokenStandardTransferInstructionV2Resource.routes(
+                tokenStandardTransferInstructionHandler,
+                buildRouteForOperation(_, "token_standard_transfer_instruction_v2"),
               ),
               TokenStandardAllocationInstructionV1Resource.routes(
                 tokenStandardAllocationInstructionHandler,
