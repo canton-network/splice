@@ -640,7 +640,8 @@ function installRunnersServiceAccount(runnersNamespace: Namespace, name: string)
     }
   );
 
-  imagePullSecretByNamespaceNameForServiceAccount('gha-runners', name, [sa]);
+  runnersNamespace.metadata.name.apply(nsName =>
+    imagePullSecretByNamespaceNameForServiceAccount(nsName, name, [sa]));
 }
 
 function installK8sRunnerScaleSets(
