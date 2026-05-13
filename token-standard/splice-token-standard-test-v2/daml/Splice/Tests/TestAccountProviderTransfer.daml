@@ -474,8 +474,8 @@ acceptTransferOffers : MultiRegistry.MultiRegistry -> Party -> V2.InstrumentId -
 acceptTransferOffers registries actor instrumentId = do
   offers <- WalletClientV2.listTransferOffersV2 actor instrumentId
   acceptChoices <- forA offers $ \(cid, offer) -> do
-    case Map.lookup [actor] offer.availableActions of
-      Some actions | V2.TIA_Accept `elem` actions ->
+    case Map.lookup V2.TIA_Accept offer.availableActions of
+      Some actors | [actor] `elem` actors ->
         WalletClientV2.mkAcceptTransferOffer registries actor (cid, offer.transfer)
       _ -> pure mempty
   pure (mconcat acceptChoices)

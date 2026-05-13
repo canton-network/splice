@@ -231,6 +231,7 @@ checkUnlockedBalance p instrumentId balance = do
 
 -- Transfer offers
 ------------------
+
 -- | List pending V2 transfer offers (as sender or receiver)
 listTransferOffersV2 : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.TransferInstructionView)]
 listTransferOffersV2 p instrumentId = do
@@ -238,7 +239,7 @@ listTransferOffersV2 p instrumentId = do
   let pendingOffers = do
         (cid, Some instr) <- instrs
         guard (instr.transfer.instrumentId == instrumentId)
-        guard ([p] `Map.member` instr.availableActions)
+        guard (any ([p] `elem`) (Map.values instr.availableActions))
         pure (cid, instr)
   pure pendingOffers
 

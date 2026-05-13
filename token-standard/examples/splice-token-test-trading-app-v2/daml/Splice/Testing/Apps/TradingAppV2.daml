@@ -49,8 +49,9 @@ template OTCTradeAllocationRequest with
         settleAt = Some settleAt
         allocations
         authorizer
-        availableActions = Map.fromList
-          [ ([p], [V2.ARA_Accept, V2.ARA_Reject]) | p <- regularAccountParties authorizer ]
+        availableActions =
+          let possibleActors = [ [p] | p <- regularAccountParties authorizer] in
+          Map.fromList [ (action, possibleActors) | action <- [V2.ARA_Accept, V2.ARA_Reject]]
         meta = emptyMetadata
 
       allocationRequest_acceptExtraObservers = allocationRequestV2_acceptDefaultExtraObservers this

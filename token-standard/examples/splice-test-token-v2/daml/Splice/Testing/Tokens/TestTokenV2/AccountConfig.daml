@@ -471,22 +471,15 @@ tryAdvanceState admin spec authState fromState = resultState
       -- Init -> Withdrawn or Init -> Accepted -> Withdrawn.
       (_,(authed, _))::_ -> tryAdvanceState admin spec authState authed
 
--- Utility function to reverse a map action->[[Party]] to [Party]->[Action]
--- and vice versa
-invertMap : (Ord a, Ord b) => Map.Map a [b] -> Map.Map b [a]
-invertMap m =
-  Map.fromListWithR (++) $
-  concatMap (\(x, ys) -> map (, [x]) ys) $
-  Map.toList m
-
 -- Creates the available actions map for an auth state machine
 mkAvailableActions : (Ord actionType, Show actionType, Ord stateType, Enum stateType , Show stateType) =>
   Party
   -> AuthStateMachine actionType stateType
   -> AuthState actionType
   -> AccountConfigMap
-  -> Map.Map [Party] [actionType]
-mkAvailableActions admin spec authState accountMap = invertMap (Map.fromList nextActors)
+  -> Map.Map actionType [[Party]]
+mkAvailableActions admin spec authState accountMap =
+    Map.fromList $ filter (\(_, actors) -> not (null actors)) nextActors
   where
     state = getState admin spec authState
     oPossibleTransitions = Map.toList <$> Map.lookup state spec
@@ -520,7 +513,7 @@ applyStateMachineTransitions
   -> (viewTp -> AuthStateMachine actionType stateType)
   -> AccountConfigMap
   -> (stateType -> stateType -> Update resType)
-  -> (AuthState actionType -> Map.Map [Party] [actionType] -> Update resType)
+  -> (AuthState actionType -> Map.Map actionType [[Party]] -> Update resType)
   -> ([Party] -> actionType -> resType -> AuthState actionType -> AccountConfigMap -> ExtraArgs -> Update (Optional resType))
   -> ExtraArgs
   -> Update resType
@@ -537,10 +530,9 @@ applyStateMachineTransitions admin this oSelf actors action mkStateMachine accou
     -- First check the actors are allowed to authorize the action.
   let
     availableActions = mkAvailableActions admin spec authState accountMap
-    invertedAvailableActions = invertMap availableActions
     possibleActors = fromSomeNote
       ("Unexpected: applyStateMachineTransitions called with unavailable action " <> show action)
-      $ Map.lookup action invertedAvailableActions
+      $ Map.lookup action availableActions
 
   checkActors actors possibleActors
 

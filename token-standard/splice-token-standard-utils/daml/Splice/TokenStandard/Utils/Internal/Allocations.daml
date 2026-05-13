@@ -497,7 +497,7 @@ instance BackwardCompatible AllocationV1.AllocationView AllocationV2.AllocationV
 -- | Generic method that allows to upcast a V1 allocation specification to a V2 one with custom available actions,
 -- and a custom `originalAllocationCid`.
 upcast_v1_v2_Allocation
-  : Optional (ContractId AllocationV2.Allocation) -> Map.Map [Party] [AllocationV2.AllocationAction] -> AllocationV1.AllocationView -> AllocationV2.AllocationView
+  : Optional (ContractId AllocationV2.Allocation) -> Map.Map  AllocationV2.AllocationAction [[Party]] -> AllocationV1.AllocationView -> AllocationV2.AllocationView
 upcast_v1_v2_Allocation originalAllocationCid availableActions (AllocationV1.AllocationView with allocation, holdingCids, meta) =
   AllocationV2.AllocationView with
     originalAllocationCid
@@ -510,21 +510,23 @@ upcast_v1_v2_Allocation originalAllocationCid availableActions (AllocationV1.All
     meta
 
 -- | Available actions for a V1 allocation that uses the default controllers for its actions.
-allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map [Party] [AllocationV2.AllocationAction]
+allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV1_availableActionsDefault allocView = Map.fromList
-  [ ([leg.sender], [AllocationV2.AA_Withdraw])
-  , (dedupSort [leg.sender, leg.receiver, allocation.settlement.executor], [AllocationV2.AA_Settle, AllocationV2.AA_Cancel])
+  [ (AllocationV2.AA_Withdraw, [[leg.sender]])
+  , (AllocationV2.AA_Settle, [v1SettleControllers])
+  , (AllocationV2.AA_Cancel, [v1SettleControllers])
   ]
   where
+    v1SettleControllers = dedupSort [leg.sender, leg.receiver, allocation.settlement.executor]
     allocation = allocView.allocation
     leg = allocation.transferLeg
 
 -- | Available actions for a V2 allocation that uses the default controllers for its actions.
-allocationV2_availableActionsDefault : AllocationV2.AllocationSpecification -> Map.Map [Party] [AllocationV2.AllocationAction]
+allocationV2_availableActionsDefault : AllocationV2.AllocationSpecification -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV2_availableActionsDefault allocation = Map.fromList
-  [ ([accountPrincipal allocation.admin allocation.authorizer], [AllocationV2.AA_Withdraw])
-  , (dedupSort allocation.settlement.executors, [AllocationV2.AA_Cancel])
-  , (dedupSort (allocation.admin :: allocation.settlement.executors), [AllocationV2.AA_Settle])
+  [ (AllocationV2.AA_Withdraw, [[accountPrincipal allocation.admin allocation.authorizer]])
+  , (AllocationV2.AA_Cancel, [dedupSort allocation.settlement.executors])
+  , (AllocationV2.AA_Settle, [dedupSort (allocation.admin :: allocation.settlement.executors)])
   ]
 
 instance BackwardCompatible (ContractId AllocationV1.Allocation) (ContractId AllocationV2.Allocation) where

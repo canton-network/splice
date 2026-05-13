@@ -54,7 +54,7 @@ template TokenAllocationInstructionV2 with
       -- AIA_Accept must be approved by all account parties of the authorizer.
       -- AIA_Withdraw must be approved by those account parties of the authorizer, which have
       -- already approved Accept.
-    availableActions : Map.Map [Party] [V2.AllocationInstructionAction]
+    availableActions : Map.Map V2.AllocationInstructionAction [[Party]]
       -- ^ Stored results of mkAvailableAllocationActions at time of creation as we cannot
       -- access account contracts in view function.
     inputHoldingCids : TextMap.TextMap [ContractId V2.Holding]
@@ -65,7 +65,7 @@ template TokenAllocationInstructionV2 with
   where
     ensure isValidAllocationSpecificationV2 (const True) allocation
     signatory fromOptional [] (Map.lookup V2.AIA_Accept actionAuthorizers), admin
-    observer dedupSort (concat (Map.keys availableActions) <> concat (Map.values actionAuthorizers))
+    observer dedupSort (concatMap concat (Map.values availableActions) <> concat (Map.values actionAuthorizers))
 
     interface instance V2.AllocationInstruction for TokenAllocationInstructionV2 where
       view = V2.AllocationInstructionView with
@@ -163,7 +163,7 @@ template TokenAllocationV2 with
       -- Specifically:
       -- AA_Withdraw must be approved by those account parties of the sender, which have
       -- already approved Accept.
-    availableActions : Map.Map [Party] [V2.AllocationAction]
+    availableActions : Map.Map V2.AllocationAction [[Party]]
       -- ^ Stored results of mkAvailableAllocationActions at time of creation as we cannot
       -- access account contracts in view function.
     lockedTokens : TextMap.TextMap [ContractId V2.Holding]
@@ -333,7 +333,7 @@ template TokenTransferOffer with
       -- TIA_Reject must be approved by both account parties of receiver account.
       -- TIA_Withdraw must be approved by those account parties of the sender, which have
       -- already approved Accept.
-    availableActions : Map.Map [Party] [V2.TransferInstructionAction]
+    availableActions : Map.Map V2.TransferInstructionAction [[Party]]
       -- ^ Stored results of mkAvailableTransferActions at time of creation as we cannot
       -- access account contracts in view function.
     transfer : V2.Transfer
@@ -343,7 +343,7 @@ template TokenTransferOffer with
     ensure isValidTransferV2 transfer
     signatory fromOptional [] (Map.lookup V2.TIA_Accept actionAuthorizers), transfer.instrumentId.admin
     -- Visible to anyone that has or can authorize an action
-    observer dedupSort (concat (Map.keys availableActions) <> concat (Map.values actionAuthorizers))
+    observer dedupSort (concatMap concat (Map.values availableActions) <> concat (Map.values actionAuthorizers))
 
     interface instance V2.TransferInstruction for TokenTransferOffer where
       view = V2.TransferInstructionView with
