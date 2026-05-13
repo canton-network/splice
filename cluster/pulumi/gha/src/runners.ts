@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
 import {
   appsAffinityAndTolerations,
   DOCKER_REPO,
@@ -67,9 +68,9 @@ function installDockerRunnerScaleSet(
   dockerConfigSecret: Secret,
   resources: K8sResourceSchema,
   serviceAccountName: string,
+  repo: string,
   dependsOn: Resource[]
 ): k8s.helm.v3.Release {
-  const repo = ghaConfig.githubRepo;
   return new k8s.helm.v3.Release(
     name,
     {
@@ -77,7 +78,7 @@ function installDockerRunnerScaleSet(
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
       values: {
-        githubConfigUrl: repo,
+        githubConfigUrl: `${ghaConfig.githubOrg}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,
         runnerScaleSetName: name,
         listenerTemplate: {
@@ -256,7 +257,8 @@ function installDockerRunnerScaleSets(
   runnersNamespace: Namespace,
   tokenSecret: Secret,
   cachePvc: PersistentVolumeClaim,
-  serviceAccountName: string
+  serviceAccountName: string,
+  repo: string
 ): void {
   const configMap = new k8s.core.v1.ConfigMap(
     'gha-runner-config',
@@ -309,6 +311,7 @@ function installDockerRunnerScaleSets(
         dockerClientConfigSecret,
         spec.resources,
         serviceAccountName,
+        repo,
         dependsOn
       );
     });
@@ -324,9 +327,10 @@ function installK8sRunnerScaleSet(
   runnersNamespace: Namespace,
   name: string,
   tokenSecret: Secret,
-  cachePvcName: string,
+  cachePvcName: pulumi.Output<string>,
   resources: K8sResourceSchema,
   serviceAccountName: string,
+  repo: string,
   dependsOn: Resource[],
   performanceTestsDb: PerformanceTestDb
 ): Release {
@@ -412,8 +416,6 @@ function installK8sRunnerScaleSet(
 
   const runnerImage = `${DOCKER_REPO}/splice-test-runner-hook:${ghaConfig.runnerHookVersion}`;
 
-  const repo = ghaConfig.githubRepo;
-
   return new k8s.helm.v3.Release(
     name,
     {
@@ -421,7 +423,7 @@ function installK8sRunnerScaleSet(
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
       values: {
-        githubConfigUrl: repo,
+        githubConfigUrl: `${ghaConfig.githubOrg}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,
         runnerScaleSetName: name,
         listenerTemplate: {
@@ -644,9 +646,10 @@ function installK8sRunnerScaleSets(
   controller: k8s.helm.v3.Release,
   runnersNamespace: Namespace,
   tokenSecret: Secret,
-  cachePvcName: string,
+  cachePvcName: pulumi.Output<string>,
   serviceAccountName: string,
-  performanceTestsDb: PerformanceTestDb
+  performanceTestsDb: PerformanceTestDb,
+  repo: string
 ): void {
   const dependsOn = [controller, runnersNamespace, tokenSecret, performanceTestsDb.db];
 
@@ -660,6 +663,7 @@ function installK8sRunnerScaleSets(
         cachePvcName,
         spec.resources,
         serviceAccountName,
+        repo,
         dependsOn,
         performanceTestsDb
       );
@@ -700,16 +704,17 @@ function installPodMonitor(runnersNamespace: Namespace) {
   );
 }
 
-const GHA_NAMESPACE_NAME = 'gha-runners';
-export function installRunnerScaleSets(controller: k8s.helm.v3.Release): void {
-  const runnersNamespace = new Namespace(GHA_NAMESPACE_NAME, {
+export function installRunnerScaleSets(controller: k8s.helm.v3.Release, repo: string): void {
+  const namespace_name = `gha-runners-${repo}`;
+
+  const runnersNamespace = new Namespace(namespace_name, {
     metadata: {
-      name: GHA_NAMESPACE_NAME,
+      name: namespace_name,
     },
   });
   const exactNs: ExactNamespace = {
     ns: runnersNamespace,
-    logicalName: GHA_NAMESPACE_NAME,
+    logicalName: namespace_name,
   };
 
   const tokenSecret = new k8s.core.v1.Secret(
@@ -736,21 +741,22 @@ export function installRunnerScaleSets(controller: k8s.helm.v3.Release): void {
       dependsOn: runnersNamespace,
     }
   );
-  const cachePvcName = 'gha-cache-pvc';
-  const cachePvc = createCachePvc(runnersNamespace, cachePvcName);
+  // For security reasons, we isolate the caches of different repos
+  const cachePvc = createCachePvc(runnersNamespace, repo);
 
   const saName = 'k8s-runners';
   installRunnersServiceAccount(runnersNamespace, saName);
 
   const performanceTestsDb = createCloudSQLInstanceForPerformanceTests(exactNs);
-  installDockerRunnerScaleSets(controller, runnersNamespace, tokenSecret, cachePvc, saName);
+  installDockerRunnerScaleSets(controller, runnersNamespace, tokenSecret, cachePvc, saName, repo);
   installK8sRunnerScaleSets(
     controller,
     runnersNamespace,
     tokenSecret,
-    cachePvcName,
+    cachePvc.metadata.name,
     saName,
-    performanceTestsDb
+    performanceTestsDb,
+    repo
   );
   installPodMonitor(runnersNamespace);
 }
