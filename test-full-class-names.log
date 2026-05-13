@@ -1,5 +1,6 @@
 org.lfdecentralizedtrust.splice.integration.tests.AmuletAllocationsIntegrationTest
 org.lfdecentralizedtrust.splice.integration.tests.AmuletExpiryIntegrationTest
+org.lfdecentralizedtrust.splice.integration.tests.AmuletWithMinimalVersionExpiryIntegrationTest
 org.lfdecentralizedtrust.splice.integration.tests.Ans4SvsIntegrationTest
 org.lfdecentralizedtrust.splice.integration.tests.AnsIntegrationTest
 org.lfdecentralizedtrust.splice.integration.tests.AutomationControlIntegrationTest

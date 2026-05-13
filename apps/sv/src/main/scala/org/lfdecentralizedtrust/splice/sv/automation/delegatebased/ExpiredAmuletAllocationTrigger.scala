@@ -66,6 +66,7 @@ class ExpiredAmuletAllocationTrigger(
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireAmuletAllocations(
         allParties.toSeq,
+        Seq(store.key.dsoParty),
         clock.now,
       )
       res <-
