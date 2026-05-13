@@ -115,13 +115,13 @@ class DbAppActivityRecordStore(
   override protected def timeouts = new ProcessingTimeout
 
   /** Cached record time (microseconds since epoch) of the completeness boundary.
-    * Set by [[ActivityIngestionMetaCheck]] when the meta row is confirmed.
+    * Set by [[ensureMetaDBIO]] when the meta row is confirmed.
     * Activity records before this time should not be served.
     */
   private val cachedStartedIngestingAt =
     new AtomicReference[Option[Long]](None)
 
-  /** Set the completeness boundary. Called by ActivityIngestionMetaCheck. */
+  /** Set the completeness boundary. Called internally by [[ensureMetaDBIO]]. */
   def setStartedIngestingAt(micros: Long): Unit =
     cachedStartedIngestingAt.set(Some(micros))
 

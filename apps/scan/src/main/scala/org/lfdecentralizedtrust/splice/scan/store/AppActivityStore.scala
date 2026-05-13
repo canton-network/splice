@@ -26,8 +26,7 @@ trait AppActivityStore {
 
   /** The completeness boundary (microseconds since epoch), if known.
     * Activity records for events before this time should not be served.
-    * Set by [[org.lfdecentralizedtrust.splice.scan.store.db.ActivityIngestionMetaCheck]]
-    * when the meta row is confirmed.
+    * Set internally by the store when the meta row is confirmed.
     */
   def startedIngestingAt: Option[Long]
 }

@@ -35,15 +35,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.scan.mediator.MediatorVerdictsClient
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanMediatorVerdictIngestionMetrics
 import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  ActivityIngestionMetaCheck,
-  DbScanVerdictStore,
-}
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.{
-  Checked,
-  DowngradeDetected,
-  NotReady,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
 
@@ -72,14 +64,6 @@ class ScanVerdictIngestionService(
     tracer: Tracer,
     esf: ExecutionSequencerFactory,
 ) extends RetryingService(config.automation, backoffClock, "verdict ingestion") {
-
-  private val activityMetaCheckO: Option[ActivityIngestionMetaCheck] =
-    store.appActivityRecordStoreO.map { activityStore =>
-      new ActivityIngestionMetaCheck(
-        activityStore,
-        loggerFactory,
-      )
-    }
 
   private lazy val currentMediatorClient =
     new MediatorVerdictsClient(
@@ -250,47 +234,26 @@ class ScanVerdictIngestionService(
           case None => Future.successful(Seq.empty)
         }
 
-        // Ensure meta row exists and versions match (first batch with activity records).
-        activityIngestionStarted <- activityMetaCheckO match {
-          case Some(metaCheck) =>
-            val ingestionStart = if (appActivityRecords.nonEmpty) {
-              val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
-                CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
-              )
-              val earliestRound = appActivityRecords
-                .map(_._2.roundNumber)
-                .foldLeft(Long.MaxValue)(math.min)
-              Some((firstRecordTimeMicros, earliestRound))
-            } else None
-            metaCheck.ensure(ingestionStart).map {
-              case Checked(d: DowngradeDetected) =>
-                logger.error(d.message)
-                sys.exit(1)
-              case NotReady => false
-              case Checked(_) => true
-            }
-          case None => Future.successful(false)
+        _ = ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
+        ingestionStart =
+          if (!store.activityIngestionStarted && appActivityRecords.nonEmpty) {
+            val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
+              CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
+            )
+            val earliestRound = appActivityRecords
+              .map(_._2.roundNumber)
+              .foldLeft(Long.MaxValue)(math.min)
+            Some((firstRecordTimeMicros, earliestRound))
+          } else None
+        downgradeO <- store.insertVerdictsWithAppActivityRecords(
+          items,
+          appActivityRecords,
+          ingestionStart,
+        )
+        _ = downgradeO.foreach { d =>
+          logger.error(d.message)
+          sys.exit(1)
         }
-
-        // After activity ingestion has started, every verdict must have a traffic summary.
-        _ <-
-          if (activityIngestionStarted) {
-            val missingTimes = verdicts
-              .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-              .filterNot(summaryByTime.keySet.contains)
-            if (missingTimes.nonEmpty)
-              Future.failed(
-                Status.INTERNAL
-                  .withDescription(
-                    s"${missingTimes.size} verdicts missing traffic summaries " +
-                      s"after ingestion start: $missingTimes"
-                  )
-                  .asRuntimeException()
-              )
-            else Future.unit
-          } else Future.unit
-
-        _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
       } yield {
         val lastRecordTime = verdicts.lastOption
           .flatMap(v => CantonTimestamp.fromProtoTimestamp(v.getRecordTime).toOption)
@@ -320,7 +283,7 @@ class ScanVerdictIngestionService(
           .fromProtoWithCorrelation(proto, viewHashToViewIdByTime, logger)
       })
       // Recover from NO_EVENT_AT_TIMESTAMPS by returning an empty result.
-      // See ActivityIngestionMetaCheck for when missing summaries are
+      // See ensureVerdictsHaveTrafficSummaries for when missing summaries are
       // tolerated vs treated as errors.
       .recoverWith { case ex @ GrpcException(status, trailers) =>
         val statusProto = StatusProto.fromStatusAndTrailers(status, trailers)
@@ -364,6 +327,26 @@ class ScanVerdictIngestionService(
     }
     (pairs.map(_._1), pairs.toMap)
   }
+
+  /** After activity ingestion has started, every verdict must have a
+    * traffic summary.
+    */
+  private def ensureVerdictsHaveTrafficSummaries(
+      verdicts: Seq[v30.Verdict],
+      summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
+  ): Unit =
+    if (store.activityIngestionStarted) {
+      val missingTimes = verdicts
+        .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+        .filterNot(summaryByTime.keySet.contains)
+      if (missingTimes.nonEmpty)
+        throw Status.INTERNAL
+          .withDescription(
+            s"${missingTimes.size} verdicts missing traffic summaries " +
+              s"after ingestion start: $missingTimes"
+          )
+          .asRuntimeException()
+    }
 
   private def processWhenUnpaused(
       input: (Seq[v30.Verdict], Seq[DbScanVerdictStore.TrafficSummaryT])

@@ -26,7 +26,12 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.{
+  AppActivityRecordT,
+  Checked,
+  DowngradeDetected,
+  EnsureResult,
+}
 
 object DbScanVerdictStore {
   import com.digitalasset.canton.mediator.admin.{v30}
@@ -474,20 +479,24 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert multiple verdicts, their transaction views and app activity records in a single transaction.
+  /** Insert verdicts, transaction views, activity records, and meta row in a single transaction.
     *
     * Verdicts are inserted first to obtain their generated row_ids. The placeholder
     * verdictRowId (= DUMMY_VERDICT_ROW_ID) in each app activity record is then resolved to the
-    * actual row_id (matched by sequencingTime) before insertion.
+    * actual row_id (matched by sequencingTime) before insertion. Finally, the meta row is
+    * checked/inserted via [[DbAppActivityRecordStore.ensureMetaDBIO]].
     *
     * @param items verdicts with their transaction view constructors
     * @param appActivityRecords pre-computed activity records paired with their sequencingTime;
     *                           each record has verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder
+    * @param ingestionStart if `Some((firstRecordTimeMicros, earliestRound))`, a meta row
+    *                       may be inserted; if `None`, the meta check is skipped
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
-  )(implicit tc: TraceContext): Future[Unit] = {
+      ingestionStart: Option[(Long, Long)] = None,
+  )(implicit tc: TraceContext): Future[Option[DowngradeDetected]] = {
     import profile.api.jdbcActionExtensionMethods
 
     val combinedAction = for {
@@ -497,18 +506,35 @@ class DbScanVerdictStore(
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
       _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
-    } yield ()
+      ensureResult <- ensureMetaDBIO(ingestionStart)
+    } yield ensureResult.flatMap {
+      case Checked(d: DowngradeDetected) => Some(d)
+      case _ => None
+    }
 
     futureUnlessShutdownToFuture(
       storage.queryAndUpdate(
         combinedAction.transactionally,
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
-    ).map { _ =>
+    ).map { downgradeO =>
       val maxRt = items.map(_._1.recordTime).maxOption
       maxRt.foreach(advanceLastIngestedRecordTime)
+      downgradeO
     }
   }
+
+  /** Whether activity record ingestion has started (meta row confirmed). */
+  def activityIngestionStarted: Boolean =
+    appActivityRecordStoreO.exists(_.startedIngestingAt.isDefined)
+
+  private def ensureMetaDBIO(
+      ingestionStart: Option[(Long, Long)]
+  ): DBIO[Option[EnsureResult]] =
+    appActivityRecordStoreO match {
+      case None => DBIO.successful(None)
+      case Some(s) => s.ensureMetaDBIO(ingestionStart).map(Some(_))
+    }
 
   def getVerdictByUpdateId(updateId: String)(implicit
       tc: TraceContext
