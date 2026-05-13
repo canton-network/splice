@@ -93,6 +93,36 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
+  /registry/allocations/v2/{allocationId}/choice-contexts/refresh-expiry:
+    post:
+      operationId: "getAllocationRefreshExpiryContext"
+      description: |
+        Get the choice context to refresh the expiry of an allocation.
+      parameters:
+        - name: allocationId
+          description: "The contract ID of the allocation whose expiry to refresh."
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetChoiceContextRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChoiceContext"
+        "400":
+          $ref: "#/components/responses/400"
+        "404":
+          $ref: "#/components/responses/404"
+
 components:
   responses:
     "400":

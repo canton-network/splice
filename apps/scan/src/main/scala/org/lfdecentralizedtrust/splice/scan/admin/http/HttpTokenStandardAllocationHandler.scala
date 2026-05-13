@@ -220,6 +220,20 @@ class HttpTokenStandardAllocationHandler(
     }
   }
 
+  override def getAllocationRefreshExpiryContext(
+      respond: v2.Resource.GetAllocationRefreshExpiryContextResponse.type
+  )(allocationId: String, body: v2.definitions.GetChoiceContextRequest)(
+      extracted: TraceContext
+  ): Future[v2.Resource.GetAllocationRefreshExpiryContextResponse] = {
+    val _ = (respond, allocationId, body, extracted)
+    // TODO(#5529): implement this method and test it
+    Future.failed(
+      io.grpc.Status.UNIMPLEMENTED
+        .withDescription("getAllocationRefreshExpiryContext is not yet implemented")
+        .asRuntimeException()
+    )
+  }
+
   /** Generic method to fetch choice contexts for all choices on an allocation V1 */
   private def getAllocationChoiceContextV1[
       DisclosedContract,

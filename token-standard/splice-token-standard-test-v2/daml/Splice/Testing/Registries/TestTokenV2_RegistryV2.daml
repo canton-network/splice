@@ -56,6 +56,8 @@ instance RegistryApi TestTokenV2Registry where
   getAllocation_CancelContext = registryApi_getCancelContext
   getAllocationInstruction_WithdrawContext = registryApi_getAllocationInstructionContext
   getAllocationInstruction_AcceptContext = registryApi_getAllocationInstructionContext
+  getAllocation_RefreshExpiryContext _ _ _ =
+    abort "getAllocation_RefreshExpiryContext: not implemented as TestTokenV2 tokens do not expire before the settlement deadline"
   getTransferInstruction_AcceptContext = registryApi_getTransferOfferContext
   getTransferInstruction_RejectContext = registryApi_getTransferOfferContext
   getTransferInstruction_WithdrawContext = registryApi_getTransferOfferContext

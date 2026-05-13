@@ -123,6 +123,14 @@ class HttpTokenStandardScanProxyHandler(
   ): Future[allocation.v2.Resource.GetAllocationWithdrawContextResponse] =
     Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5326").asRuntimeException())
 
+    override def getAllocationRefreshExpiryContext(
+      respond: allocation.v2.Resource.GetAllocationRefreshExpiryContextResponse.type
+    )(allocationId: String, body: allocation.v2.definitions.GetChoiceContextRequest)(
+      extracted: AuthenticatedRequest
+    ): Future[allocation.v2.Resource.GetAllocationRefreshExpiryContextResponse] =
+    // TODO(#5529): implement this method and test it
+    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("getAllocationRefreshExpiryContext is not yet implemented in Scan proxy").asRuntimeException())
+
   override def getAllocationCancelContext(
       respond: allocation.v2.Resource.GetAllocationCancelContextResponse.type
   )(allocationId: String, body: allocation.v2.definitions.GetChoiceContextRequest)(

@@ -47,6 +47,8 @@ class RegistryApi app where
 
   getAllocationInstruction_AcceptContext
     : app -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+  getAllocation_RefreshExpiryContext
+    : app -> ContractId V2.Allocation -> Metadata -> Script OpenApiChoiceContext
 
   getTransferInstruction_AcceptContext
     : app -> ContractId V2.TransferInstruction -> Metadata -> Script OpenApiChoiceContext
@@ -90,6 +92,8 @@ data GenericRegistry = GenericRegistry with
 
   ggetAllocationInstruction_AcceptContext
     : ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+  ggetAllocation_RefreshExpiryContext
+    : ContractId V2.Allocation -> Metadata -> Script OpenApiChoiceContext
 
   ggetTransferInstruction_AcceptContext
     : ContractId V2.TransferInstruction -> Metadata -> Script OpenApiChoiceContext
@@ -111,6 +115,7 @@ mkGenericRegistry app =
     ggetAllocation_CancelContext = getAllocation_CancelContext app
     ggetAllocationInstruction_WithdrawContext = getAllocationInstruction_WithdrawContext app
     ggetAllocationInstruction_AcceptContext = getAllocationInstruction_AcceptContext app
+    ggetAllocation_RefreshExpiryContext = getAllocation_RefreshExpiryContext app
     ggetTransferInstruction_AcceptContext = getTransferInstruction_AcceptContext app
     ggetTransferInstruction_RejectContext = getTransferInstruction_RejectContext app
     ggetTransferInstruction_WithdrawContext = getTransferInstruction_WithdrawContext app
@@ -123,6 +128,7 @@ instance RegistryApi GenericRegistry where
   getAllocation_CancelContext registry = registry.ggetAllocation_CancelContext
   getAllocationInstruction_WithdrawContext registry = registry.ggetAllocationInstruction_WithdrawContext
   getAllocationInstruction_AcceptContext registry = registry.ggetAllocationInstruction_AcceptContext
+  getAllocation_RefreshExpiryContext registry = registry.ggetAllocation_RefreshExpiryContext
   getTransferInstruction_AcceptContext registry = registry.ggetTransferInstruction_AcceptContext
   getTransferInstruction_RejectContext registry = registry.ggetTransferInstruction_RejectContext
   getTransferInstruction_WithdrawContext registry = registry.ggetTransferInstruction_WithdrawContext
