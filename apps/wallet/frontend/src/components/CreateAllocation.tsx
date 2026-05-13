@@ -358,14 +358,14 @@ function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV
     validLegSides.push({
       transfer_leg_id: leg.transfer_leg_id,
       side: 'RECEIVERSIDE',
-      other_side: leg.sender,
+      otherside: leg.sender,
       meta: {},
       amount: leg.amount,
     });
     validLegSides.push({
       transfer_leg_id: leg.transfer_leg_id,
       side: 'SENDERSIDE',
-      other_side: leg.receiver,
+      otherside: leg.receiver,
       meta: {},
       amount: leg.amount,
     });

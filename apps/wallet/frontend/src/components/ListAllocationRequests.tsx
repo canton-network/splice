@@ -462,7 +462,7 @@ export function openApiV2RequestFromAllocationRequest(
     transfer_leg_sides: transferLegSides.map(side => ({
       transfer_leg_id: side.transferLegId,
       amount: side.amount,
-      other_side: side.otherside.owner,
+      otherside: side.otherside.owner,
       side: side.side === 'SenderSide' ? 'SENDERSIDE' : 'RECEIVERSIDE',
       meta: side.meta.values,
     })),
