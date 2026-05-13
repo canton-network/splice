@@ -679,11 +679,11 @@ function installK8sRunnerScaleSets(
     });
 }
 
-function installPodMonitor(runnersNamespace: Namespace) {
+function installPodMonitor(runnersNamespace: Namespace, repo: string) {
   // Define a PodMonitor to scrape metrics from the workflow runner pods
   // (identified by the presence of the 'runner-pod' label).
   return new k8s.apiextensions.CustomResource(
-    'workflow-runner-pod-monitor',
+    `workflow-runner-pod-monitor-${repo}`,
     {
       apiVersion: 'monitoring.coreos.com/v1',
       kind: 'PodMonitor',
@@ -767,5 +767,5 @@ export function installRunnerScaleSets(controller: k8s.helm.v3.Release, repo: st
     repo,
     performanceTestsDb
   );
-  installPodMonitor(runnersNamespace);
+  installPodMonitor(runnersNamespace, repo);
 }
