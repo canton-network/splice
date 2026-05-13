@@ -72,7 +72,7 @@ function installDockerRunnerScaleSet(
   dependsOn: Resource[]
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
-    name,
+    `${name}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
@@ -419,7 +419,7 @@ function installK8sRunnerScaleSet(
   const runnerImage = `${DOCKER_REPO}/splice-test-runner-hook:${ghaConfig.runnerHookVersion}`;
 
   return new k8s.helm.v3.Release(
-    name,
+    `${name}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
