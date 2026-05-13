@@ -162,7 +162,7 @@ class TokenStandardFetchFallbackIntegrationTest
                       new AccountV2(aliceParty.toProtoPrimitive, Optional.empty(), ""),
                       new AccountV2(bobParty.toProtoPrimitive, Optional.empty(), ""),
                       BigDecimal(10).bigDecimal,
-                      amuletInstrumentIdV2,
+                      amuletInstrumentIdName,
                       new metadatav1.Metadata(java.util.Map.of()),
                     ),
                   )

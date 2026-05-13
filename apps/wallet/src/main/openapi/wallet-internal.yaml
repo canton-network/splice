@@ -1977,15 +1977,14 @@ components:
       type: object
       required:
         - settlement
-        - transfer_legs
+        - transfer_leg_sides
+        - committed
       properties:
         settlement:
           type: object
           required:
             - executors
             - settlement_ref
-            - requested_at
-            - settle_at
           properties:
             executors:
               type: array
@@ -2000,12 +1999,6 @@ components:
                   type: string
                 cid:
                   type: string
-            requested_at:
-              type: integer
-              format: int64
-            settle_at:
-              type: integer
-              format: int64
             settlement_deadline:
               type: integer
               format: int64
@@ -2013,24 +2006,38 @@ components:
               type: object
               additionalProperties:
                 type: string
-        transfer_legs:
+        transfer_leg_sides:
           type: array
           items:
-            $ref: "#/components/schemas/TransferLegV2"
+            $ref: "#/components/schemas/TransferLegSide"
+        next_iteration_funding:
+          type: object
+          additionalProperties:
+            description: "BigDecimal amount, encoded as string to prevent precision loss"
+            type: string
+        committed:
+          type: boolean
+          default: false
+        meta:
+          type: object
+          additionalProperties:
+            type: string
 
-    TransferLegV2:
+    TransferLegSide:
       type: object
       required:
         - transfer_leg_id
-        - sender
-        - receiver
+        - side
+        - otherside
         - amount
       properties:
         transfer_leg_id:
           type: string
-        sender:
+        side:
           type: string
-        receiver:
+          enum: [ SENDERSIDE, RECEIVERSIDE ]
+        otherside:
+          description: A party id
           type: string
         amount:
           type: string

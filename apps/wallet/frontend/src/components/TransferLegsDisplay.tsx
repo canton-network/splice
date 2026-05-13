@@ -70,7 +70,7 @@ const TransferLegsDisplay: React.FC<{
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" className="allocation-amount-instrument">
-                    {BigNumber(amount).toFormat()} {instrumentId.id}
+                    {BigNumber(amount).toFormat()} {instrumentId}
                   </Typography>
                 </TableCell>
                 <TableCell>

@@ -237,7 +237,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
     transition fromState toState =  case (fromState, toState) of
 
       (AS_Init, AS_Withdrawn) -> do
-        -- FIXME: ensureWithdrawIsAllowed allocation
+        ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockTokenAllocationV2 "allocation withdrawn" this extraArgs
         pure V2.AllocationResult
           with

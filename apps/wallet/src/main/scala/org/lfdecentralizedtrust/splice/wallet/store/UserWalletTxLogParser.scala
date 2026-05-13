@@ -119,8 +119,7 @@ class UserWalletTxLogParser(
   import UserWalletTxLogParser.*
 
   private val endUserPartyProtoPrimitive = endUserParty.toProtoPrimitive
-  // TODO (#4973): remove this if/when v1 and v2 InstrumentId are unified
-  private val amuletInstrumentIdV2 = "Amulet"
+  private val amuletInstrumentIdName = "Amulet"
 
   // ignoreUnexpectedAmuletCreateArchive disables the warning when we
   // hit a bare create/archive of an amulet contract.  We use this for
@@ -1105,7 +1104,7 @@ class UserWalletTxLogParser(
               node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
                 case (stateAcc, transferLeg) =>
                   if (
-                    transferLeg.instrumentId == amuletInstrumentIdV2 && (transferLeg.receiver.owner == endUserPartyProtoPrimitive || transferLeg.sender.owner == endUserPartyProtoPrimitive)
+                    transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner == endUserPartyProtoPrimitive || transferLeg.sender.owner == endUserPartyProtoPrimitive)
                   ) {
                     stateAcc.appended(
                       State(
