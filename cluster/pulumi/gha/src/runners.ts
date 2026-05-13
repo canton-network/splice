@@ -335,7 +335,7 @@ function installK8sRunnerScaleSet(
   dependsOn: Resource[],
   performanceTestsDb?: PerformanceTestDb
 ): Release {
-  const podConfigMapName = `${name}-pod-config`;
+  const podConfigMapName = `${name}-pod-config-${repo}`;
   // A configMap that will be mounted to runner pods and provide additional pod spec for the workflow pods
   const workflowPodConfigMap = cachePvcName.apply(cachePvcName =>
     new k8s.core.v1.ConfigMap(
