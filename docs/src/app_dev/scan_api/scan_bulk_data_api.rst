@@ -439,9 +439,10 @@ App activity records
 .. warning::
 
    This field is experimental while CIP-0104 traffic-based app rewards are in preview.
-   It will be stabilised once CIP-0104 exits the preview phase and is fully enabled on mainnet.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
 
-Each event may include an ``app_activity_records`` field containing per-app-provider
+Each event includes an ``app_activity_records`` field containing per-app-provider
 activity weights computed from traffic summaries as per
 `CIP-0104 <https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md>`_.
 This is present when a traffic summary is available for the event.
