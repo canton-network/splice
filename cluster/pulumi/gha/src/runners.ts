@@ -727,10 +727,10 @@ export function installRunnerScaleSets(controller: k8s.helm.v3.Release, repo: st
   };
 
   const tokenSecret = new k8s.core.v1.Secret(
-    'gh-access-token',
+    `gh-access-token-${repo}`,
     {
       metadata: {
-        name: 'gh-access-token',
+        name: `gh-access-token-${repo}`,
         namespace: runnersNamespace.metadata.name,
       },
       stringData: {
