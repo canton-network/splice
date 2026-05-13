@@ -81,39 +81,42 @@ trait PackageVersionSupport extends NamedLogging {
       DarResources.amulet_0_1_16,
     )
 
-  def supports24hSubmissionDelay(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext,
-      ec: ExecutionContext,
+  def supports24hSubmissionDelay(
+      amuletParties: Seq[PartyId],
+      dsoGovernanceParties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
   ): Future[FeatureSupport] = {
     isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceAmulet,
+      Seq(
+        PackageIdResolver.Package.SpliceDsoGovernance -> dsoGovernanceParties,
+        PackageIdResolver.Package.SpliceAmulet -> amuletParties,
+      ),
       now,
       DarResources.amulet,
       DarResources.amulet_0_1_17,
-    ).map { fs =>
-      // governance minimal supported version is 0.1.15
-      val amuletToGovFallback: Map[String, String] = Map(
-        DarResources.amulet_0_1_15.packageId -> DarResources.dsoGovernance_0_1_21.packageId,
-        DarResources.amulet_0_1_16.packageId -> DarResources.dsoGovernance_0_1_22.packageId,
-      )
-      fs.copy(
-        packageIds = fs.packageIds ++ fs.packageIds.flatMap(amuletToGovFallback.get)
-      )
-    }
+      ignoreRedundantCheck = true,
+    )
   }
 
   // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
 
-  def supportsExpireTransferInstructions(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext,
-      ec: ExecutionContext,
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(parties, now)
+  def supportsExpireTransferInstructions(
+      amuletParties: Seq[PartyId],
+      dsoGovernanceParties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
 
-  def supportsExpireAmuletAllocations(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext,
-      ec: ExecutionContext,
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(parties, now)
+  def supportsExpireAmuletAllocations(
+      amuletParties: Seq[PartyId],
+      dsoGovernanceParties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
 
   def supports24hSubmissionDelayDsoGovernance(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext

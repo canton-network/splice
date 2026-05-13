@@ -53,6 +53,7 @@ class ExpiredAmuletTrigger(
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
         informees.toSeq,
+        Seq(store.key.dsoParty),
         context.clock.now,
       )
       cmds <-
