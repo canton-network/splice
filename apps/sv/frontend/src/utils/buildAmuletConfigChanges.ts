@@ -31,7 +31,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'featuredAppActivityMarkerAmount',
       label:
-        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in USD)',
+        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in $USD)',
       currentValue: before?.featuredAppActivityMarkerAmount || '',
       newValue: after?.featuredAppActivityMarkerAmount || '',
     },
@@ -74,7 +74,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'transferConfigExtraFeaturedAppRewardAmount',
       label:
-        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in USD)',
+        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in $USD)',
       currentValue: before?.transferConfig.extraFeaturedAppRewardAmount || '',
       newValue: after?.transferConfig.extraFeaturedAppRewardAmount || '',
     },
@@ -360,7 +360,7 @@ function buildDecentralizedSynchronizerChanges(
     },
     {
       fieldName: 'decentralizedSynchronizerFeesExtraTrafficPrice',
-      label: 'Traffic fees: Extra traffic: Price (in USD/MB)',
+      label: 'Traffic fees: Extra traffic: Price (in $USD per MB)',
       currentValue: before?.fees.extraTrafficPrice || '',
       newValue: after?.fees.extraTrafficPrice || '',
     },
