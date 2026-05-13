@@ -194,7 +194,6 @@ data AllocationView = AllocationView with
       -- Registries SHOULD avoid unnecessary refreshes by
       --   - making the expiry time as close to the settlement deadline as possible
       --   - bumping expiry on every settlement iteration.
-      --
     availableActions : Map.Map [Party] [AllocationAction]
       -- ^ The actions that the wallet can present to the user on the allocation.
       --
