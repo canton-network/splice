@@ -1325,6 +1325,42 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetHoldingsSummaryAtV1(
+      at: java.time.OffsetDateTime,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId],
+      recordTimeMatch: Option[definitions.HoldingsSummaryRequestV1.RecordTimeMatch],
+  ) extends InternalBaseCommand[
+        http.GetHoldingsSummaryAtV1Response,
+        Option[definitions.HoldingsSummaryResponseV1],
+      ] {
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetHoldingsSummaryAtV1Response] =
+      client.getHoldingsSummaryAtV1(
+        definitions.HoldingsSummaryRequestV1(
+          migrationId,
+          at,
+          recordTimeMatch,
+          ownerPartyIds.map(_.toProtoPrimitive),
+        ),
+        headers,
+      )
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[http.GetHoldingsSummaryAtV1Response, Either[
+      String,
+      Option[definitions.HoldingsSummaryResponseV1],
+    ]] = {
+      case http.GetHoldingsSummaryAtV1Response.OK(value) =>
+        Right(Some(value))
+      case http.GetHoldingsSummaryAtV1Response.NotFound(_) =>
+        Right(None)
+    }
+  }
+
   object GetAggregatedRounds
       extends InternalBaseCommand[http.GetAggregatedRoundsResponse, Option[
         ScanAggregator.RoundRange
@@ -2517,9 +2553,14 @@ object HttpScanAppClient {
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ) extends InternalBaseCommand[http.ListVoteRequestResultsResponse, Seq[
-        DsoRules_CloseVoteRequestResult
-      ]] {
+      pageToken: Option[BigInt] = None,
+  ) extends InternalBaseCommand[
+        http.ListVoteRequestResultsResponse,
+        (
+            Seq[DsoRules_CloseVoteRequestResult],
+            Option[BigInt],
+        ),
+      ] {
 
     override def submitRequest(
         client: ScanClient,
@@ -2533,6 +2574,7 @@ object HttpScanAppClient {
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         ),
         headers = headers,
       )
@@ -2540,18 +2582,17 @@ object HttpScanAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case http.ListVoteRequestResultsResponse.OK(response) =>
-      Right(
-        response.dsoRulesVoteResults
-          .map(e =>
-            decoder.decodeValue(
-              DsoRules_CloseVoteRequestResult.valueDecoder(),
-              DsoRules_CloseVoteRequestResult._packageId,
-              "Splice.DsoRules",
-              "DsoRules_CloseVoteRequestResult",
-            )(e)
-          )
-          .toSeq
-      )
+      val results = response.dsoRulesVoteResults
+        .map(e =>
+          decoder.decodeValue(
+            DsoRules_CloseVoteRequestResult.valueDecoder(),
+            DsoRules_CloseVoteRequestResult._packageId,
+            "Splice.DsoRules",
+            "DsoRules_CloseVoteRequestResult",
+          )(e)
+        )
+        .toSeq
+      Right((results, response.nextPageToken))
     }
   }
 

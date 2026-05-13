@@ -7,12 +7,29 @@
 
 .. release-notes:: Upcoming
 
-    - Scan app
+    - Wallet & CNS UIs
 
-        - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
-          This required clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
-          This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
-          Specifically the ``app_activity_records`` field will not contain the
-          data which has been provided for the events which happened between the ``0.5.18`` and this release.
-          Note that the ``app_activity_records`` data already provided for events during this period is correct
-          and the network explorers who have ingested this data should keep a copy of it.
+      - The wallet and CNS UIs now support optionally configuring the OAuth token scope, to support IAM providers that require doing so.
+
+    - Scan UI
+
+      - Bring back the governance page that was removed in release 0.5.18.
+
+    - Wallet UI
+
+      - Fix a corner case in the wallet Allocations UI where invalid values would be passed to ``/v0/allocations`` when creating allocations from allocation requests.
+        This could manifest as a browser error when clicking ``Accept`` on an allocation request.
+
+    - SV app
+
+      - SV participants now use the public sequencer URL instead of
+        the internal one to connect to their sequencer. This avoids
+        some redundant reconnects around LSUs where the participant
+        LSU automation would set the public URL while the SV app would
+        set the internal one.
+
+        The prior behavior can be set recovered by setting
+        ``canton.sv-apps.sv.use-internal-sequencer-api = true``
+        through an ``ADDITIONAL_CONFIG`` environment variable. LSUs
+        will still work but be slightly slower due to extra
+        reconnects.

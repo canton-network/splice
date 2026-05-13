@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
 
 import App from '../App';
@@ -84,44 +84,40 @@ describe('Development Fund page', () => {
 
   test('applies allocation amount validation', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       }),
-      rest.get(`${walletUrl}/v0/scan-proxy/unclaimed-development-fund-coupons`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            unclaimed_development_fund_coupons: [
-              {
-                contract: {
-                  payload: {
-                    amount: '10.0',
-                  },
+      http.get(`${walletUrl}/v0/scan-proxy/unclaimed-development-fund-coupons`, () => {
+        return HttpResponse.json({
+          unclaimed_development_fund_coupons: [
+            {
+              contract: {
+                payload: {
+                  amount: '10.0',
                 },
-                domain_id: 'domain-0',
               },
-            ],
-          })
-        );
+              domain_id: 'domain-0',
+            },
+          ],
+        });
       })
     );
 
@@ -140,44 +136,40 @@ describe('Development Fund page', () => {
 
   test('shows amount helper text when allocation amount is zero', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       }),
-      rest.get(`${walletUrl}/v0/scan-proxy/unclaimed-development-fund-coupons`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            unclaimed_development_fund_coupons: [
-              {
-                contract: {
-                  payload: {
-                    amount: '10.0',
-                  },
+      http.get(`${walletUrl}/v0/scan-proxy/unclaimed-development-fund-coupons`, () => {
+        return HttpResponse.json({
+          unclaimed_development_fund_coupons: [
+            {
+              contract: {
+                payload: {
+                  amount: '10.0',
                 },
-                domain_id: 'domain-0',
               },
-            ],
-          })
-        );
+              domain_id: 'domain-0',
+            },
+          ],
+        });
       })
     );
 
@@ -197,28 +189,26 @@ describe('Development Fund page', () => {
 
   test('applies allocation expiration date validation', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       })
     );
 
@@ -239,47 +229,43 @@ describe('Development Fund page', () => {
 
   test('renders development fund history table view', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       }),
-      rest.get(`${walletUrl}/v0/wallet/development-fund-coupons/history`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            development_fund_coupon_history: [
-              {
-                createdAt: '2026-01-01T10:00:00.000Z',
-                archivedAt: '2026-01-02T11:00:00.000Z',
-                beneficiary: alicePartyId,
-                fund_manager: bobPartyId,
-                amount: '3.0',
-                expiresAt: '2026-01-10T11:00:00.000Z',
-                reason: 'Infrastructure improvements',
-                status: 'withdrawn',
-                rejection_or_withdrawal_reason: 'No longer needed',
-              },
-            ],
-          })
-        );
+      http.get(`${walletUrl}/v0/wallet/development-fund-coupons/history`, () => {
+        return HttpResponse.json({
+          development_fund_coupon_history: [
+            {
+              createdAt: '2026-01-01T10:00:00.000Z',
+              archivedAt: '2026-01-02T11:00:00.000Z',
+              beneficiary: alicePartyId,
+              fund_manager: bobPartyId,
+              amount: '3.0',
+              expiresAt: '2026-01-10T11:00:00.000Z',
+              reason: 'Infrastructure improvements',
+              status: 'withdrawn',
+              rejection_or_withdrawal_reason: 'No longer needed',
+            },
+          ],
+        });
       })
     );
 
@@ -292,35 +278,31 @@ describe('Development Fund page', () => {
 
   test('renders empty development fund history table view', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       }),
-      rest.get(`${walletUrl}/v0/wallet/development-fund-coupons/history`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            development_fund_coupon_history: [],
-          })
-        );
+      http.get(`${walletUrl}/v0/wallet/development-fund-coupons/history`, () => {
+        return HttpResponse.json({
+          development_fund_coupon_history: [],
+        });
       })
     );
 
@@ -332,28 +314,26 @@ describe('Development Fund page', () => {
 
   test('renders unclaimed development fund allocations table view', async () => {
     server.use(
-      rest.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, (_, res, ctx) => {
-        return res(
-          ctx.json({
-            ...amuletRules,
-            amulet_rules: {
-              ...amuletRules.amulet_rules,
-              contract: {
-                ...amuletRules.amulet_rules.contract,
-                payload: {
-                  ...amuletRules.amulet_rules.contract.payload,
-                  configSchedule: {
-                    ...amuletRules.amulet_rules.contract.payload.configSchedule,
-                    initialValue: {
-                      ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
-                      optDevelopmentFundManager: alicePartyId,
-                    },
+      http.get(`${walletUrl}/v0/scan-proxy/amulet-rules`, () => {
+        return HttpResponse.json({
+          ...amuletRules,
+          amulet_rules: {
+            ...amuletRules.amulet_rules,
+            contract: {
+              ...amuletRules.amulet_rules.contract,
+              payload: {
+                ...amuletRules.amulet_rules.contract.payload,
+                configSchedule: {
+                  ...amuletRules.amulet_rules.contract.payload.configSchedule,
+                  initialValue: {
+                    ...amuletRules.amulet_rules.contract.payload.configSchedule.initialValue,
+                    optDevelopmentFundManager: alicePartyId,
                   },
                 },
               },
             },
-          })
-        );
+          },
+        });
       })
     );
 

@@ -36,7 +36,9 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetDsoInfoResponse,
+  HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
+  HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
 }
@@ -183,6 +185,15 @@ class BftScanConnection(
       asOfRound: Option[Long],
   )(implicit tc: TraceContext): Future[Option[HoldingsSummaryResponse]] = {
     bftCall(_.getHoldingsSummaryAt(at, migrationId, ownerPartyIds, recordTimeMatch, asOfRound))
+  }
+
+  override def getHoldingsSummaryAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId],
+      recordTimeMatch: Option[HoldingsSummaryRequestV1.RecordTimeMatch],
+  )(implicit tc: TraceContext): Future[Option[HoldingsSummaryResponseV1]] = {
+    bftCall(_.getHoldingsSummaryAtV1(at, migrationId, ownerPartyIds, recordTimeMatch))
   }
 
   override protected def runGetAmuletRulesWithState(
@@ -430,10 +441,11 @@ class BftScanConnection(
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: Int,
+      pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Seq[DsoRules_CloseVoteRequestResult]] = bftCall(
+  ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = bftCall(
     _.listVoteRequestResults(
       actionName,
       accepted,
@@ -441,6 +453,7 @@ class BftScanConnection(
       effectiveFrom,
       effectiveTo,
       limit,
+      pageToken,
     )
   )
 

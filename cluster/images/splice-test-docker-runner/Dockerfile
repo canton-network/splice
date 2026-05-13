@@ -1,5 +1,5 @@
-ARG RUNNER_VERSION=2.333.1
-ARG RUNNER_DIGEST=sha256:b57864c9fcda15ea4a270446aa9cfb108b819a26f6e71fc515f6caf6c27989c6
+ARG RUNNER_VERSION=2.334.0
+ARG RUNNER_DIGEST=sha256:b6614fce332517f74d0a76e7c762fb08e4f2ff13dcf333183397c8a5725b6e8e
 
 # Note that we don't currently support arm64 runners, so we build this only for amd64
 FROM --platform=$BUILDPLATFORM ghcr.io/actions/actions-runner:${RUNNER_VERSION}@${RUNNER_DIGEST}
@@ -10,9 +10,7 @@ ARG RUNNER_VERSION
 LABEL org.opencontainers.image.base.name="ghcr.io/actions/actions-runner:${RUNNER_VERSION}"
 #Ideally, we'd reduce duplication between this and splice-test-ci, but we're not tackling that right now
 
-RUN sudo sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources && \
-    sudo sed -i 's/security.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources && \
-    sudo apt-get update && \
+RUN sudo apt-get update && \
     sudo apt-get install -y sudo git curl xz-utils pigz rsync jq unzip python3-pip moreutils && \
     sudo rm -rf /var/lib/apt/lists/*
 

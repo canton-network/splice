@@ -403,6 +403,7 @@ case class SvAppBackendConfig(
     enableFreeConfirmationResponses: Boolean = true,
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
+    useInternalSequencerApi: Boolean = false,
 ) extends SpliceBackendConfig {
 
   def shouldSkipSynchronizerInitialization: Boolean =
@@ -468,6 +469,14 @@ final case class SequencerPruningConfig(
     pruningInterval: NonNegativeFiniteDuration,
     // data within the retention period preceding the current time will not be removed during the pruning process
     retentionPeriod: NonNegativeFiniteDuration,
+    // TODO(DACH-NY/cn-test-failures#8065) We currently check that the
+    // delta between the earliest and latest transaction on the current
+    // physical synchronizer is > retentionPeriod.  The earliest
+    // available timestamp is itself subject to mediator pruning so we
+    // allow a bit of slack and check that it is
+    // pruningSafetyCheckPercentage * retentionPeriod to ensure we can
+    // actually prune. For 30 days this corresponds to 8 hours slack.
+    pruningSafetyCheckPercentage: Double = 0.99,
 )
 
 final case class SvSequencerConfig(
