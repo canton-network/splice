@@ -104,7 +104,7 @@ describe('Wallet user can', () => {
     await user.type(input, userLogin);
 
     const button = screen.getByRole('button', { name: 'Log In' });
-    user.click(button);
+    await user.click(button);
 
     expect(await screen.findByText(aliceEntry.name)).toBeDefined();
   });
