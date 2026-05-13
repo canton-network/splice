@@ -447,7 +447,7 @@ This is present when a traffic summary is available for the event.
 
 The ``app_activity_records`` object contains:
 
-* **round_number** : The mining round number assigned to the activity records.
+* **round_number** : The minting round number assigned to the activity records.
 * **records** : An array of activity records, one per app provider. Each entry contains:
 
    * **party**: The app provider party identifier.
