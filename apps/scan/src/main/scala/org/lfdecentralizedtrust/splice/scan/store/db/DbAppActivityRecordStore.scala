@@ -17,7 +17,7 @@ import slick.jdbc.{GetResult, PostgresProfile}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.{ExecutionContext, Future}
 
 object DbAppActivityRecordStore {
@@ -409,6 +409,82 @@ class DbAppActivityRecordStore(
         "appActivity.insertActivityRecordMeta",
       )
     )
+
+  import DbAppActivityRecordStore.*
+
+  private val metaChecked = new AtomicBoolean(false)
+
+  /** Future-returning wrapper around [[ensureMetaDBIO]]. */
+  def ensureMeta(
+      ingestionStart: Option[(Long, Long)]
+  )(implicit tc: TraceContext): Future[EnsureResult] =
+    futureUnlessShutdownToFuture(
+      storage.queryAndUpdate(
+        ensureMetaDBIO(ingestionStart),
+        "appActivity.ensureMeta",
+      )
+    )
+
+  /** DBIO action that checks/inserts the meta row.
+    * Composable in a transaction with activity record inserts.
+    *
+    * @param ingestionStart `Some((firstRecordTimeMicros, earliestRound))` when
+    *                       the batch has activity records, `None` otherwise.
+    */
+  def ensureMetaDBIO(
+      ingestionStart: Option[(Long, Long)]
+  ): DBIO[EnsureResult] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    if (metaChecked.get()) DBIO.successful(Checked(Resume))
+    else {
+      for {
+        maxVersions <- sql"""select max(activity_ingestion_code_version),
+                                    max(activity_ingestion_user_version)
+                             from #${Tables.activityRecordMeta}
+                             where history_id = $historyId
+                       """
+          .as[(Option[Int], Option[Int])]
+          .headOption
+          .map(_.flatMap {
+            case (Some(c), Some(u)) => Some((c, u))
+            case _ => None
+          })
+        result <- checkMetaVersions(maxVersions, codeVersion, userVersion) match {
+          case InsertMeta =>
+            ingestionStart match {
+              case None =>
+                DBIO.successful(NotReady: EnsureResult)
+              case Some((firstRecordTimeMicros, earliestRound)) =>
+                sql"""insert into #${Tables.activityRecordMeta}
+                        (history_id, activity_ingestion_code_version,
+                         activity_ingestion_user_version, started_ingesting_at,
+                         earliest_ingested_round)
+                      values ($historyId, $codeVersion, $userVersion,
+                              $firstRecordTimeMicros, $earliestRound)
+                """.asUpdate.map { _ =>
+                  cachedStartedIngestingAt.set(Some(firstRecordTimeMicros))
+                  metaChecked.set(true)
+                  Checked(InsertMeta): EnsureResult
+                }
+            }
+          case Resume =>
+            sql"""select started_ingesting_at
+                  from #${Tables.activityRecordMeta}
+                  where history_id = $historyId
+                    and activity_ingestion_code_version = $codeVersion
+                    and activity_ingestion_user_version = $userVersion
+               """.as[Long].headOption.map { tsO =>
+              tsO.foreach(ts => cachedStartedIngestingAt.set(Some(ts)))
+              metaChecked.set(true)
+              Checked(Resume): EnsureResult
+            }
+          case d: DowngradeDetected =>
+            DBIO.successful(Checked(d): EnsureResult)
+        }
+      } yield result
+    }
+  }
 
   private def runQuerySingle[T](
       action: DBIOAction[Option[T], NoStream, Effect.Read],
