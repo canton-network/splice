@@ -1,11 +1,11 @@
-import { rest, RestHandler } from 'msw';
+import { http, HttpHandler, HttpResponse } from 'msw';
 
 import { ValidatorLicense } from '@daml.js/splice-amulet/lib/Splice/ValidatorLicense';
 
-export function validatorLicensesHandler(baseUrl: string): RestHandler {
-  return rest.get(`${baseUrl}/v0/admin/validator/licenses`, (req, res, ctx) => {
-    const n = parseInt(req.url.searchParams.get('limit')!);
-    const after = req.url.searchParams.get('after');
+export function validatorLicensesHandler(baseUrl: string): HttpHandler {
+  return http.get(`${baseUrl}/v0/admin/validator/licenses`, ({ request }) => {
+    const n = parseInt(new URL(request.url).searchParams.get('limit')!);
+    const after = new URL(request.url).searchParams.get('after');
     const from = after ? parseInt(after) + 1 : 0;
     const aTimestamp = '2024-09-26T16:15:36Z';
     const validatorLicenses = Array.from({ length: n }, (_, i) => {
@@ -30,11 +30,9 @@ export function validatorLicensesHandler(baseUrl: string): RestHandler {
         template_id: ValidatorLicense.templateId,
       };
     });
-    return res(
-      ctx.json({
-        validator_licenses: validatorLicenses,
-        next_page_token: from + n,
-      })
-    );
+    return HttpResponse.json({
+      validator_licenses: validatorLicenses,
+      next_page_token: from + n,
+    });
   });
 }
