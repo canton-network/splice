@@ -39,6 +39,19 @@ vote for that SV; operator votes remain the precedence path. The operator and
 governance-voter paths intentionally share the represented SV's cooldown because
 there is still only one vote slot per SV.
 
+The supported submission path is explicit disclosure: a governance voter that
+is not affiliated with the represented SV presents the Scan-discovered proposal
+and request contract IDs together with the necessary disclosed contracts when
+exercising the cast choice. SV-hosted submission or relay remains a valid
+deployment option but is not required by this design.
+
+Alignment with the dApp standard (CIP-0103) is still an open review item. The
+contract surface — fetching the binding and request by contract ID, no contract
+key on the binding, the action allowlist gate, and explicit ``castBy`` /
+``castByRole`` attribution — was chosen to be compatible with an
+explicit-disclosure flow, but a deliberate review against CIP-0103 is needed
+before this prototype is promoted out of draft.
+
 The first contract slice uses a hardcoded Daml allowlist for governance-voter
 eligible actions. New ``ActionRequiringConfirmation`` constructors are rejected
 by default until reviewed and added deliberately. The proposed allowlist is
