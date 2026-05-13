@@ -2028,7 +2028,7 @@ components:
       required:
         - transfer_leg_id
         - side
-        - other_side
+        - otherside
         - amount
       properties:
         transfer_leg_id:
@@ -2036,7 +2036,7 @@ components:
         side:
           type: string
           enum: [ SENDERSIDE, RECEIVERSIDE ]
-        other_side:
+        otherside:
           description: A party id
           type: string
         amount:

@@ -1264,7 +1264,7 @@ object HttpWalletAppClient {
                   case allocationv2.TransferSide.RECEIVERSIDE =>
                     definitions.TransferLegSide.Side.Receiverside
                 },
-                otherSide = transferLegSide.otherside.owner,
+                otherside = transferLegSide.otherside.owner,
                 Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
                 Some(transferLegSide.meta.values.asScala.toMap),
               )

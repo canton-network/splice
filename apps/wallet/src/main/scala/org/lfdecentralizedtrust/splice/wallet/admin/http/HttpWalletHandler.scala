@@ -1211,7 +1211,7 @@ class HttpWalletHandler(
                 )
                 .asRuntimeException()
           },
-          basicAccount(side.otherSide),
+          basicAccount(side.otherside),
           Codec.tryDecode(Codec.JavaBigDecimal)(side.amount),
           "Amulet",
           new metadatav1.Metadata(side.meta.getOrElse(Map.empty).asJava),
