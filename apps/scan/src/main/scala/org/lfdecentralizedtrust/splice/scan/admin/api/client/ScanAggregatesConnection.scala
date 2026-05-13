@@ -3,13 +3,14 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   BftScanConnection,
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
-import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerClient, RetryProvider}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.logging.NamedLogging
@@ -62,6 +63,13 @@ class ScanAggregatesConnection(
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] = bftScanConnection.closeAsync()
   private val scanList = bftScanConnection.scanList
 
+  private def markMissingRound(reason: String): Unit =
+    bftScanConnection.connectionMetrics.foreach { m =>
+      MetricsContext.withMetricLabels(("reason", reason)) { implicit ctx =>
+        m.missingRounds.mark()
+      }
+    }
+
   def getRoundAggregate(round: Long)(implicit
       tc: TraceContext
   ): Future[Option[ScanAggregator.RoundAggregate]] = {
@@ -92,6 +100,7 @@ class ScanAggregatesConnection(
         s"Aggregate rounds per scan: ${roundsPerScan}, while getting round aggregate for round $round"
       )
       if (scansWithRounds.isEmpty) {
+        markMissingRound("no_scans_aggregated")
         Future.failed(
           ScanAggregator.CannotAdvance(
             s"No scans have any aggregated rounds available, while getting round aggregate for round $round"
@@ -103,6 +112,7 @@ class ScanAggregatesConnection(
           .keys
           .toSeq
         if (scansHavingRound.isEmpty) {
+          markMissingRound("no_scans_have_round")
           Future.failed(
             ScanAggregator.CannotAdvance(
               s"No scans have aggregated round $round available, while getting round aggregate for round $round"
@@ -137,10 +147,11 @@ class ScanAggregatesConnection(
       scan
         .getRoundAggregate(round)
         .flatMap {
-          _.map(Future.successful).getOrElse(
+          _.map(Future.successful).getOrElse {
+            markMissingRound("no_aggregate_found")
             Future
               .failed(ScanAggregator.CannotAdvance(s"No RoundAggregate found for round $round"))
-          )
+          }
         }
         .recoverWith { case e: Throwable =>
           logger.info(

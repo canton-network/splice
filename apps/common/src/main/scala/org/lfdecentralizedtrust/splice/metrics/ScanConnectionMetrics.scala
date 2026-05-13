@@ -15,7 +15,7 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
     SpliceMetrics.MetricsPrefix :+ "validator" :+ "scan"
 
   private val perConnectionLabels: Map[String, String] = Map(
-    "scan_connection" -> "The scan connection (host:port) handling the request",
+    "scan_connection" -> "The scan connection (host) handling the request",
     "request" -> "Name of the HTTP/gRPC command being issued",
   )
 
@@ -37,7 +37,9 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         name = prefix :+ "per_connection_errors",
         summary = "Count of failed requests to a scan connection",
         qualification = Traffic,
-        labelsWithDescription = perConnectionLabels,
+        labelsWithDescription = perConnectionLabels ++ Map(
+          "error_class" -> "Category of failure"
+        ),
       )
     )
 
@@ -62,6 +64,32 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         name = prefix :+ "bft_errors",
         summary = "Count of failed BFT reads",
         qualification = Traffic,
+        labelsWithDescription = Map(
+          "outcome" -> ("Why the BFT call failed: " +
+            "not_enough_scans (fewer than f+1 reachable scans), " +
+            "consensus_not_reached (responses did not agree), " +
+            "transport_error (all underlying calls failed)")
+        ),
+      )
+    )
+
+  /** Count of round-aggregate fetches that failed because round data was missing.
+    * Distinguishes between network-wide unavailability, per-round unavailability,
+    * and per-scan inconsistency via the `reason` label.
+    */
+  val missingRounds: Meter =
+    metricsFactory.meter(
+      MetricInfo(
+        name = prefix :+ "missing_rounds",
+        summary = "Count of round-aggregate fetches that failed because round data was missing",
+        qualification = Traffic,
+        labelsWithDescription = Map(
+          "reason" ->
+            ("Why the round was missing: " +
+              "no_scans_aggregated (no scan has any aggregated rounds), " +
+              "no_scans_have_round (no scan has the requested round), " +
+              "no_aggregate_found (a scan claimed to have it but returned None)")
+        ),
       )
     )
 }

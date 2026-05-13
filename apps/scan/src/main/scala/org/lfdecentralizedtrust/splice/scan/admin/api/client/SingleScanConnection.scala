@@ -65,6 +65,7 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import org.apache.pekko.stream.Materializer
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
@@ -137,8 +138,11 @@ class SingleScanConnection private[client] (
           super
             .runHttpCmd(url, command, headers)
             .andThen {
-              case Failure(_) =>
-                metrics.failuresPerConnection.mark()(m)
+              case Failure(e) =>
+                MetricsContext.withMetricLabels(("error_class", e.getClass.getSimpleName)) {
+                  implicit ec2 =>
+                    metrics.failuresPerConnection.mark()(m.merge(ec2))
+                }
                 timer.stop()(m)
               case Success(_) =>
                 timer.stop()(m)
