@@ -104,7 +104,7 @@ describe('Wallet user can', () => {
     await user.type(input, userLogin);
 
     const button = screen.getByRole('button', { name: 'Log In' });
-    user.click(button);
+    await user.click(button);
 
     expect(await screen.findByText(aliceEntry.name)).toBeDefined();
   });
@@ -674,7 +674,8 @@ describe('Wallet user can', () => {
     await user.click(cancelButtons[0]);
 
     // Confirm the cancellation in the confirmation dialog
-    const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
+    const confirmationDialog = await screen.findByRole('dialog');
+    const proceedButton = within(confirmationDialog).getByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
     // Assert the cancel API was called once
@@ -711,7 +712,8 @@ describe('Wallet user can', () => {
     await user.click(buttons[0]);
 
     // Confirm the acceptance in the confirmation dialog
-    const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
+    const confirmationDialog = await screen.findByRole('dialog');
+    const proceedButton = within(confirmationDialog).getByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
     await waitFor(() => expect(calledArgs).toHaveLength(1));
@@ -747,7 +749,8 @@ describe('Wallet user can', () => {
     await user.click(buttons[0]);
 
     // Confirm the rejection in the confirmation dialog
-    const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
+    const confirmationDialog = await screen.findByRole('dialog');
+    const proceedButton = within(confirmationDialog).getByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
     await waitFor(() => expect(calledArgs).toHaveLength(1));
@@ -798,7 +801,8 @@ describe('Wallet user can', () => {
     expect(newMaxAmulets?.textContent).toBe('25');
 
     // Click proceed
-    const proceedButton = await screen.findByRole('button', { name: 'Proceed' });
+    const confirmationDialog = await screen.findByRole('dialog');
+    const proceedButton = within(confirmationDialog).getByRole('button', { name: 'Proceed' });
     await user.click(proceedButton);
 
     // Verify accept was called (backend handles replacement automatically)
