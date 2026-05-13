@@ -118,15 +118,11 @@ class DbAppActivityRecordStore(
     * Set by [[ensureMetaDBIO]] when the meta row is confirmed.
     * Activity records before this time should not be served.
     */
-  private val cachedStartedIngestingAt =
+  private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
-  /** Set the completeness boundary. Called internally by [[ensureMetaDBIO]]. */
-  def setStartedIngestingAt(micros: Long): Unit =
-    cachedStartedIngestingAt.set(Some(micros))
-
   /** The completeness boundary, if known. */
-  def startedIngestingAt: Option[Long] = cachedStartedIngestingAt.get()
+  def startedIngestingAt: Option[Long] = startedIngestingAtRef.get()
 
   object Tables {
     val appActivityRecords = "app_activity_record_store"
@@ -452,7 +448,7 @@ class DbAppActivityRecordStore(
                       values ($historyId, $codeVersion, $userVersion,
                               $firstRecordTimeMicros, $earliestRound)
                 """.asUpdate.map { _ =>
-                  cachedStartedIngestingAt.set(Some(firstRecordTimeMicros))
+                  startedIngestingAtRef.set(Some(firstRecordTimeMicros))
                   metaChecked.set(true)
                   Checked(InsertMeta): EnsureResult
                 }
@@ -464,7 +460,7 @@ class DbAppActivityRecordStore(
                     and activity_ingestion_code_version = $codeVersion
                     and activity_ingestion_user_version = $userVersion
                """.as[Long].headOption.map { tsO =>
-              tsO.foreach(ts => cachedStartedIngestingAt.set(Some(ts)))
+              tsO.foreach(ts => startedIngestingAtRef.set(Some(ts)))
               metaChecked.set(true)
               Checked(Resume): EnsureResult
             }
