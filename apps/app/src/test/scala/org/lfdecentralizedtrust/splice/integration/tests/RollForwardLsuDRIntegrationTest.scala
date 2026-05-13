@@ -473,7 +473,9 @@ class RollForwardLsuDRIntegrationTest
         }
 
         clue("stop apps manually to prevent errors from the synchronizer being force stopped") {
-          stopAllAsync(((allSvLocalBackends: Seq[AppBackendReference]) ++ allScanLocalBackends)*).futureValue
+          stopAllAsync(
+            ((allSvLocalBackends: Seq[AppBackendReference]) ++ allScanLocalBackends)*
+          ).futureValue
           allSvLocalBackends.par.foreach(
             _.participantClient.synchronizers.disconnect_all()
           )
