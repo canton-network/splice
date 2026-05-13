@@ -115,23 +115,22 @@ testGovernanceVoterCastPath = do
         accept
         reason = Reason with url = ""; body
         optCastAt = None
-  let requestOffboardSv = submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-        requester = sv1
+  let requestOffboardSv = submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+        requester = sv2
         action = ARC_DsoRules with
-          dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+          dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv1
         reason = Reason with url = ""; body = "cast path"
         targetEffectiveAt = None
         voteRequestTimeout = Some (days 7)
 
   requestResult <- requestOffboardSv
-  passTime (minutes 1)
   castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = requestResult.voteRequest
     bindingCid
     vote = governanceVote governanceVoter1 False "governance voter update"
   Some request <- queryContractId dso castResult.voteRequest
-  Map.size request.votes === 1
-  case Map.lookup request.requester request.votes of
+  Map.size request.votes === 2
+  case Map.lookup sv1 request.votes of
     None -> fail "represented SV vote missing"
     Some vote -> do
       vote.sv === sv1
@@ -144,7 +143,7 @@ testGovernanceVoterCastPath = do
     requestCid = castResult.voteRequest
     vote = operatorVote True "operator overwrite"
   Some request <- queryContractId dso operatorResult.voteRequest
-  case Map.lookup request.requester request.votes of
+  case Map.lookup sv1 request.votes of
     None -> fail "operator vote missing"
     Some vote -> do
       vote.castBy === sv1
@@ -152,20 +151,20 @@ testGovernanceVoterCastPath = do
       vote.accept === True
 
   passTime (minutes 1)
-  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = operatorResult.voteRequest
     bindingCid
-    vote = governanceVote governanceVoter1 False "governance voter overwrite"
-  Some request <- queryContractId dso castResult.voteRequest
-  case Map.lookup request.requester request.votes of
-    None -> fail "governance-voter vote missing"
+    vote = governanceVote governanceVoter1 False "governance voter cannot overwrite operator"
+  Some request <- queryContractId dso operatorResult.voteRequest
+  case Map.lookup sv1 request.votes of
+    None -> fail "operator vote missing after rejected governance-voter overwrite"
     Some vote -> do
-      vote.castBy === governanceVoter1
-      vote.castByRole === VCR_GovernanceVoter
-      vote.accept === False
+      vote.castBy === sv1
+      vote.castByRole === VCR_Operator
+      vote.accept === True
 
-  unsupportedRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  unsupportedRequest <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv2
     action = ARC_DsoRules with
       dsoAction = SRARC_AddSv DsoRules_AddSv with
         newSvParty = newSv
@@ -294,7 +293,7 @@ testVoteUpdateKeepsOneSlotPerSv = do
 
   Some initialRequest <- queryContractId dso initialRequestCid
   Map.size initialRequest.votes === 1
-  case Map.lookup initialRequest.requester initialRequest.votes of
+  case Map.lookup sv1 initialRequest.votes of
     None -> fail "requester vote missing"
     Some vote -> do
       vote.sv === sv1
@@ -315,7 +314,7 @@ testVoteUpdateKeepsOneSlotPerSv = do
   Some updatedRequest <- queryContractId dso result.voteRequest
   Map.size updatedRequest.votes === 1
   updatedRequest.trackingCid === Some initialRequestCid
-  case Map.lookup updatedRequest.requester updatedRequest.votes of
+  case Map.lookup sv1 updatedRequest.votes of
     None -> fail "updated requester vote missing"
     Some vote -> do
       vote.sv === sv1
@@ -786,7 +785,7 @@ testRacingSvRemoval = do
     sv = Some sv1
 
   result.completedAt === now
-  result.offboardedVoters === ["sv2"]
+  result.offboardedVoters === [partyToText sv2]
   result.abstainingSvs === []
   result.outcome === VRO_Accepted with effectiveAt = now
 

@@ -330,7 +330,7 @@ executeAllDefinitiveVotes app = do
   now <- getTime
   requests <- query @VoteRequest app.dso
   forA_ requests $ \(requestCid, request) -> do
-    let activeSvs = Set.fromList $ map (.name) $ Map.values rules.svs
+    let activeSvs = Set.fromList $ Map.keys rules.svs
     let execute = request.voteBefore <= now ||
           (activeSvs == Set.fromList (Map.keys request.votes))
     when execute $ do
