@@ -294,7 +294,8 @@ function installDockerRunnerScaleSets(
   );
 
   const dockerClientConfigSecret = DockerConfig.getConfig().createDockerClientConfigSecret(
-    runnersNamespace.metadata.name
+    runnersNamespace.metadata.name,
+    `docker-client-config-${repo}`,
   );
 
   const dependsOn = [tokenSecret, controller, configMap, cachePvc, dockerClientConfigSecret];
