@@ -43,6 +43,9 @@ class TokenStandardV2AllocationIntegrationTest
     with WalletTxLogTestUtil
     with TriggerTestUtil {
 
+  // TODO (#5499): restore once tx log parsing works for v2
+  override protected def runTokenStandardCliSanityCheck: Boolean = false
+
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -90,15 +93,21 @@ class TokenStandardV2AllocationIntegrationTest
         "OTCTrade",
         java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
       ),
-      otcTrade.data.createdAt,
-      otcTrade.data.settleAt,
       otcTrade.data.settlementDeadline,
       emptyMetadata,
     )
     val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
       settlementInfo,
-      otcTrade.data.transferLegs,
-      allocations.asJava,
+      transferLegsFromTrade(otcTrade).asJava,
+      allocations
+        .map(cid =>
+          new allocationv2.FinalizedAllocation(
+            cid,
+            java.util.List.of(),
+            java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+          )
+        )
+        .asJava,
       /*actors = */ java.util.List.of(venueParty.toProtoPrimitive),
       emptyExtraArgs,
     )
@@ -302,11 +311,16 @@ class TokenStandardV2AllocationIntegrationTest
         allocationRequestView: allocationrequestv2.AllocationRequestView,
     ) = {
       val allocateResponse = clue(s"${walletClient.name} accepts the Allocation Request") {
+        val requestedAllocation = allocationRequestView.allocations.asScala.loneElement
         walletClient.allocateAmulet(
           new allocationv2.AllocationSpecification(
             allocationRequestView.settlement,
-            allocationRequestView.transferLegs,
+            requestedAllocation.admin,
             allocationRequestView.authorizer,
+            requestedAllocation.transferLegSides,
+            requestedAllocation.nextIterationFunding,
+            requestedAllocation.committed,
+            requestedAllocation.meta,
           )
         )
       }

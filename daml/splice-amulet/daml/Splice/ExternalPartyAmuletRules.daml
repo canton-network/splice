@@ -4,11 +4,11 @@
 {-# LANGUAGE MultiWayIf #-}
 module Splice.ExternalPartyAmuletRules where
 
+import DA.Action
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
-import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
@@ -339,7 +339,7 @@ amulet_transferFactory_transferImpl this _self arg = do
 
   -- TODO(#4665): limit time between requestedAt and executeBefore, i.e., max lock duration (and add to release notes)
 
-  -- execute the right kind of transfer
+  -- execute the right direction of transfer
   case optPreapprovalCid of
     None
       | transfer.receiver == transfer.sender -> do
@@ -414,15 +414,18 @@ amulet_allocationFactoryV2_allocateImpl
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
 amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
-  let creditAmount = netAmuletCreditAmount externalAmuletRules.dso arg.allocation.authorizer arg.allocation.transferLegs
-  let debitAmount = negate creditAmount
+  let netTransferAmount = netAmuletCreditAmount arg.allocation.authorizer arg.allocation.transferLegSides
+  outputFundingAmount <- validateAmuletNextIterationFunding arg.allocation.nextIterationFunding
+  let requiredFundingAmount = outputFundingAmount - netTransferAmount
   (lockedAmulet, senderChangeCids, expiresAt, meta) <-
-    amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg debitAmount
+    amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg requiredFundingAmount
   allocationCid <- toInterfaceContractId <$> create AmuletAllocationV2 with
     allocation = arg.allocation
     lockedAmulet
     dso = externalAmuletRules.dso
     expiresAt
+    createdAt = arg.requestedAt
+    numIterations = 0
   pure V2.AllocationInstructionResult with
     authorizerChangeCids = TextMap.fromList [(amuletInstrumentIdName, map upcast senderChangeCids)]
     output = V2.AllocationInstructionResult_Completed with allocationCid
@@ -448,35 +451,31 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
 
   -- == validate each field of the requested allocation
   let settlement = allocation.settlement
-  let transferLegs = allocation.transferLegs
+  let transferLegSides = allocation.transferLegSides
 
   -- settlement.executors: no check
   -- settlement.settlementRef: no check
-  -- settlement.requestedAt:
-  assertDeadlineExceeded "Allocation.settlement.requestedAt" settlement.requestedAt
   -- settlement.settlementDeadline:
   whenSome settlement.settlementDeadline \d -> do
-      assertWithinDeadline "Allocation.settlement.settlementDeadline" d
+    assertWithinDeadline "Allocation.settlement.settlementDeadline" d
 
-  let
-    -- TODO(#4665): make max duration configurable; and also implement for transfer instructions
-    latestExpiresAt = requestedAt `addRelTime` days 90
-    expiresAt = optional latestExpiresAt (min latestExpiresAt) allocation.settlement.settlementDeadline
-  require "Allocation.settlement.settleAt <= Allocation.expiresAt"
-    (settlement.settleAt <= expiresAt)
+
+  -- note: nextIterationFunding is validated in `amulet_allocationFactoryV2_allocateImpl`,
+  -- as it is only supported for V2 factories
 
   -- transferLegs:
-  requireUnique "allocation.transferLegs" transferLegs
-  forA_ transferLegs $ \transferLeg -> do
+  requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
+  unless (isSome allocation.nextIterationFunding) $
+    require' ("transferLegSides", transferLegSides) (notR isEqualR) ("empty list", [])
+  forA_ transferLegSides $ \transferLeg -> do
       -- transferLegId: no check
-      -- transferLeg.sender
-      ensureBasicAccount "transferLeg.sender" transferLeg.sender
-      -- transferLeg.receiver
-      ensureBasicAccount "transferLeg.receiver" transferLeg.receiver
+      -- transferLeg.side: no check
+      -- transferLeg.otherside:
+      ensureBasicAccount "transferLeg.otherside" transferLeg.otherside
       -- transferLeg.amount
       require "Transfer amount must be positive" (transferLeg.amount > 0.0)
       -- transferLeg.instrumentId
-      require "Instrument-id must match the factory" (transferLeg.instrumentId == amuletInstrumentIdV2 dso)
+      require "Instrument-id must match the factory" (transferLeg.instrumentId == amuletInstrumentIdName)
       -- transferLeg.meta: check no redundant account information
       ensureNoAccountMeta "transferLeg" "sender" transferLeg.meta
       ensureNoAccountMeta "transferLeg" "receiver" transferLeg.meta
@@ -485,6 +484,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   assertDeadlineExceeded "requestedAt" requestedAt
 
   -- create locked amulet if required
+  let expiresAt = computeAllocationExpiry requestedAt settlement
   if fundingAmount <= 0.0
   then do
     -- return input cids as change, so they can be reused on chaining

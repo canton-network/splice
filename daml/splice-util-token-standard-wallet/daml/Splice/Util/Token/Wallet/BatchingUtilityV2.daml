@@ -233,10 +233,10 @@ executeTokenStandardAction actor (holdingMap, results) action = case action of
     callChoiceV2 @V2.AllocationFactory (holdingMap, results) call
       (\_cid arg -> do
         let alloc = arg.allocation
-        pure (Left (allocationAdmin alloc), alloc.authorizer))
+        pure (Left alloc.admin, alloc.authorizer))
       (\cid arg inputHoldingCids -> do
           result <- exercise cid arg with inputHoldingCids
-          let admin = allocationAdmin arg.allocation
+          let admin = arg.allocation.admin
           let newHoldingMap = holdingMapFromList [(ScopedAccount admin arg.allocation.authorizer, result.authorizerChangeCids)]
           pure (newHoldingMap, TSAR_AllocationInstructionResultV2 result)
       )

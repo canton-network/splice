@@ -44,10 +44,7 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 
 ## Appendix: Planned Cleanup (Non-blocking)
 
-* Move `TradingAppV2` into its own package to enable reuse in integration tests.
-* Merge `splice-token-standard-test-v1` and `splice-token-standard-test-v2` into a single test package, with separate modules for V1 and V2 tests.
-
-Cleanup performed so far:
+Cleanup and improvements applied so far:
 
 * Replace `ChoiceExecutionMetadata` with concrete result types for `AllocationRequest_Reject`
   and `AllocationRequest_Withdraw` choices to prepare for an eventual future where interface definitions
@@ -143,3 +140,32 @@ Cleanup performed so far:
   - validate the API on `TestTokenV2` by adding support for a rich variety of
     authorization configurations
 - Use a uniform `AllocationResult` for `Allocation` choices to simplify working with them
+- Add iterated settlement support across the V2 API packages so the allocation authorizer
+  can authorize net funding up front, allow the executors to finalize the
+  concrete transfer-leg sides at settlement time, and optionally carry reserved funding forward into later settlement
+  iterations.
+  - this enables use cases such as prefunding RFQ trades, and funding liquidity pools across multiple settlement iterations.
+  - `splice-api-token-allocation-request-v2`:
+    - add `RequestedAllocation` with `admin`, `transferLegSides`, `nextIterationFunding`, `committed`, and `meta`
+    - change `AllocationRequestView.transferLegs` to `AllocationRequestView.allocations : [RequestedAllocation]`
+    - move `requestedAt` and `settleAt` onto `AllocationRequestView`
+  - `splice-api-token-allocation-v2`:
+    - remove `requestedAt` and `settleAt` from `SettlementInfo`
+    - change `TransferLeg.instrumentId` from `HoldingV2.InstrumentId` to plain `Text`, and add `TransferSide` / `TransferLegSide`
+    - extend `AllocationSpecification` with `admin`, `transferLegSides`, `nextIterationFunding`, `committed`, and `meta`
+    - extend `AllocationView` with `createdAt`, and `numIterations`
+    - add `FinalizedAllocation`
+    - extend `Allocation_Settle` with `extraTransferLegSides`, and `nextIterationFunding`
+    - extend `Allocation_SettleResult` with `nextIterationAllocationCid`
+  - `splice-api-token-transfer-events-v2` and token-standard utilities:
+    - switch transfer and holdings-change reporting to `transferLegSides`
+    - remove `TokenStandardUtils.allocationAdmin`, which is now trivial from `allocation.admin`
+- Introduce committed allocations that lock the funds until settlement time.
+  - `RequestedAllocation.committed` lets an app request creation of a committed allocation.
+  - `AllocationSpecification.committed` records that commitment on the created allocation.
+  - if `committed = True`, the authorizer cannot withdraw the allocation before the
+    settlement deadline; if there is no settlement deadline, the authorizer cannot withdraw it at all.
+    The allocation must instead be concluded by settlement, cancellation, or registry-specific expiry.
+- Remove the `defaultAllocation_*Controllers` helper functions, as the default controller
+  sets have become straightforward enough to inline in implementations.
+

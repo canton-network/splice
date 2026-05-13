@@ -13,6 +13,8 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationRequestV2 qualified as V2
+import Splice.TokenStandard.Utils as TSU
 
 
 import Splice.Testing.Utils
@@ -178,7 +180,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
           sender = accountConfig.account
           receiver = voidAccount
           amount = 1.0
-          instrumentId = instrX
+          instrumentId = instrX.id
           meta = emptyMetadata
         ,
         V2.TransferLeg with
@@ -186,20 +188,29 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
           sender = voidAccount
           receiver = accountConfig.account
           amount = 1.0
-          instrumentId = instrY
+          instrumentId = instrY.id
           meta = emptyMetadata
       ]
+    transferLegSides = do
+      (authorizer, legSide) <- concatMap TSU.transferLegSidesWithAuthorizer transferLegs
+      guard (authorizer == accountConfig.account)
+      pure legSide
     settlement = V2.SettlementInfo with
       executors
-      requestedAt
-      settleAt
       settlementDeadline = None
       settlementRef = V2.Reference "foo" None
       meta = emptyMetadata
     request = TradingAppV2.OTCTradeAllocationRequest with
       authorizer = accountConfig.account
+      requestedAt
+      settleAt
       settlement
-      transferLegs
+      allocations = pure $ V2.RequestedAllocation with
+        admin = instrX.admin
+        transferLegSides
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
 
   -- Create the allocation request
   submit executors do
@@ -224,7 +235,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
     settle_allocation actors (allocCid, V2.AllocationView{..}) = do
       let
         batch = V2.SettlementFactory_SettleBatch with
-          allocationCids = [allocCid]
+          allocations = [nonIteratedAllocation allocCid]
           extraArgs = emptyExtraArgs
           ..
 
@@ -239,6 +250,8 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
         exerciseCmd allocCid V2.Allocation_Settle with
           actors = actors'
           extraArgs = context.arg.extraArgs
+          nextIterationFunding = None
+          extraTransferLegSides = []
 
     cancel_allocation actors (allocCid, _) = do
       registry <- MultiRegistry.getRegistryApiV2 registries env.testTokenV2.admin

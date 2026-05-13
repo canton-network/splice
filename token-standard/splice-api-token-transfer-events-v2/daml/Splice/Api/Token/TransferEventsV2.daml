@@ -7,25 +7,35 @@ module Splice.Api.Token.TransferEventsV2 where
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2
 
--- Note: the TransferLeg type below is identical to Allocation.TransferLeg, but
+-- Note: the TransferLegSide type below is identical to Allocation.TransferLegSide, but
 -- defined separately to avoid a tight coupling between how to specify
 -- allocations and how to report transfers. This allows evolving these two APIs
 -- independently.
 
--- | A specification of a transfer of holdings between two parties.
-data TransferLeg = TransferLeg with
+-- | A side of a transfer.
+data TransferSide
+  = SenderSide
+    -- ^ The outbound side of a transfer, i.e., the sending of assets.
+  | ReceiverSide
+    -- ^ The inbound direction, i.e., the receipt of assets.
+  deriving (Show, Ord, Eq)
+
+-- | A side of a transfer of holdings between two parties.
+--
+-- Used to report transfer events on the affected accounts.
+data TransferLegSide = TransferLegSide with
     transferLegId : Text
-      -- ^ An identifier for the transfer leg intended to disambiguate multiple
-      -- transfer legs reported in the same event.
-      --
-      -- Use the empty string as the default identifier if no disambiguation is needed.
-    sender : Account
-      -- ^ The sender of the transfer.
-    receiver : Account
-      -- ^ The receiver of the transfer.
+      -- ^ An identifier for the transfer leg intended to correlate the sender
+      -- and receiver sides.
+    side : TransferSide
+      -- ^ The side of the transfer that this leg refers to.
+    otherside : Account
+      -- ^ The account on the other side of the transfer leg; i.e., the sender
+      -- in case of `side == ReceiverSide`, and the receiver in case of
+      -- `side == SenderSide`.
     amount : Decimal
       -- ^ The amount to transfer.
-    instrumentId : InstrumentId
+    instrumentId : Text
       -- ^ The instrument identifier.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
@@ -68,12 +78,12 @@ interface EventLog where
         -- Note that these MAY include holdings that were created and archived
         -- within the same transaction. Such holding contracts-ids will occur
         -- in both the input and output list of holdings.
-      transferLegs : [TransferLeg]
+      transferLegSides : [TransferLegSide]
         -- ^ The transfers that caused the change in holdings.
         --
         -- Their net balance changes MUST match the change in holdings of the account.
-        -- Transfers between accounts MUST be reported for both sender and receiver separately.
-        -- Transfer leg ids MUST be unique.
+        -- Both sides of a transfer MUST be reported, and their ids must match.
+        -- Transfer leg ids MUST be unique for different transfer legs.
         --
         -- Note that the settlement of transfers whose net balance change is
         -- zero MAY result in events that do have empty input and output
@@ -81,7 +91,7 @@ interface EventLog where
         --
         -- Note also that merging and splitting of holdings MAY be reported with
         -- an empty list of transfer legs, as the merge and split actions may not
-        -- related to a (self-)transfer of tokens.
+        -- be related to a (self-)transfer of tokens.
       outputHoldingCids : [ContractId Holding]
         -- ^ The newly created holdings of the account.
       observers : [Party]

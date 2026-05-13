@@ -270,8 +270,8 @@ registryApi_getSettlementFactory registry arg = do
   -- Option 2 seems preferable from given an architecture where the backend does not
   -- ingest interfaces, but only works with the concrete templates.
   --
-  lockedDs <- forA arg.allocationCids $ \allocCid -> do
-    getLockedAmuletForAllocationsD registry allocCid
+  lockedDs <- forA arg.allocations $ \alloc -> do
+    getLockedAmuletForAllocationsD registry alloc.allocationCid
   let fullContext = withExtraDisclosures (extAmuletRulesD <> mconcat lockedDs) transferC
   pure EnrichedFactoryChoice with
     factoryCid = toInterfaceContractId @SettlementFactory extAmuletRulesCid

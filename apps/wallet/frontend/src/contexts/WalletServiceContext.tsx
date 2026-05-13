@@ -392,9 +392,14 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
         const res = await walletClient.listAllocationRequests();
         return res.allocation_requests.map(ar => {
           try {
-            return Contract.decodeOpenAPI(ar.contract, AllocationRequestV2);
-          } catch {
-            return Contract.decodeOpenAPI(ar.contract, AllocationRequestV1);
+            try {
+              return Contract.decodeOpenAPI(ar.contract, AllocationRequestV2);
+            } catch {
+              return Contract.decodeOpenAPI(ar.contract, AllocationRequestV1);
+            }
+          } catch (e) {
+            console.error('Unsupported AllocationRequest', e, ar);
+            throw e;
           }
         });
       },

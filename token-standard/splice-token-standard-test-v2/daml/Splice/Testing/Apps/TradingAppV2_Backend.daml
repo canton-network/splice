@@ -27,7 +27,6 @@ import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.AllocationV1 qualified as V1
-import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
@@ -62,14 +61,6 @@ data SettleableTrade = SettleableTrade with
     disclosures : Disclosures'
     batchesByAdmin : Map Party SettlementBatch
     allocationRequestCids : [ContractId OTCTradeAllocationRequest]
-
--- | Helper type of a transfer leg together with its authorizer.
-type AuthorizedLeg = (V2.Account, V2.TransferLeg)
-
-toAuthorizedLegs : V2.TransferLeg -> [AuthorizedLeg]
-toAuthorizedLegs leg
-  | leg.sender == leg.receiver = [(leg.sender, leg)] -- self-transfers are authorized only once
-  | otherwise = [(leg.sender, leg), (leg.receiver, leg)]
 
 groupAsMapBy : Ord k => (a -> k) -> [a] -> Map k [a]
 groupAsMapBy k xs = Map.fromListWithR (++) [ (k x, [x]) | x <- xs ]
@@ -116,25 +107,25 @@ querySettleableTrades registries venue = do
     let otcTrade = trade.otcTrade
     let receiversWithAgreements = map basicAccount (Map.keys agreementsByTrader)
     let minimallyRequiredAuthorizations = do
-          authz@(authorizer, leg) <- concatMap toAuthorizedLegs otcTrade.transferLegs
+          (authorizer, leg) <- concatMap (\tradeleg -> transferLegSidesWithAuthorizer tradeleg.leg) otcTrade.tradeLegs
           -- the venue can create their own allocations directly as part of settlement
           guard (authorizer.owner /= venue)
-          -- authorization is only required for senders, and for receivers without trade agreements
-          guard (leg.sender == authorizer || authorizer `notElem` receiversWithAgreements)
-          pure authz
+          -- authorization is only required for outgoing transfers, and for receivers without trade agreements
+          guard (leg.side == V2.SenderSide || authorizer `notElem` receiversWithAgreements)
+          pure (authorizer, leg)
 
     let actualAuthorizations =
           do
             (_cid, allocView) <- trade.allocationsV2
-            leg <- allocView.allocation.transferLegs
+            leg <- allocView.allocation.transferLegSides
             pure (allocView.allocation.authorizer, leg)
           <>
           do
             (_cid, allocView) <- trade.allocationsV1
             let legV1 = allocView.allocation.transferLeg
             let legV2 = upcast_v1_v2_TransferLeg allocView.allocation.transferLegId legV1
-            -- V1 allocations cover both sender and receiver authorization
-            [(basicAccount legV1.sender, legV2), (basicAccount legV1.receiver, legV2)]
+            -- V1 allocations authorize both sides of the transfer
+            transferLegSidesWithAuthorizer legV2
 
     if Set.fromList minimallyRequiredAuthorizations `Set.isSubsetOf` Set.fromList actualAuthorizations
       then do
@@ -144,8 +135,8 @@ querySettleableTrades registries venue = do
     mkSettleableTrade trade agreementsByTrader = do
       let otcTrade = trade.otcTrade
       let otcTradeCid = trade.otcTradeCid
-      let settlement = mkOtcTradeSettlementInfo otcTradeCid otcTrade
-      let transferLegsByAdmin = splitLegsByAdmin otcTrade.transferLegs
+      let settlement = mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade
+      let transferLegsByAdmin = splitLegsBy (.admin) otcTrade.tradeLegs
 
       -- create V1 contexts
       let allocationsV1ByAdmin = groupAsMapBy (._2.allocation.transferLeg.instrumentId.admin) trade.allocationsV1
@@ -172,7 +163,7 @@ querySettleableTrades registries venue = do
           pure ((admin, batch), disclosures)
 
       -- create V2 contexts
-      let allocationsV2ByAdmin = groupAsMapBy (\(_, allocView) -> allocationAdmin allocView.allocation) trade.allocationsV2
+      let allocationsV2ByAdmin = groupAsMapBy (\(_, allocView) -> allocView.allocation.admin) trade.allocationsV2
       settleBatchContextsV2 <-
         forA (Map.toList transferLegsByAdmin) $ \(admin, requiredLegs) -> do
           supportsV2 <- MultiRegistry.supportsV2 registries admin
@@ -183,9 +174,9 @@ querySettleableTrades registries venue = do
             let existingAllocations = fromOptional [] $ Map.lookup admin allocationsV2ByAdmin
             let actualAuthorizations = Set.fromList $ do
                   (_, allocView) <- existingAllocations
-                  leg <- allocView.allocation.transferLegs
+                  leg <- allocView.allocation.transferLegSides
                   pure (allocView.allocation.authorizer, leg)
-            let requiredAuthorizations = Set.fromList $ concatMap toAuthorizedLegs requiredLegs
+            let requiredAuthorizations = Set.fromList $ concatMap (\tradeleg -> transferLegSidesWithAuthorizer tradeleg.leg) requiredLegs
             let missingAuthorizations = requiredAuthorizations `Set.difference` actualAuthorizations
             let missingByAuthorizer = groupAsMapBy fst $ Set.toList missingAuthorizations
             missingAllocations <- forA (Map.toList missingByAuthorizer) $ \(authorizer, missingLegs) -> do
@@ -193,9 +184,13 @@ querySettleableTrades registries venue = do
                 fail $ "unexpected internal failure: missing authorizer is a non-basic account " <> show authorizer
               enrichedChoice <- RegistryApiV2.getAllocationFactory registry V2.AllocationFactory_Allocate with
                 allocation = V2.AllocationSpecification with
-                  transferLegs = map snd missingLegs
+                  admin
+                  transferLegSides = map snd missingLegs
                   settlement
+                  nextIterationFunding = None
+                  committed = False
                   authorizer
+                  meta = emptyMetadata
                 inputHoldingCids = []
                 requestedAt = now
                 extraArgs = emptyExtraArgs
@@ -208,8 +203,8 @@ querySettleableTrades registries venue = do
             let allocationCids = map fst existingAllocations
             let settleBatchArg = V2.SettlementFactory_SettleBatch with
                   settlement
-                  transferLegs = requiredLegs
-                  allocationCids
+                  transferLegs = map (.leg) requiredLegs
+                  allocations = map (nonIteratedAllocation . fst) existingAllocations
                   extraArgs = emptyExtraArgs
                   actors = [venue]
             context <- RegistryApiV2.getSettlementFactory registry settleBatchArg
@@ -262,7 +257,7 @@ cancelWithTradeAgreements registries trade = do
     pure (allocationWithContext, context.disclosures)
   -- grab contexts for V2 allocation cancellation
   allocationsWithContextV2 <- forA trade.allocationsV2 $ \(allocCid, allocView) -> do
-    registry <- MultiRegistry.getRegistryApiV2 registries (allocationAdmin allocView.allocation)
+    registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
     context <- RegistryApiV2.getAllocation_CancelContext registry allocCid emptyMetadata
     let extraArgs = ExtraArgs with
           context = context.choiceContext

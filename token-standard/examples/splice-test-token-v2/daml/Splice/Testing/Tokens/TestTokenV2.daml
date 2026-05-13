@@ -62,7 +62,7 @@ template TokenAllocationInstructionV2 with
     admin : Party
     requestedAt : Time
   where
-    ensure isValidAllocationSpecificationV2 (\instrumentId -> instrumentId.admin == admin) allocation
+    ensure isValidAllocationSpecificationV2 (const True) allocation
     signatory fromOptional [] (Map.lookup V2.AIA_Accept actionAuthorizers), admin
     observer dedupSort (concat (Map.keys availableActions) <> concat (Map.values actionAuthorizers))
 
@@ -128,13 +128,14 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
             meta = emptyMetadata
 
       (AIS_Init, AIS_Accepted) -> do
-          let allocationSpec = allocationStateMachineSpec allocation.authorizer allocation.settlement.executors (allocationAdmin allocation)
+          let allocationSpec = allocationStateMachineSpec allocation.authorizer allocation.settlement.executors allocation.admin
           eventLogCid <- getEventLogFromContext extraArgs.context
           (lockedTokens, authorizerChangeCids) <- splitAndLock eventLogCid allocation inputHoldingCids
           allocationCid <- create TokenAllocationV2 with
             originalAllocationCid = None
             availableActions = mkAvailableActions allocationSpec Map.empty accountMap
             actionAuthorizers = Map.empty
+            createdAt = requestedAt
             ..
           pure V2.AllocationInstructionResult with
             output = V2.AllocationInstructionResult_Completed (coerceContractId allocationCid)
@@ -163,10 +164,10 @@ template TokenAllocationV2 with
     lockedTokens : TextMap.TextMap [ContractId V2.Holding]
       -- ^ Map from instrumentId to holdings.
     allocation : V2.AllocationSpecification
-    admin : Party
+    createdAt : Time
   where
-    ensure isValidAllocationSpecificationV2 (\instrumentId -> instrumentId.admin == admin) allocation
-    signatory accountParties allocation.authorizer, allocationAdmin allocation
+    ensure isValidAllocationSpecificationV2 (const True) allocation
+    signatory accountParties allocation.authorizer, allocation.admin
     observer allocation.settlement.executors
 
     interface instance V2.Allocation for TokenAllocationV2 where
@@ -178,6 +179,8 @@ template TokenAllocationV2 with
         allocation
         holdingCids = Foldable.concat lockedTokens
         availableActions = allocationV2_availableActionsDefault allocation
+        createdAt
+        numIterations = 0  -- TODO(#5464): support iterated settlement in V2 token
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -208,12 +211,12 @@ applyAllocationTransitions
 applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraArgs = do
 
   accountMap <- extractAccountConfigMap
-      this.admin
+      this.allocation.admin
       extraArgs
       [this.allocation.authorizer]
 
   let
-    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors (allocationAdmin v.allocation)
+    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors v.allocation.admin
 
     mkPending newActionAuthorizers newAvailableActions = do
       pendingInstrCid <- create this with
@@ -234,6 +237,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
     transition fromState toState =  case (fromState, toState) of
 
       (AS_Init, AS_Withdrawn) -> do
+        ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockTokenAllocationV2 "allocation withdrawn" this extraArgs
         pure V2.AllocationResult
           with
@@ -255,17 +259,18 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
         -- archive the locked tokens
-        debitAmounts <- fmap (Map.fromListWithR (+)) $ forA (Foldable.concat lockedTokens) $ \cid -> do
+        debitAmounts <- fmap (TextMap.fromListWithR (+)) $ forA (Foldable.concat lockedTokens) $ \cid -> do
           token <- fetch cid
           let holding = view token
           archive cid
           require' ("lockedToken", holding.account) isEqualR ("allocation.authorizer", allocation.authorizer)
-          pure (holding.instrumentId, holding.amount)
+          require' ("lockedToken.instrumentId.admin", holding.instrumentId.admin) isEqualR ("allocation.admin", allocation.admin)
+          pure (holding.instrumentId.id, holding.amount)
 
         -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
-        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
+        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
         let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
-        authorizerHoldingCids0 <- forA (Map.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
+        authorizerHoldingCids0 <- forA (TextMap.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
           require'
             ("archived lockedAmulet.amount for " <> show instrumentId, debitAmount)
             isEqualR
@@ -277,13 +282,15 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
                 holding = V2.HoldingView with
                   account = allocation.authorizer
                   amount = creditAmount
-                  instrumentId
+                  instrumentId = V2.InstrumentId with
+                    id = instrumentId
+                    admin = allocation.admin
                   lock = None
                   meta = emptyMetadata
-              pure (instrumentId.id, [toInterfaceContractId newHoldingCid])
+              pure (instrumentId, [toInterfaceContractId newHoldingCid])
             else
               -- No credit of Token ==> no holding change
-              pure (instrumentId.id, [])
+              pure (instrumentId, [])
 
         -- log v2 transfer events
         tokenRulesCid <- getEventLogFromContext extraArgs.context
@@ -294,7 +301,8 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
           (concat $ textMapValues authorizerHoldingCids)
 
         pure V2.AllocationResult with
-          output = V2.AllocationResult_Settled
+          output = V2.AllocationResult_Settled with
+            nextIterationAllocationCid = None -- TODO(#5464): support iterated settlement in V2 token
           authorizerHoldingCids = authorizerHoldingCids
           meta = emptyMetadata
             -- Note: for V1 tx history we would need create extra choices for
@@ -398,7 +406,7 @@ transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TI
       admin = this.transfer.instrumentId.admin
       account = this.transfer.sender
       inputHoldingCids = this.transfer.inputHoldingCids
-      transferLegs = []
+      transferLegSides = []
       outputHoldingCids = inputHoldingCids <> senderChangeCids
       observers = accountParties this.transfer.sender
       extraArgs = ExtraArgs with
@@ -666,17 +674,17 @@ splitAndLock : ContractId TransferEventsV2.EventLog -> V2.AllocationSpecificatio
 splitAndLock eventLogCid allocation inputTokenCids = do
 
   -- debit all input amounts
-  inputAmounts <- Map.fromListWithR (+) . concat <$> forA (TextMap.toList inputTokenCids) (\(_, cids) -> forA cids (\cid -> do
+  inputAmounts <- TextMap.fromListWithR (+) . concat <$> forA (TextMap.toList inputTokenCids) (\(_, cids) -> forA cids (\cid -> do
       let tokenCid = coerceContractId cid : ContractId Token
       token <- fetch tokenCid
       archive tokenCid
-      pure (token.holding.instrumentId, token.holding.amount)
+      pure (token.holding.instrumentId.id, token.holding.amount)
       ))
 
   -- create locked tokens and change for the sender
-  let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegs
+  let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
   let combinedAmounts = mergeAmountMaps inputAmounts creditAmounts
-  locksAndChange <- forA (Map.toList combinedAmounts) $ \(instrumentId, (inputAmount, creditAmount)) -> do
+  locksAndChange <- forA (TextMap.toList combinedAmounts) $ \(instrumentId, (inputAmount, creditAmount)) -> do
     let netAmount = min 0.0 creditAmount + inputAmount
     when (netAmount < 0.0) $
       fail $ T.unlines
@@ -690,24 +698,28 @@ splitAndLock eventLogCid allocation inputTokenCids = do
           holding = V2.HoldingView with
             account = allocation.authorizer
             amount = negate creditAmount
-            instrumentId
+            instrumentId = V2.InstrumentId with
+              id = instrumentId
+              admin = allocation.admin
             lock = Some $ V2.Lock with
-              holders = instrumentId.admin :: accountParties allocation.authorizer
-              expiresAt = Some allocation.settlement.settleAt
+              holders = allocation.admin :: accountParties allocation.authorizer
+              expiresAt = allocation.settlement.settlementDeadline
               expiresAfter = None
               context = Some $ "allocation for settlement of " <> allocation.settlement.settlementRef.id
             meta = emptyMetadata
-        pure [(instrumentId.id, [toInterfaceContractId cid])]
+        pure [(instrumentId, [toInterfaceContractId cid])]
     changeTokens <-
       if netAmount <= 0.0 then pure [] else do
         cid <- create Token with
           holding = V2.HoldingView with
             account = allocation.authorizer
             amount = netAmount
-            instrumentId
+            instrumentId = V2.InstrumentId with
+              id = instrumentId
+              admin = allocation.admin
             lock = None
             meta = emptyMetadata
-        pure [(instrumentId.id, [toInterfaceContractId cid])]
+        pure [(instrumentId, [toInterfaceContractId cid])]
     pure (lockedTokens, changeTokens)
 
   let
@@ -716,10 +728,10 @@ splitAndLock eventLogCid allocation inputTokenCids = do
 
   -- log the tx history v2 event
   logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-    admin = allocationAdmin allocation
+    admin = allocation.admin
     account = allocation.authorizer
     inputHoldingCids = concat (textMapValues inputTokenCids)
-    transferLegs = []
+    transferLegSides = []
     outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
     observers = accountParties allocation.authorizer
     extraArgs = ExtraArgs with
@@ -770,10 +782,10 @@ unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
         holding = holding with lock = None
   eventLogCid <- getEventLogFromContext extraArgs.context
   logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-    admin = allocationAdmin tokenAllocation.allocation
+    admin = tokenAllocation.allocation.admin
     account = tokenAllocation.allocation.authorizer
     inputHoldingCids = concat (textMapValues tokenAllocation.lockedTokens)
-    transferLegs = []
+    transferLegSides = []
     outputHoldingCids = concat (textMapValues authorizerCids)
     observers = accountParties tokenAllocation.allocation.authorizer
     extraArgs = ExtraArgs with
@@ -793,7 +805,7 @@ unlockTokenTransferOffer reason offer extraArgs = do
       admin = transfer.instrumentId.admin
       account = transfer.sender
       inputHoldingCids = transfer.inputHoldingCids
-      transferLegs = []
+      transferLegSides = []
       outputHoldingCids = [toInterfaceContractId tokenCid]
       observers = accountParties transfer.sender
       extraArgs = ExtraArgs with
@@ -801,8 +813,9 @@ unlockTokenTransferOffer reason offer extraArgs = do
         meta = reasonToMeta reason emptyMetadata
     return [tokenCid]
 
-mergeAmountMaps : Ord k => Map.Map k Decimal -> Map.Map k Decimal -> Map.Map k (Decimal, Decimal)
-mergeAmountMaps = Map.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
+
+mergeAmountMaps : TextMap.TextMap Decimal -> TextMap.TextMap Decimal -> TextMap.TextMap (Decimal, Decimal)
+mergeAmountMaps = TextMap.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
 
 senderHoldingFromTransfer : V2.Transfer -> V2.HoldingView
 senderHoldingFromTransfer transfer = V2.HoldingView with

@@ -7,6 +7,9 @@
 --
 --  - authorizing multiple transfers in a single allocation
 --  - only allocating the net amount of funds transferred to the allocation
+--  - allow the executors to specify the actual transfers after creation of the allocation
+--  - use the same allocation for multiple settlement iterations
+--  - create committed allocations whose funds are locked until the settlement deadline
 --  - specifying accounts directly in the transfer legs instead of using metadata
 --  - flexible actors for extensibility
 --  - implementation-defined choice observers for view compression where
@@ -21,7 +24,7 @@ import DA.Map qualified as Map
 import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
-import Splice.Api.Token.HoldingV2 (Holding, InstrumentId, Account)
+import Splice.Api.Token.HoldingV2 (Holding, Account)
 
 
 -- Allocation View
@@ -50,15 +53,10 @@ data SettlementInfo = SettlementInfo
       --
       -- Executors MUST ensure that they use unique `settlementRef` values for
       -- different settlements to avoid ambiguity or settlement errors.
-    requestedAt : Time
-      -- ^ When the settlement was requested. Provided for display and debugging purposes,
-      -- but SHOULD be in the past.
-    settleAt : Time
-      -- ^ The earliest settlement time. Allocations should be made before this time. Settlement
-      -- happens at any point after this time.
     settlementDeadline : Optional Time
-      -- ^ The latest point at which settlement will occur. This allows registries
-      -- to set appropriate locks and expiries.
+      -- The executors' and authorizer's agreed time-to-live for the allocation.
+      -- After this time, if set, the allocation can no longer be settled, and
+      -- the authorizer can withdraw the allocation to release the funds.
     meta : Metadata
       -- ^ Additional metadata about the settlement, used for extensibility.
   deriving (Show, Eq)
@@ -74,27 +72,76 @@ data TransferLeg = TransferLeg with
       -- ^ The receiver of the transfer.
     amount : Decimal
       -- ^ The amount to transfer.
-    instrumentId : InstrumentId
+    instrumentId : Text
       -- ^ The instrument identifier.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
   deriving (Eq, Ord, Show)
 
--- | An approval by the authorizer to execute the given transfers
--- as part of the settlement.
---
--- In contrast to an `AllocationView` this just specifies the authorized
--- transfers, but not the holdings that fund the transfers.
+-- | A side of a transfer.
+data TransferSide
+  = SenderSide
+    -- ^ The outbound side of a transfer, i.e., the sending of assets.
+  | ReceiverSide
+    -- ^ The inbound direction, i.e., the receipt of assets.
+  deriving (Show, Ord, Eq)
+
+-- | A side of a transfer leg, which is what allocations authorize.
+data TransferLegSide = TransferLegSide with
+    transferLegId : Text
+      -- ^ An identifier for the transfer leg.
+    side : TransferSide
+      -- ^ The side of the transfer that this leg refers to.
+    otherside : Account
+      -- ^ The account on the other side of the transfer leg; i.e., the sender
+      -- in case of `side == ReceiverSide`, and the receiver in case of
+      -- `side == SenderSide`.
+    amount : Decimal
+      -- ^ The amount being transferred.
+    instrumentId : Text
+      -- ^ The instrument identifier.
+    meta : Metadata
+      -- ^ Additional metadata about the transfer leg, used for extensibility.
+  deriving (Eq, Ord, Show)
+
+-- | An approval by the authorizer to receive or send assets as part of
+-- settlement.
 data AllocationSpecification = AllocationSpecification with
     settlement : SettlementInfo
       -- ^ The settlement for which this allocation is made.
-    transferLegs : [TransferLeg]
-      -- ^ The transfers whose send or receipt is authorized by this allocation.
-      --
-      -- There MUST be at least one transfer leg. All transfer legs MUST have the
-      -- same instrument admin and involve the authorizer as sender or receiver.
+    admin : Party
+      -- ^ The asset admin of the instruments that are transferred as part of
+      -- the settlement.
     authorizer : Account
-      -- ^ The account authorizing the transfers to happen as part of the settlement.
+      -- ^ The account authorizing the transfers as part of the settlement.
+    transferLegSides : [TransferLegSide]
+      -- ^ The sides of transfer legs authorized by this allocation.
+    nextIterationFunding : Optional (TextMap.TextMap Decimal)
+      -- ^ Amounts reserved for funding the next settlement iteration.
+      --
+      -- Amounts are keyed by instrument id and MUST be positive.
+      --
+      -- Setting this to `None` indicates that iterated settlement is disabled,
+      -- and the allocation can only be settled once with exactly its specified
+      -- transfer legs. Setting this to an empty map indicates that iterated settlement
+      -- is enabled, but that no funding for the next iteration is reserved by
+      -- the authorizer. This can be used when the authorizer expects incoming
+      -- transfers in the next iteration, and thus does not need to reserve any funding.
+    committed : Bool
+      -- ^ Whether the authorizer commits to the allocation until either
+      --
+      --   - the executors settle allocation,
+      --   - the executors cancel the allocation,
+      --   - the settlement deadline passed, or
+      --   - the admin expires the allocation.
+      --
+      -- If set to `True`, then the authorizer cannot withdraw the allocation
+      -- until the settlement deadline. Use committed allocations for cases
+      -- where the executors need a guarantee that the allocation will be
+      -- available until settlement.
+    meta : Metadata
+      -- ^ Additional metadata for the allocation specification, which can be used
+      -- to store information about an allocation used in iterated settlement.
   deriving (Show, Eq)
 
 -- | Actions available on an allocation.
@@ -131,9 +178,23 @@ data AllocationView = AllocationView with
       -- holdings.
       --
       -- MAY be empty for registries that do not represent their holdings on-ledger.
+    createdAt : Time
+      -- ^ The time when the allocation was originally created.
+    numIterations : Int
+      -- ^ The number of settlement iterations that have been executed for this allocation so far.
     expiresAt : Optional Time
-      -- ^ The time at which this allocation expires. SHOULD be as close as the
-      -- registry can make it to the `allocation.settlement.settlementDeadline`.
+      -- ^ The time at which the allocation expires if inactive.
+      --
+      -- Registries MAY expire the allocation and return the locked funds to the
+      -- authorizer after this time. Thereby recovering storage resources and
+      -- protecting themselves from denial-of-service attacks.
+      --
+      -- TODO(#5487): introduce explicit choice for `Allocation_RefreshExpiry` and mention it here.
+      --
+      -- Registries SHOULD avoid unnecessary refreshes by
+      --   - making the expiry time as close to the settlement deadline as possible
+      --   - bumping expiry on every settlement iteration.
+      --
     availableActions : Map.Map [Party] [AllocationAction]
       -- ^ The actions that the wallet can present to the user on the allocation.
       --
@@ -150,22 +211,25 @@ data AllocationView = AllocationView with
 -- Allocation
 -------------
 
--- | Default controllers for allocation settlement, which are the `executors`,
--- and the instrument admin of the transfer legs.
-defaultAllocation_SettleControllers : AllocationView -> [Party]
-defaultAllocation_SettleControllers allocView =
-    allocView.allocation.settlement.executors <>
-      map (.instrumentId.admin) allocView.allocation.transferLegs
-
--- | Default controllers for allocation cancellation are the `executors` allocation.
-defaultAllocation_CancelControllers : AllocationView -> [Party]
-defaultAllocation_CancelControllers allocView = allocView.allocation.settlement.executors
-
+-- | An allocation finalized by the executors for settlement.
+data FinalizedAllocation = FinalizedAllocation with
+    allocationCid : ContractId Allocation
+      -- ^ The allocation to settle.
+    extraTransferLegSides : [TransferLegSide]
+      -- ^ The extra transfer leg sides to authorize as part of this allocation
+      -- in this settlement iteration.
+      --
+      -- They MUST be empty unless iterated settlement was enabled by the allocation's authorizer.
+    nextIterationFunding : Optional (TextMap.TextMap Decimal)
+      -- ^ The funding to reserve for the next settlement iteration.
+      --
+      -- This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer.
+  deriving (Show, Eq)
 
 -- | A contract representing the approval of the authorizer to send or receive
 -- the net amount of assets of the transfer legs as part of a settlement where
 -- the executors and instrument admin check that every transfer leg has a matching
--- authorization from the counterparty.
+-- authorization from the otherside.
 interface Allocation where
   viewtype AllocationView
 
@@ -191,18 +255,26 @@ interface Allocation where
         -- ^ Parties executing the settlement.
         --
         -- Implementations MUST check these parties to avoid unauthorized settlement execution.
+        -- By default, they SHOULD require them to be equal to the allocation
+        -- `admin` and the `executors`, so that they can jointly guarantee
+        -- atomic settlement.
         --
-        -- They SHOULD do so by checking that the actors are equal to the
-        -- `defaultAllocation_SettleControllers`, which ensures maximal
-        -- compatibility and proper implementation of the constraint:
+        -- This authorization is typically provided as part of the
+        -- `SettlementFactory_SettleBatch` choice, which should be used by the
+        -- `executors` to settle V2 allocations.
+      extraTransferLegSides : [TransferLegSide]
+        -- ^ Extra transfer leg sides to settle as part of settlement.
         --
-        -- - The actors MUST always include the settlement executors and the
-        --   instrument admin of the transfer legs.
+        -- They MUST NOT be set unless iterated settlement was enabled by the
+        -- allocation's authorizer.
+      nextIterationFunding : Optional (TextMap.TextMap Decimal)
+        -- ^ The funds to reserve for the next settlement iteration, if there is any.
         --
-        -- This authorization is required as all of these parties are expected
-        -- to guarantee atomic settlement. This authorization is typically provided
-        -- as part of the `SettlementFactory_SettleBatch` choice, which should
-        -- be used by the executors to settle V2 allocations.
+        -- This MUST NOT be set unless iterated settlement was enabled by the
+        -- allocation's authorizer.
+        --
+        -- Setting this to `None` indicates that no further settlement
+        -- iterations will be executed after this one.
       extraArgs : ExtraArgs
         -- ^ Additional context required in order to exercise the choice.
     observer allocation_settleExtraObservers this arg
@@ -227,14 +299,7 @@ interface Allocation where
         -- ^ Parties authorizing the cancellation.
         --
         -- Implementations MUST check these parties to avoid unauthorized cancellation.
-        --
-        -- They SHOULD do so by checking that the actors are equal to the
-        -- `defaultAllocation_CancelControllers`, which ensures maximal
-        -- compatibility and proper implementation of the following constraints:
-        --
-        -- - The actors MUST always include the settlement executors.
-        -- - For V1 allocations, the actors MUST additionally include the owners
-        --   of the sender and receiver accounts of the transfer legs.
+        -- By default, they SHOULD require them to be equal to the allocation `executors`.
       extraArgs : ExtraArgs
         -- ^ Additional context required in order to exercise the choice.
     observer allocation_cancelExtraObservers this arg
@@ -247,6 +312,9 @@ interface Allocation where
     -- example be used by the authorizer to undo a mistakenly created
     -- allocation.
     --
+    -- For committed allocations (i.e., `committed` set to `True`), this
+    -- choice can only be exercised once the settlement deadline has passed.
+    --
     -- The choice is nonconsuming to support alternative consumption patterns,
     -- e.g., by calling the consuming V1.Allocation_Withdraw choice for
     -- transaction parsing compatibility.
@@ -258,15 +326,13 @@ interface Allocation where
         -- ^ Parties authorizing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
-        --
-        -- Implementations SHOULD allow the owner and provider of the authorizer
-        -- account to call this choice to withdraw mistakenly created allocations.
+        -- By default they SHOULD allow the account parties of the authorizer to
+        -- withdraw the allocation.
       extraArgs : ExtraArgs
         -- ^ Additional context required in order to exercise the choice.
     observer allocation_withdrawExtraObservers this arg
     controller actors
     do allocation_withdrawImpl this self arg
-
 
 
 -- Result Types
@@ -277,11 +343,11 @@ data AllocationResult = AllocationResult with
     output : AllocationResult_Output
       -- ^ The output of the action.
     authorizerHoldingCids : TextMap.TextMap [ContractId Holding]
-      -- ^ The holdings that were released back to the authorizer keyed by
-      -- their `instrumentId.id`.
+      -- ^ New holdings created for the authorizer as part of the settlement
+      -- keyed by their `instrumentId.id`.
     meta : Metadata
-      -- ^ Additional metadata specific to the allocation, used for extensibility.
-  deriving (Show, Eq)
+      -- ^ Additional metadata specific to the settlement, used for extensibility.
+  deriving (Eq, Show)
 
 -- | The output of changing the state of an allocation.
 data AllocationResult_Output
@@ -292,11 +358,14 @@ data AllocationResult_Output
           -- ^ Contract id of the allocation representing the pending state.
   | AllocationResult_Settled
       -- ^ The result of settling an allocation by exercising the `Allocation_Settle` choice.
+      with
+        nextIterationAllocationCid : Optional (ContractId Allocation)
+          -- ^ The new allocation created for the next settlement iteration, if any.
   | AllocationResult_Cancelled
       -- ^ The result of the `Allocation_Cancel` choice  when fully authorized.
   | AllocationResult_Withdrawn
       -- ^ The result of the `Allocation_Withdraw` choice when fully authorized.
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 
 -- Settlement Factory
@@ -309,7 +378,7 @@ data SettlementFactoryView = SettlementFactoryView with
       -- for which this settlement factory can be used.
     meta : Metadata
       -- ^ Additional metadata specific to the settlement factory, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 -- | A settlement factory enables the net settlement of a batch of allocations
 -- for the same instrument admin.
@@ -327,16 +396,16 @@ interface SettlementFactory where
     -- The choice is structured in this form for efficiency and privacy. It
     -- enables the instrument admin to only perform net debits and credits for
     -- each account across all transfers being settled; and restrict visibility of
-    -- each credit or debit to executors, admin, and affected account only.
+    -- each credit or debit to executors, admin, and affected account parties only.
     with
       settlement : SettlementInfo
         -- ^ The settlement for which the allocations are settled.
       transferLegs : [TransferLeg]
-        -- ^ The sequence of transfers to execute as part of the settlement.
+        -- ^ The transfers that are to be executed as part of the settlement.
         --
         -- There MUST be at least one transfer leg. All transfer legs MUST have the
         -- same instrument admin as the one of the factory.
-      allocationCids : [ContractId Allocation]
+      allocations : [FinalizedAllocation]
         -- ^ Allocations to settle.
         --
         -- They serve as proof that all transfers executed as part of settlement
@@ -360,9 +429,8 @@ interface SettlementFactory where
         -- can be used for implementation specific authorization patterns.
         --
         -- Implementations MUST check this value to avoid unauthorized settlement execution.
-        --
-        -- Implementations SHOULD allow the `settlement.executors` to execute the settlement
-        -- to maximize compatibility with apps.
+        -- By default the SHOULD check that they are equal to
+        -- `settlement.executors` to provide maximal compatibility with apps.
       extraArgs : ExtraArgs
         -- ^ Additional choice arguments.
     observer settlementFactory_settleBatchExtraObservers this arg
@@ -382,10 +450,9 @@ interface SettlementFactory where
 
 -- | Result of settling a batch of allocations.
 data SettlementFactory_SettleBatchResult = SettlementFactory_SettleBatchResult with
-    newHoldingCids : Map.Map Account (TextMap.TextMap [ContractId Holding])
-      -- ^ New holdings created as part of the batch settlement, grouped by account and
-      -- keyed by their `instrumentId.id` to enable chaining of actions on holdings of
-      -- one or more accounts.
+    allocationSettleResults : [AllocationResult]
+      -- ^ The result of settling each allocation in the batch.
+      -- In the same order as the `allocationCids` in the choice arguments.
     meta : Metadata
       -- ^ Additional metadata specific to the batch settlement, used for extensibility.
   deriving (Eq, Show)
