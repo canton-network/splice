@@ -27,12 +27,14 @@ import {
   damlTimestampToOpenApiTimestamp,
   isValidDamlTimestamp,
 } from '../utils/timestampConversion';
+import { usePrimaryParty } from '../hooks';
 
 const CreateAllocation: React.FC = () => {
   const { createAllocationV2 } = useWalletClient();
+  const userParty = usePrimaryParty();
   const [error, setError] = useState<object | null>(null);
   const [allocation, setAllocation] = useState<PartialAllocateAmuletV2Request>(emptyForm());
-  const validated = validatedForm(allocation);
+  const validated = validatedForm(userParty!, allocation);
   const createAllocationMutation = useMutation({
     mutationFn: async () => {
       return validated && (await createAllocationV2(validated));
@@ -341,7 +343,10 @@ function emptyForm(): PartialAllocateAmuletV2Request {
   };
 }
 
-function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV2Request | null {
+function validatedForm(
+  userParty: string,
+  partial: PartialAllocateAmuletV2Request
+): AllocateAmuletV2Request | null {
   if (
     !partial.settlement.executors.length ||
     partial.settlement.executors.some(e => !e) ||
@@ -355,17 +360,21 @@ function validatedForm(partial: PartialAllocateAmuletV2Request): AllocateAmuletV
   const validLegSides: TransferLegSide[] = [];
   for (const leg of partial.transfer_legs) {
     if (!leg.transfer_leg_id || !leg.sender || !leg.receiver || !leg.amount) return null;
+    let side: 'SENDERSIDE' | 'RECEIVERSIDE';
+    let otherside: string;
+    if (userParty === leg.sender) {
+      side = 'SENDERSIDE';
+      otherside = leg.receiver;
+    } else if (userParty === leg.receiver) {
+      side = 'RECEIVERSIDE';
+      otherside = leg.sender;
+    } else {
+      return null;
+    }
     validLegSides.push({
       transfer_leg_id: leg.transfer_leg_id,
-      side: 'RECEIVERSIDE',
-      otherside: leg.sender,
-      meta: {},
-      amount: leg.amount,
-    });
-    validLegSides.push({
-      transfer_leg_id: leg.transfer_leg_id,
-      side: 'SENDERSIDE',
-      otherside: leg.receiver,
+      side,
+      otherside,
       meta: {},
       amount: leg.amount,
     });
