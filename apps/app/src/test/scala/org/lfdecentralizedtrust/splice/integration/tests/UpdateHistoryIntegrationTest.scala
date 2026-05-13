@@ -46,7 +46,6 @@ class UpdateHistoryIntegrationTest
 
   "update history can replicate update stream" in { implicit env =>
     val ledgerBeginSv1 = sv1Backend.participantClient.ledger_api.state.end()
-    val ledgerBeginAlice = aliceValidatorBackend.participantClient.ledger_api.state.end()
     val tapAmount = com.digitalasset.daml.lf.data.Numeric.assertFromString("33." + "3".repeat(10))
     val transferAmount =
       com.digitalasset.daml.lf.data.Numeric.assertFromString("11." + "1".repeat(10))
@@ -168,28 +167,6 @@ class UpdateHistoryIntegrationTest
         compareHistoryViaLosslessScanApi(
           sv1ScanBackend,
           scanClient,
-        )
-      }
-      // History for Alice, read from aliceValidator (should contain domain transfer because of splitwell)
-      eventually() {
-        compareHistory(
-          aliceValidatorBackend.participantClient,
-          aliceValidatorBackend.appState.walletManager
-            .getOrElse(throw new RuntimeException(s"Wallet is disabled"))
-            .lookupUserWallet(aliceWalletClient.config.ledgerApiUser)
-            .futureValue
-            .getOrElse(throw new RuntimeException("Alice wallet should exist"))
-            .automation
-            .updateHistory,
-          ledgerBeginAlice,
-          true,
-        )
-      }
-      eventually() {
-        compareHistory(
-          aliceValidatorBackend.participantClient,
-          aliceValidatorBackend.appState.automation.updateHistory,
-          ledgerBeginAlice,
         )
       }
 

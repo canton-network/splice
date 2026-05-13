@@ -11,8 +11,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  HistoryMetrics,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
@@ -33,7 +31,6 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.Scheduler
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 
 import scala.concurrent.ExecutionContext
 
@@ -58,8 +55,6 @@ class UserWalletService(
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     dedupDuration: DedupDuration,
-    txLogBackfillEnabled: Boolean,
-    txLogBackfillingBatchSize: Int,
     params: SpliceParametersConfig,
 )(implicit
     ec: ExecutionContext,
@@ -86,20 +81,6 @@ class UserWalletService(
       params.defaultLimit,
     )
 
-  val updateHistory: UpdateHistory =
-    new UpdateHistory(
-      storage,
-      domainMigrationInfo,
-      store.storeName,
-      participantId,
-      store.acsContractFilter.ingestionFilter.primaryParty,
-      BackfillingRequirement.BackfillingNotRequired,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = false,
-      HistoryMetrics(retryProvider.metricsFactory, domainMigrationInfo.currentMigrationId),
-    )
-
   val treasury: TreasuryService = new TreasuryService(
     // The treasury gets its own connection, and is required to manage waiting for the store on its own.
     ledgerClient.connection(
@@ -123,7 +104,6 @@ class UserWalletService(
 
   val automation = new UserWalletAutomationService(
     store,
-    updateHistory,
     treasury,
     ledgerClient,
     automationConfig,
@@ -138,8 +118,6 @@ class UserWalletService(
     walletSweep,
     autoAcceptTransfers,
     dedupDuration,
-    txLogBackfillEnabled = txLogBackfillEnabled,
-    txLogBackfillingBatchSize = txLogBackfillingBatchSize,
     params,
   )
 

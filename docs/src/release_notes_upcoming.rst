@@ -33,3 +33,12 @@
         through an ``ADDITIONAL_CONFIG`` environment variable. LSUs
         will still work but be slightly slower due to extra
         reconnects.
+
+    - Validator app
+
+      - Stop recording update history. This data was never exposed
+        beyond undocumented SQL tables so there should be no effect
+        other than the database growing at a slower rate.
+
+        If you need to access data for any of the parties on your node
+        use the ledger API.
