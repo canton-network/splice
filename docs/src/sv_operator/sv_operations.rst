@@ -851,6 +851,8 @@ The ``activityIngestionUserVersion`` field controls the activity record
 ingestion version. Incrementing this value causes the scan app to
 record a new app activity record completeness lower bound. Reward accounting excludes rounds
 before this boundary, even though their activity records are retained.
+Thus bumping the user version has the same effect as reinitializing the 
+app activity record computation from the time of the bump onwards.
 
 Consequences of incrementing the user version:
 
