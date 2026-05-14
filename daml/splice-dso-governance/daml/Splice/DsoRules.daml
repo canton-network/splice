@@ -867,6 +867,9 @@ template DsoRules with
         -- validate and archive request
         request <- fetchAndArchive (ForDso with dso) requestCid
         require "Action is governance-voter eligible; use DsoRules_CastGovernanceVote" (not (isGovernanceVoterAction request.action))
+        now <- getTime
+        let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
+        require "Vote request has expired" (now < castDeadline)
         -- rate limit casting of votes by the same SV to avoid them blocking others from making progress
         -- Note: we currently ignore the optional self-declared vote casting time
         -- `vote.optCastAt`. We'll use that in the future when adding support for larger
@@ -874,8 +877,6 @@ template DsoRules with
         enforceCooldown ("voteCooldownTime for " <> partyToText vote.sv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup vote.sv request.votes
           pastVote.optCastAt
-        -- store vote
-        now <- getTime
         let recordedVote = vote with
               castBy = vote.sv
               castByRole = VCR_Operator
@@ -912,13 +913,15 @@ template DsoRules with
         -- validate request before archiving it
         request <- fetchChecked (ForDso with dso) requestCid
         require "Action is not governance-voter eligible" (isGovernanceVoterAction request.action)
+        now <- getTime
+        let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
+        require "Vote request has expired" (now < castDeadline)
         archive requestCid
         -- rate limit casting of votes by the same represented SV to avoid blocking progress
         enforceCooldown ("voteCooldownTime for " <> partyToText binding.sv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup binding.sv request.votes
           pastVote.optCastAt
         -- store vote in the represented SV's vote slot
-        now <- getTime
         let recordedVote = vote with
               sv = binding.sv
               castBy = binding.governanceVoter

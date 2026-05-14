@@ -92,6 +92,66 @@ testSvGovernanceVoterBindingLifecycle = do
   returnedBinding.governanceVoter === sv1
   pure ()
 
+-- | Tests that both cast paths refuse votes after the cast deadline. For
+-- requests without targetEffectiveAt the deadline is voteBefore; for
+-- requests with targetEffectiveAt the deadline extends to the effective
+-- time, matching the existing close-vote semantics.
+testCastDeadlineExpiry : Script ()
+testCastDeadlineExpiry = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+  sv1Binding <- ensureSelfBinding dso sv1
+
+  -- Governance-voter cast path: voteBefore is the cast deadline when there
+  -- is no targetEffectiveAt.
+  let offboardSv2Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+  govRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
+    action = offboardSv2Action
+    reason = Reason with url = ""; body = "expiry"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 1)
+  passTime (days 1 + seconds 1)
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = govRequest.voteRequest
+    bindingCid = sv1Binding
+    vote = Vote with
+      sv = sv1
+      castBy = sv1
+      castByRole = VCR_GovernanceVoter
+      accept = False
+      reason = Reason with url = ""; body = "after deadline"
+      optCastAt = None
+
+  -- Operator cast path: same enforcement on an operational action.
+  now <- getTime
+  opRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = sv2
+        newSvName = "expiry-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "expiry-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "expiry op"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 1)
+  passTime (days 1 + seconds 1)
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = opRequest.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv2
+      castByRole = VCR_Operator
+      accept = True
+      reason = Reason with url = ""; body = "after deadline"
+      optCastAt = None
+  pure ()
+
 -- | Tests governance-voter request and cast paths under the strict role
 -- split: governance-voter eligible actions are requested and cast only by
 -- the governance voter; the operator path is closed for them.
