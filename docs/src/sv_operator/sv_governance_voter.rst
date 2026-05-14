@@ -23,19 +23,26 @@ cooldown and overwrite behavior tied to the stable party identifier while
 existing review-facing outputs can still render SV names.
 
 The prototype binding is declared by the represented SV and has no contract key.
-Phase 1 intends one active governance-voter party per represented SV; the
-``RotateGovernanceVoter`` choice is consuming so the lifecycle preserves that
-invariant by construction. Multi-user organizations are expected to assign
-several users to the single governance-voter party at the dApp/UI layer rather
-than by creating additional bindings. All casts write into the represented
-SV's single vote slot under a per-SV cooldown, so the one-vote-per-SV tally is
-robust regardless of how the off-ledger workflow is arranged.
+The intended Phase 1 workflow has one active governance-voter party per
+represented SV, shaped by the consuming ``RotateGovernanceVoter`` choice and
+the self-binding onboarding default. Multi-user organizations are expected to
+assign several users to the single governance-voter party at the dApp/UI
+layer rather than by creating additional bindings. All casts write into the
+represented SV's single vote slot under a per-SV cooldown, so the
+one-vote-per-SV tally is robust regardless of how the off-ledger workflow is
+arranged.
 
-Without a contract key, the template still admits a direct ``create`` on top of
-an existing binding, so Phase 1 enforces the single-binding invariant through
-the workflow (the dApp uses ``RotateGovernanceVoter`` exclusively). Whether
-the invariant should be promoted to a contract key or a small registry pattern
-is left as an open question for Splice maintainers.
+The template does not contract-level prevent the represented SV from
+bare-creating additional bindings for itself: ``sv`` is the sole signatory,
+and the consuming rotation is intent rather than enforcement. If a represented
+SV does end up with two active bindings, both delegates can cast against the
+same represented-SV slot under last-writer-wins; the tally still records one
+vote per represented SV, but the cast log becomes ambiguous. This boundary is
+pinned by ``testGovernanceVoterDuplicateBindingsAmbiguity`` so that any future
+tightening — contract key, DSO-owned registry, or explicit duplicate-create
+guard — has a concrete baseline to compare against. Whether to promote the
+workflow shape to a contract-level invariant is left as an open question for
+Splice maintainers.
 
 The binding is SV-declared by design: the represented SV can create or rotate
 its governance-voter binding without a Propose-Accept step. The onboarding
