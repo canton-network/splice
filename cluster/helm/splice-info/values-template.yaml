@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 nginxImage: nginx:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
+updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
 contentType: "application/json"
 
 # runtimeDetails:  # Optional, exposes the runtime configuration under path /runtime/
+#   migrationId: 4
 #   scanUrl: https://scan.sv.global.canton.network.xxx  # Scan URL to fetch the runtime configuration
+#   tlsSkipVerify: true  # Optional, the default is false
 
 # deploymentDetails:  # Optional, exposes static configuration under path /
 #   network: "dev"

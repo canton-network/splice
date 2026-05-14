@@ -4,6 +4,7 @@
 suite: "Splice-info values"
 templates:
   - deployment.yaml
+  - configmap-config.yaml
 
 release:
   # Set for testing labels
@@ -18,10 +19,11 @@ nginxImage: "some-nginx-image"
 
 tests:
   - it: "should include runtime details env vars"
+    template: deployment.yaml
     set:
       runtimeDetails:
+        migrationId: 0
         scanUrl: "https://scan.url"
-        logToStderrAfterFailures: 123
     documentSelector:
       path: kind
       value: Deployment
@@ -31,8 +33,5 @@ tests:
           path: spec.template.spec.containers[0].name
           value: "nginx"
       - equal:
-          path: spec.template.spec.containers[?(@.name=='content-runtime-updater')].env[?(@.name=='SCAN_URL')].value
+          path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SCAN_URL')].value
           value: "https://scan.url"
-      - equal:
-          path: spec.template.spec.containers[?(@.name=='content-runtime-updater')].env[?(@.name=='LOG_TO_STDERR_AFTER_FAILURES')].value
-          value: "123"
