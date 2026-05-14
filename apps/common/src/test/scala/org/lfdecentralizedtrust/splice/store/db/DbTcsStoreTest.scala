@@ -147,8 +147,17 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
         resultAt300 <- store.listAllContractsAsOf(
           AppRewardCoupon.COMPANION,
           CantonTimestamp.ofEpochSecond(300),
+          limit = Some(2)
         )
         _ = resultAt300.map(_.contract).toSet shouldBe Set(coupon2, coupon3)
+
+        resultAt300Limit1 <- store.listAllContractsAsOf(
+          AppRewardCoupon.COMPANION,
+          CantonTimestamp.ofEpochSecond(300),
+          limit = Some(1)
+        )
+        // The limit does not guarantee order, so we only check size
+        _ = resultAt300Limit1.size shouldBe 1
 
         resultAt400 <- store.listAllContractsAsOf(
           AppRewardCoupon.COMPANION,

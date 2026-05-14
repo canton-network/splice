@@ -21,11 +21,15 @@ trait TcsStore {
   ): Future[Option[ContractWithState[TCid, T]]]
 
   /** List ALL contracts of the given template that are active as of the given
-    * record time. Use this with great caution as the result set is unbounded in size.
+    * record time. Use this with great caution as the result set is unbounded in size,
+    * unless a `limit` is supplied.
+    * The `limit` is intentionally kept as `Int` as this is not meant for
+    * pagination and is therefore not to be constrained by the `DefaultMaxPageSize` of `Limit`
     */
   def listAllContractsAsOf[C, TCid <: ContractId[?], T](
       companion: C,
       asOf: CantonTimestamp,
+      limit: Option[Int] = None,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T],
       traceContext: TraceContext,
