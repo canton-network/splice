@@ -24,9 +24,6 @@ trait AppActivityStore {
       tc: TraceContext
   ): Future[Option[Long]]
 
-  /** The completeness boundary (microseconds since epoch), if known.
-    * Activity records for events before this time should not be served.
-    * Backed by DB, cached after first successful check.
-    */
+  /** The record time of the first activity record in the store. */
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]]
 }
