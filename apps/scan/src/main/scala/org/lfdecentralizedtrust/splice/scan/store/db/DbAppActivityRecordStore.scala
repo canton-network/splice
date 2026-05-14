@@ -116,7 +116,7 @@ class DbAppActivityRecordStore(
 
   import DbAppActivityRecordStore.*
 
-  // Cached by ensureMetaDBIO and startedIngestingAt.
+  // Cached by startedIngestingAt.
   private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
