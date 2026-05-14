@@ -99,6 +99,85 @@ testSvGovernanceVoterBindingLifecycle = do
   activeSv1Bindings >>= \bs -> length bs === 1
   pure ()
 
+-- | Documents the Phase 1 boundary of the single-active-binding invariant:
+-- the SvGovernanceVoter template does not gate against the represented SV
+-- bare-creating multiple bindings in parallel. The invariant is workflow-
+-- only (onboarding default plus consuming RotateGovernanceVoter), not a
+-- contract-level guard. If a represented SV does end up with two active
+-- bindings, both governance voters can cast against the same represented-
+-- SV slot under last-writer-wins; no double-counting and no extra vote
+-- weight, but the cast log becomes ambiguous. This test captures that
+-- failure mode so future work (contract key, single-binding registry, or
+-- onboarding-side enforcement) has a concrete behaviour to point at.
+testGovernanceVoterDuplicateBindingsAmbiguity : Script ()
+testGovernanceVoterDuplicateBindingsAmbiguity = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter1 <- allocateParty "duplicate-governance-voter-1"
+  governanceVoter2 <- allocateParty "duplicate-governance-voter-2"
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- sv1 bare-creates two SvGovernanceVoter contracts in parallel, each
+  -- delegating to a distinct governance-voter party. The template itself
+  -- accepts this; one active binding per represented SV relies on the
+  -- onboarding default and the consuming Rotate choice, not on the
+  -- contract.
+  binding1Cid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter1
+  binding2Cid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter2
+
+  activeBindings <- queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
+  length activeBindings === 2
+
+  let offboardSv2Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+  requestResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = governanceVoter1
+    bindingCid = binding1Cid
+    action = offboardSv2Action
+    reason = Reason with url = ""; body = "duplicate-binding ambiguity"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  Some initialRequest <- queryContractId dso requestResult.voteRequest
+  case Map.lookup sv1 initialRequest.votes of
+    None -> fail "initial governance-voter vote missing"
+    Some vote -> do
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+
+  -- The second binding is structurally valid (same DSO party, same
+  -- represented SV, its own governance voter), so DsoRules_CastGovernanceVote
+  -- accepts a cast from governanceVoter2 against the same represented-SV slot.
+  passTime (minutes 1)
+  castResult <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = requestResult.voteRequest
+    bindingCid = binding2Cid
+    vote = Vote with
+      sv = sv1
+      castBy = governanceVoter2
+      castByRole = VCR_GovernanceVoter
+      accept = False
+      reason = Reason with url = ""; body = "second binding wins"
+      optCastAt = None
+
+  -- One vote per represented SV is preserved: governanceVoter2's cast
+  -- overwrites governanceVoter1's auto-accept in the sv1 slot. The
+  -- ambiguity is in the cast log, not in the tally.
+  Some finalRequest <- queryContractId dso castResult.voteRequest
+  Map.size finalRequest.votes === 1
+  case Map.lookup sv1 finalRequest.votes of
+    None -> fail "represented SV vote slot missing after second cast"
+    Some vote -> do
+      vote.castBy === governanceVoter2
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+  pure ()
+
 -- | Tests that both cast paths refuse votes after the cast deadline. For
 -- requests without targetEffectiveAt the deadline is voteBefore; for
 -- requests with targetEffectiveAt the deadline extends to the effective
