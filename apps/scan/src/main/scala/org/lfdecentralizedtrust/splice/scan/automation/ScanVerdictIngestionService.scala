@@ -235,22 +235,7 @@ class ScanVerdictIngestionService(
         }
 
         _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
-        started <- store.activityIngestionStarted
-        ingestionStart =
-          if (!started && appActivityRecords.nonEmpty) {
-            val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
-              CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
-            )
-            val earliestRound = appActivityRecords
-              .map(_._2.roundNumber)
-              .foldLeft(Long.MaxValue)(math.min)
-            Some((firstRecordTimeMicros, earliestRound))
-          } else None
-        _ <- store.insertVerdictsWithAppActivityRecords(
-          items,
-          appActivityRecords,
-          ingestionStart,
-        )
+        _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
       } yield {
         val lastRecordTime = verdicts.lastOption
           .flatMap(v => CantonTimestamp.fromProtoTimestamp(v.getRecordTime).toOption)

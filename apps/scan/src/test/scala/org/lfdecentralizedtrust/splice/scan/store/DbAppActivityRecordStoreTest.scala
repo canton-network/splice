@@ -145,6 +145,8 @@ class DbAppActivityRecordStoreTest
         // Verify activity records have resolved row_ids (not 0)
         r1 <- appStore.getRecordByVerdictRowId(v1.value.rowId)
         r2 <- appStore.getRecordByVerdictRowId(v2.value.rowId)
+        // Verify meta row was created as a side effect
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
         v1 shouldBe defined
         v2 shouldBe defined
@@ -156,12 +158,16 @@ class DbAppActivityRecordStoreTest
         r2.value.verdictRowId shouldBe v2.value.rowId
         r2.value.roundNumber shouldBe 11L
         r2.value.appProviderParties shouldBe Seq("app2::provider")
+
+        meta shouldBe defined
+        meta.value.startedIngestingAt shouldBe baseTs.toMicros
+        meta.value.earliestIngestedRound shouldBe 10L
       }
     }
 
     "insert verdicts without activity records when appActivityRecords is empty" in {
       for {
-        (_, verdictStore) <- newStores()
+        (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
         verdict = mkVerdict(verdictStore, "update-no-activity", baseTs)
@@ -173,9 +179,12 @@ class DbAppActivityRecordStoreTest
 
         v <- verdictStore.getVerdictByUpdateId("update-no-activity")
         countAfter <- countRecords()
+        // No meta row should be created when there are no activity records
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
         v shouldBe defined
         countAfter shouldBe 0L
+        meta shouldBe None
       }
     }
 

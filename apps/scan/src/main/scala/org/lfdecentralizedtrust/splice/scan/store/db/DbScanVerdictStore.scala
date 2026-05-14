@@ -479,14 +479,20 @@ class DbScanVerdictStore(
     *
     * @param items verdicts with transaction view constructors
     * @param appActivityRecords activity records with placeholder verdictRowIds
-    * @param ingestionStart passed to the activity store for meta row maintenance
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
-      ingestionStart: Option[(Long, Long)] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
+
+    val ingestionStart = if (appActivityRecords.nonEmpty) {
+      val firstRecordTimeMicros = items.headOption.fold(0L)(_._1.recordTime.toMicros)
+      val earliestRound = appActivityRecords
+        .map(_._2.roundNumber)
+        .foldLeft(Long.MaxValue)(math.min)
+      Some((firstRecordTimeMicros, earliestRound))
+    } else None
 
     val combinedAction = for {
       rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
