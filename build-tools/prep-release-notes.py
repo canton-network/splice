@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from github import Github
 import re
+import sys
 
 upcoming_notes_filename = f"{os.environ['SPLICE_ROOT']}/docs/src/release_notes_upcoming.rst"
 release_notes_filename = f"{os.environ['SPLICE_ROOT']}/docs/src/release_notes.rst"
@@ -90,7 +91,7 @@ def move_upcoming_notes():
 
     if split_index_upcoming == -1:
         print("ERROR! upcoming file missing the header")
-        os.exit(1)
+        sys.exit(1)
 
     upcoming_header = lines_upcoming[:split_index_upcoming]
     upcoming_content = lines_upcoming[split_index_upcoming:]
@@ -148,6 +149,7 @@ def create_pr():
     )
 
     print(f"Pull Request created successfully: {pr.html_url}")
+    sys.exit(0)
 
 def main():
 
@@ -155,7 +157,7 @@ def main():
 
     while True:
         actions = '''
-    1. All good! Create the PR (coming soon...)
+    1. All good! Create the PR
     2. Edit release notes
     3. Cancel
     '''
