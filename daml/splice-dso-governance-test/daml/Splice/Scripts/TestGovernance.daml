@@ -251,6 +251,96 @@ testGovernanceVoterCastPath = do
     vote = governanceVote sv1 sv1 False "operator-as-self-voter"
   pure ()
 
+-- | Tests that multiple active SvGovernanceVoter contracts for the same
+-- represented SV are permitted. Any active binding can authorize a cast for
+-- the represented SV's single vote slot, but the binding signer must match
+-- the binding presented.
+testGovernanceVoterMultipleBindings : Script ()
+testGovernanceVoterMultipleBindings = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  delegateA <- allocateParty "multi-binding-delegate-a"
+  delegateB <- allocateParty "multi-binding-delegate-b"
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- sv1 holds two concurrent bindings, one per delegate. There is no
+  -- duplicate-prevention check on create, by design: the represented SV may
+  -- maintain more than one active binding if it chooses.
+  bindingA <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = delegateA
+  bindingB <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = delegateB
+  sv1Bindings <- queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
+  length sv1Bindings === 2
+
+  -- sv2 self-binds so it can open a governance-voter eligible vote request.
+  sv2BindingCid <- submit sv2 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv2
+    governanceVoter = sv2
+
+  let offboardSv1Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv1
+  let governanceVote svParty signer accept body = Vote with
+        sv = svParty
+        castBy = signer
+        castByRole = VCR_GovernanceVoter
+        accept
+        reason = Reason with url = ""; body
+        optCastAt = None
+
+  requestResult <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv2
+    bindingCid = sv2BindingCid
+    action = offboardSv1Action
+    reason = Reason with url = ""; body = "multi-binding"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  -- delegateA casts via bindingA: succeeds and fills sv1's vote slot.
+  castA <- submit (actAs delegateA <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = requestResult.voteRequest
+    bindingCid = bindingA
+    vote = governanceVote sv1 delegateA False "delegate A"
+  Some afterA <- queryContractId dso castA.voteRequest
+  case Map.lookup sv1 afterA.votes of
+    None -> fail "delegate A vote missing"
+    Some v -> do
+      v.castBy === delegateA
+      v.accept === False
+
+  -- delegateB casts via bindingB: succeeds against the same represented SV
+  -- slot, subject to the per-SV cooldown.
+  passTime (minutes 1)
+  castB <- submit (actAs delegateB <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = castA.voteRequest
+    bindingCid = bindingB
+    vote = governanceVote sv1 delegateB True "delegate B"
+  Some afterB <- queryContractId dso castB.voteRequest
+  Map.size afterB.votes === 2
+  case Map.lookup sv1 afterB.votes of
+    None -> fail "delegate B vote missing"
+    Some v -> do
+      v.castBy === delegateB
+      v.accept === True
+
+  -- A delegate cannot cast against the other delegate's binding: signer must
+  -- match the presented binding's governance voter.
+  passTime (minutes 1)
+  submitMustFail (actAs delegateA <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = castB.voteRequest
+    bindingCid = bindingB
+    vote = governanceVote sv1 delegateA False "A using B's binding"
+  submitMustFail (actAs delegateB <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = castB.voteRequest
+    bindingCid = bindingA
+    vote = governanceVote sv1 delegateB False "B using A's binding"
+  pure ()
+
 -- | Tests the Phase 1 governance-voter action taxonomy.
 testGovernanceVoterActionTaxonomy : Script ()
 testGovernanceVoterActionTaxonomy = do

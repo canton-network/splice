@@ -23,9 +23,13 @@ cooldown and overwrite behavior tied to the stable party identifier while
 existing review-facing outputs can still render SV names.
 
 The prototype binding is declared by the represented SV and has no contract key.
-The intended invariant is one active governance-voter binding per SV. This slice
-keeps that invariant outside the template key space by design, matching the
-Phase 1 proposal direction.
+Multiple active ``SvGovernanceVoter`` contracts for the same represented SV are
+permitted by design: ``RotateGovernanceVoter`` is consuming so rotation never
+produces a duplicate, but the represented SV may also create additional bindings
+directly. Any active binding can authorize a cast for the represented SV, and
+all casts write into the represented SV's single vote slot under the same
+per-SV cooldown — so additional bindings broaden the set of parties that may
+sign but do not increase voting weight or weaken the one-vote-per-SV tally.
 
 The binding is SV-declared by design: the represented SV can create or rotate
 its governance-voter binding without a Propose-Accept step. The onboarding
