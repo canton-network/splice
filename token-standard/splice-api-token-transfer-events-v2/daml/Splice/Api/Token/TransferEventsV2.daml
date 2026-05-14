@@ -7,7 +7,7 @@ module Splice.Api.Token.TransferEventsV2 where
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2
 
--- Note: the TransferLegSide type below is identical to Allocation.TransferLegSide, but
+-- Note: the TransferLegSide type below is identical to AllocationV2.TransferLegSide, but
 -- defined separately to avoid a tight coupling between how to specify
 -- allocations and how to report transfers. This allows evolving these two APIs
 -- independently.
@@ -36,7 +36,7 @@ data TransferLegSide = TransferLegSide with
     amount : Decimal
       -- ^ The amount to transfer.
     instrumentId : Text
-      -- ^ The instrument identifier.
+      -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
   deriving (Eq, Ord, Show)
@@ -55,9 +55,9 @@ interface EventLog where
     -- ^ Signal a change in the holdings of an account to the observers.
     --
     -- Asset admins MUST ensure that these events explain:
-    --   1. all changes to the holdings of all regular accounts, including holdings that
+    --   1. All changes to the holdings of all regular accounts, including holdings that
     --      were created and archived within a single transaction.
-    --   2. all incoming and outgoing transfers for all regular accounts.
+    --   2. All incoming and outgoing transfers for all regular accounts.
     --
     with
       admin : Party
@@ -71,7 +71,7 @@ interface EventLog where
         -- by the `account` specified in this change.
         --
         -- Note that these MAY include holdings that were created and archived
-        -- within the same transaction. Such holding contracts-ids will occur
+        -- within the same transaction. Such holding contract ids will occur
         -- in both the input and output list of holdings.
       transferLegSides : [TransferLegSide]
         -- ^ The transfers that caused the change in holdings.
@@ -112,7 +112,9 @@ interface EventLog where
 -- be used by the instrument admin or app provider only.
 data EventLogView = EventLogView with
     admin : Party
+      -- ^ Instrument admin reporting the change in holdings.
     meta : Metadata
+      -- ^ Additional metadata about the event log, used for extensibility.
   deriving (Eq, Show)
 
 -- | Result of logging a change in holdings event. Provided for extensibility

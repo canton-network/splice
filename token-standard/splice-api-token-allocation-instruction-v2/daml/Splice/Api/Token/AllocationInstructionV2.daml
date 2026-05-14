@@ -57,8 +57,9 @@ data AllocationInstructionView = AllocationInstructionView with
       --   - bumping expiry on every action on the allocation instruction
     availableActions : Map.Map AllocationInstructionAction [[Party]]
       -- ^ What actions are available to which groups of parties. The list of lists
-      -- represents a disjunction of conjunctions of parties, i.e., each inner
-      -- list represents a group of parties that can act jointly to execute the action.
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
@@ -89,7 +90,7 @@ interface AllocationInstruction where
     -- ^ Accept the allocation instruction as someone that needs to authorize it.
     with
       actors : [Party]
-        -- ^ Parties executing the acceptance.
+        -- ^ Set of parties executing the acceptance.
         --
         -- Registries are free to decide on the required authorization for
         -- acceptance. They MUST however report the parties that can accept
@@ -102,10 +103,10 @@ interface AllocationInstruction where
     do allocationInstruction_acceptImpl this self arg
 
   nonconsuming choice AllocationInstruction_Withdraw : AllocationInstructionResult
-    -- ^ Withdraw the allocation instruction as the sender.
+    -- ^ Withdraw the allocation instruction.
     with
       actors : [Party]
-        -- ^ Parties executing the withdrawal.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         --
@@ -143,15 +144,16 @@ interface AllocationFactory where
   allocationFactory_publicFetchImpl : ContractId AllocationFactory -> AllocationFactory_PublicFetch -> Update AllocationFactoryView
 
   nonconsuming choice AllocationFactory_Allocate : AllocationInstructionResult
-    -- ^ Request the creation of an allocation for legs of a specific instrument.
+    -- ^ Request the creation of an allocation.
     --
     -- It depends on the registry whether this results in the allocation being
     -- created directly or in an allocation instruction being created instead.
     with
       allocation : AllocationSpecification
-        -- ^ The allocation which should be created. All legs must be for the same instrument.
+        -- ^ The allocation which should be created.
         --
-        -- Implementations MUST validate that the instrument admin of the legs matches the admin of the factory.
+        -- Implementations MUST validate that the allocation's admin party
+        -- matches the admin of the factory.
       requestedAt : Time
         -- ^ The time at which the allocation was requested.
       inputHoldingCids : [ContractId Holding]
@@ -162,7 +164,7 @@ interface AllocationFactory where
       extraArgs : ExtraArgs
         -- ^ Additional choice arguments.
       actors : [Party]
-        -- ^ Actors executing the allocation.
+        -- ^ Set of parties executing the allocation.
         --
         -- Implementations MUST check their concrete values to avoid unauthorized allocation creation.
         --
@@ -178,7 +180,7 @@ interface AllocationFactory where
   nonconsuming choice AllocationFactory_PublicFetch : AllocationFactoryView
     with
       actors : [Party]
-        -- ^ Parties executing the fetch.
+        -- ^ Set of parties executing the fetch.
     controller actors
     do allocationFactory_publicFetchImpl this self arg
 

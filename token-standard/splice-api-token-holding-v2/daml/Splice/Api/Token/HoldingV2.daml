@@ -21,7 +21,7 @@ data InstrumentId = InstrumentId
 
 -- | A data type to represent an on-chain managed account,
 --
--- For example in a traditional accounting structure, or simply a delegation to
+-- For example a traditional accounting structure, or simply a delegation to
 -- a provider to perform some services.
 data Account = Account
   with

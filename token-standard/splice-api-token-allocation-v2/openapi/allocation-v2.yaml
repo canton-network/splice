@@ -5,8 +5,8 @@ openapi: 3.0.0
 info:
   title: V2 allocation off-ledger API
   description: |
-    Implemented by token registries for the purpose of the use and management of
-    allocations by wallets and apps orchestrating the settlement of asset transfers.
+    Implemented by token registries to support wallets and apps that use and manage
+    allocations while orchestrating the settlement of asset transfers.
   version: 1.0.0
 paths:
   /registry/allocation/v2/settlement-factory:
@@ -30,6 +30,8 @@ paths:
                 $ref: "#/components/schemas/FactoryWithChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -60,6 +62,8 @@ paths:
                 $ref: "#/components/schemas/ChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -90,6 +94,8 @@ paths:
                 $ref: "#/components/schemas/ChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -101,6 +107,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    "409":
+      description: "conflict"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     "404":
       description: "not found"
       content:
@@ -108,7 +120,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
-    # Note: intentionally not shared with the other APIs to keep the self-contained, and because not all OpenAPI codegens support such shared definitions.
+    # Note: intentionally not shared with the other APIs to keep this spec self-contained, and because not all OpenAPI codegens support such shared definitions.
     GetFactoryRequest:
       type: object
       properties:
@@ -196,15 +208,20 @@ components:
           "disclosedContracts",
         ]
 
-    # Note: intentionally not shared with the other APIs to keep the self-contained, and because not all OpenAPI codegens support such shared definitions.
+    # Note: intentionally not shared with the other APIs to keep this spec self-contained, and because not all OpenAPI codegens support such shared definitions.
     DisclosedContract:
       type: object
       properties:
         templateId:
+          description: "The fully qualified template identifier of the disclosed contract."
           type: string
         contractId:
+          description: "The contract ID of the disclosed contract."
           type: string
         createdEventBlob:
+          description: |
+            The serialized created event of the disclosed contract, forwarded unchanged as retrieved
+            from the JSON Ledger API.
           type: string
         synchronizerId:
           description: |

@@ -5,8 +5,8 @@ openapi: 3.0.0
 info:
   title: V2 allocation instruction off-ledger API
   description: |
-    Implemented by token registries for using and managing
-    allocation instructions by wallets.
+    Implemented by token registries to support wallets that use and manage
+    allocation instructions.
   version: 1.0.0
 paths:
 
@@ -30,6 +30,8 @@ paths:
                 $ref: "#/components/schemas/FactoryWithChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -37,7 +39,7 @@ paths:
     post:
       operationId: "getAllocationInstructionAcceptContext"
       description: |
-        Get the choice context to accept a allocation instruction.
+        Get the choice context to accept an allocation instruction.
       parameters:
         - name: allocationInstructionId
           description: "The contract ID of the allocation instruction to accept."
@@ -60,6 +62,8 @@ paths:
                 $ref: "#/components/schemas/ChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -67,7 +71,7 @@ paths:
     post:
       operationId: "getAllocationInstructionWithdrawContext"
       description: |
-        Get the choice context to withdraw a allocation instruction.
+        Get the choice context to withdraw an allocation instruction.
       parameters:
         - name: allocationInstructionId
           description: "The contract ID of the allocation instruction to withdraw."
@@ -90,6 +94,8 @@ paths:
                 $ref: "#/components/schemas/ChoiceContext"
         "400":
           $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
         "404":
           $ref: "#/components/responses/404"
 
@@ -102,6 +108,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    "409":
+      description: "conflict"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     "404":
       description: "not found"
       content:
@@ -110,7 +122,7 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
-    # Note: intentionally not shared with the other APIs to keep the self-contained, and because not all OpenAPI codegens support such shared definitions.
+    # Note: intentionally not shared with the other APIs to keep this spec self-contained, and because not all OpenAPI codegens support such shared definitions.
     GetFactoryRequest:
       type: object
       properties:
@@ -198,15 +210,20 @@ components:
           "disclosedContracts",
         ]
 
-    # Note: intentionally not shared with the other APIs to keep the self-contained, and because not all OpenAPI codegens support such shared definitions.
+    # Note: intentionally not shared with the other APIs to keep this spec self-contained, and because not all OpenAPI codegens support such shared definitions.
     DisclosedContract:
       type: object
       properties:
         templateId:
+          description: "The fully qualified template identifier of the disclosed contract."
           type: string
         contractId:
+          description: "The contract ID of the disclosed contract."
           type: string
         createdEventBlob:
+          description: |
+            The serialized created event of the disclosed contract, forwarded unchanged as retrieved
+            from the JSON Ledger API.
           type: string
         synchronizerId:
           description: |
