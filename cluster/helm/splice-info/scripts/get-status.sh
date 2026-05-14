@@ -12,6 +12,7 @@ SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 SV_THRESHOLD="${SV_THRESHOLD:-600}"
 MEDIATOR_THRESHOLD="${MEDIATOR_THRESHOLD:-900}"
 SCAN_THRESHOLD="${SCAN_THRESHOLD:-900}"
+SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-1800}" # Sequencer acknowledgments are irregular, so we use a higher threshold here
 
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 
@@ -199,6 +200,7 @@ sequencer_metric_data=$(get_sequencer_metric_data "$sequencer_metric_name")
 
 mediator_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" MED "$MEDIATOR_THRESHOLD")
 scan_status=$(scan_get_status)
+sequencer_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" SEQ "$SEQUENCER_THRESHOLD")
 
 jq -n \
   --argjson sv "$sv_status" \
@@ -207,12 +209,15 @@ jq -n \
   --argjson mediator_threshold "$MEDIATOR_THRESHOLD" \
   --argjson scan "$scan_status" \
   --argjson scan_threshold "$SCAN_THRESHOLD" \
+  --argjson sequencer "$sequencer_status" \
+  --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
   '
     {
       status: {
-        sv:       {nodes: $sv,       description: "Last status report within \($sv_threshold) seconds"},
-        mediator: {nodes: $mediator, description: "Last acknowledgment within \($mediator_threshold) seconds"},
-        scan:     {nodes: $scan,     description: "Last open and issuing rounds are within \($scan_threshold) seconds"},
+        sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
+        mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
+        scan:      {nodes: $scan,      description: "Last open and issuing rounds are within \($scan_threshold) seconds"},
+        sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
       },
       generatedAt: (now | todate),
     }
