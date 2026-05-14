@@ -216,7 +216,7 @@ jq -n \
       status: {
         sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
         mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
-        scan:      {nodes: $scan,      description: "Last open and issuing rounds are within \($scan_threshold) seconds"},
+        scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold) seconds"},
         sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
       },
       generatedAt: (now | todate),
