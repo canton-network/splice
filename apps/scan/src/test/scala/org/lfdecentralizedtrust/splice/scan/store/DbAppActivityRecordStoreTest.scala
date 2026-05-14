@@ -67,6 +67,7 @@ class DbAppActivityRecordStoreTest
         }
 
         _ <- store.insertAppActivityRecords(records)
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, roundNumber)
         // Spot-check first, last and a middle record via row decoders
         first <- store.getRecordByVerdictRowId(verdictRowIds(0))
         middle <- store.getRecordByVerdictRowId(verdictRowIds(25))

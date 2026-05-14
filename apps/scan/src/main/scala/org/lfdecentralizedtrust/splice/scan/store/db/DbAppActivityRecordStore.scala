@@ -120,8 +120,8 @@ class DbAppActivityRecordStore(
   private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
-  /** The completeness boundary (microseconds since epoch), if known.
-    * Backed by DB, cached after first successful check.
+  /** The record time of the first activity record in the store.
+    * Backed by DB, cached after first successful read.
     */
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
     startedIngestingAtRef.get() match {
@@ -276,16 +276,20 @@ class DbAppActivityRecordStore(
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
     if (verdictRowIds.isEmpty) Future.successful(Map.empty)
     else {
-      storage
-        .query(
-          (sql"""
-          select verdict_row_id, round_number, app_provider_parties, app_activity_weights
-          from #${Tables.appActivityRecords}
-          where """ ++ inClause("verdict_row_id", verdictRowIds))
-            .as[AppActivityRecordT],
-          "appActivity.getRecordsByVerdictRowIds",
-        )
-        .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+      startedIngestingAt.flatMap {
+        case None => Future.successful(Map.empty)
+        case Some(_) =>
+          storage
+            .query(
+              (sql"""
+              select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+              from #${Tables.appActivityRecords}
+              where """ ++ inClause("verdict_row_id", verdictRowIds))
+                .as[AppActivityRecordT],
+              "appActivity.getRecordsByVerdictRowIds",
+            )
+            .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+      }
     }
   }
 
