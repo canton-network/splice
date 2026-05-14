@@ -918,11 +918,11 @@ template DsoRules with
         now <- getTime
         let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
         require "Vote request has expired" (now < castDeadline)
-        archive requestCid
         -- rate limit casting of votes by the same represented SV to avoid blocking progress
         enforceCooldown ("voteCooldownTime for " <> partyToText binding.sv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup binding.sv request.votes
           pastVote.optCastAt
+        archive requestCid
         -- store vote in the represented SV's vote slot
         let recordedVote = vote with
               sv = binding.sv
