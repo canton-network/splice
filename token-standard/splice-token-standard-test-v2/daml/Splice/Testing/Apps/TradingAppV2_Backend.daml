@@ -109,7 +109,7 @@ querySettleableTrades registries venue = do
     let minimallyRequiredAuthorizations = do
           (authorizer, leg) <- concatMap (\tradeleg -> transferLegSidesWithAuthorizer tradeleg.leg) otcTrade.tradeLegs
           -- the venue can create their own allocations directly as part of settlement
-          guard (authorizer.owner /= venue)
+          guard (regularAccountOwner authorizer /= venue)
           -- authorization is only required for outgoing transfers, and for receivers without trade agreements
           guard (leg.side == V2.SenderSide || authorizer `notElem` receiversWithAgreements)
           pure (authorizer, leg)
@@ -180,8 +180,9 @@ querySettleableTrades registries venue = do
             let missingAuthorizations = requiredAuthorizations `Set.difference` actualAuthorizations
             let missingByAuthorizer = groupAsMapBy fst $ Set.toList missingAuthorizations
             missingAllocations <- forA (Map.toList missingByAuthorizer) $ \(authorizer, missingLegs) -> do
-              unless (isBasicAccount authorizer || authorizer.owner == trade.otcTrade.venue) $
+              unless (isBasicAccount authorizer || authorizer.owner == Some trade.otcTrade.venue) $
                 fail $ "unexpected internal failure: missing authorizer is a non-basic account " <> show authorizer
+              let authorizerOwner = regularAccountOwner authorizer
               enrichedChoice <- RegistryApiV2.getAllocationFactory registry V2.AllocationFactory_Allocate with
                 allocation = V2.AllocationSpecification with
                   admin
@@ -194,9 +195,9 @@ querySettleableTrades registries venue = do
                 inputHoldingCids = []
                 requestedAt = now
                 extraArgs = emptyExtraArgs
-                actors = [authorizer.owner]
+                actors = [authorizerOwner]
               pure $ MissingAllocation with
-                authorizerAgreementCid = Map.lookup authorizer.owner agreementsByTrader
+                authorizerAgreementCid = Map.lookup authorizerOwner agreementsByTrader
                 factoryCid = enrichedChoice.factoryCid
                 choiceArg = enrichedChoice.arg
             -- query off-ledger API of admin to get the settlement context.

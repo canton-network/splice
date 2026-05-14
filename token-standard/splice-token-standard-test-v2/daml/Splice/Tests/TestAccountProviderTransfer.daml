@@ -26,7 +26,7 @@ import Splice.Tests.TestTokenV2.UnitTest_AccountConfig
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig
 import DA.Action (foldlA, when)
 import DA.Functor (void)
-import DA.Optional (isNone)
+import DA.Optional (isNone, fromSomeNote)
 import DA.Foldable (sequence_)
 
 -- Shared test setup
@@ -34,6 +34,7 @@ import DA.Foldable (sequence_)
 
 make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
 make_account_if_missing env config = do
+  let owner = fromSomeNote ("Unexpected special account: " <> show config.account) config.account.owner
   -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
         id = "X"
@@ -43,7 +44,7 @@ make_account_if_missing env config = do
   case config.account.provider of
     None -> return ()
     Some provider -> do
-      oAccount <- queryFilter @AccountConfig config.account.owner (\ac -> ac.account == config.account)
+      oAccount <- queryFilter @AccountConfig owner (\ac -> ac.account == config.account)
       case oAccount of
         [(_, config')] -> assertMsg ("Account already exists with different config: " <> show config) (config' == config)
         [] -> do
@@ -51,14 +52,14 @@ make_account_if_missing env config = do
             createCmd AccountConfig.AccountProposal with
               config
 
-          submit config.account.owner do
+          submit owner do
             exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
 
           return ()
         _ -> abort ("Multiple accounts found for config: " <> show config)
 
   -- mint
-  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account config.account.owner instrX
+  cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account owner instrX
   when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
 test_transfer_flows : Script ()
@@ -323,21 +324,21 @@ test_transfers_between_accounts = do
 
   -- accounts
   let bobSelf = V2.Account with
-        owner = bob
+        owner = Some bob
         provider = None
         id = "default"
   let aliceSelf1 = V2.Account with
-        owner = alice
+        owner = Some alice
         provider = None
         id = "acc1"
   let aliceSelf2 = V2.Account with
-        owner = alice
+        owner = Some alice
         provider = None
         id = "acc2"
   let aliceCustodyConfig = AccountConfig.AccountConfig with
         admin = env.testTokenV2.admin
         account = V2.Account with
-          owner = alice
+          owner = Some alice
           provider = Some custodian1
           id = "acc2"
         ownerConfig = AccountConfig.PartyConfig True True

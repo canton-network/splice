@@ -55,15 +55,10 @@ interface EventLog where
     -- ^ Signal a change in the holdings of an account to the observers.
     --
     -- Asset admins MUST ensure that these events explain:
-    --   1. all changes to the holdings of all accounts, including holdings that
+    --   1. all changes to the holdings of all regular accounts, including holdings that
     --      were created and archived within a single transaction.
-    --   2. all incoming and outgoing transfers for all accounts
-    --      that are not owned by the instrument admin.
+    --   2. all incoming and outgoing transfers for all regular accounts.
     --
-    -- Reporting holdings changes for accounts owned by the instrument admin is
-    -- not required, as the instrument admin has full visibility into all
-    -- holdings, and full knowledge of the actual workflows used to change these
-    -- holdings.
     with
       admin : Party
         -- ^ Instrument admin reporting the change in holdings.

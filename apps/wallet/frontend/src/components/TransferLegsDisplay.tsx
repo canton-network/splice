@@ -42,7 +42,10 @@ const TransferLegsDisplay: React.FC<{
                 </TableCell>
                 <TableCell>
                   <Stack>
-                    <BftAnsEntry partyId={sender.owner} className="allocation-sender" />
+                    <BftAnsEntry
+                      partyId={sender.owner ?? '<unexpected: missing owner party>'}
+                      className="allocation-sender"
+                    />
                     {sender.provider ? (
                       <BftAnsEntry partyId={sender.provider} className="allocation-provider" />
                     ) : null}
@@ -55,7 +58,10 @@ const TransferLegsDisplay: React.FC<{
                 </TableCell>
                 <TableCell>
                   <Stack>
-                    <BftAnsEntry partyId={receiver.owner} className="allocation-receiver" />
+                    <BftAnsEntry
+                      partyId={receiver.owner ?? '<unexpected: missing owner party>'}
+                      className="allocation-receiver"
+                    />
                     {receiver.provider ? (
                       <Typography variant="caption" color="text.secondary">
                         Provider: {receiver.provider}

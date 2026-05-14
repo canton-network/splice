@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   TemplateJsonDecoder,
+  TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
 import com.digitalasset.canton.ProtoDeserializationError
@@ -1392,7 +1393,8 @@ object HttpWalletAppClient {
                   case allocationv2.TransferSide.RECEIVERSIDE =>
                     definitions.TransferLegSide.Side.Receiverside
                 },
-                otherside = transferLegSide.otherside.owner,
+                otherside =
+                  TokenStandardAccount.tryGetRegularAccountOwner(transferLegSide.otherside),
                 Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
                 Some(transferLegSide.meta.values.asScala.toMap),
               )

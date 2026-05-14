@@ -35,10 +35,11 @@ template Token with
   where
     -- We model a token that is jointly maintained by the account parties and the instrument admin
     -- to test that the authorization rules work our for that as well.
-    signatory accountParties holding.account, holding.instrumentId.admin
+    signatory accountParties holding.instrumentId.admin holding.account, holding.instrumentId.admin
 
     ensure
       holding.amount > 0.0 -- positive amounts
+      && isSome holding.account.owner -- holdings for regular accounts only
 
     interface instance V2.Holding for Token where
       view = holding
@@ -101,6 +102,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
       [this.allocation.authorizer]
 
   let
+    admin = this.admin
     mkStateMachine v = allocationInstructionStateMachineSpec v.allocation.authorizer
 
     mkPending newActionAuthorizers newAvailableActions = do
@@ -133,7 +135,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
           (lockedTokens, authorizerChangeCids) <- splitAndLock eventLogCid allocation inputHoldingCids
           allocationCid <- create TokenAllocationV2 with
             originalAllocationCid = None
-            availableActions = mkAvailableActions allocationSpec Map.empty accountMap
+            availableActions = mkAvailableActions admin allocationSpec Map.empty accountMap
             actionAuthorizers = Map.empty
             createdAt = requestedAt
             ..
@@ -145,7 +147,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
       x -> abort $ "Unsupported state transition: " <> show x
 
   applyStateMachineTransitions
-    this oSelf actors action mkStateMachine accountMap transition
+    admin this oSelf actors action mkStateMachine accountMap transition
     mkPending tryUseAuthority extraArgs
 
 
@@ -167,7 +169,7 @@ template TokenAllocationV2 with
     createdAt : Time
   where
     ensure isValidAllocationSpecificationV2 (const True) allocation
-    signatory accountParties allocation.authorizer, allocation.admin
+    signatory accountParties allocation.admin allocation.authorizer, allocation.admin
     observer allocation.settlement.executors
 
     interface instance V2.Allocation for TokenAllocationV2 where
@@ -216,6 +218,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
       [this.allocation.authorizer]
 
   let
+    admin = this.allocation.admin
     mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors v.allocation.admin
 
     mkPending newActionAuthorizers newAvailableActions = do
@@ -268,7 +271,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
           pure (holding.instrumentId.id, holding.amount)
 
         -- prudent engineering: compare debits with expected debits based on the transfer legs, and settle
-        let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
+        let creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
         let combinedAmounts = mergeAmountMaps debitAmounts creditAmounts
         authorizerHoldingCids0 <- forA (TextMap.toList combinedAmounts) $ \(instrumentId, (debitAmount, creditAmount)) -> do
           require'
@@ -312,7 +315,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
       x -> abort $ "Unsupported state transition: " <> show x
 
   applyStateMachineTransitions
-    this oSelf actors action mkStateMachine accountMap
+    admin this oSelf actors action mkStateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
 
 -- | Transfer instruction representing a token transfer offer.
@@ -398,17 +401,18 @@ transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Auth
     meta = emptyMetadata
 
 transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized = do
+    let admin = this.transfer.instrumentId.admin
     senderChangeCids <- debitHoldings this
     inputHoldingCids <- createLockedInputs this.transfer
     -- log the tx history v2 event
     eventLogCid <- getEventLogFromContext extraArgs.context
-    logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-      admin = this.transfer.instrumentId.admin
+    logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      admin
       account = this.transfer.sender
       inputHoldingCids = this.transfer.inputHoldingCids
       transferLegSides = []
       outputHoldingCids = inputHoldingCids <> senderChangeCids
-      observers = accountParties this.transfer.sender
+      observers = accountParties admin this.transfer.sender
       extraArgs = ExtraArgs with
         context = emptyChoiceContext
         meta = reasonToMeta ("lock for transfer to " <> show this.transfer.receiver) emptyMetadata
@@ -417,11 +421,11 @@ transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TI
       newActionAuthorizers =
         insertWithUnion V2.TIA_Accept actors this.actionAuthorizers
       spec = transferInstructionStateMachineSpec this.transfer.sender this.transfer.receiver
-      state = getState spec newActionAuthorizers
+      state = getState admin spec newActionAuthorizers
 
     case state of
       TIS_Authorized -> do
-        let newAvailableActions = mkAvailableActions spec newActionAuthorizers accountMap
+        let newAvailableActions = mkAvailableActions admin spec newActionAuthorizers accountMap
         pendingInstrCid <- create this with
           actionAuthorizers = newActionAuthorizers
           availableActions = newAvailableActions
@@ -454,7 +458,9 @@ transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Auth
     senderChangeCids
     output = V2.TransferInstructionResult_Completed with
       receiverHoldingCids = [toInterfaceContractId tokenCid]
-    meta = mkMetaTransferFrom this.transfer.sender.owner (reasonFromMeta this.transfer.meta)
+    meta = case this.transfer.sender.owner of
+      None -> emptyMetadata
+      Some owner -> mkMetaTransferFrom owner (reasonFromMeta this.transfer.meta)
 
 transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Accepted = do
   transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized
@@ -470,9 +476,9 @@ applyTransferInstructionTransitions
   -> ExtraArgs
   -> Update V2.TransferInstructionResult
 applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors action extraArgs = do
-
+  let admin = transfer.instrumentId.admin
   accountMap <- extractAccountConfigMap
-      transfer.instrumentId.admin
+      admin
       extraArgs
       [transfer.sender, transfer.receiver]
 
@@ -498,7 +504,7 @@ applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors act
     transition = transferInstructionTransition this oSelf actors accountMap extraArgs
 
   applyStateMachineTransitions
-    this oSelf actors action mkStateMachine accountMap
+    admin this oSelf actors action mkStateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
 
 -- | Template providing all the rules for how the tokens can be changed.
@@ -585,7 +591,7 @@ template TokenRules with
         offerCid <- create TokenTransferOffer with
           originalInstructionCid = None
           actionAuthorizers = adminApproved
-          availableActions = mkAvailableActions spec adminApproved accountMap
+          availableActions = mkAvailableActions admin spec adminApproved accountMap
           mintAmount = amount
           transfer = V2.Transfer with
             sender = mintAccount admin
@@ -660,10 +666,11 @@ debitHoldings offer = do
 createLockedInputs : V2.Transfer -> Update [ContractId V2.Holding]
 createLockedInputs transfer = do
   -- lock the amount to be transferred
+  let admin = transfer.instrumentId.admin
   lockedCid <- create Token with
     holding = (senderHoldingFromTransfer transfer) with
       lock = Some $ V2.Lock with
-        holders = transfer.instrumentId.admin :: accountParties transfer.sender
+        holders = admin :: accountParties admin transfer.sender
         expiresAt = Some transfer.executeBefore
         expiresAfter = None
         context = Some $ "transfer to " <> show transfer.receiver
@@ -682,7 +689,7 @@ splitAndLock eventLogCid allocation inputTokenCids = do
       ))
 
   -- create locked tokens and change for the sender
-  let creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
+  let creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
   let combinedAmounts = mergeAmountMaps inputAmounts creditAmounts
   locksAndChange <- forA (TextMap.toList combinedAmounts) $ \(instrumentId, (inputAmount, creditAmount)) -> do
     let netAmount = min 0.0 creditAmount + inputAmount
@@ -702,7 +709,7 @@ splitAndLock eventLogCid allocation inputTokenCids = do
               id = instrumentId
               admin = allocation.admin
             lock = Some $ V2.Lock with
-              holders = allocation.admin :: accountParties allocation.authorizer
+              holders = allocation.admin :: accountParties allocation.admin allocation.authorizer
               expiresAt = allocation.settlement.settlementDeadline
               expiresAfter = None
               context = Some $ "allocation for settlement of " <> allocation.settlement.settlementRef.id
@@ -727,13 +734,13 @@ splitAndLock eventLogCid allocation inputTokenCids = do
     authorizerChangeCids = TextMap.fromListWithR (++) $ concatMap snd locksAndChange
 
   -- log the tx history v2 event
-  logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
     admin = allocation.admin
     account = allocation.authorizer
     inputHoldingCids = concat (textMapValues inputTokenCids)
     transferLegSides = []
     outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
-    observers = accountParties allocation.authorizer
+    observers = accountParties allocation.admin allocation.authorizer
     extraArgs = ExtraArgs with
       context = emptyChoiceContext
       meta = reasonToMeta ("lock holdings for allocation") emptyMetadata
@@ -747,11 +754,14 @@ token_allocationFactoryV2_allocateImpl
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
 token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
+  let admin = tokenRules.admin
+  requireMatchExpected ("allocation.admin", arg.allocation.admin) admin
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token
     token <- fetch tokenCid
     let holding = token.holding
     require' ("inputHolding.account", holding.account) isEqualR ("allocation.authorizer", arg.allocation.authorizer)
+    requireMatchExpected ("inputHolding.instrumentId.admin", holding.instrumentId.admin) admin
     pure (holding.instrumentId.id, [cid])
 
   let
@@ -781,13 +791,14 @@ unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
       toInterfaceContractId <$> create Token with
         holding = holding with lock = None
   eventLogCid <- getEventLogFromContext extraArgs.context
-  logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-    admin = tokenAllocation.allocation.admin
+  let admin = tokenAllocation.allocation.admin
+  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+    admin
     account = tokenAllocation.allocation.authorizer
     inputHoldingCids = concat (textMapValues tokenAllocation.lockedTokens)
     transferLegSides = []
     outputHoldingCids = concat (textMapValues authorizerCids)
-    observers = accountParties tokenAllocation.allocation.authorizer
+    observers = accountParties admin tokenAllocation.allocation.authorizer
     extraArgs = ExtraArgs with
       context = emptyChoiceContext
       meta = reasonToMeta reason emptyMetadata
@@ -801,13 +812,14 @@ unlockTokenTransferOffer reason offer extraArgs = do
       holding = senderHoldingFromTransfer transfer
     -- log v2 history event
     eventLogCid <- getEventLogFromContext extraArgs.context
-    logNonEmptyChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-      admin = transfer.instrumentId.admin
+    let admin = transfer.instrumentId.admin
+    logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+      admin
       account = transfer.sender
       inputHoldingCids = transfer.inputHoldingCids
       transferLegSides = []
       outputHoldingCids = [toInterfaceContractId tokenCid]
-      observers = accountParties transfer.sender
+      observers = accountParties admin transfer.sender
       extraArgs = ExtraArgs with
         context = emptyChoiceContext
         meta = reasonToMeta reason emptyMetadata
@@ -825,8 +837,6 @@ senderHoldingFromTransfer transfer = V2.HoldingView with
   lock = None
   meta = emptyMetadata
 
-jointAuthorizers : V2.Account -> [Party]
-jointAuthorizers = dedupSort . accountParties
 
 -- Event log retrieval
 ----------------------

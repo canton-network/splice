@@ -122,7 +122,7 @@ import Daml.Script
 -- | List all holdings of a specific instrument owned by a party.
 listHoldings : Party -> V2.InstrumentId -> Script [(ContractId V2.Holding, V2.HoldingView)]
 listHoldings p instrumentId = do
-  filter (\(_, holding) -> holding.instrumentId == instrumentId && holding.account.owner == p) <$> listVisibleHoldings p
+  filter (\(_, holding) -> holding.instrumentId == instrumentId && holding.account.owner == Some p) <$> listVisibleHoldings p
 
 -- | List the holdings visible to a party.
 listVisibleHoldings : Party -> Script [(ContractId V2.Holding, V2.HoldingView)]
@@ -694,6 +694,11 @@ data SimpleTransfer = SimpleTransfer with
     reason : Text
   deriving (Eq, Show)
 
+regularAccountOwner : V2.Account -> Party
+regularAccountOwner account = case account.owner of
+  None -> error $ "unexpected special account: " <> show account
+  Some owner -> owner
+
 -- | Create a simplified transfer.
 mkTransferFactory_TransferV1' : MultiRegistry.MultiRegistry -> SimpleTransfer -> Script TSABatch
 mkTransferFactory_TransferV1' registries t = do
@@ -701,8 +706,8 @@ mkTransferFactory_TransferV1' registries t = do
   mkTransferFactory_TransferV1 registries V1.TransferFactory_Transfer with
     expectedAdmin = t.instrumentId.admin
     transfer = V1.Transfer with
-      sender = t.sender.owner
-      receiver = t.receiver.owner
+      sender = regularAccountOwner t.sender
+      receiver = regularAccountOwner t.receiver
       amount = t.amount
       instrumentId = TSU.downcast t.instrumentId
       requestedAt = now
@@ -716,7 +721,7 @@ mkTransferFactory_TransferV2' : MultiRegistry.MultiRegistry -> SimpleTransfer ->
 mkTransferFactory_TransferV2' registries t = do
   now <- getTime
   mkTransferFactory_TransferV2 registries V2.TransferFactory_Transfer with
-    actors = [t.sender.owner]
+    actors = optionalToList t.sender.owner
     transfer = V2.Transfer with
       sender = t.sender
       receiver = t.receiver
@@ -809,7 +814,7 @@ validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
               TransferEventsV2.ReceiverSide -> TransferEventsV2.SenderSide
         let othersideLeg =
               (leg.otherside, leg with side = otherSide; otherside = change.account)
-        unless (othersideLeg `elem` allNonAdminTransferLegs || othersideLeg._1.owner == change.admin) $
+        unless (othersideLeg `elem` allRegularTransferLegs || isNone othersideLeg._1.owner) $
           fail $ "transfer leg side " <> show leg <> " is not reported"
     -- check that total supply changes are reported via burns and mints
     unless (reportedSupplyChangeByAdmin == actualSupplyChangeByAdmin) $
@@ -843,9 +848,9 @@ validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
       [ (holding.instrumentId.admin, negate holding.amount) | (_, holding) <- Map.toList holdingsBefore ] ++
       [ (holding.instrumentId.admin, holding.amount) | (_, holding) <- Map.toList holdingsAfter ]
 
-    allNonAdminTransferLegs = do
+    allRegularTransferLegs = do
       change <- changes
-      guard (change.account.owner /= change.admin) -- admins are free to not provide tx history for their accounts
+      guard (isSome change.account.owner)
       leg <- change.transferLegSides
       pure (change.account, leg)
 
@@ -883,7 +888,7 @@ validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
           let ignoreZeroChanges = Map.filter (/= 0.0)
           let holdingAmountChanges = ignoreZeroChanges $ Map.fromListWithR (+) (catOptionals debits ++ credits)
           let legAmountChanges = ignoreZeroChanges $ netAllocationCreditAmountsOfLegs change.admin change.transferLegSides
-          unless (holdingAmountChanges == legAmountChanges || change.account.owner == change.admin) $
+          unless (holdingAmountChanges == legAmountChanges || isNone change.account.owner) $
             fail $ T.unlines
               [ "holding amount changes do not match leg amount changes for account " <> show change.account
               , "holding amount changes: " <> show holdingAmountChanges

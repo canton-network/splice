@@ -25,8 +25,12 @@ data InstrumentId = InstrumentId
 -- a provider to perform some services.
 data Account = Account
   with
-    owner : Party
-      -- ^ The party that owns the account.
+    owner : Optional Party
+      -- ^ The party that owns the account, which MUST be set for regular accounts.
+      --
+      -- `None` is reserved for special accounts managed by the instrument
+      -- admin. Special accounts are for example used to represent the source
+      -- account for mints and the target account for burns.
     provider : Optional Party
       -- ^ The provider of the account.
       --

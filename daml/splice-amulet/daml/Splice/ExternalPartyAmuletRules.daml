@@ -147,7 +147,7 @@ template ExternalPartyAmuletRules
         settlementFactoryV2_settleBatchDefaultImpl dso self arg
 
       settlementFactory_settleBatchExtraObservers =
-        settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl
+        settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl dso
 
       settlementFactory_publicFetchImpl = publicFetchDefaultImpl this
 
@@ -414,7 +414,8 @@ amulet_allocationFactoryV2_allocateImpl
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
 amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
-  let netTransferAmount = netAmuletCreditAmount arg.allocation.authorizer arg.allocation.transferLegSides
+  let dso = externalAmuletRules.dso
+  let netTransferAmount = netAmuletCreditAmount dso arg.allocation.authorizer arg.allocation.transferLegSides
   outputFundingAmount <- validateAmuletNextIterationFunding arg.allocation.nextIterationFunding
   let requiredFundingAmount = outputFundingAmount - netTransferAmount
   (lockedAmulet, senderChangeCids, expiresAt, meta) <-
@@ -422,7 +423,7 @@ amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
   allocationCid <- toInterfaceContractId <$> create AmuletAllocationV2 with
     allocation = arg.allocation
     lockedAmulet
-    dso = externalAmuletRules.dso
+    dso
     expiresAt
     createdAt = arg.requestedAt
     numIterations = 0
@@ -446,7 +447,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
 
   -- check actors
   ensureBasicAccount "allocation.authorizer" allocation.authorizer
-  let authorizer = allocation.authorizer.owner
+  let authorizer = accountPrincipal dso allocation.authorizer
   checkActors actors [[authorizer]]
 
   -- == validate each field of the requested allocation
