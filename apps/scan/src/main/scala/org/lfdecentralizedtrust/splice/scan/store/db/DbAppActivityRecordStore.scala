@@ -354,31 +354,6 @@ class DbAppActivityRecordStore(
       )
     }
 
-  /** Returns the maximum stored code and user versions, for downgrade detection.
-    * Returns None if no meta row exists for this history.
-    */
-  def lookupMaxMetaVersions()(implicit
-      tc: TraceContext
-  ): Future[Option[(Int, Int)]] =
-    futureUnlessShutdownToFuture(
-      storage
-        .querySingle(
-          sql"""select max(activity_ingestion_code_version),
-                       max(activity_ingestion_user_version)
-                from #${Tables.activityRecordMeta}
-                where history_id = $historyId
-          """
-            .as[(Option[Int], Option[Int])]
-            .headOption
-            .map(_.flatMap {
-              case (Some(c), Some(u)) => Some((c, u))
-              case _ => None
-            }),
-          "appActivity.lookupMaxMetaVersions",
-        )
-        .value
-    )
-
   /** Returns the meta row for the given code and user version. */
   def lookupActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
       tc: TraceContext
