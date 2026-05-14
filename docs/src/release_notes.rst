@@ -63,8 +63,8 @@
         SV submitted transactions, and such app activity records should be considered incorrect.
         App activity records data provided for other transactions is valid.
 
-        The ``app_activity_record_store`` table has been truncated to remove the records computed with the earlier logic,
-        and both the endpoints will not provide ``app_activity_records`` for events prior to this release.
+        Neither endpoint will provide ``app_activity_records`` for events prior to this release.
+        Internally, the ``app_activity_record_store`` table will be truncated to remove the records computed with the earlier logic on initial launch.
 
 .. release-notes:: 0.6.3
 
