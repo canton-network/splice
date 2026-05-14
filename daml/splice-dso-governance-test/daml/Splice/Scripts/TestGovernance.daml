@@ -25,6 +25,7 @@ import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
 import Splice.CometBft
 import Splice.DecentralizedSynchronizer
+import Splice.DSO.GovernanceVoter
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry.Parameters
@@ -34,20 +35,540 @@ import Splice.Testing.Utils
 -- Vote Requests
 ----------------
 
+-- | Tests the governance-voter binding lifecycle and authorization.
+testSvGovernanceVoterBindingLifecycle : Script ()
+testSvGovernanceVoterBindingLifecycle = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter <- allocateParty "governance-voter"
+  otherParty <- allocateParty "wrong-governance-voter"
+
+  let activeSv1Bindings = queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
+
+  -- Onboarding default is self-voting: the represented SV is its own
+  -- governance voter until it rotates the binding to a delegate.
+  selfBindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = sv1
+  Some selfBinding <- queryContractId dso selfBindingCid
+  selfBinding.governanceVoter === sv1
+  -- Phase 1 invariant: exactly one active binding per represented SV.
+  -- Rotation is consuming, so the lifecycle preserves this by construction.
+  activeSv1Bindings >>= \bs -> length bs === 1
+
+  -- The DSO party is never a valid governance voter.
+  submitMustFail sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = dso
+
+  -- Only the represented SV can declare the binding.
+  submitMustFail governanceVoter $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter
+
+  -- Rotate the binding to an external governance-voter party.
+  rotateResult <- submit sv1 $ exerciseCmd selfBindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter
+  None <- queryContractId dso selfBindingCid
+  Some rotatedBinding <- queryContractId dso rotateResult.bindingCid
+  rotatedBinding.governanceVoter === governanceVoter
+  activeSv1Bindings >>= \bs -> length bs === 1
+
+  -- No-op rotation is rejected.
+  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter
+
+  -- Rotation to the DSO party is rejected.
+  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = dso
+
+  -- Non-SV parties cannot rotate the binding.
+  submitMustFail otherParty $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = otherParty
+
+  -- Returning control to the operator is rotation back to the represented SV;
+  -- there is intentionally no Clear choice. The represented SV always has a
+  -- binding so that there is always a path to cast its vote.
+  returnResult <- submit sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = sv1
+  None <- queryContractId dso rotateResult.bindingCid
+  Some returnedBinding <- queryContractId dso returnResult.bindingCid
+  returnedBinding.governanceVoter === sv1
+  activeSv1Bindings >>= \bs -> length bs === 1
+  pure ()
+
+-- | Documents the Phase 1 boundary of the single-active-binding invariant:
+-- the SvGovernanceVoter template does not gate against the represented SV
+-- bare-creating multiple bindings in parallel. The invariant is workflow-
+-- only (onboarding default plus consuming RotateGovernanceVoter), not a
+-- contract-level guard. If a represented SV does end up with two active
+-- bindings, both governance voters can cast against the same represented-
+-- SV slot under last-writer-wins; no double-counting and no extra vote
+-- weight, but the cast log becomes ambiguous. This test captures that
+-- failure mode so future work (contract key, single-binding registry, or
+-- onboarding-side enforcement) has a concrete behaviour to point at.
+testGovernanceVoterDuplicateBindingsAmbiguity : Script ()
+testGovernanceVoterDuplicateBindingsAmbiguity = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter1 <- allocateParty "duplicate-governance-voter-1"
+  governanceVoter2 <- allocateParty "duplicate-governance-voter-2"
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- sv1 bare-creates two SvGovernanceVoter contracts in parallel, each
+  -- delegating to a distinct governance-voter party. The template itself
+  -- accepts this; one active binding per represented SV relies on the
+  -- onboarding default and the consuming Rotate choice, not on the
+  -- contract.
+  binding1Cid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter1
+  binding2Cid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter2
+
+  activeBindings <- queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
+  length activeBindings === 2
+
+  let offboardSv2Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+  requestResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = governanceVoter1
+    bindingCid = binding1Cid
+    action = offboardSv2Action
+    reason = Reason with url = ""; body = "duplicate-binding ambiguity"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  Some initialRequest <- queryContractId dso requestResult.voteRequest
+  case Map.lookup sv1 initialRequest.votes of
+    None -> fail "initial governance-voter vote missing"
+    Some vote -> do
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+
+  -- The second binding is structurally valid (same DSO party, same
+  -- represented SV, its own governance voter), so DsoRules_CastGovernanceVote
+  -- accepts a cast from governanceVoter2 against the same represented-SV slot.
+  passTime (minutes 1)
+  castResult <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = requestResult.voteRequest
+    bindingCid = binding2Cid
+    vote = Vote with
+      sv = sv1
+      castBy = governanceVoter2
+      castByRole = VCR_GovernanceVoter
+      accept = False
+      reason = Reason with url = ""; body = "second binding wins"
+      optCastAt = None
+
+  -- One vote per represented SV is preserved: governanceVoter2's cast
+  -- overwrites governanceVoter1's auto-accept in the sv1 slot. The
+  -- ambiguity is in the cast log, not in the tally.
+  Some finalRequest <- queryContractId dso castResult.voteRequest
+  Map.size finalRequest.votes === 1
+  case Map.lookup sv1 finalRequest.votes of
+    None -> fail "represented SV vote slot missing after second cast"
+    Some vote -> do
+      vote.castBy === governanceVoter2
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+  pure ()
+
+-- | Tests that both cast paths refuse votes after the cast deadline. For
+-- requests without targetEffectiveAt the deadline is voteBefore; for
+-- requests with targetEffectiveAt the deadline extends to the effective
+-- time, matching the existing close-vote semantics.
+testCastDeadlineExpiry : Script ()
+testCastDeadlineExpiry = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+  sv1Binding <- ensureSelfBinding dso sv1
+
+  -- Governance-voter cast path: voteBefore is the cast deadline when there
+  -- is no targetEffectiveAt.
+  let offboardSv2Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+  govRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
+    action = offboardSv2Action
+    reason = Reason with url = ""; body = "expiry"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 1)
+  passTime (days 1 + seconds 1)
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = govRequest.voteRequest
+    bindingCid = sv1Binding
+    vote = Vote with
+      sv = sv1
+      castBy = sv1
+      castByRole = VCR_GovernanceVoter
+      accept = False
+      reason = Reason with url = ""; body = "after deadline"
+      optCastAt = None
+
+  -- Operator cast path: same enforcement on an operational action.
+  now <- getTime
+  opRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = sv2
+        newSvName = "expiry-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "expiry-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "expiry op"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 1)
+  passTime (days 1 + seconds 1)
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = opRequest.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv2
+      castByRole = VCR_Operator
+      accept = True
+      reason = Reason with url = ""; body = "after deadline"
+      optCastAt = None
+  pure ()
+
+-- | Tests that DsoRules_CastVote rejects votes whose declared castBy or
+-- castByRole do not match the operator path's invariants. These checks
+-- mirror the binding/role checks on DsoRules_CastGovernanceVote and
+-- surface caller bugs that the silent overwrite would otherwise mask.
+testOperatorCastAttributionGuards : Script ()
+testOperatorCastAttributionGuards = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = sv2
+        newSvName = "guards-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "guards-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "attribution guards"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  -- castBy must match vote.sv on the operator path.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = requestResult.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv1
+      castByRole = VCR_Operator
+      accept = True
+      reason = Reason with url = ""; body = "wrong castBy"
+      optCastAt = None
+
+  -- castByRole must be VCR_Operator on the operator path.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = requestResult.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv2
+      castByRole = VCR_GovernanceVoter
+      accept = True
+      reason = Reason with url = ""; body = "wrong castByRole"
+      optCastAt = None
+  pure ()
+
+-- | Tests governance-voter request and cast paths under the strict role
+-- split: governance-voter eligible actions are requested and cast only by
+-- the governance voter; the operator path is closed for them.
+testGovernanceVoterCastPath : Script ()
+testGovernanceVoterCastPath = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  governanceVoter1 <- allocateParty "cast-governance-voter-1"
+  governanceVoter2 <- allocateParty "cast-governance-voter-2"
+  wrongVoter <- allocateParty "wrong-cast-governance-voter"
+  newSv <- allocateParty "cast-new-sv"
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+
+  -- sv2 starts with self-voting (the onboarding default), and so is its own
+  -- governance voter for opening governance-voter eligible vote requests.
+  sv2BindingCid <- submit sv2 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv2
+    governanceVoter = sv2
+
+  -- sv1 delegates its vote to a separate governance-voter party.
+  bindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = governanceVoter1
+
+  let governanceVote svParty signer accept body = Vote with
+        sv = svParty
+        castBy = signer
+        castByRole = VCR_GovernanceVoter
+        accept
+        reason = Reason with url = ""; body
+        optCastAt = None
+  let offboardSv1Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv1
+  let requestOffboardSv = submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+        governanceVoter = sv2
+        bindingCid = sv2BindingCid
+        action = offboardSv1Action
+        reason = Reason with url = ""; body = "cast path"
+        targetEffectiveAt = None
+        voteRequestTimeout = Some (days 7)
+
+  -- Governance-voter eligible actions cannot be opened via the operator path.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv2
+    action = offboardSv1Action
+    reason = Reason with url = ""; body = "blocked operator request"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  requestResult <- requestOffboardSv
+  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = requestResult.voteRequest
+    bindingCid
+    vote = governanceVote sv1 governanceVoter1 False "governance voter update"
+  Some request <- queryContractId dso castResult.voteRequest
+  Map.size request.votes === 2
+  case Map.lookup sv1 request.votes of
+    None -> fail "represented SV vote missing"
+    Some vote -> do
+      vote.sv === sv1
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+
+  -- The operator path is closed on governance-voter eligible requests: sv1
+  -- cannot use DsoRules_CastVote to overwrite the governance voter's vote.
+  passTime (minutes 1)
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = castResult.voteRequest
+    vote = Vote with
+      sv = sv1
+      castBy = sv1
+      castByRole = VCR_Operator
+      accept = True
+      reason = Reason with url = ""; body = "operator may not override"
+      optCastAt = None
+  Some request <- queryContractId dso castResult.voteRequest
+  case Map.lookup sv1 request.votes of
+    None -> fail "governance voter vote missing after rejected operator overwrite"
+    Some vote -> do
+      vote.castBy === governanceVoter1
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+
+  -- Operational actions still flow through the operator path; the governance-
+  -- voter path rejects them.
+  unsupportedRequest <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv2
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = newSv
+        newSvName = "cast-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "cast-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "operational action"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = unsupportedRequest.voteRequest
+    bindingCid
+    vote = governanceVote sv1 governanceVoter1 False "operational"
+
+  -- And opening an operational action via the governance-voter path also fails.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv2
+    bindingCid = sv2BindingCid
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = newSv
+        newSvName = "cast-new-sv-2"
+        newSvRewardWeight = 1
+        newSvParticipantId = "cast-new-sv-2-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "operational via governance path"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  wrongVoterRequest <- requestOffboardSv
+  submitMustFail (actAs wrongVoter <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = wrongVoterRequest.voteRequest
+    bindingCid
+    vote = governanceVote sv1 wrongVoter False "wrong voter"
+
+  -- Rotating sv1's binding switches the authorized governance voter; the
+  -- previous one can no longer cast.
+  rotateResult <- submit sv1 $ exerciseCmd bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = governanceVoter2
+  rotatedRequest <- requestOffboardSv
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = rotatedRequest.voteRequest
+    bindingCid = rotateResult.bindingCid
+    vote = governanceVote sv1 governanceVoter1 False "rotated old voter"
+  passTime (minutes 1)
+  _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = rotatedRequest.voteRequest
+    bindingCid = rotateResult.bindingCid
+    vote = governanceVote sv1 governanceVoter2 False "rotated new voter"
+
+  -- Returning control to the operator is rotation back to the represented SV;
+  -- after that, sv1 itself is the governance voter and may cast through the
+  -- governance-voter path.
+  returnedResult <- submit sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
+    newGovernanceVoter = sv1
+  returnedRequest <- requestOffboardSv
+  submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = returnedRequest.voteRequest
+    bindingCid = returnedResult.bindingCid
+    vote = governanceVote sv1 governanceVoter2 False "stale delegate"
+  passTime (minutes 1)
+  _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+    requestCid = returnedRequest.voteRequest
+    bindingCid = returnedResult.bindingCid
+    vote = governanceVote sv1 sv1 False "operator-as-self-voter"
+  pure ()
+
+-- | Tests the Phase 1 governance-voter action taxonomy.
+testGovernanceVoterActionTaxonomy : Script ()
+testGovernanceVoterActionTaxonomy = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  provider <- allocateParty "taxonomy-provider"
+  beneficiary <- allocateParty "taxonomy-beneficiary"
+  newSv <- allocateParty "taxonomy-new-sv"
+  now <- getTime
+  [(_, dsoRules)] <- query @DsoRules dso
+  [(_, amuletRules)] <- query @AmuletRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+  rightCid <- submit dso $ createCmd FeaturedAppRight with
+    dso
+    provider
+
+  forA_
+    [ ARC_DsoRules with
+        dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with provider
+    , ARC_DsoRules with
+        dsoAction = SRARC_RevokeFeaturedAppRight DsoRules_RevokeFeaturedAppRight with rightCid
+    , ARC_DsoRules with
+        dsoAction = SRARC_SetConfig DsoRules_SetConfig with
+          newConfig = dsoRules.config
+          baseConfig = Some dsoRules.config
+    , ARC_DsoRules with
+        dsoAction = SRARC_UpdateSvRewardWeight DsoRules_UpdateSvRewardWeight with
+          svParty = sv1
+          newRewardWeight = 1
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateUnallocatedUnclaimedActivityRecord DsoRules_CreateUnallocatedUnclaimedActivityRecord with
+          beneficiary
+          amount = 1.0
+          reason = "taxonomy test"
+          expiresAt = now `addRelTime` (days 1)
+    , ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
+    , ARC_AmuletRules with
+        amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
+          newConfig = amuletRules.configSchedule.initialValue
+          baseConfig = amuletRules.configSchedule.initialValue
+    ]
+    (\action -> isGovernanceVoterAction action === True)
+
+  forA_
+    [ ARC_DsoRules with
+        dsoAction = SRARC_AddSv DsoRules_AddSv with
+          newSvParty = newSv
+          newSvName = "taxonomy-new-sv"
+          newSvRewardWeight = 1
+          newSvParticipantId = "taxonomy-participant"
+          joinedAsOfRound = openRound.round
+    , ARC_DsoRules with
+        dsoAction = SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding with
+          newSvParty = newSv
+          newSvName = "taxonomy-new-sv"
+          newParticipantId = "taxonomy-participant"
+          newSvRewardWeight = 1
+          reason = "taxonomy test"
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateExternalPartyAmuletRules DsoRules_CreateExternalPartyAmuletRules
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateTransferCommandCounter DsoRules_CreateTransferCommandCounter with
+          sender = provider
+    , ARC_DsoRules with
+        dsoAction = SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
+    , ExtActionRequiringConformation with dummyUnitField = ()
+    ]
+    (\action -> isGovernanceVoterAction action === False)
+
+-- | Tests that vote updates keep one vote slot for the represented SV.
+testVoteUpdateKeepsOneSlotPerSv : Script ()
+testVoteUpdateKeepsOneSlotPerSv = do
+  (app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
+
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
+    action = ARC_DsoRules with
+      dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
+        sv = sv2
+    reason = Reason with url = ""; body = "taxonomy tally test"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  let initialRequestCid = result.voteRequest
+
+  Some initialRequest <- queryContractId dso initialRequestCid
+  Map.size initialRequest.votes === 1
+  case Map.lookup sv1 initialRequest.votes of
+    None -> fail "requester vote missing"
+    Some vote -> do
+      vote.sv === sv1
+      vote.castBy === sv1
+      vote.castByRole === VCR_GovernanceVoter
+
+  passTime (minutes 1)
+  updatedCid <- castVoteOnRequest app dsoRulesCid sv1 initialRequestCid False "updated vote"
+
+  Some updatedRequest <- queryContractId dso updatedCid
+  Map.size updatedRequest.votes === 1
+  updatedRequest.trackingCid === Some initialRequestCid
+  case Map.lookup sv1 updatedRequest.votes of
+    None -> fail "updated requester vote missing"
+    Some vote -> do
+      vote.sv === sv1
+      vote.castBy === sv1
+      vote.castByRole === VCR_GovernanceVoter
+      vote.accept === False
+
 -- | Tests vote request machinery on featured app right granting and revoking without effectivity.
 testVoteRequestAcceptanceWithoutEffectivity : Script ()
 testVoteRequestAcceptanceWithoutEffectivity = do
   (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
 
   -- allocate an app provider, and check that there is no app right
   provider <- allocateParty "provider"
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider with no effective time
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -111,6 +632,7 @@ testVoteRequestAcceptanceWithEffectivity = do
   (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
 
   -- allocate an app provider, and check that there is no app right
   provider <- allocateParty "provider"
@@ -120,8 +642,9 @@ testVoteRequestAcceptanceWithEffectivity = do
   let effectiveTime = addRelTime now (days 8)
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -204,14 +727,16 @@ testVoteRequestRejectionWithoutEffectivity = do
   (_app, dso, (sv1, sv2, _sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
 
   -- allocate an app provider, and check that there is no app right
   provider <- allocateParty "provider"
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -246,6 +771,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
   (_app, dso, (sv1, sv2, _sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
 
   now <- getTime
   let effectiveTime = addRelTime now (days 8)
@@ -255,8 +781,9 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -291,6 +818,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
   (_app, dso, (sv1, sv2, _sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
 
   now <- getTime
   let effectiveTime = addRelTime now (days 8)
@@ -300,8 +828,9 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
   [] <- query @FeaturedAppRight provider
 
   -- voteRequests with an effective time set before the expiration date must fail
-  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -310,8 +839,9 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     voteRequestTimeout = Some (days 2)
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -359,10 +889,13 @@ testRacingSvRemoval = do
   (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
+  sv2Binding <- ensureSelfBinding dso sv2
 
   -- sv1 is not happy with sv2, and issues two removal requests at the same time!
-  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv2
@@ -370,8 +903,9 @@ testRacingSvRemoval = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
 
-  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv2
@@ -380,8 +914,9 @@ testRacingSvRemoval = do
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
 
   -- sv2 counters and wants to remove sv1
-  result3 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv2
+  result3 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv2
+    bindingCid = sv2Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv1
@@ -393,8 +928,9 @@ testRacingSvRemoval = do
   now <- getTime
   let effectiveTime = addRelTime now (days 8)
 
-  result4 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result4 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv2
@@ -410,35 +946,10 @@ testRacingSvRemoval = do
   -- sv3 and sv4 are not happy with either of them, and accept both removal requests
   -- sv1 and sv2 accept both requests as well, so we can better test races
   [req1, req2, req3] <- forA [req1, req2, req3] $ \requestCid -> do
-    result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-      requestCid
-      vote = Vote with
-        sv = sv1
-        accept = True
-        reason = Reason with url = ""; body = "OK, let them go"
-        optCastAt = None
-    result2 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-      requestCid = result1.voteRequest
-      vote = Vote with
-        sv = sv2
-        accept = True
-        reason = Reason with url = ""; body = "OK, let them go"
-        optCastAt = None
-    result3 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-      requestCid = result2.voteRequest
-      vote = Vote with
-        sv = sv3
-        accept = True
-        reason = Reason with url = ""; body = "OK, let them go"
-        optCastAt = None
-    result4 <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-      requestCid = result3.voteRequest
-      vote = Vote with
-        sv = sv4
-        accept = True
-        reason = Reason with url = ""; body = "OK, let them go"
-        optCastAt = None
-    pure result4.voteRequest
+    req <- castVoteOnRequest app dsoRulesCid sv1 requestCid True "OK, let them go"
+    req <- castVoteOnRequest app dsoRulesCid sv2 req True "OK, let them go"
+    req <- castVoteOnRequest app dsoRulesCid sv3 req True "OK, let them go"
+    castVoteOnRequest app dsoRulesCid sv4 req True "OK, let them go"
 
   -- sv1 attempts to immediatly accept the request to remove sv2
   now <- getTime
@@ -489,7 +1000,7 @@ testRacingSvRemoval = do
     sv = Some sv1
 
   result.completedAt === now
-  result.offboardedVoters === ["sv2"]
+  result.offboardedVoters === [partyToText sv2]
   result.abstainingSvs === []
   result.outcome === VRO_Accepted with effectiveAt = now
 
@@ -500,8 +1011,10 @@ testRacingSvRemoval = do
 
   -- The story continues: sv3 tries to remove sv4
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result4 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv3
+  sv3Binding <- ensureSelfBinding dso sv3
+  result4 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv3
+    bindingCid = sv3Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv4
@@ -528,8 +1041,9 @@ testRacingSvRemoval = do
   result.outcome === VRO_Expired
 
   -- Let's see if sv3 and sv4 can work together to also remove sv4
-  result5 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv3
+  result5 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv3
+    bindingCid = sv3Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv4
@@ -537,14 +1051,7 @@ testRacingSvRemoval = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 1)
 
-  castResult <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-    requestCid = result5.voteRequest
-    vote = Vote with
-      sv = sv4
-      accept = True
-      reason = Reason with url = ""; body = "yes, let me go please!"
-      optCastAt = None
-  let req5 = castResult.voteRequest
+  req5 <- castVoteOnRequest app dsoRulesCid sv4 result5.voteRequest True "yes, let me go please!"
 
   -- and actually early closing is possible, as everybody has voted and the outcome is definite
   now <- getTime
@@ -611,8 +1118,10 @@ testDsoRulesConfigChange = do
 
   -- creation of two concurrent independent vote requests
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  sv1Binding <- ensureSelfBinding dso sv1
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
         newConfig = newConfig1
@@ -621,8 +1130,9 @@ testDsoRulesConfigChange = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
 
-  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
         newConfig = newConfig2
@@ -684,8 +1194,10 @@ testAmuletRulesTickDurationChange = do
   let newConfig = amuletRules.configSchedule.initialValue with tickDuration = seconds 20
 
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  sv1Binding <- ensureSelfBinding dso sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
         newConfig = newConfig
@@ -787,8 +1299,10 @@ testAmuletRulesConfigChange = do
 
   -- creation of two concurrent independent vote requests
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
-  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  sv1Binding <- ensureSelfBinding dso sv1
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
         newConfig = newConfig1
@@ -797,8 +1311,9 @@ testAmuletRulesConfigChange = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
 
-  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
         newConfig = newConfig2
@@ -907,8 +1422,10 @@ testVoteRequestExpireWithoutEffectivity = do
   provider <- allocateParty "provider"
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  sv1Binding <- ensureSelfBinding dso sv1
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -949,8 +1466,10 @@ testVoteRequestExpireWithEffectivity = do
   let effectiveTime = addRelTime now (days 8)
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  sv1Binding <- ensureSelfBinding dso sv1
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
@@ -1052,13 +1571,16 @@ testAmuletPriceVoting = do
 
 testVoteCastingCooldown : Script ()
 testVoteCastingCooldown  = do
-  (_, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  (app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
+  sv2Binding <- ensureSelfBinding dso sv2
 
   -- create vote request to use for testing
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
+    governanceVoter = sv1
+    bindingCid = sv1Binding
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
         sv = sv2
@@ -1068,29 +1590,28 @@ testVoteCastingCooldown  = do
   let requestCid = result.voteRequest
 
   -- SV2 can immediately cast a vote
-  result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-    requestCid
-    vote = Vote with
-      sv = sv2
-      accept = False
-      reason = Reason with url = ""; body = "noooo, let me stay on please!"
-      optCastAt = None
-  let requestCid = result.voteRequest
+  requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid False "noooo, let me stay on please!"
 
   -- The second vote SV2 fails though
-  _ <- submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
         requestCid
+        bindingCid = sv2Binding
         vote = Vote with
           sv = sv2
+          castBy = sv2
+          castByRole = VCR_GovernanceVoter
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
 
   -- And that same holds for SV1, as it voted as part of creating the request.
-  _ <- submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
         requestCid
+        bindingCid = sv1Binding
         vote = Vote with
           sv = sv1
+          castBy = sv1
+          castByRole = VCR_GovernanceVoter
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None
@@ -1098,23 +1619,8 @@ testVoteCastingCooldown  = do
   -- let the vote cooldown pass, so they can update their votes
   passTime (minutes 1)
 
-  -- The second vote SV2 fails though
-  result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-        requestCid
-        vote = Vote with
-          sv = sv2
-          accept = False
-          reason = Reason with url = ""; body = "a better rebuttal"
-          optCastAt = None
-  let requestCid = result.voteRequest
-
-  -- And that same holds for SV1, as it voted as part of creating the request.
-  _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-        requestCid
-        vote = Vote with
-          sv = sv1
-          accept = True
-          reason = Reason with url = ""; body = "a better reason"
-          optCastAt = None
+  -- Once the cooldown has elapsed, both SVs can update their vote.
+  requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid False "a better rebuttal"
+  _ <- castVoteOnRequest app dsoRulesCid sv1 requestCid True "a better reason"
 
   pure ()
