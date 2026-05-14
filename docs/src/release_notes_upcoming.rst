@@ -23,7 +23,7 @@
       activity records are retained.
       See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.
 
-        - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
+        - The ``app_activity_record_store`` table has been modified to improve DB performance.
           The corresponding DB migration truncates the existing data in this table which has been ingested since the ``0.5.18`` release, which is OK as we are still in the preview phase of CIP-104.
           This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
           Specifically the ``app_activity_records`` field will not contain the
