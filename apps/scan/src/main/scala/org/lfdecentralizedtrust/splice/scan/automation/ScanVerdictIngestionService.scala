@@ -245,15 +245,11 @@ class ScanVerdictIngestionService(
               .foldLeft(Long.MaxValue)(math.min)
             Some((firstRecordTimeMicros, earliestRound))
           } else None
-        downgradeO <- store.insertVerdictsWithAppActivityRecords(
+        _ <- store.insertVerdictsWithAppActivityRecords(
           items,
           appActivityRecords,
           ingestionStart,
         )
-        _ = downgradeO.foreach { d =>
-          logger.error(d.message)
-          sys.exit(1)
-        }
       } yield {
         val lastRecordTime = verdicts.lastOption
           .flatMap(v => CantonTimestamp.fromProtoTimestamp(v.getRecordTime).toOption)
