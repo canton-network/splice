@@ -9,9 +9,12 @@ data RotateGovernanceVoterResult = RotateGovernanceVoterResult with
     bindingCid : ContractId SvGovernanceVoter
   deriving (Eq, Show)
 
-data ClearGovernanceVoterResult = ClearGovernanceVoterResult
-  deriving (Eq, Show)
-
+-- | A binding from a represented SV to the party that may cast its vote on
+-- governance-voter eligible actions. The represented SV is always covered by a
+-- binding: onboarding establishes a self-binding (governanceVoter == sv) and
+-- "returning control to the operator" is expressed as rotating back to self.
+-- There is intentionally no Clear choice; without a binding nobody could cast
+-- on governance-voter actions for the represented SV.
 template SvGovernanceVoter
   with
     dso : Party
@@ -34,8 +37,3 @@ template SvGovernanceVoter
         require "Governance voter must not be dso" (newGovernanceVoter /= dso)
         bindingCid <- create this with governanceVoter = newGovernanceVoter
         pure RotateGovernanceVoterResult with ..
-
-    choice ClearGovernanceVoter : ClearGovernanceVoterResult
-      controller sv
-      do
-        pure ClearGovernanceVoterResult

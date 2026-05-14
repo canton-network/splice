@@ -11,7 +11,7 @@ The governance-voter contract work is a prototype for review under
 especially Milestone 1: Governance-Voting Identity and CIP.
 
 Phase 1 preserves the current one-vote-per-SV model. A governance voter is
-intended to be an alternate signer for the represented SV's vote on explicitly
+the party authorized to act on the represented SV's vote on explicitly
 supported non-operational governance actions; it is not a new voting unit and
 does not add voting weight.
 
@@ -27,17 +27,29 @@ The intended invariant is one active governance-voter binding per SV. This slice
 keeps that invariant outside the template key space by design, matching the
 Phase 1 proposal direction.
 
-The binding is SV-declared by design: the represented SV can create, rotate, or
-clear its governance-voter binding without a Propose-Accept step. Self-binding
-(``governanceVoter == sv``) is also allowed by design for bootstrap and
-self-voting. The DSO party cannot be used as a governance voter.
+The binding is SV-declared by design: the represented SV can create or rotate
+its governance-voter binding without a Propose-Accept step. The onboarding
+default is self-voting (``governanceVoter == sv``); returning control to the
+operator is expressed as ``RotateGovernanceVoter`` back to the represented SV
+itself. There is intentionally no Clear choice — leaving the SV without a
+binding would leave nobody authorized to cast its vote on governance-voter
+actions. The DSO party cannot be used as a governance voter.
 
-Governance-voter vote submission fetches the binding by contract ID, validates
-the signer against the binding, checks the action allowlist, and writes the vote
-into the represented SV's vote slot. It cannot overwrite a prior operator-cast
-vote for that SV; operator votes remain the precedence path. The operator and
-governance-voter paths intentionally share the represented SV's cooldown because
-there is still only one vote slot per SV.
+Operational and governance-voter actions follow a strict role split:
+
+* Operational actions (everything outside the allowlist below) are requested
+  and voted on by the operator via ``DsoRules_RequestVote`` and
+  ``DsoRules_CastVote``. Both choices reject governance-voter eligible actions.
+* Governance-voter eligible actions are requested and voted on by the
+  governance-voter party — which is the represented SV itself under the
+  default self-binding — via ``DsoRules_RequestGovernanceVote`` and
+  ``DsoRules_CastGovernanceVote``. ``DsoRules_CastGovernanceVote`` checks the
+  binding and rejects calls for actions outside the allowlist.
+
+Operators have no override on the governance-voter side: there is no path by
+which an operator can overwrite a governance voter's vote on an eligible
+action. The operator and governance-voter paths intentionally share the
+represented SV's cooldown because there is still only one vote slot per SV.
 
 The supported submission path is explicit disclosure: a governance voter that
 is not affiliated with the represented SV presents the Scan-discovered proposal
