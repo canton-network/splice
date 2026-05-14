@@ -50,6 +50,16 @@ data AllocationInstructionView = AllocationInstructionView with
       -- Empty for allocations that do not require funding.
       --
       -- MAY be empty for registries that do not represent their holdings on-ledger.
+    expiresAt : Optional Time
+      -- ^ The time at which the allocation instruction expires if inactive.
+      --
+      -- Registries MAY expire the allocation instruction after this time.
+      -- Thereby recovering storage resources and protecting themselves from
+      -- denial-of-service attacks.
+      --
+      -- Registries SHOULD avoid unnecessary expiries by
+      --   - making the expiry time as close to the allocation's settlement deadline as possible
+      --   - bumping expiry on every action on the allocation instruction
     availableActions : Map.Map [Party] [AllocationInstructionAction]
       -- ^ The actions that the wallet can present to the user to advance the allocation instruction.
       --
@@ -74,7 +84,7 @@ interface AllocationInstruction where
   viewtype AllocationInstructionView
 
   allocationInstruction_withdrawImpl : ContractId AllocationInstruction -> AllocationInstruction_Withdraw -> Update AllocationInstructionResult
-  allocationInstruction_withdrawExtraObservers : AllocationInstruction_Withdraw -> [Party] 
+  allocationInstruction_withdrawExtraObservers : AllocationInstruction_Withdraw -> [Party]
   allocationInstruction_acceptImpl : ContractId AllocationInstruction -> AllocationInstruction_Accept -> Update AllocationInstructionResult
   allocationInstruction_acceptExtraObservers : AllocationInstruction_Accept -> [Party]
 
@@ -83,7 +93,7 @@ interface AllocationInstruction where
     with
       actors : [Party]
         -- ^ Parties executing the acceptance.
-        -- 
+        --
         -- Registries are free to decide on the required authorization for
         -- acceptance. They MUST however report the parties that can accept
         -- unilaterally via the `AllocationInstructionView.availableActions`

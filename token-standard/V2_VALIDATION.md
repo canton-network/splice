@@ -177,3 +177,7 @@ Cleanup and improvements applied so far:
   - adjust `TokenStandardUtils.netAllocationCreditAmounts` to not compute credits for the burn account as a receiver
     and neither compute debits for the mint account as the sender
   - test delivery-vs-burn and delivery-vs-mint scenarios using `TestTokenV2`
+- Add an `expiresAt` field to transfer instruction and allocation instruction, so that registries
+  can report and enforce a TTL for instructions that is shorter than the `executeBefore` or the `settlementDeadline` of the underlying transfer or allocation. Registries are expected to
+  bump that TTL on updates to the instruction, so that only long times of inactivity lead to
+  expiry.

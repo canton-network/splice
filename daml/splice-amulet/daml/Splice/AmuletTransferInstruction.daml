@@ -53,6 +53,7 @@ template AmuletTransferInstruction
       view = Api.TransferInstructionV2.TransferInstructionView with
         originalInstructionCid = None
         transfer = upcast transfer
+        expiresAt = Some transfer.executeBefore -- TODO(#4665): limit the maximum TTL to avoid a storage leak
         availableActions = Map.fromList
           [ ([transfer.sender], [Api.TransferInstructionV2.TIA_Withdraw])
           , ([transfer.receiver], [Api.TransferInstructionV2.TIA_Accept, Api.TransferInstructionV2.TIA_Reject])
