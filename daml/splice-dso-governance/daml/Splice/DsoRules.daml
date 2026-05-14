@@ -912,7 +912,7 @@ template DsoRules with
           Some _ -> pure ()
         -- validate request before archiving it
         request <- fetchChecked (ForDso with dso) requestCid
-        require "Action is not governance-voter eligible" (isGovernanceVoterAction request.action)
+        require "Action is not governance-voter eligible; use DsoRules_CastVote" (isGovernanceVoterAction request.action)
         now <- getTime
         let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
         require "Vote request has expired" (now < castDeadline)
