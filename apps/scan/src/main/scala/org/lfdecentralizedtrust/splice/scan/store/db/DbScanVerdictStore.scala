@@ -479,24 +479,19 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert verdicts, transaction views, activity records, and meta row in a single transaction.
+  /** Insert verdicts, transaction views, activity records, and ensure the meta
+    * row in a single transaction. Calls `sys.exit(1)` if a version downgrade
+    * is detected.
     *
-    * Verdicts are inserted first to obtain their generated row_ids. The placeholder
-    * verdictRowId (= DUMMY_VERDICT_ROW_ID) in each app activity record is then resolved to the
-    * actual row_id (matched by sequencingTime) before insertion. Finally, the meta row is
-    * checked/inserted via [[DbAppActivityRecordStore.ensureMetaDBIO]].
-    *
-    * @param items verdicts with their transaction view constructors
-    * @param appActivityRecords pre-computed activity records paired with their sequencingTime;
-    *                           each record has verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder
-    * @param ingestionStart if `Some((firstRecordTimeMicros, earliestRound))`, a meta row
-    *                       may be inserted; if `None`, the meta check is skipped
+    * @param items verdicts with transaction view constructors
+    * @param appActivityRecords activity records with placeholder verdictRowIds
+    * @param ingestionStart meta row params, or `None` to skip the meta check
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
       ingestionStart: Option[(Long, Long)] = None,
-  )(implicit tc: TraceContext): Future[Option[DowngradeDetected]] = {
+  )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
     val combinedAction = for {
@@ -507,9 +502,11 @@ class DbScanVerdictStore(
       }
       _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
       ensureResult <- ensureMetaDBIO(ingestionStart)
-    } yield ensureResult.flatMap {
-      case Checked(d: DowngradeDetected) => Some(d)
-      case _ => None
+    } yield ensureResult.foreach {
+      case Checked(d: DowngradeDetected) =>
+        logger.error(d.message)
+        sys.exit(1)
+      case _ => ()
     }
 
     futureUnlessShutdownToFuture(
@@ -517,10 +514,9 @@ class DbScanVerdictStore(
         combinedAction.transactionally,
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
-    ).map { downgradeO =>
+    ).map { _ =>
       val maxRt = items.map(_._1.recordTime).maxOption
       maxRt.foreach(advanceLastIngestedRecordTime)
-      downgradeO
     }
   }
 
