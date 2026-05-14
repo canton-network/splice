@@ -15,6 +15,14 @@ data RotateGovernanceVoterResult = RotateGovernanceVoterResult with
 -- "returning control to the operator" is expressed as rotating back to self.
 -- There is intentionally no Clear choice; without a binding nobody could cast
 -- on governance-voter actions for the represented SV.
+--
+-- The represented SV is the sole signatory, so the implicit per-signatory
+-- Archive choice still lets the SV unilaterally archive any of its bindings.
+-- This is self-harm only (the SV temporarily loses the ability to cast on
+-- governance-voter actions) and is trivially recoverable by creating a new
+-- self-binding. Hard enforcement of the "every SV has at least one active
+-- binding" invariant is deferred; the Phase 1 expectation is that the SV
+-- workflow uses RotateGovernanceVoter rather than direct archive.
 template SvGovernanceVoter
   with
     dso : Party

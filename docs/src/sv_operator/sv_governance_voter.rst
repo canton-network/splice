@@ -39,6 +39,14 @@ itself. There is intentionally no Clear choice — leaving the SV without a
 binding would leave nobody authorized to cast its vote on governance-voter
 actions. The DSO party cannot be used as a governance voter.
 
+The implicit per-signatory ``Archive`` choice still lets the represented SV
+unilaterally archive a binding, since the SV is the sole signatory. This is
+self-harm only — the SV temporarily loses the ability to cast on
+governance-voter actions and recovers by creating a new self-binding — and the
+Phase 1 expectation is that the SV workflow uses ``RotateGovernanceVoter``
+rather than direct archive. Hard enforcement of the "every SV has at least one
+active binding" invariant is left for a later phase if maintainers want it.
+
 Operational and governance-voter actions follow a strict role split:
 
 * Operational actions (everything outside the allowlist below) are requested
