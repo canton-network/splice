@@ -115,7 +115,7 @@ class DbScanRewardsReferenceStore(
   override def lookupSvParticipantIdsAsOf(
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Set[String]] =
-    tcsStore.listAllContractsAsOf(DsoRules.COMPANION, asOf).map {
+    tcsStore.listAllContractsAsOf(DsoRules.COMPANION, asOf, limit = Some(2)).map {
       case Seq() => Set.empty[String]
       case Seq(c) =>
         import scala.jdk.CollectionConverters.*
