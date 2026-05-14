@@ -114,6 +114,8 @@ class DbAppActivityRecordStore(
 
   override protected def timeouts = new ProcessingTimeout
 
+  import DbAppActivityRecordStore.*
+
   private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
@@ -293,17 +295,28 @@ class DbAppActivityRecordStore(
     }
   }
 
-  /** Returns a DBIO action for inserting app activity records (for use in combined transactions).
-    * Unlike insertAppActivityRecords, this doesn't wrap in a transaction or Future.
+  /** DBIO action that inserts app activity records and ensures the meta row.
+    *
+    * @param items activity records to insert
+    * @param ingestionStart meta row params, or `None` to skip the meta check
     */
   def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppActivityRecordT],
+      ingestionStart: Option[(Long, Long)] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
-    if (items.isEmpty) DBIO.successful(())
-    else {
-      batchInsertAppActivityRecords(items).map { _ =>
-        logger.info(s"Inserted ${items.size} app activity records.")
-      }
+    for {
+      _ <-
+        if (items.isEmpty) DBIO.successful(())
+        else
+          batchInsertAppActivityRecords(items).map { _ =>
+            logger.info(s"Inserted ${items.size} app activity records.")
+          }
+      ensureResult <- ensureMetaDBIO(ingestionStart)
+    } yield ensureResult match {
+      case Checked(d: DowngradeDetected) =>
+        logger.error(d.message)
+        sys.exit(1)
+      case _ => ()
     }
   }
 
@@ -375,8 +388,6 @@ class DbAppActivityRecordStore(
         "appActivity.insertActivityRecordMeta",
       )
     )
-
-  import DbAppActivityRecordStore.*
 
   private val metaChecked = new AtomicBoolean(false)
 
