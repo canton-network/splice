@@ -234,9 +234,10 @@ class ScanVerdictIngestionService(
           case None => Future.successful(Seq.empty)
         }
 
-        _ = ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
+        _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
+        started <- store.activityIngestionStarted
         ingestionStart =
-          if (!store.activityIngestionStarted && appActivityRecords.nonEmpty) {
+          if (!started && appActivityRecords.nonEmpty) {
             val firstRecordTimeMicros = verdicts.headOption.fold(0L)(v =>
               CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime).toMicros
             )
@@ -330,18 +331,20 @@ class ScanVerdictIngestionService(
   private def ensureVerdictsHaveTrafficSummaries(
       verdicts: Seq[v30.Verdict],
       summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
-  ): Unit =
-    if (store.activityIngestionStarted) {
-      val missingTimes = verdicts
-        .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-        .filterNot(summaryByTime.keySet.contains)
-      if (missingTimes.nonEmpty)
-        throw Status.INTERNAL
-          .withDescription(
-            s"${missingTimes.size} verdicts missing traffic summaries " +
-              s"after ingestion start: $missingTimes"
-          )
-          .asRuntimeException()
+  )(implicit tc: TraceContext): Future[Unit] =
+    store.activityIngestionStarted.map { started =>
+      if (started) {
+        val missingTimes = verdicts
+          .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+          .filterNot(summaryByTime.keySet.contains)
+        if (missingTimes.nonEmpty)
+          throw Status.INTERNAL
+            .withDescription(
+              s"${missingTimes.size} verdicts missing traffic summaries " +
+                s"after ingestion start: $missingTimes"
+            )
+            .asRuntimeException()
+      }
     }
 
   private def processWhenUnpaused(

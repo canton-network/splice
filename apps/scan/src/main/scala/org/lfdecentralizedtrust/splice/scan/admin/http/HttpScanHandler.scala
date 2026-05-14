@@ -183,8 +183,14 @@ class HttpScanHandler(
   /** Returns true if the record time is at or after the completeness boundary.
     * If no boundary is set (ingestion hasn't started), returns false.
     */
-  private def isAfterCompletenessBoundary(recordTime: CantonTimestamp): Boolean =
-    appActivityStoreO.flatMap(_.startedIngestingAt).exists(recordTime.toMicros >= _)
+  private def isAfterCompletenessBoundary(
+      recordTime: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Boolean] =
+    appActivityStoreO match {
+      case Some(activityStore) =>
+        activityStore.startedIngestingAt.map(_.exists(recordTime.toMicros >= _))
+      case None => Future.successful(false)
+    }
 
   override protected val workflowId: String = this.getClass.getSimpleName
   override protected val votesStore: VotesStore = store
@@ -1036,8 +1042,12 @@ class HttpScanHandler(
             appActivityRecordO <-
               if (serveAppActivityRecordsAndTraffic)
                 (verdictRowIdO, verdictWithViewsO) match {
-                  case (Some(rowId), Some((v, _))) if isAfterCompletenessBoundary(v.recordTime) =>
-                    eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
+                  case (Some(rowId), Some((v, _))) =>
+                    isAfterCompletenessBoundary(v.recordTime).flatMap {
+                      case true =>
+                        eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
+                      case false => Future.successful(None)
+                    }
                   case _ => Future.successful(None)
                 }
               else Future.successful(None)
@@ -1114,9 +1124,13 @@ class HttpScanHandler(
           currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId,
           limit = PageLimit.tryCreate(pageSize, updateHistoryMaxPageSize),
         )
+        boundaryO <- appActivityStoreO match {
+          case Some(store) => store.startedIngestingAt
+          case None => Future.successful(None)
+        }
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
           verdictWithViewsO.collect {
-            case (v, _) if isAfterCompletenessBoundary(v.recordTime) => v.rowId
+            case (v, _) if boundaryO.exists(v.recordTime.toMicros >= _) => v.rowId
           }
         }
         appActivityRecordMap <-
