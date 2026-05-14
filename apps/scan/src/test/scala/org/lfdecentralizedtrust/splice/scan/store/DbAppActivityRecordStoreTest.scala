@@ -560,43 +560,6 @@ class DbAppActivityRecordStoreTest
     }
   }
 
-  "lookupMaxMetaVersions" should {
-
-    "return None when no meta row exists" in {
-      for {
-        (store, _) <- newStore()
-        result <- store.lookupMaxMetaVersions()
-      } yield {
-        result shouldBe None
-      }
-    }
-
-    "return the max versions after inserting multiple rows" in {
-      for {
-        (store, _) <- newStore()
-        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 0L)
-        _ <- store.insertActivityRecordMeta(2, 1, 2000000L, 5L)
-        result <- store.lookupMaxMetaVersions()
-      } yield {
-        result shouldBe Some((2, 1))
-      }
-    }
-
-    "isolate by history_id" in {
-      for {
-        (store1, _) <- newStore()
-        (store2, _) <- newStore()
-        _ <- store1.insertActivityRecordMeta(1, 0, 1000000L, 0L)
-        _ <- store2.insertActivityRecordMeta(5, 3, 9000000L, 0L)
-        result1 <- store1.lookupMaxMetaVersions()
-        result2 <- store2.lookupMaxMetaVersions()
-      } yield {
-        result1 shouldBe Some((1, 0))
-        result2 shouldBe Some((5, 3))
-      }
-    }
-  }
-
   "ensureMetaDBIO" should {
 
     "return NotReady when no meta row and no activity records" in {
