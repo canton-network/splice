@@ -26,12 +26,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.{
-  AppActivityRecordT,
-  Checked,
-  DowngradeDetected,
-  EnsureResult,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
 
 object DbScanVerdictStore {
   import com.digitalasset.canton.mediator.admin.{v30}
@@ -479,13 +474,12 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert verdicts, transaction views, activity records, and ensure the meta
-    * row in a single transaction. Calls `sys.exit(1)` if a version downgrade
-    * is detected.
+  /** Insert verdicts, transaction views, and activity records in a single
+    * transaction.
     *
     * @param items verdicts with transaction view constructors
     * @param appActivityRecords activity records with placeholder verdictRowIds
-    * @param ingestionStart meta row params, or `None` to skip the meta check
+    * @param ingestionStart passed to the activity store for meta row maintenance
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
@@ -500,14 +494,8 @@ class DbScanVerdictStore(
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
-      ensureResult <- ensureMetaDBIO(ingestionStart)
-    } yield ensureResult.foreach {
-      case Checked(d: DowngradeDetected) =>
-        logger.error(d.message)
-        sys.exit(1)
-      case _ => ()
-    }
+      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords, ingestionStart)
+    } yield ()
 
     futureUnlessShutdownToFuture(
       storage.queryAndUpdate(
@@ -525,14 +513,6 @@ class DbScanVerdictStore(
     appActivityRecordStoreO match {
       case Some(store) => store.startedIngestingAt.map(_.isDefined)
       case None => Future.successful(false)
-    }
-
-  private def ensureMetaDBIO(
-      ingestionStart: Option[(Long, Long)]
-  ): DBIO[Option[EnsureResult]] =
-    appActivityRecordStoreO match {
-      case None => DBIO.successful(None)
-      case Some(s) => s.ensureMetaDBIO(ingestionStart).map(Some(_))
     }
 
   def getVerdictByUpdateId(updateId: String)(implicit
@@ -565,11 +545,12 @@ class DbScanVerdictStore(
   }
 
   private def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppActivityRecordT],
+      ingestionStart: Option[(Long, Long)],
   )(implicit tc: TraceContext): DBIO[Unit] = {
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, ingestionStart)
     }
   }
 
