@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWall
 import java.time.Instant
 import java.util.UUID
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 trait TokenStandardV2TestUtil extends TestCommon {
 
@@ -153,9 +154,9 @@ trait TokenStandardV2TestUtil extends TestCommon {
       transferLeg: allocationv2.TransferLeg,
   ): allocationv2.TransferLegSide = {
     val (side, otherside) =
-      if (transferLeg.sender.owner == authorizer.toProtoPrimitive) {
+      if (transferLeg.sender.owner.toScala.contains(authorizer.toProtoPrimitive)) {
         allocationv2.TransferSide.SENDERSIDE -> transferLeg.receiver
-      } else if (transferLeg.receiver.owner == authorizer.toProtoPrimitive) {
+      } else if (transferLeg.receiver.owner.toScala.contains(authorizer.toProtoPrimitive)) {
         allocationv2.TransferSide.RECEIVERSIDE -> transferLeg.sender
       } else {
         throw new IllegalArgumentException(

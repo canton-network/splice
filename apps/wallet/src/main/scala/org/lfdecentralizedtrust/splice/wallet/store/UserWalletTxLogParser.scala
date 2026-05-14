@@ -1105,7 +1105,9 @@ class UserWalletTxLogParser(
               node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
                 case (stateAcc, transferLeg) =>
                   if (
-                    transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner == endUserPartyProtoPrimitive || transferLeg.sender.owner == endUserPartyProtoPrimitive)
+                    transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner.toScala
+                      .contains(endUserPartyProtoPrimitive) || transferLeg.sender.owner.toScala
+                      .contains(endUserPartyProtoPrimitive))
                   ) {
                     stateAcc.appended(
                       State(
