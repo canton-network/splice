@@ -114,15 +114,20 @@ class DbAppActivityRecordStore(
 
   override protected def timeouts = new ProcessingTimeout
 
-  /** Cached record time (microseconds since epoch) of the completeness boundary.
-    * Set by [[ensureMetaDBIO]] when the meta row is confirmed.
-    * Activity records before this time should not be served.
-    */
   private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
-  /** The completeness boundary, if known. */
-  def startedIngestingAt: Option[Long] = startedIngestingAtRef.get()
+  /** The record time of the first activity record in the store. */
+  def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
+    startedIngestingAtRef.get() match {
+      case some @ Some(_) => Future.successful(some)
+      case None =>
+        lookupActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
+          val tsO = metaO.map(_.startedIngestingAt)
+          tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
+          tsO
+        }
+    }
 
   object Tables {
     val appActivityRecords = "app_activity_record_store"
@@ -449,7 +454,7 @@ class DbAppActivityRecordStore(
                     and activity_ingestion_code_version = $codeVersion
                     and activity_ingestion_user_version = $userVersion
                """.as[Long].headOption.map { tsO =>
-              tsO.foreach(ts => startedIngestingAtRef.set(Some(ts)))
+              tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
               metaChecked.set(true)
               Checked(Resume): EnsureResult
             }

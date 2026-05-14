@@ -521,8 +521,11 @@ class DbScanVerdictStore(
   }
 
   /** Whether activity record ingestion has started (meta row confirmed). */
-  def activityIngestionStarted: Boolean =
-    appActivityRecordStoreO.exists(_.startedIngestingAt.isDefined)
+  def activityIngestionStarted(implicit tc: TraceContext): Future[Boolean] =
+    appActivityRecordStoreO match {
+      case Some(store) => store.startedIngestingAt.map(_.isDefined)
+      case None => Future.successful(false)
+    }
 
   private def ensureMetaDBIO(
       ingestionStart: Option[(Long, Long)]
