@@ -1197,10 +1197,18 @@ final class DbMultiDomainAcsStore[TXE](
           sqlu"delete from incomplete_reassignments where store_id = $acsStoreId and migration_id = $domainMigrationId",
           "clearDataForCurrentMigrationId.deleteReassignments",
         )
+        nArchive <- acsArchiveConfigOpt match {
+          case Some(AcsArchiveConfig(archiveTableName, _)) =>
+            storage.update(
+              sqlu"delete from #$archiveTableName where store_id = $acsStoreId and migration_id = $domainMigrationId",
+              "clearDataForCurrentMigrationId.deleteArchive",
+            )
+          case None => FutureUnlessShutdown.pure(0)
+        }
       } yield {
-        if (nAcs > 0 || nReassignments > 0) {
+        if (nAcs > 0 || nReassignments > 0 || nArchive > 0) {
           logger.warn(
-            s"Deleted $nAcs rows from ACS table and $nReassignments incomplete reassignments for store $acsStoreId and migration $domainMigrationId. " +
+            s"Deleted $nAcs rows from ACS table, $nReassignments incomplete reassignments, and $nArchive archive rows for store $acsStoreId and migration $domainMigrationId. " +
               "This should only happen if the store already had some data, but was not marked as having ingested the ACS " +
               "(because of a previous failed ACS ingestion attempt)."
           )
