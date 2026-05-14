@@ -152,6 +152,52 @@ testCastDeadlineExpiry = do
       optCastAt = None
   pure ()
 
+-- | Tests that DsoRules_CastVote rejects votes whose declared castBy or
+-- castByRole do not match the operator path's invariants. These checks
+-- mirror the binding/role checks on DsoRules_CastGovernanceVote and
+-- surface caller bugs that the silent overwrite would otherwise mask.
+testOperatorCastAttributionGuards : Script ()
+testOperatorCastAttributionGuards = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
+
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_AddSv DsoRules_AddSv with
+        newSvParty = sv2
+        newSvName = "guards-new-sv"
+        newSvRewardWeight = 1
+        newSvParticipantId = "guards-new-sv-participant"
+        joinedAsOfRound = openRound.round
+    reason = Reason with url = ""; body = "attribution guards"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  -- castBy must match vote.sv on the operator path.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = requestResult.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv1
+      castByRole = VCR_Operator
+      accept = True
+      reason = Reason with url = ""; body = "wrong castBy"
+      optCastAt = None
+
+  -- castByRole must be VCR_Operator on the operator path.
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid = requestResult.voteRequest
+    vote = Vote with
+      sv = sv2
+      castBy = sv2
+      castByRole = VCR_GovernanceVoter
+      accept = True
+      reason = Reason with url = ""; body = "wrong castByRole"
+      optCastAt = None
+  pure ()
+
 -- | Tests governance-voter request and cast paths under the strict role
 -- split: governance-voter eligible actions are requested and cast only by
 -- the governance voter; the operator path is closed for them.

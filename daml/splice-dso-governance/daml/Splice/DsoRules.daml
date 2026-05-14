@@ -861,6 +861,8 @@ template DsoRules with
       do
         -- validate vote parameters
         requireWellformedVote config vote
+        require "Vote castBy must match SV on operator path" (vote.castBy == vote.sv)
+        require "Vote castByRole must be VCR_Operator on operator path" (vote.castByRole == VCR_Operator)
         case Map.lookup vote.sv svs of
           None -> fail "Voter is not an SV"
           Some _ -> pure ()
