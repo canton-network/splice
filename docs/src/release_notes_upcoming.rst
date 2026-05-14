@@ -16,7 +16,8 @@
       - Bring back the governance page that was removed in release 0.5.18.
 
     - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting
-      has been added to control the activity record ingestion version.
+      has been added to control the activity record ingestion version
+      for the purpose of recovering from unexpected operational issues.
       Incrementing this value causes the Scan app to record a new completeness
       boundary; reward accounting excludes rounds before it, while existing
       activity records are retained.
