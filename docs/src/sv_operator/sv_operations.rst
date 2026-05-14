@@ -863,7 +863,7 @@ Consequences of incrementing the user version:
   those of other scans for event record times around the time the user
   version was bumped.
 
-This is useful for recovering from ingestion or reward processing errors without
+This is useful for recovering from unexpected ingestion or reward processing errors without
 reprocessing historical data.
 
 The user version must never decrease. A lower value than previously
