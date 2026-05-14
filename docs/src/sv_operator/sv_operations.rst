@@ -857,7 +857,7 @@ Consequences of incrementing the user version:
 - Reward accounting excludes rounds before the new boundary, which may
   result in the SV node not participating in reward computation for a
   few rounds.
-- Existing activity records are retained, but scan may miss a few
+- Scan will note serve activity records ingested before bumping the user version.
   activity records while there is no metadata row for the new version.
   The results of the ``v0/events`` scan API may therefore differ from
   those of other scans for event record times around the time the user
