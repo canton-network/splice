@@ -50,7 +50,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties accepting the allocation request.
+        -- ^ Set of parties executing the acceptance.
         --
         -- Implementations MUST check these parties to avoid unauthorized acceptance.
         --
@@ -73,7 +73,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties rejecting the allocation request.
+        -- ^ Set of parties executing the rejection.
         --
         -- Implementations MUST check these parties to avoid unauthorized rejection.
         --
@@ -96,7 +96,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties withdrawing the allocation request.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         --
@@ -169,8 +169,9 @@ data AllocationRequestView = AllocationRequestView with
       -- For iterated settlements, this is the expected time of the first iteration.
     availableActions : Map.Map AllocationRequestAction [[Party]]
       -- ^ What actions are available to which groups of parties. The list of lists
-      -- represents a disjunction of conjunctions of parties, i.e., each inner
-      -- list represents a group of parties that can act jointly to execute the action.
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.

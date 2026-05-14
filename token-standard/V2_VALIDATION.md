@@ -185,3 +185,6 @@ Cleanup and improvements applied so far:
   - invert its type from `[Party] -> [Action]` to `Action -> [[Party]]` as that makes it easier to determine who can execute an action
   - remove the `description` and `meta` fields from the `_Custom` actions, as they bloat the representation and can be delivered
     out of band (or in the view's overall metadata) by the registry if needed.
+- Polished documentation of Daml and HTTP APIs for the V2 token standard
+  - introduced the `409` reponse code to report in-flight reassignments in the
+  OpenAPI specs of the off-ledger APIs

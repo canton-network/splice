@@ -9,7 +9,6 @@ import DA.Map qualified as Map
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2
 
--- TODO(#4598): when switching to batch transfers attempt to share the adjusted Transfer type between events, transfer instructions, and allocations
 
 -- | A specification of a transfer of holdings between two accounts.
 data Transfer = Transfer with
@@ -122,8 +121,9 @@ data TransferInstructionView = TransferInstructionView with
       --   - bumping expiry on every action on the transfer instruction
     availableActions : Map.Map TransferInstructionAction [[Party]]
       -- ^ What actions are available to which groups of parties. The list of lists
-      -- represents a disjunction of conjunctions of parties, i.e., each inner
-      -- list represents a group of parties that can act jointly to execute the action.
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
@@ -160,7 +160,7 @@ interface TransferInstruction where
     -- be any of the three possible results.
     with
       actors : [Party]
-        -- ^ The parties accepting the transfer offer.
+        -- ^ Set of parties executing the acceptance.
         --
         -- Implementations MUST check these parties to avoid unauthorized acceptance.
         --
@@ -180,7 +180,7 @@ interface TransferInstruction where
     -- where possible to maximize compatibility with v1 transaction parsers.
     with
       actors : [Party]
-        -- ^ The parties rejecting the transfer offer.
+        -- ^ Set of parties executing the rejection.
         --
         -- Implementations MUST check these parties to avoid unauthorized rejection.
         --
@@ -200,7 +200,7 @@ interface TransferInstruction where
     -- where possible to maximize compatibility with v1 transaction parsers.
     with
       actors : [Party]
-        -- ^ The parties withdrawing the transfer instruction.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         --
@@ -232,14 +232,15 @@ interface TransferFactory where
       transfer : Transfer
         -- ^ The transfer to execute.
         --
-        -- Implementations MUST validate that the admin of the instrument matches the admin of the factory.
+        -- Implementations MUST validate that the admin of the transferred instrument
+        -- matches the admin of the factory.
       actors : [Party]
-        -- ^ The parties instructing the transfer, if different from the owner of the source account
+        -- ^ Set of parties executing the transfer.
         --
         -- Implementations MUST check these parties to avoid unauthorized transfer instructions.
         --
-        -- Implementations SHOULD allow the owner and the provider of the source
-        -- account to call this choice.
+        -- Implementations SHOULD allow the sender's account parties to call
+        -- this choice.
       extraArgs : ExtraArgs
         -- ^ The extra arguments to pass to the transfer implementation.
     observer transferFactory_transferExtraObservers this arg
@@ -250,7 +251,7 @@ interface TransferFactory where
     -- ^ Fetch the view of the factory contract.
     with
       actors : [Party]
-        -- ^ Parties executing the fetch.
+        -- ^ Set of parties executing the fetch.
     controller actors
     do transferFactory_publicFetchImpl this self arg
 

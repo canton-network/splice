@@ -30,8 +30,11 @@ import Splice.Api.Token.HoldingV2 (Holding, Account)
 -- Allocation View
 ------------------
 
--- | A generic type to refer to data defined within an app.
--- The interpretation of such a reference is app specific, but SHOULD be unambiguous within the context of the app.
+-- | A generic type to unambiguously refer to data defined within an app.
+--
+-- The interpretation of such a reference is app specific, but SHOULD be
+-- unambiguous within the context of the app. Both fields need to be equal
+-- for a `Reference` to be considered equal to another.
 data Reference = Reference with
     id : Text
       -- ^ The key that identifies the data. Can be set to the empty string if the contract-id is provided and is sufficient.
@@ -54,7 +57,8 @@ data SettlementInfo = SettlementInfo
       -- Executors MUST ensure that they use unique `settlementRef` values for
       -- different settlements to avoid ambiguity or settlement errors.
     settlementDeadline : Optional Time
-      -- The executors' and authorizer's agreed time-to-live for the allocation.
+      -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
+      --
       -- After this time, if set, the allocation can no longer be settled, and
       -- the authorizer can withdraw the allocation to release the funds.
     meta : Metadata
@@ -73,7 +77,7 @@ data TransferLeg = TransferLeg with
     amount : Decimal
       -- ^ The amount to transfer.
     instrumentId : Text
-      -- ^ The instrument identifier.
+      -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
   deriving (Eq, Ord, Show)
@@ -99,7 +103,7 @@ data TransferLegSide = TransferLegSide with
     amount : Decimal
       -- ^ The amount being transferred.
     instrumentId : Text
-      -- ^ The instrument identifier.
+      -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
   deriving (Eq, Ord, Show)
@@ -189,8 +193,9 @@ data AllocationView = AllocationView with
       --   - bumping expiry on every settlement iteration.
     availableActions : Map.Map AllocationAction [[Party]]
       -- ^ What actions are available to which groups of parties. The list of lists
-      -- represents a disjunction of conjunctions of parties, i.e., each inner
-      -- list represents a group of parties that can act jointly to execute the action.
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
@@ -246,7 +251,7 @@ interface Allocation where
     -- the body of this choice.
     with
       actors : [Party]
-        -- ^ Parties executing the settlement.
+        -- ^ Set of parties executing the settlement.
         --
         -- Implementations MUST check these parties to avoid unauthorized settlement execution.
         -- By default, they SHOULD require them to be equal to the allocation
@@ -290,7 +295,7 @@ interface Allocation where
     -- the body of this choice.
     with
       actors : [Party]
-        -- ^ Parties authorizing the cancellation.
+        -- ^ Set of parties executing the cancellation.
         --
         -- Implementations MUST check these parties to avoid unauthorized cancellation.
         -- By default, they SHOULD require them to be equal to the allocation `executors`.
@@ -317,7 +322,7 @@ interface Allocation where
     -- the body of this choice.
     with
       actors : [Party]
-        -- ^ Parties authorizing the withdrawal.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         -- By default they SHOULD allow the account parties of the authorizer to
@@ -421,9 +426,10 @@ interface SettlementFactory where
       actors : [Party]
         -- ^ Allows setting non-default controllers for settling the batch, which
         -- can be used for implementation specific authorization patterns.
+        -- Set of parties executing the settlement.
         --
         -- Implementations MUST check this value to avoid unauthorized settlement execution.
-        -- By default the SHOULD check that they are equal to
+        -- By default they SHOULD check that they are equal to
         -- `settlement.executors` to provide maximal compatibility with apps.
       extraArgs : ExtraArgs
         -- ^ Additional choice arguments.
@@ -434,7 +440,7 @@ interface SettlementFactory where
   nonconsuming choice SettlementFactory_PublicFetch : SettlementFactoryView
     with
       actors : [Party]
-        -- ^ Parties executing the fetch.
+        -- ^ Set of parties executing the fetch.
     controller actors
     do settlementFactory_publicFetchImpl this self arg
 
@@ -446,7 +452,7 @@ interface SettlementFactory where
 data SettlementFactory_SettleBatchResult = SettlementFactory_SettleBatchResult with
     allocationSettleResults : [AllocationResult]
       -- ^ The result of settling each allocation in the batch.
-      -- In the same order as the `allocationCids` in the choice arguments.
+      -- In the same order as the `allocations` in the choice arguments.
     meta : Metadata
       -- ^ Additional metadata specific to the batch settlement, used for extensibility.
   deriving (Eq, Show)
