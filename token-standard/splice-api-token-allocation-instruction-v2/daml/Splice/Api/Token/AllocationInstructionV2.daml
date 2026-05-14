@@ -23,12 +23,7 @@ data AllocationInstructionAction
       -- for the allocation to be created.
       AIA_Custom with
         id : Text
-          -- ^ Machine-readable identifier of the action, e.g., used for matching in the wallet.
-          -- Namespaced analogously to metadata keys.
-        description : Text
-          -- ^ Brief human-readable description of the action, e.g., used for display in the wallet.
-        meta : Metadata
-          -- ^ Additional metadata specific to the action, used for extensibility.
+          -- ^ Identifier of the action. Namespaced analogously to metadata keys.
     deriving (Show, Eq, Ord)
 
 -- | View for `AllocationInstruction`.
@@ -60,8 +55,10 @@ data AllocationInstructionView = AllocationInstructionView with
       -- Registries SHOULD avoid unnecessary expiries by
       --   - making the expiry time as close to the allocation's settlement deadline as possible
       --   - bumping expiry on every action on the allocation instruction
-    availableActions : Map.Map [Party] [AllocationInstructionAction]
-      -- ^ The actions that the wallet can present to the user to advance the allocation instruction.
+    availableActions : Map.Map AllocationInstructionAction [[Party]]
+      -- ^ What actions are available to which groups of parties. The list of lists
+      -- represents a disjunction of conjunctions of parties, i.e., each inner
+      -- list represents a group of parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.

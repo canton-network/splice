@@ -115,13 +115,8 @@ data AllocationRequestAction
     | -- | Used to represent app-specific actions on allocation requests.
       ARA_Custom with
         id : Text
-          -- ^ Machine-readable identifier of the action, e.g., used for matching in the wallet.
-          -- Namespaced analogously to metadata keys.
-        description : Text
-          -- ^ Brief human-readable description of the action, e.g., used for display in the wallet.
-        meta : Metadata
-          -- ^ Additional metadata specific to the action, used for extensibility.
-    deriving (Show, Eq)
+          -- ^ Identifier of the action. Namespaced analogously to metadata keys.
+    deriving (Show, Ord, Eq)
 
 -- | An allocation of transfers of instruments maintained by the same asset admin.
 data RequestedAllocation = RequestedAllocation with
@@ -172,8 +167,10 @@ data AllocationRequestView = AllocationRequestView with
       -- SHOULD create their allocations before this time.
       --
       -- For iterated settlements, this is the expected time of the first iteration.
-    availableActions : Map.Map [Party] [AllocationRequestAction]
-      -- ^ The actions that the wallet can present to the user on the allocation request.
+    availableActions : Map.Map AllocationRequestAction [[Party]]
+      -- ^ What actions are available to which groups of parties. The list of lists
+      -- represents a disjunction of conjunctions of parties, i.e., each inner
+      -- list represents a group of parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.

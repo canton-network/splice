@@ -181,3 +181,7 @@ Cleanup and improvements applied so far:
   can report and enforce a TTL for instructions that is shorter than the `executeBefore` or the `settlementDeadline` of the underlying transfer or allocation. Registries are expected to
   bump that TTL on updates to the instruction, so that only long times of inactivity lead to
   expiry.
+- Improve the representation of the `availableActions` maps of `Allocation`, `AllocationInstruction`, `AllocationRequest`, and `TransferInstruction`
+  - invert its type from `[Party] -> [Action]` to `Action -> [[Party]]` as that makes it easier to determine who can execute an action
+  - remove the `description` and `meta` fields from the `_Custom` actions, as they bloat the representation and can be delivered
+    out of band (or in the view's overall metadata) by the registry if needed.

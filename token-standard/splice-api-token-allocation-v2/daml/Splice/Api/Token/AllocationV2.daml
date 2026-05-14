@@ -152,12 +152,7 @@ data AllocationAction
     | -- | Used to represent registry-specific actions on allocations.
       AA_Custom with
         id : Text
-          -- ^ Machine-readable identifier of the action, e.g., used for matching in the wallet.
-          -- Namespaced analogously to metadata keys.
-        description : Text
-          -- ^ Brief human-readable description of the action, e.g., used for display in the wallet.
-        meta : Metadata
-          -- ^ Additional metadata specific to the action, used for extensibility.
+          -- ^ Identifier of the action. Namespaced analogously to metadata keys.
     deriving (Show, Eq, Ord)
 
 -- | View of a contract representing a ready-to-settle allocation.
@@ -189,13 +184,13 @@ data AllocationView = AllocationView with
       -- authorizer after this time. Thereby recovering storage resources and
       -- protecting themselves from denial-of-service attacks.
       --
-      -- TODO(#5487): introduce explicit choice for `Allocation_RefreshExpiry` and mention it here.
-      --
       -- Registries SHOULD avoid unnecessary refreshes by
       --   - making the expiry time as close to the settlement deadline as possible
       --   - bumping expiry on every settlement iteration.
-    availableActions : Map.Map [Party] [AllocationAction]
-      -- ^ The actions that the wallet can present to the user on the allocation.
+    availableActions : Map.Map AllocationAction [[Party]]
+      -- ^ What actions are available to which groups of parties. The list of lists
+      -- represents a disjunction of conjunctions of parties, i.e., each inner
+      -- list represents a group of parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
