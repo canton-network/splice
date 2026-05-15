@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 sdk-version: 3.4.11
-name: splice-token-standard-test-v1
+name: splice-token-standard-v1-test
 description: |
   Test infrastructure for the token standard.
 
