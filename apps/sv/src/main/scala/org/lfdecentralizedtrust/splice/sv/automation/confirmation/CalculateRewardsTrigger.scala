@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
+import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingRootHashResponse
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
@@ -64,56 +65,64 @@ abstract class CalculateRewardsTriggerBase(
       task: Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val round = task.calculateRewards.payload.round.number
-    for {
-      rootHash <- getRootHash(round)
-      action = startProcessingRewardsAction(
-        task.calculateRewards.contractId,
-        rootHash,
-      )
-      queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
-      taskOutcome <- queryResult match {
-        case QueryResult(_, Some(_)) =>
-          Future.successful(
-            TaskSuccess(
-              s"skipping as confirmation from $svParty is already created for CalculateRewardsV2 round $round"
-            )
+    getRootHash(round).flatMap {
+      case None =>
+        Future.successful(
+          TaskSuccess(
+            s"waiting for scan to compute root hash for CalculateRewardsV2 round $round, will retry"
           )
-        case QueryResult(offset, None) =>
-          for {
-            dsoRules <- store.getDsoRules()
-            cmd = dsoRules.exercise(
-              _.exerciseDsoRules_ConfirmAction(
-                svParty.toProtoPrimitive,
-                action,
+        )
+      case Some(rootHash) =>
+        val action = startProcessingRewardsAction(
+          task.calculateRewards.contractId,
+          rootHash,
+        )
+        for {
+          queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
+          taskOutcome <- queryResult match {
+            case QueryResult(_, Some(_)) =>
+              Future.successful(
+                TaskSuccess(
+                  s"skipping as confirmation from $svParty is already created for CalculateRewardsV2 round $round"
+                )
               )
-            )
-            _ <- connection
-              .submit(
-                actAs = Seq(svParty),
-                readAs = Seq(dsoParty),
-                update = cmd,
+            case QueryResult(offset, None) =>
+              for {
+                dsoRules <- store.getDsoRules()
+                cmd = dsoRules.exercise(
+                  _.exerciseDsoRules_ConfirmAction(
+                    svParty.toProtoPrimitive,
+                    action,
+                  )
+                )
+                _ <- connection
+                  .submit(
+                    actAs = Seq(svParty),
+                    readAs = Seq(dsoParty),
+                    update = cmd,
+                  )
+                  .withDedup(
+                    commandId = SpliceLedgerConnection.CommandId(
+                      "org.lfdecentralizedtrust.splice.sv.createStartProcessingRewardsV2Confirmation",
+                      Seq(svParty, dsoParty),
+                      task.calculateRewards.contractId.contractId,
+                    ),
+                    deduplicationOffset = offset,
+                  )
+                  .yieldUnit()
+                delay = java.time.Duration.between(
+                  task.calculateRewards.payload.roundClosedAt,
+                  context.clock.now.toInstant,
+                )
+                _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
+                  MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+                )
+              } yield TaskSuccess(
+                s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
               )
-              .withDedup(
-                commandId = SpliceLedgerConnection.CommandId(
-                  "org.lfdecentralizedtrust.splice.sv.createStartProcessingRewardsV2Confirmation",
-                  Seq(svParty, dsoParty),
-                  task.calculateRewards.contractId.contractId,
-                ),
-                deduplicationOffset = offset,
-              )
-              .yieldUnit()
-            delay = java.time.Duration.between(
-              task.calculateRewards.payload.roundClosedAt,
-              context.clock.now.toInstant,
-            )
-            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-            )
-          } yield TaskSuccess(
-            s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
-          )
-      }
-    } yield taskOutcome
+          }
+        } yield taskOutcome
+    }
   }
 
   override def isStaleTask(task: Task)(implicit
@@ -144,13 +153,16 @@ abstract class CalculateRewardsTriggerBase(
           f(conn)
       }
 
-  private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Hash] =
+  private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Option[Hash]] =
     withScanConnection { conn =>
       conn.getRewardAccountingRootHash(round).map {
-        case Some(response) => new Hash(response.rootHash)
-        case None =>
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+          Some(new Hash(ok.rootHash))
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
+          None
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
           throw new RuntimeException(
-            s"Root hash not available from scan for round $round"
+            s"Scan cannot provide root hash for round $round"
           )
       }
     }
