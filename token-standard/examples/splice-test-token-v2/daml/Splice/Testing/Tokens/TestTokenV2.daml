@@ -153,7 +153,7 @@ token_transferFactory_transferImpl admin actors transfer extraArgs = do
         originalInstructionCid = None
         transfer
 
-  applyTransferInstructionTransitions offer None actors V2.TIA_Accept extraArgs
+  applyTransferInstructionTransitions CalledFromV2 offer None actors V2.TIA_Accept extraArgs
 
 
 -- | Create a V2 allocation.

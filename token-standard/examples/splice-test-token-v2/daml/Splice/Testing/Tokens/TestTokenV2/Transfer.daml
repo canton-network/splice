@@ -14,6 +14,7 @@ import DA.Optional
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig
@@ -46,6 +47,21 @@ template TokenTransferOffer with
     -- Visible to anyone that has or can authorize an action
     observer dedupSort (concatMap concat (Map.values availableActions) <> concat (Map.values actionAuthorizers))
 
+    -- FIXME: test V1 sending and recieving transfers to accounts
+    interface instance V1.TransferInstruction for TokenTransferOffer where
+      view = downcast (view @V2.TransferInstruction (toInterface this))
+
+      transferInstruction_withdrawImpl = transferInstruction_v1_withdrawDefaultImplUsingV2
+        (toInterface this)
+        (token_transferInstruction_withdrawImplV2 CalledFromV1 this)
+      transferInstruction_acceptImpl = transferInstruction_v1_acceptDefaultImplUsingV2
+        (toInterface this)
+        (token_transferInstruction_acceptImplV2 this)
+      transferInstruction_rejectImpl = transferInstruction_v1_rejectDefaultImplUsingV2
+        (toInterface this)
+        (token_transferInstruction_rejectImplV2 this)
+      transferInstruction_updateImpl _self _arg = abort "update is not used in a V2-based TransferInstruction implementation"
+
     interface instance V2.TransferInstruction for TokenTransferOffer where
       view = V2.TransferInstructionView with
         originalInstructionCid = originalInstructionCid
@@ -60,14 +76,9 @@ template TokenTransferOffer with
       transferInstruction_rejectExtraObservers = transferInstruction_rejectDefaultExtraObservers this
       transferInstruction_withdrawExtraObservers = transferInstruction_withdrawDefaultExtraObservers this
 
-      transferInstruction_withdrawImpl self arg = do
-        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Withdraw arg.extraArgs
-
-      transferInstruction_rejectImpl self arg = do
-        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Reject arg.extraArgs
-
-      transferInstruction_acceptImpl self arg = do
-        applyTransferInstructionTransitions this (Some self) arg.actors V2.TIA_Accept arg.extraArgs
+      transferInstruction_withdrawImpl = token_transferInstruction_withdrawImplV2 CalledFromV2 this
+      transferInstruction_rejectImpl = token_transferInstruction_rejectImplV2 this
+      transferInstruction_acceptImpl = token_transferInstruction_acceptImplV2 this
 
     -- Implemented here so that we do not have to pull in the Rules contract.
     interface instance TransferEventsV2.EventLog for TokenTransferOffer where
@@ -176,13 +187,14 @@ transferInstructionTransition _this _oSelf _actors _accountMap _extraArgs fromSt
   abort $ "Unsupported state transition: " <> show (fromState, toState)
 
 applyTransferInstructionTransitions
-  : TokenTransferOffer
+  : CallSource
+  -> TokenTransferOffer
   -> Optional (ContractId V2.TransferInstruction)
   -> [Party]
   -> V2.TransferInstructionAction
   -> ExtraArgs
   -> Update V2.TransferInstructionResult
-applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors action extraArgs = do
+applyTransferInstructionTransitions callSource this@TokenTransferOffer{..} oSelf actors action extraArgs = do
   let admin = transfer.instrumentId.admin
   accountMap <- extractAccountConfigMap
       admin
@@ -210,8 +222,10 @@ applyTransferInstructionTransitions this@TokenTransferOffer{..} oSelf actors act
 
     transition = transferInstructionTransition this oSelf actors accountMap extraArgs
 
+    cidToArchive = archiveIfCalledFromV2 callSource oSelf
+
   applyStateMachineTransitions
-    admin this oSelf actors action mkStateMachine accountMap
+    admin this cidToArchive actors action mkStateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
 
 
@@ -291,3 +305,60 @@ senderHoldingFromTransfer transfer = V2.HoldingView with
   instrumentId = transfer.instrumentId
   lock = None
   meta = emptyMetadata
+
+
+-- V1 compatibility
+-------------------
+
+
+token_transferInstruction_withdrawImplV2
+  : CallSource -> TokenTransferOffer
+  -> ContractId V2.TransferInstruction -> V2.TransferInstruction_Withdraw -> Update V2.TransferInstructionResult
+token_transferInstruction_withdrawImplV2 archiveSelf this self arg = do
+  applyTransferInstructionTransitions archiveSelf this (Some self) arg.actors V2.TIA_Withdraw arg.extraArgs
+
+token_transferInstruction_acceptImplV2
+  : TokenTransferOffer
+  -> ContractId V2.TransferInstruction -> V2.TransferInstruction_Accept -> Update V2.TransferInstructionResult
+token_transferInstruction_acceptImplV2 this self arg = do
+  applyTransferInstructionTransitions CalledFromV2 this (Some self) arg.actors V2.TIA_Accept arg.extraArgs
+
+token_transferInstruction_rejectImplV2
+  : TokenTransferOffer
+  -> ContractId V2.TransferInstruction -> V2.TransferInstruction_Reject -> Update V2.TransferInstructionResult
+token_transferInstruction_rejectImplV2 this self arg = do
+  applyTransferInstructionTransitions CalledFromV2 this (Some self) arg.actors V2.TIA_Reject arg.extraArgs
+
+
+transferInstruction_v1_withdrawDefaultImplUsingV2
+  : V2.TransferInstruction
+  -> (ContractId V2.TransferInstruction -> V2.TransferInstruction_Withdraw -> Update V2.TransferInstructionResult)
+  -> ContractId V1.TransferInstruction -> V1.TransferInstruction_Withdraw -> Update V1.TransferInstructionResult
+transferInstruction_v1_withdrawDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) V2.TransferInstruction_Withdraw with
+    actors = [regularAccountOwner thisView.transfer.sender]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+transferInstruction_v1_acceptDefaultImplUsingV2
+  : V2.TransferInstruction
+  -> (ContractId V2.TransferInstruction -> V2.TransferInstruction_Accept -> Update V2.TransferInstructionResult)
+  -> ContractId V1.TransferInstruction -> V1.TransferInstruction_Accept -> Update V1.TransferInstructionResult
+transferInstruction_v1_acceptDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) V2.TransferInstruction_Accept with
+    actors = [regularAccountOwner thisView.transfer.receiver]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+transferInstruction_v1_rejectDefaultImplUsingV2
+  : V2.TransferInstruction
+  -> (ContractId V2.TransferInstruction -> V2.TransferInstruction_Reject -> Update V2.TransferInstructionResult)
+  -> ContractId V1.TransferInstruction -> V1.TransferInstruction_Reject -> Update V1.TransferInstructionResult
+transferInstruction_v1_rejectDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) V2.TransferInstruction_Reject with
+    actors = [regularAccountOwner thisView.transfer.receiver]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
