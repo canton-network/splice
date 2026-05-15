@@ -6,23 +6,14 @@ module Splice.Tests.TestTokenV2.TestTransfer_V1V2Mixed where
 
 import Daml.Script
 
-import DA.Assert
-import DA.Action (void, when)
-import DA.Foldable (forA_)
 import DA.Time
-import DA.TextMap qualified as TextMap
 
-import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
-import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
 import Splice.TokenStandard.Utils (basicAccount)
 
-import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
-
 import Splice.Testing.Utils
-import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
@@ -101,7 +92,6 @@ test_transfer_v1_v2_mixed = do
 
   alice <- mkParty "alice"
   bob <- mkParty "bob"
-  let allParties = [alice, bob]
   let aliceAccount1 = V2.Account with owner = Some alice; provider = None; id = "alice-acc-1"
   let aliceBasic = basicAccount alice
 

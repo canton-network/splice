@@ -545,6 +545,16 @@ instance BackwardCompatible AllocationInstructionV1.AllocationInstructionResult_
   upcast AllocationInstructionV1.AllocationInstructionResult_Failed =
     AllocationInstructionV2.AllocationInstructionResult_Failed
 
+instance ForwardCompatible AllocationInstructionV1.AllocationInstructionResult_Output AllocationInstructionV2.AllocationInstructionResult_Output where
+  downcast (AllocationInstructionV2.AllocationInstructionResult_Pending with allocationInstructionCid) =
+    AllocationInstructionV1.AllocationInstructionResult_Pending with
+      allocationInstructionCid = coerceContractId allocationInstructionCid
+  downcast (AllocationInstructionV2.AllocationInstructionResult_Completed with allocationCid) =
+    AllocationInstructionV1.AllocationInstructionResult_Completed with
+      allocationCid = coerceContractId allocationCid
+  downcast AllocationInstructionV2.AllocationInstructionResult_Failed =
+    AllocationInstructionV1.AllocationInstructionResult_Failed
+
 
 -- Allocation requests
 ----------------------

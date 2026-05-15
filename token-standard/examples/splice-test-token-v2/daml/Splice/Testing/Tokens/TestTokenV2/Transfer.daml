@@ -60,6 +60,7 @@ template TokenTransferOffer with
         (toInterface this)
         (token_transferInstruction_rejectImplV2 CalledFromV1 this)
       transferInstruction_updateImpl _self _arg = abort "update is not used in a V2-based TransferInstruction implementation"
+        -- FIXME: share the above method
 
     interface instance V2.TransferInstruction for TokenTransferOffer where
       view = V2.TransferInstructionView with

@@ -28,6 +28,10 @@ import Splice.Testing.Tokens.TestTokenV2.Holding
 import Splice.Testing.Tokens.TestTokenV2.Util
 import Splice.TokenStandard.Utils
 
+-- FIXME
+import Splice.Api.Token.AllocationInstructionV1 qualified as AllocationInstructionV1
+import Splice.Api.Token.AllocationInstructionV2 qualified as AllocationInstructionV2
+
 
 -- | Implementation of a V2-only allocation instruction
 template TokenAllocationInstructionV2 with
@@ -137,6 +141,34 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
   applyStateMachineTransitions
     admin this oSelf actors action mkStateMachine accountMap transition
     mkPending tryUseAuthority extraArgs
+
+
+-- | We model V1 allocations as a subset of V2 allocations.
+--
+-- We can't directly implement the `V1.Allocation` interface on `TokenAllocationV2`
+-- as that would result in errors in the interface view implementation when it has to downcast
+-- a V2.Allocation with multiple legs. This approach here let's us share the logic while
+-- keeping the templates separate.
+template TokenAllocationV1 with
+    allocationV2 : TokenAllocationV2
+  where
+    ensure (ensure allocationV2) && canBeDowncastToV1 allocationV2
+    signatory allocationV2.allocation.admin
+
+    interface instance V1.Allocation for TokenAllocationV1 where
+      view = -- FIXME: implement downcast as partial method
+
+      allocation_executeTransferImpl self arg =
+        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Settle arg.extraArgs
+
+      allocation_cancelImpl self arg =
+        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Cancel arg.extraArgs
+
+      allocation_withdrawImpl self arg =
+        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Withdraw arg.extraArgs
+
+canBeDowncastToV1 : TokenAllocationV2 -> Bool
+canBeDowncastToV1 _ = True -- FIXME: check number of transfer legs
 
 
 -- | Implementation of a V2-only allocation.
@@ -404,3 +436,43 @@ unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
       context = emptyChoiceContext
       meta = reasonToMeta reason emptyMetadata
   pure authorizerCids
+
+
+-- V1/V2 compatibility
+----------------------
+
+
+
+-- | Adapter to implement `V1.AllocationInstruction_Withdraw` using the body of the V2 choice.
+--
+-- Built as an adapter, as calling the V2 interface method directly is not possible, as that will
+-- archive the allocation instruction again.
+allocationInstruction_v1_withdrawDefaultImplUsingV2
+  : AllocationInstructionV2.AllocationInstruction
+  -> (ContractId AllocationInstructionV2.AllocationInstruction -> AllocationInstructionV2.AllocationInstruction_Withdraw -> Update AllocationInstructionV2.AllocationInstructionResult)
+  -> ContractId AllocationInstructionV1.AllocationInstruction -> AllocationInstructionV1.AllocationInstruction_Withdraw -> Update AllocationInstructionV1.AllocationInstructionResult
+allocationInstruction_v1_withdrawDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) AllocationInstructionV2.AllocationInstruction_Withdraw with
+    actors = [regularAccountOwner thisView.allocation.authorizer]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+-- | Default method for `V1.AllocationFactory_Allocate` that uses the V2 allocation implementation under the hood.
+allocationFactory_v1_allocationDefaultImplUsingV2
+  : AllocationInstructionV2.AllocationFactory
+  -> ContractId AllocationInstructionV1.AllocationFactory -> AllocationInstructionV1.AllocationFactory_Allocate -> Update AllocationInstructionV1.AllocationInstructionResult
+allocationFactory_v1_allocationDefaultImplUsingV2 this self arg = do
+  let allocation = arg.allocation
+  let thisView = view this
+  requireMatchExpected ("arg.expectedAdmin", arg.expectedAdmin) thisView.admin
+  result <- AllocationInstructionV2.allocationFactory_allocateImpl this (coerceInterfaceContractId self) AllocationInstructionV2.AllocationFactory_Allocate with
+    actors = [arg.allocation.transferLeg.sender]
+    requestedAt = allocation.settlement.requestedAt
+    inputHoldingCids = map coerceContractId arg.inputHoldingCids
+    allocation = upcast allocation
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+
+
