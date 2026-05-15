@@ -5,5 +5,5 @@ dir := $(call current_dir)
 
 $(dir)/$(docker-build): $(dir)/target/LICENSE
 
-$(dir)/target/LICENSE: ${SPLICE_ROOT}/cluster/images/LICENSE | $(dir)/target
+$(dir)/target/LICENSE: ${SPLICE_ROOT}/LICENSE | $(dir)/target
 	cp $< $@
