@@ -60,7 +60,7 @@ initialize config = do
   let registries = Map.fromList
         [ (amuletV2.dso, mkRegistryApisV1V2 amuletV1 amuletV2)
         , (testTokenV1.admin, mkRegistryApisV1 testTokenV1)
-        , (testTokenV2.admin, mkRegistryApisV2 testTokenV2 )
+        , (testTokenV2.admin, mkRegistryApisV1V2 testTokenV2 testTokenV2 )
         ]
 
   pure Env with ..

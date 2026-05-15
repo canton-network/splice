@@ -44,8 +44,8 @@ data TestSetup = TestSetup with
   mkTransfer : SimpleTransfer -> Script WalletClientV2.TSABatch
   checkMetadata : Bool
 
-test_v1_transfers : Script ()
-test_v1_transfers = do
+testTokenV1_test_v1_transfers : Script ()
+testTokenV1_test_v1_transfers = do
   -- setup
   env <- TestRegistries.initialize TestRegistries.defaultConfig
   let instrX = V2.InstrumentId with
@@ -66,8 +66,33 @@ test_v1_transfers = do
       mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
       checkMetadata = False
 
-test_v2_transfer : Script ()
-test_v2_transfer = do
+
+testTokenV2_test_v1_transfers : Script ()
+testTokenV2_test_v1_transfers = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let instrX = V2.InstrumentId with
+        id = "X1"
+        admin = env.testTokenV2.admin
+  let instrY = V2.InstrumentId with
+        id = "Y1"
+        admin = env.testTokenV2.admin
+
+  let mint owner amount instrId =
+        void $ TestTokenRegistryV2.mint env.testTokenV2 (basicAccount owner) instrId.id amount
+
+  genericTestTransfers TestSetup with
+      registries = env.registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
+      checkMetadata = False
+
+-- FIXME: check mixed transfers V1 initiator and V2 receiver, and tx history for that
+
+testTokenV2_test_v2_transfer : Script ()
+testTokenV2_test_v2_transfer = do
   -- setup
   env <- TestRegistries.initialize TestRegistries.defaultConfig
   let registries = env.registries

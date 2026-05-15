@@ -125,7 +125,7 @@ module Splice.TokenStandard.Utils (
   upcast_v1_v2_TransferLeg,
   downcast_v2_v1_TransferLeg,
   downcast_v2_v1_SettlementInfo,
-  upcast_v1_v2_Allocation,
+  upcast_v1_v2_AllocationView,
 
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
