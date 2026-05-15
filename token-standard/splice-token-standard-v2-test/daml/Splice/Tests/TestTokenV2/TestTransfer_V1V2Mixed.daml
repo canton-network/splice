@@ -1,0 +1,229 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Daml script tests checking mixed V1 and V2 transfers using TesTokenV2.
+module Splice.Tests.TestTokenV2.TestTransfer_V1V2Mixed where
+
+import Daml.Script
+
+import DA.Assert
+import DA.Action (void, when)
+import DA.Foldable (forA_)
+import DA.Time
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+
+import Splice.TokenStandard.Utils (basicAccount)
+
+import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
+
+import Splice.Testing.Utils
+import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.WalletClientV2 (SimpleTransfer(..))
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+
+{- FIXME
+
+-- Shared test setup
+--------------------
+
+
+testTokenV1_test_v1_transfers : Script ()
+testTokenV1_test_v1_transfers = do
+
+  genericTestTransfers TestSetup with
+      registries = env.registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
+      checkMetadata = False
+
+
+testTokenV2_test_v1_transfers : Script ()
+testTokenV2_test_v1_transfers = do
+
+  genericTestTransfers TestSetup with
+      registries = env.registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
+      checkMetadata = False
+
+-- FIXME: check mixed transfers V1 initiator and V2 receiver, and tx history for that
+-- FIXME: check that all transfer offers are archived
+
+testTokenV2_test_v2_transfer : Script ()
+testTokenV2_test_v2_transfer = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registries = env.registries
+  let instrX = V2.InstrumentId with
+        id = "X2"
+        admin = env.testTokenV2.admin
+  let instrY = V2.InstrumentId with
+        id = "Y2"
+        admin = env.testTokenV2.admin
+
+  let mint owner amount instrId =
+        void $ TestTokenRegistryV2.mint env.testTokenV2 (basicAccount owner) instrId.id amount
+
+  genericTestTransfers TestSetup with
+      registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV2' registries
+      checkMetadata = True
+-}
+
+test_transfer_v1_v2_mixed : Script ()
+test_transfer_v1_v2_mixed = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let instrX = V2.InstrumentId with
+        id = "X"
+        admin = env.testTokenV2.admin
+  let mkParty name = do
+        party <- allocatePartyExact name
+        WalletClientV2.createBatchingUtility party
+        pure party
+  let registries = env.registries
+
+  alice <- mkParty "alice"
+  bob <- mkParty "bob"
+  let allParties = [alice, bob]
+  let aliceAccount1 = V2.Account with owner = Some alice; provider = None; id = "alice-acc-1"
+  let aliceBasic = basicAccount alice
+
+  TestTokenRegistryV2.mint env.testTokenV2 aliceAccount1 "X" 1000.0
+
+  at1 <- WalletClientV2.mkTransferFactory_TransferV2' registries SimpleTransfer with
+      sender = aliceAccount1
+      receiver = basicAccount bob
+      amount = 10.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> bob - test transfer 1"
+  at2 <- WalletClientV2.mkTransferFactory_TransferV2' registries SimpleTransfer with
+      sender = aliceAccount1
+      receiver = aliceBasic
+      amount = 25.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> self - test transfer 2"
+  at3 <- WalletClientV2.mkTransferFactory_TransferV1' registries SimpleTransfer with
+      sender = aliceBasic
+      receiver = basicAccount bob
+      amount = 25.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> bob - test transfer 3"
+  WalletClientV2.executeTSABatch registries alice (at1 <> at2 <> at3)
+
+  transfers <- queryInterface @V1.TransferInstruction bob
+
+  trace transfers $ pure ()
+
+{-
+  -- test creating three outgoing transfers in on batch
+  at1 <- mkTransfer SimpleTransfer with
+        sender = basicAccount alice
+        receiver = basicAccount bob
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "alice -> bob - test transfer 1"
+  at2 <- mkTransfer SimpleTransfer with
+        sender = basicAccount alice
+        receiver = basicAccount charlie
+        amount = 25.0
+        instrumentId = instrY
+        offerTime = days 1
+        reason = "alice -> charlie - test transfer 2"
+  at3 <- mkTransfer SimpleTransfer with
+        sender = basicAccount alice
+        receiver = basicAccount dora
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "alice -> dora - test transfer 3"
+  WalletClientV2.executeTSABatch registries alice (at1 <> at2 <> at3)
+
+  -- test accepting and forwarding a transfer using the holdings just received
+  baccept <- acceptTransferOffers registries bob instrX
+  bt1 <- mkTransfer SimpleTransfer with
+        sender = basicAccount bob
+        receiver = basicAccount dora
+        amount = 5.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "bob -> dora - test transfer 4"
+
+  WalletClientV2.executeTSABatch registries bob (baccept <> bt1)
+
+  -- dora accepts all transfers in one go, and merges them
+  daccept <- acceptTransferOffers registries dora instrX
+  doraMerge <- mkTransfer SimpleTransfer with
+        sender = basicAccount dora
+        receiver = basicAccount dora
+        amount = 15.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> dora - test self-merge"
+  -- test that self-merge extracts the args correctly by executing it twice
+  WalletClientV2.executeTSABatch registries dora (daccept <> doraMerge <> doraMerge)
+
+  -- charlie accepts their offer
+  -- TODO(#4813): actually reject as part of a batch, once we have the support for that in the batching utility
+  caccept <- acceptTransferOffers registries charlie instrY
+  (result, changes) <- WalletClientV2.executeTSABatch registries charlie caccept
+
+  -- check tx history on V2 transfers
+  when checkMetadata $ do
+    let testTransferReason = "alice -> charlie - test transfer 2"
+    WalletClientV2.expectTxHistoryReasons changes
+      [ (basicAccount alice, [testTransferReason], "")
+      , (basicAccount charlie, [testTransferReason], "")
+      ]
+    -- V1 history metadata
+    let expectedMeta = Metadata with
+          values = TextMap.fromList
+            [ ("splice.lfdecentralizedtrust.org/reason", testTransferReason)
+            , ("splice.lfdecentralizedtrust.org/sender", "alice")
+            , ("splice.lfdecentralizedtrust.org/tx-kind", "transfer")
+            ]
+    [BatchingUtilityV2.TSAR_TransferInstructionResultV2 acceptResult] <- pure result.actionResults
+    acceptResult.meta === expectedMeta
+
+  -- Check balances
+  WalletClientV2.checkBalance alice instrX 980.0
+  WalletClientV2.checkBalance alice instrY 975.0
+  WalletClientV2.checkBalance bob instrX 5.0
+  WalletClientV2.checkBalance charlie instrY 25.0
+
+  -- No transfer instructions left
+  forA_ allParties $ \p -> do
+    [] <- queryInterface @V1.TransferInstruction p
+    [] <- queryInterface @V2.TransferInstruction p
+    pure ()
+-}
+
+  pure ()
+
+
+acceptTransferOffers : MultiRegistry.MultiRegistry -> Party -> V2.InstrumentId -> Script WalletClientV2.TSABatch
+acceptTransferOffers registries actor instrumentId = do
+  offers <- WalletClientV2.listTransferOffers actor instrumentId
+  acceptChoices <- forA offers (WalletClientV2.mkAcceptTransferOffer registries actor)
+  pure (mconcat acceptChoices)
+
