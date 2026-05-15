@@ -146,7 +146,7 @@ genericTestTransfers TestSetup {..} = do
   doraMerge <- mkTransfer SimpleTransfer with
         sender = basicAccount dora
         receiver = basicAccount dora
-        amount = 15.0 -- TODO(#4875): implement a self-merge choice in the batching utility, so that this amount does not have to be precomputed by the wallet
+        amount = 15.0
         instrumentId = instrX
         offerTime = days 1
         reason = "dora -> dora - test self-merge"
