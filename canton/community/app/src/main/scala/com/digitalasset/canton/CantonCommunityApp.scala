@@ -3,8 +3,8 @@
 
 package com.digitalasset.canton
 
-import com.digitalasset.canton.config.{CantonConfig, DefaultPorts}
 import com.digitalasset.canton.config.ConfigErrors.CantonConfigError
+import com.digitalasset.canton.config.{CantonConfig, DefaultPorts}
 import com.digitalasset.canton.environment.{
   CantonEnvironment,
   CommunityEnvironmentFactory,
