@@ -1,0 +1,35 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.SvWeight where
+
+import Splice.Types
+import Splice.Util
+
+
+-- | On-ledger representation of the SV weight.
+--
+-- A 'SvWeight' links a SV party to a SV operator that records
+-- the reward weight used to create SV reward coupons for the SV.
+template SvWeight
+  with
+    dso : Party
+    sv : Party -- ^ The SV party for which reward coupons are created by the SV operator.
+    svOperator : Party -- ^ The SV operator party responsible for creating reward coupons for 'sv'.
+    weight : Int -- ^ The SV reward weight. Must be strictly greater than 0.
+  where
+    ensure weight > 0
+    signatory dso, svOperator
+
+    observer sv
+
+
+
+-- instances
+------------
+
+instance HasCheckedFetch SvWeight ForOwner where
+  contractGroupId SvWeight{..} = ForOwner with dso; owner = sv
+
+instance HasCheckedFetch SvWeight ForDso where
+  contractGroupId SvWeight{..} = ForDso with dso
