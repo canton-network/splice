@@ -4,51 +4,58 @@ import * as cloudsql from '@google-cloud/sql';
 import * as gcp from '@pulumi/gcp';
 import * as automation from '@pulumi/pulumi/automation';
 import * as readline from 'readline';
-import { program } from 'commander';
 import { CLUSTER_BASENAME, config } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { runSvProjectForAllSvs } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
+import { program } from 'commander';
 
 import { stack } from './pulumi';
 import { runSvCantonForAllMigrations } from './sv-canton/pulumi';
-import { runSvProjectForAllSvs } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
 
 const gcpSqlClient = new cloudsql.SqlInstancesServiceClient({
   fallback: 'rest',
 });
 
+type PulumiStackResource = {
+  type?: string;
+  id?: string;
+};
+
 async function getDBsInStack(stack: automation.Stack): Promise<gcp.sql.DatabaseInstance[]> {
   const exported = await stack.exportStack();
-  const resources = exported.deployment.resources;
+  const resources = exported.deployment.resources as PulumiStackResource[] | undefined;
   if (!resources) {
     return Promise.resolve([]);
   }
-  const res = resources.filter((r: any) => r.type === 'gcp:sql/databaseInstance:DatabaseInstance');
+  const res = resources.filter(r => r.type === 'gcp:sql/databaseInstance:DatabaseInstance');
   console.log(
     `In ${stack.name} got ${JSON.stringify(
-      res.map((x: any) => x.id),
+      res.map(x => x.id),
       null,
       2
     )}`
   );
-  return res;
+  return res as unknown as gcp.sql.DatabaseInstance[];
 }
 
 async function getAllPulumiDbs(): Promise<gcp.sql.DatabaseInstance[]> {
   const projects = ['canton-network', 'sv-runbook', 'splitwell', 'validator1'];
   const coreDbs = [
-    ...await Promise.all(
-      projects.map(async project => await getDBsInStack(await stack(project, project, true, {})))
-    ).then(dbs => dbs.flat()),
     ...(await Promise.all(
-      runSvProjectForAllSvs(
-        'get_dbs',
-        async stack => {
-          return getDBsInStack(stack);
-        },
-        false,
-        true
-      ).map(res => res.promise)
-    )).flat()
-  ]
+      projects.map(async project => await getDBsInStack(await stack(project, project, true, {})))
+    ).then(dbs => dbs.flat())),
+    ...(
+      await Promise.all(
+        runSvProjectForAllSvs(
+          'get_dbs',
+          async stack => {
+            return getDBsInStack(stack);
+          },
+          false,
+          true
+        ).map(res => res.promise)
+      )
+    ).flat(),
+  ];
 
   const readDbsForAllStacks = runSvCantonForAllMigrations(
     'get_dbs',

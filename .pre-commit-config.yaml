@@ -50,9 +50,7 @@ repos:
         language: system
         entry: "scripts/fix-ts.py"
         types_or: [javascript, jsx, ts, tsx]
-        # TODO(#3334): The current implementation of fix-ts.py makes it impossible to format files
-        #              in the top level pulumi package.
-        exclude: "(/[.]prettierrc[.]cjs$|/pulumi/[^/]+.ts$)"
+        exclude: "/[.]prettierrc[.]cjs$"
       - id: pulumi_tests
         name: run pulumi tests and check expected files
         language: system
