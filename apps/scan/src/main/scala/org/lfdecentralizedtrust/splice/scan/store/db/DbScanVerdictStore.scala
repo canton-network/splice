@@ -209,7 +209,6 @@ object DbScanVerdictStore {
       updateId = verdict.updateId,
       submittingParties = verdict.submittingParties,
       transactionRootViews = transactionRootViews,
-      // TODO(#4060): log an error and fail ingestion if a trafficSummary is missing for a verdict
       trafficSummaryO = byTimestamp.get(recordTime),
     )
 
@@ -475,15 +474,11 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert multiple verdicts, their transaction views and app activity records in a single transaction.
+  /** Insert verdicts, transaction views, and activity records in a single
+    * transaction.
     *
-    * Verdicts are inserted first to obtain their generated row_ids. The placeholder
-    * verdictRowId (= DUMMY_VERDICT_ROW_ID) in each app activity record is then resolved to the
-    * actual row_id (matched by sequencingTime) before insertion.
-    *
-    * @param items verdicts with their transaction view constructors
-    * @param appActivityRecords pre-computed activity records paired with their sequencingTime;
-    *                           each record has verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder
+    * @param items verdicts with transaction view constructors
+    * @param appActivityRecords activity records with placeholder verdictRowIds
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
@@ -491,13 +486,21 @@ class DbScanVerdictStore(
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
+    val ingestionStart = if (appActivityRecords.nonEmpty) {
+      val firstRecordTimeMicros = items.headOption.fold(0L)(_._1.recordTime.toMicros)
+      val earliestRound = appActivityRecords
+        .map(_._2.roundNumber)
+        .foldLeft(Long.MaxValue)(math.min)
+      Some((firstRecordTimeMicros, earliestRound))
+    } else None
+
     val combinedAction = for {
       rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
       // Resolve placeholder verdictRowId to actual row_ids from the inserted verdicts
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
+      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords, ingestionStart)
     } yield ()
 
     futureUnlessShutdownToFuture(
@@ -510,6 +513,13 @@ class DbScanVerdictStore(
       maxRt.foreach(advanceLastIngestedRecordTime)
     }
   }
+
+  /** Whether activity record ingestion has started (meta row confirmed). */
+  def activityIngestionStarted(implicit tc: TraceContext): Future[Boolean] =
+    appActivityRecordStoreO match {
+      case Some(store) => store.startedIngestingAt.map(_.isDefined)
+      case None => Future.successful(false)
+    }
 
   def getVerdictByUpdateId(updateId: String)(implicit
       tc: TraceContext
@@ -541,11 +551,12 @@ class DbScanVerdictStore(
   }
 
   private def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppActivityRecordT],
+      ingestionStart: Option[(Long, Long)],
   )(implicit tc: TraceContext): DBIO[Unit] = {
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, ingestionStart)
     }
   }
 

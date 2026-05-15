@@ -17,6 +17,7 @@ import slick.jdbc.{GetResult, PostgresProfile}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.{ExecutionContext, Future}
 
 object DbAppActivityRecordStore {
@@ -37,11 +38,68 @@ object DbAppActivityRecordStore {
   )
 
   val DUMMY_VERDICT_ROW_ID: Long = -123456789L
+
+  /** Bump this when the functional behavior of the app activity computation changes. */
+  val ActivityIngestionCodeVersion: Int = 1
+
+  /** Metadata for an activity record ingestion run.
+    *
+    * @param historyId history identifier from update_history_descriptors
+    * @param codeVersion code version of the ingestion logic
+    * @param userVersion operator-configured version from ScanAppConfig
+    * @param startedIngestingAt record time (microseconds since epoch) of the first
+    *                           verdict in the first batch with activity records
+    * @param earliestIngestedRound the earliest round number in the first batch with activity records
+    */
+  final case class AppActivityRecordMetaT(
+      historyId: Long,
+      codeVersion: Int,
+      userVersion: Int,
+      startedIngestingAt: Long,
+      earliestIngestedRound: Long,
+  )
+
+  final case class IngestionVersions(code: Int, user: Int)
+
+  sealed trait EnsureResult
+  case class Checked(result: MetaCheckResult) extends EnsureResult
+  case object NotReady extends EnsureResult
+
+  sealed trait MetaCheckResult
+  case object InsertMeta extends MetaCheckResult
+  case object Resume extends MetaCheckResult
+  final case class DowngradeDetected(
+      runningCode: Int,
+      runningUser: Int,
+      storedCode: Int,
+      storedUser: Int,
+  ) extends MetaCheckResult {
+    def message: String =
+      s"Activity ingestion version downgrade detected: " +
+        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser). " +
+        s"Shutting down to prevent data corruption."
+  }
+
+  def checkMetaVersions(
+      existing: Option[(Int, Int)],
+      runningCode: Int,
+      runningUser: Int,
+  ): MetaCheckResult = existing match {
+    case None => InsertMeta
+    case Some((storedCode, storedUser)) =>
+      if (runningCode < storedCode || runningUser < storedUser)
+        DowngradeDetected(runningCode, runningUser, storedCode, storedUser)
+      else if (runningCode > storedCode || runningUser > storedUser)
+        InsertMeta
+      else
+        Resume
+  }
 }
 
 class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
+    val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -56,8 +114,29 @@ class DbAppActivityRecordStore(
 
   override protected def timeouts = new ProcessingTimeout
 
+  import DbAppActivityRecordStore.*
+
+  // Cached by startedIngestingAt.
+  private val startedIngestingAtRef =
+    new AtomicReference[Option[Long]](None)
+
+  /** The record time of the first activity record in the store.
+    * Backed by DB, cached after first successful read.
+    */
+  def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
+    startedIngestingAtRef.get() match {
+      case some @ Some(_) => Future.successful(some)
+      case None =>
+        lookupActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
+          val tsO = metaO.map(_.startedIngestingAt)
+          tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
+          tsO
+        }
+    }
+
   object Tables {
     val appActivityRecords = "app_activity_record_store"
+    val activityRecordMeta = "app_activity_record_meta"
   }
 
   private def historyId = updateHistory.historyId
@@ -76,36 +155,31 @@ class DbAppActivityRecordStore(
 
   /** Find the earliest round with complete app activity.
     *
-    * Assumes that ledger ingestion order for app activity is sequential,
-    * i.e.,
-    * - app activity for round N always precedes round N + 1, and
-    * - if activity for N + 1 is present now, N has all its activity.
+    * Uses `earliest_ingested_round` from the meta table — the first round
+    * may be partial, so the earliest complete round is
+    * `earliest_ingested_round + 1`.
     *
-    * Returns None if fewer than two consecutive rounds have been ingested.
+    * Returns None if no meta record exists (ingestion hasn't started) or
+    * if the next round after the earliest hasn't been ingested yet.
     */
   def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
 
-    // `order by ... limit 1` is used instead of min/max to force the query planner
-    // to use the (history_id, round_number) index.
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
     runQuerySingle(
-      sql"""select min_round + 1
-            from (
-              select a.round_number as min_round
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              order by a.round_number asc
-              limit 1
-            ) sub
-            where exists (
-              select 1
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              and a.round_number = sub.min_round + 1
-              order by a.round_number asc
-              limit 1
-            )
+      sql"""select m.earliest_ingested_round + 1
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
+              and exists (
+                select 1
+                from #${Tables.appActivityRecords} a
+                where a.history_id = $historyId
+                  and a.round_number = m.earliest_ingested_round + 1
+              )
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
     )
@@ -116,6 +190,11 @@ class DbAppActivityRecordStore(
     * round also has records. We return max_round - 1 because max_round
     * itself may still be receiving records.
     * Returns None if fewer than two consecutive rounds have been ingested.
+    *
+    * Unlike [[earliestRoundWithCompleteAppActivity]], this does not filter
+    * by ingestion version. The completeness boundary only constrains the
+    * start of ingestion — callers should pair this with
+    * `earliestRoundWithCompleteAppActivity` to get a valid range.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
@@ -197,16 +276,20 @@ class DbAppActivityRecordStore(
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
     if (verdictRowIds.isEmpty) Future.successful(Map.empty)
     else {
-      storage
-        .query(
-          (sql"""
-          select verdict_row_id, round_number, app_provider_parties, app_activity_weights
-          from #${Tables.appActivityRecords}
-          where """ ++ inClause("verdict_row_id", verdictRowIds))
-            .as[AppActivityRecordT],
-          "appActivity.getRecordsByVerdictRowIds",
-        )
-        .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+      startedIngestingAt.flatMap {
+        case None => Future.successful(Map.empty)
+        case Some(_) =>
+          storage
+            .query(
+              (sql"""
+              select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+              from #${Tables.appActivityRecords}
+              where """ ++ inClause("verdict_row_id", verdictRowIds))
+                .as[AppActivityRecordT],
+              "appActivity.getRecordsByVerdictRowIds",
+            )
+            .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+      }
     }
   }
 
@@ -229,17 +312,30 @@ class DbAppActivityRecordStore(
     }
   }
 
-  /** Returns a DBIO action for inserting app activity records (for use in combined transactions).
-    * Unlike insertAppActivityRecords, this doesn't wrap in a transaction or Future.
+  /** Returns a DBIO action for inserting app activity records and ensuring
+    * the meta row, for use in combined transactions. Calls `sys.exit(1)` if
+    * a version downgrade is detected.
+    *
+    * @param items activity records to insert
+    * @param ingestionStart meta row params, or `None` to skip the meta check
     */
   def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppActivityRecordT],
+      ingestionStart: Option[(Long, Long)] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
-    if (items.isEmpty) DBIO.successful(())
-    else {
-      batchInsertAppActivityRecords(items).map { _ =>
-        logger.info(s"Inserted ${items.size} app activity records.")
-      }
+    for {
+      _ <-
+        if (items.isEmpty) DBIO.successful(())
+        else
+          batchInsertAppActivityRecords(items).map { _ =>
+            logger.info(s"Inserted ${items.size} app activity records.")
+          }
+      ensureResult <- ensureMetaDBIO(ingestionStart)
+    } yield ensureResult match {
+      case Checked(d: DowngradeDetected) =>
+        logger.error(d.message)
+        sys.exit(1)
+      case _ => ()
     }
   }
 
@@ -261,6 +357,117 @@ class DbAppActivityRecordStore(
             "appActivity.insertAppActivityRecords.batch",
           )
       )
+    }
+  }
+
+  type AppActivityRecordMetaT = DbAppActivityRecordStore.AppActivityRecordMetaT
+
+  private implicit val getResultAppActivityRecordMeta: GetResult[AppActivityRecordMetaT] =
+    GetResult { prs =>
+      DbAppActivityRecordStore.AppActivityRecordMetaT(
+        historyId = prs.<<[Long],
+        codeVersion = prs.<<[Int],
+        userVersion = prs.<<[Int],
+        startedIngestingAt = prs.<<[Long],
+        earliestIngestedRound = prs.<<[Long],
+      )
+    }
+
+  /** Returns the meta row for the given code and user version. */
+  def lookupActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
+      tc: TraceContext
+  ): Future[Option[AppActivityRecordMetaT]] =
+    runQuerySingle(
+      sql"""select history_id, activity_ingestion_code_version,
+                   activity_ingestion_user_version, started_ingesting_at,
+                   earliest_ingested_round
+            from #${Tables.activityRecordMeta}
+            where history_id = $historyId
+              and activity_ingestion_code_version = $codeVersion
+              and activity_ingestion_user_version = $userVersion
+      """.as[AppActivityRecordMetaT].headOption,
+      "appActivity.lookupActivityRecordMeta",
+    )
+
+  def insertActivityRecordMeta(
+      codeVersion: Int,
+      userVersion: Int,
+      startedIngestingAt: Long,
+      earliestIngestedRound: Long,
+  )(implicit tc: TraceContext): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update_(
+        sql"""insert into #${Tables.activityRecordMeta}
+                (history_id, activity_ingestion_code_version,
+                 activity_ingestion_user_version, started_ingesting_at,
+                 earliest_ingested_round)
+              values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
+                      $earliestIngestedRound)
+        """.asUpdate,
+        "appActivity.insertActivityRecordMeta",
+      )
+    )
+
+  private val metaChecked = new AtomicBoolean(false)
+
+  /** DBIO action that checks/inserts the meta row.
+    * Composable in a transaction with activity record inserts.
+    *
+    * @param ingestionStart `Some((firstRecordTimeMicros, earliestRound))` when
+    *                       the batch has activity records, `None` otherwise.
+    */
+  def ensureMetaDBIO(
+      ingestionStart: Option[(Long, Long)]
+  ): DBIO[EnsureResult] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    if (metaChecked.get()) DBIO.successful(Checked(Resume))
+    else {
+      for {
+        maxVersions <- sql"""select max(activity_ingestion_code_version),
+                                    max(activity_ingestion_user_version)
+                             from #${Tables.activityRecordMeta}
+                             where history_id = $historyId
+                       """
+          .as[(Option[Int], Option[Int])]
+          .headOption
+          .map(_.flatMap {
+            case (Some(c), Some(u)) => Some((c, u))
+            case _ => None
+          })
+        result <- checkMetaVersions(maxVersions, codeVersion, userVersion) match {
+          case InsertMeta =>
+            ingestionStart match {
+              case None =>
+                DBIO.successful(NotReady: EnsureResult)
+              case Some((firstRecordTimeMicros, earliestRound)) =>
+                sql"""insert into #${Tables.activityRecordMeta}
+                        (history_id, activity_ingestion_code_version,
+                         activity_ingestion_user_version, started_ingesting_at,
+                         earliest_ingested_round)
+                      values ($historyId, $codeVersion, $userVersion,
+                              $firstRecordTimeMicros, $earliestRound)
+                """.asUpdate.map { _ =>
+                  startedIngestingAtRef.set(Some(firstRecordTimeMicros))
+                  metaChecked.set(true)
+                  Checked(InsertMeta): EnsureResult
+                }
+            }
+          case Resume =>
+            sql"""select started_ingesting_at
+                  from #${Tables.activityRecordMeta}
+                  where history_id = $historyId
+                    and activity_ingestion_code_version = $codeVersion
+                    and activity_ingestion_user_version = $userVersion
+               """.as[Long].headOption.map { tsO =>
+              tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
+              metaChecked.set(true)
+              Checked(Resume): EnsureResult
+            }
+          case d: DowngradeDetected =>
+            DBIO.successful(Checked(d): EnsureResult)
+        }
+      } yield result
     }
   }
 

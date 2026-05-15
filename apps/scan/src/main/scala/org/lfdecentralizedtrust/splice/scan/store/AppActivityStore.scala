@@ -23,4 +23,7 @@ trait AppActivityStore {
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]]
+
+  /** The record time of the first activity record in the store. */
+  def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]]
 }

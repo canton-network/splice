@@ -847,6 +847,42 @@ A subsequent re-ingestion can be triggered by incrementing the value, as shown i
       persistence:
         txLogStoreDescriptorUserVersion: 2
 
+The ``activityIngestionUserVersion`` field controls the activity record
+ingestion version. Incrementing this value causes the scan app to
+record a new app activity record completeness lower bound. Reward accounting excludes rounds
+before this boundary, even though their activity records are retained.
+Thus bumping the user version has the same effect as reinitializing the 
+app activity record computation from the time of the bump onwards.
+
+Consequences of incrementing the user version:
+
+- Reward accounting excludes rounds before the new boundary, which may
+  result in the SV node participating in reward computation
+  by asking other SV nodes for the data for the rounds for which
+  the SV node does not have complete activity records.
+- Scan will note serve activity records ingested before bumping the user version.
+  activity records while there is no metadata row for the new version.
+  The results of the ``v0/events`` scan API may therefore differ from
+  those of other scans for event record times around the time the user
+  version was bumped.
+
+This is useful for recovering from unexpected ingestion or reward processing errors without
+reprocessing historical data.
+
+The user version must never decrease. A lower value than previously
+stored will cause the scan app to shut down to prevent data corruption.
+
+The HOCON configuration key is
+``canton.scan-apps.scan-app.activity-ingestion-user-version``.
+It can be set via an ``ADDITIONAL_CONFIG`` environment variable:
+
+   .. code-block:: yaml
+
+      # Example to reset the activity ingestion completeness boundary
+      additionalEnvVars:
+        - name: ADDITIONAL_CONFIG_ACTIVITY_INGESTION_USER_VERSION
+          value: canton.scan-apps.scan-app.activity-ingestion-user-version = 1
+
 .. _sv-unvet_insecure_package_versions:
 
 Unvet insecure package versions

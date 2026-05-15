@@ -186,6 +186,8 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       assertNoAppActivity(event, "updateId1")
     }
 
+    // updateId2 is in round 5, the earliest ingested round. Its record time
+    // is at or after the completeness boundary, so activity records are served.
     clue("updateId2") {
       val event = fetchEvent(updateId2, "updateId2")
       assertTrafficSummary(event, "updateId2")

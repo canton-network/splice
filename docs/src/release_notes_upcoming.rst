@@ -15,6 +15,23 @@
 
       - Bring back the governance page that was removed in release 0.5.18.
 
+    - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting
+      has been added to control the activity record ingestion version
+      for the purpose of recovering from unexpected operational issues.
+      Incrementing this value causes the Scan app to record a new completeness
+      boundary; reward accounting excludes rounds before it, while existing
+      activity records are retained.
+      See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.
+
+        - The ``app_activity_record_store`` table has been modified to improve DB performance.
+          The corresponding DB migration truncates the existing data in this table which has been ingested since the ``0.5.18`` release, which is OK as we are still in the preview phase of CIP-104.
+          This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
+          Specifically the ``app_activity_records`` field will not contain the
+          data which has been provided for the events which happened between the ``0.5.18`` and this release.
+          Note that the ``app_activity_records`` data already provided for events during this period is correct
+          and the network explorers who have ingested this data should keep a copy of it.
+          The downstream reward-accounting tables are also cleared as part of this change.
+
     - Wallet UI
 
       - Fix a corner case in the wallet Allocations UI where invalid values would be passed to ``/v0/allocations`` when creating allocations from allocation requests.
