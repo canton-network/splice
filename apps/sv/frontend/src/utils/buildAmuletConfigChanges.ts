@@ -331,7 +331,7 @@ function buildDecentralizedSynchronizerChanges(
   ].sort();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
-    label: `(unused) Decentralized synchronizer (Required synchronizer ${idx + 1})`,
+    label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,
     currentValue: beforeRequiredSynchronizers.includes(sync) ? sync : '',
     newValue: afterRequiredSynchronizers.includes(sync) ? sync : '',
     disabled: true,
