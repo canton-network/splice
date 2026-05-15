@@ -193,22 +193,3 @@ token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
       requestedAt = arg.requestedAt
 
   applyAllocationInstructionTransitions allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs
-
-
--- V1/V2 compatibility
-----------------------
-
--- FIXME: move
-
-transferFactory_v1_transferDefaultImplUsingV2
-  : V2.TransferFactory
-  -> ContractId V1.TransferFactory -> V1.TransferFactory_Transfer -> Update V1.TransferInstructionResult
-transferFactory_v1_transferDefaultImplUsingV2 this self arg = do
-  let transfer = arg.transfer
-  let thisView = view this
-  requireMatchExpected ("arg.expectedAdmin", arg.expectedAdmin) thisView.admin
-  result <- V2.transferFactory_transferImpl this (coerceInterfaceContractId self) V2.TransferFactory_Transfer with
-    actors = [arg.transfer.sender]
-    transfer = upcast transfer
-    extraArgs = arg.extraArgs
-  pure (downcast result)

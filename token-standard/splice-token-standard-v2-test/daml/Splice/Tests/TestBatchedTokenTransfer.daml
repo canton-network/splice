@@ -90,6 +90,7 @@ testTokenV2_test_v1_transfers = do
       checkMetadata = False
 
 -- FIXME: check mixed transfers V1 initiator and V2 receiver, and tx history for that
+-- FIXME: check that all transfer offers are archived
 
 testTokenV2_test_v2_transfer : Script ()
 testTokenV2_test_v2_transfer = do
