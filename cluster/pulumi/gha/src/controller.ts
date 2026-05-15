@@ -9,14 +9,15 @@ import { Namespace } from '@pulumi/kubernetes/core/v1';
 
 import { ghaConfig } from './config';
 
-export function installController(repo: string): k8s.helm.v3.Release {
+export function installController(repo: string, runnersNamespaceName: string): k8s.helm.v3.Release {
   const controllerNamespace = new Namespace(`gha-runner-controller-${repo}`, {
     metadata: {
       name: `gha-runner-controller-${repo}`,
     },
   });
 
-  return new k8s.helm.v3.Release(`gha-runner-scale-set-controller-${repo}`, {
+  const releaseName = repo == "splice" ? "gha-runner-scale-set-controller-splice" : `ssc-${repo}`;
+  return new k8s.helm.v3.Release(releaseName, {
     chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller',
     version: ghaConfig.runnerScaleSetVersion,
     namespace: controllerNamespace.metadata.name,
@@ -25,6 +26,7 @@ export function installController(repo: string): k8s.helm.v3.Release {
       maxHistory: HELM_MAX_HISTORY_SIZE,
       flags: {
         logFormat: 'json',
+        watchSingleNamespace: runnersNamespaceName,
       },
     },
   });

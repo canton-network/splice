@@ -62,6 +62,7 @@ function resourcesSpecFromConfig(resources: K8sResourceSchema) {
 function installDockerRunnerScaleSet(
   name: string,
   runnersNamespace: Namespace,
+  controller: Release,
   tokenSecret: Secret,
   cachePvc: PersistentVolumeClaim,
   configMap: ConfigMap,
@@ -306,6 +307,7 @@ function installDockerRunnerScaleSets(
       installDockerRunnerScaleSet(
         `self-hosted-docker-${spec.name}`,
         runnersNamespace,
+        controller,
         tokenSecret,
         cachePvc,
         configMap,
@@ -557,10 +559,6 @@ function installK8sRunnerScaleSet(
         },
         ...infraAffinityAndTolerations,
         maxHistory: HELM_MAX_HISTORY_SIZE,
-        controllerServiceAccount: {
-          namespace: 'gha-runner-controller',
-          name: 'gha-runner-scale-set-controller-9a0b4f49-gha-rs-controller',
-        },
       },
     },
     {
@@ -721,9 +719,7 @@ function installPodMonitor(runnersNamespace: Namespace, repo: string) {
   );
 }
 
-export function installRunnerScaleSets(controller: k8s.helm.v3.Release, repo: string): void {
-  const namespace_name = `gha-runners-${repo}`;
-
+export function installRunnerScaleSets(controller: k8s.helm.v3.Release, namespace_name: string, repo: string): void {
   const runnersNamespace = new Namespace(namespace_name, {
     metadata: {
       name: namespace_name,
