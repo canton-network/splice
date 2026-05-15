@@ -7,6 +7,11 @@
 
 .. release-notes:: Upcoming
 
+    .. important:: Validators must upgrade to 0.6.4 or newer before
+                   any LSU. If you don't upgrade in time, your node
+                   will be unable to receive or submit transactions
+                   until you upgrade.
+
     - Wallet & CNS UIs
 
       - The wallet and CNS UIs now support optionally configuring the OAuth token scope, to support IAM providers that require doing so.
