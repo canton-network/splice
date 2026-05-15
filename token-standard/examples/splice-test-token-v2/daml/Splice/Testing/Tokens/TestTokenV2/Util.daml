@@ -1,0 +1,47 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Utility functions for the TestTokenV2 module.
+module Splice.Testing.Tokens.TestTokenV2.Util
+( mergeAmountMaps
+, union
+, insertWithUnion
+, tokenRulesContextKey
+, getEventLogFromContext
+) where
+
+import DA.List (dedupSort)
+import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
+
+
+mergeAmountMaps : TextMap.TextMap Decimal -> TextMap.TextMap Decimal -> TextMap.TextMap (Decimal, Decimal)
+mergeAmountMaps = TextMap.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
+
+
+-- Set theoretic union for sets represented as sorted deduplicated lists.
+union : (Ord a) => [a] -> [a] -> [a]
+union x y = dedupSort (x ++ y)
+
+-- Insert into a map with values that are sets represented as sorted deduplicated lists.
+insertWithUnion : (Ord k, Ord v) => k -> [v] -> Map.Map k [v] -> Map.Map k [v]
+insertWithUnion = Map.insertWith union
+
+-- Event log retrieval
+----------------------
+
+tokenRulesContextKey : Text
+tokenRulesContextKey = "testTokenV2/tokenRules"
+
+getTokenRulesFromContext : ChoiceContext -> Update AnyContractId
+getTokenRulesFromContext context = do
+  case TextMap.lookup tokenRulesContextKey context.values of
+    Some (AV_ContractId cid) -> pure cid
+    None -> fail $ "Context value for '" <> tokenRulesContextKey <> "' not found"
+    v -> fail $ "Failed to decode context value for '" <> tokenRulesContextKey <> "': " <> show v
+
+getEventLogFromContext : ChoiceContext -> Update (ContractId TransferEventsV2.EventLog)
+getEventLogFromContext context = coerceInterfaceContractId <$> getTokenRulesFromContext context

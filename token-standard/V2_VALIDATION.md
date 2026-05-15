@@ -195,3 +195,5 @@ Cleanup and improvements applied so far:
   must be supported by registries when creating and settling allocations. The limits are chosen
   to be generous, while avoiding that the off-ledger APIs have to serve more than a few 100kB
   of reference data.
+- Split the `TestTokenV2` implementation into separate util, holding, transfer, and allocation modules
+  to improve maintainability and readability of the code.
