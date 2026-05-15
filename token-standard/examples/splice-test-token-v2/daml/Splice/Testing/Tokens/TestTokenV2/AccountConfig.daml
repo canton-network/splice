@@ -2,21 +2,62 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Account authorization configuration and functions to make use of it.
-module Splice.Testing.Tokens.TestTokenV2.AccountConfig where
+module Splice.Testing.Tokens.TestTokenV2.AccountConfig
+(
+  -- * Account configuration
+  PartyConfig(..),
+  AccountConfig(..),
+  AccountConfigMap(..),
+  extractAccountConfigMap,
+  accountConfigsContextKey,
 
+  -- * Account proposal template
+  AccountProposal(..),
+  AccountProposal_Accept(..),
+  AccountProposal_Accept_Result(..),
+  AccountProposal_Reject(..),
+  AccountProposal_Reject_Result(..),
+  AccountProposal_Withdraw(..),
+  AccountProposal_Withdraw_Result(..),
+
+  -- * State machines specifications
+
+  -- ** Generic utilities
+  getState,
+  mkAvailableActions,
+  applyStateMachineTransitions,
+
+  -- ** Allocations
+  AllocationState(..),
+  allocationStateMachineSpec,
+  tryUseAccountAuthorityForAA',
+
+  -- ** Allocation instructions
+  AllocationInstructionState(..),
+  allocationInstructionStateMachineSpec,
+  tryUseAccountAuthorityForAIA',
+
+  -- ** Transfer instructions
+  TransferInstructionState(..),
+  transferInstructionStateMachineSpec,
+  tryUseAccountAuthorityForTIA'
+) where
+
+
+import DA.Action (foldlA)
+import DA.List (dedupSort, dedup, (\\))
+import DA.Optional (whenSome, fromSomeNote, isSome, isNone, fromOptional)
+import qualified DA.TextMap as TextMap
+import qualified DA.Traversable as Traversable
 import DA.Map qualified as Map
 
+import Splice.Api.Token.MetadataV1 (AnyValue(..), ExtraArgs)
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils (checkActors, requireMatchExpected, isMemberR, require', accountParties)
-import Splice.Api.Token.MetadataV1 (AnyValue(..), ExtraArgs)
-import DA.List (dedupSort, dedup, (\\))
-import DA.Optional (whenSome, fromSomeNote, isSome, isNone, fromOptional)
-import qualified DA.TextMap as TextMap
-import DA.Action (foldlA)
-import qualified DA.Traversable as Traversable
+import Splice.Testing.Tokens.TestTokenV2.Util (insertWithUnion)
 
 
 -- | Authorization configuration for one party in an account.
@@ -227,14 +268,6 @@ authorizationTransfers config = case (config.account.owner, config.account.provi
     let cs = [(owner, config.ownerConfig), (provider, config.providerConfig)]
      in [(p, q) | (p, pConfig) <- cs, (q, qConfig) <- cs, q /= p, not qConfig.mustApprove, pConfig.canInitiate]
   _ -> []
-
--- A function to determine whether an AccountConfig makes it possible to transfer authority
--- from actor to the other party on the account.
-authorizationTransferFrom : Party -> AccountConfig -> Optional Party
-authorizationTransferFrom actor ac
-  | Some actor == ac.account.owner && ac.ownerConfig.canInitiate && not ac.providerConfig.mustApprove = ac.account.provider
-  | Some actor == ac.account.provider && ac.providerConfig.canInitiate && not ac.ownerConfig.mustApprove = ac.account.owner
-  | otherwise = None
 
 -- Utility to determine what transitions are valid from a given state, for a given action.
 -- The authState given must have the actors incorporated as authorizers of the given action.
@@ -490,14 +523,6 @@ mkAvailableActions admin spec authState accountMap =
           (action, getNextActors admin action authSpec authState accountMap))
         possibleTransitions
 
--- Set theoretic union for sets represented as sorted deduplicated lists.
-union : (Ord a) => [a] -> [a] -> [a]
-union x y = dedupSort (x ++ y)
-
--- Insert into a map with values that are sets represented as sorted deduplicated lists.
-insertWithUnion : (Ord k, Ord v) => k -> [v] -> Map.Map k [v] -> Map.Map k [v]
-insertWithUnion = Map.insertWith union
-
 -- Advances an on-ledger state machine by calling transition functions.
 applyStateMachineTransitions
   : forall actionType stateType templateTp interfaceTp viewTp resType .
@@ -594,13 +619,6 @@ extractAccountConfigMap admin extraArgs as = do
           return accountMap
 
   foldlA addBasicValidated suppliedMap (dedup as)
-
--- Convenience to get account configs as a list.
-extractAccountConfigs
-  : Party -> ExtraArgs -> [V2.Account] -> Update [(AccountConfig, Optional (ContractId AccountConfig))]
-extractAccountConfigs admin extraArgs as = do
-  accountConfigsMap <- extractAccountConfigMap admin extraArgs as
-  return $ map (\a -> fromSomeNote ("No account config supplied for account " <> show a) (Map.lookup a accountConfigsMap)) as
 
 accountConfigsContextKey : Text
 accountConfigsContextKey = "testTokenV2/accountConfigs"
