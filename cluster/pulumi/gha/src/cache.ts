@@ -14,7 +14,8 @@ export function createCachePvc(
   const capacityGb = 2560;
   // For backward compat of the existing splice cache, we keep the old unsuffixed name for the splice repo, and add repo suffix only for other repos
   const filestoreInstanceName = repo == 'splice' ? 'gha-filestore' : `gha-filestore-${repo}`;
-  const filestoreName = repo == 'splice' ? 'gha_share' : `gha_share-${repo}`;
+  // Filestore names must be 16 characters or less, so we trim the repo name if needed, and the leading "splice" to save a few more chars
+  const filestoreName = repo == 'splice' ? 'gha_share' : repo.replaceAll(RegExp('splice-?', 'g'), '').replaceAll('-', '_').slice(0, 16);
   const filestore = new gcp.filestore.Instance(filestoreInstanceName, {
     tier: 'BASIC_SSD',
     fileShares: {

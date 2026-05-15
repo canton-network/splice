@@ -8,6 +8,7 @@ import { installRunnerScaleSets } from './runners';
 installDockerRegistryMirror();
 for (const repo of ghaConfig.githubRepos) {
   console.error(`Configuring GHA runner for repository: ${repo}`);
-  const controller = installController(repo);
-  installRunnerScaleSets(controller, repo);
+  const runnersNamespaceName = `gha-runners-${repo}`
+  const controller = installController(repo, runnersNamespaceName);
+  installRunnerScaleSets(controller, runnersNamespaceName, repo);
 }
