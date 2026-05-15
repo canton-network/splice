@@ -37,6 +37,20 @@ import {
 } from '../delegation-constants';
 import { mkContract } from '../contract';
 
+const mintingDelegationsResponse: ListMintingDelegationsResponse = {
+  delegations: mockMintingDelegations.map((delegation, index) => ({
+    contract: mkContract(MintingDelegation, delegation),
+    beneficiary_hosted: mockDelegationHostedStatus[index],
+  })),
+};
+
+const mintingDelegationProposalsResponse: ListMintingDelegationProposalsResponse = {
+  proposals: mockMintingDelegationProposals.map((proposal, index) => ({
+    contract: mkContract(MintingDelegationProposal, proposal),
+    beneficiary_hosted: mockProposalHostedStatus[index],
+  })),
+};
+
 export const buildWalletMock = (walletUrl: string): HttpHandler[] => [
   http.get(`${walletUrl}/v0/wallet/user-status`, () => {
     return HttpResponse.json<UserStatusResponse>({
@@ -232,21 +246,13 @@ export const buildWalletMock = (walletUrl: string): HttpHandler[] => [
   }),
 
   http.get(`${walletUrl}/v0/wallet/minting-delegations`, () => {
-    return HttpResponse.json<ListMintingDelegationsResponse>({
-      delegations: mockMintingDelegations.map((delegation, index) => ({
-        contract: mkContract(MintingDelegation, delegation),
-        beneficiary_hosted: mockDelegationHostedStatus[index],
-      })),
-    });
+    return HttpResponse.json<ListMintingDelegationsResponse>(mintingDelegationsResponse);
   }),
 
   http.get(`${walletUrl}/v0/wallet/minting-delegation-proposals`, () => {
-    return HttpResponse.json<ListMintingDelegationProposalsResponse>({
-      proposals: mockMintingDelegationProposals.map((proposal, index) => ({
-        contract: mkContract(MintingDelegationProposal, proposal),
-        beneficiary_hosted: mockProposalHostedStatus[index],
-      })),
-    });
+    return HttpResponse.json<ListMintingDelegationProposalsResponse>(
+      mintingDelegationProposalsResponse
+    );
   }),
 
   http.post(`${walletUrl}/v0/wallet/minting-delegations/:cid/reject`, () => {
