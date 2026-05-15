@@ -31,7 +31,8 @@ import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 
 import java.lang.management.ManagementFactory
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 import javax.management.openmbean.CompositeData
 import javax.management.{NotificationEmitter, NotificationListener}
 import scala.jdk.CollectionConverters.*

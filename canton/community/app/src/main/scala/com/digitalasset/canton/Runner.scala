@@ -4,7 +4,6 @@
 package com.digitalasset.canton
 
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
-import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.console.{HeadlessConsole, InteractiveConsole}
 import com.digitalasset.canton.crypto.{Hash, HashAlgorithm, HashPurpose}
 import com.digitalasset.canton.environment.Environment

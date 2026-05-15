@@ -56,7 +56,7 @@ import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
-import com.digitalasset.canton.participant.config.{ParticipantNodeConfig, RemoteParticipantConfig}
+import com.digitalasset.canton.participant.config.RemoteParticipantConfig
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
@@ -82,11 +82,6 @@ import scala.util.Try
 import scala.util.control.NoStackTrace
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import com.digitalasset.canton.synchronizer.mediator.{MediatorNodeConfig, RemoteMediatorConfig}
-import com.digitalasset.canton.synchronizer.sequencer.config.{
-  RemoteSequencerConfig,
-  SequencerNodeConfig,
-}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
