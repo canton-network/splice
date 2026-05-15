@@ -47,8 +47,8 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_OffboardSv: 'Offboard Member',
   SRARC_RevokeFeaturedAppRight: 'Unfeature Application',
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
-  SRARC_SetConfig: 'Set Dso Rules Configuration',
-  SRARC_UpdateSvRewardWeight: 'Update SV Reward Weight',
+  SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
+  SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
 });
 
 export const createProposalActions: {
@@ -58,13 +58,16 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-  { name: 'Set Dso Rules Configuration', value: 'SRARC_SetConfig' },
+  {
+    name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
+    value: 'SRARC_SetConfig',
+  },
   {
     name: 'Create Unclaimed Activity Record',
     value: 'SRARC_CreateUnallocatedUnclaimedActivityRecord',
   },
   { name: 'Set Amulet Rules Configuration', value: 'CRARC_SetConfig' },
-  { name: 'Update SV Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
+  { name: 'Update Super Validator Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
 ];
 
 export const getVoteResultStatus = (
