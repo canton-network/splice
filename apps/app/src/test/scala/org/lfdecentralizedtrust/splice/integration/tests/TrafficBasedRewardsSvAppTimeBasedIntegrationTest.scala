@@ -14,6 +14,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.GetRewardAccountingBatchResponse
+import definitions.GetRewardAccountingActivityTotalsResponse
+import definitions.GetRewardAccountingRootHashResponse
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -139,7 +141,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       clue("Alice and Bob have minting allowances for R6") {
         eventually() {
-          val hash = sv1ScanBackend.getRewardAccountingRootHash(6L).value.rootHash
+          val hash = inside(sv1ScanBackend.getRewardAccountingRootHash(6L)) {
+            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+              h.rootHash
+          }
           val providers = walkBatch(6L, hash).map(_.provider)
           providers should contain(aliceParty.toProtoPrimitive)
           providers should contain(bobParty.toProtoPrimitive)
@@ -148,7 +153,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       clue("Alice and Bob have minting allowances for R8") {
         eventually() {
-          val hash = sv1ScanBackend.getRewardAccountingRootHash(8L).value.rootHash
+          val hash = inside(sv1ScanBackend.getRewardAccountingRootHash(8L)) {
+            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+              h.rootHash
+          }
           val providers = walkBatch(8L, hash).map(_.provider)
           providers should contain(aliceParty.toProtoPrimitive)
           providers should contain(bobParty.toProtoPrimitive)
@@ -157,8 +165,12 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       clue("Scan computes activity totals even for rounds with no dryRun/mintingVersion set") {
         eventually() {
-          sv1ScanBackend.getRewardAccountingActivityTotals(5L) shouldBe defined
-          sv1ScanBackend.getRewardAccountingActivityTotals(7L) shouldBe defined
+          sv1ScanBackend.getRewardAccountingActivityTotals(5L) shouldBe an[
+            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
+          ]
+          sv1ScanBackend.getRewardAccountingActivityTotals(7L) shouldBe an[
+            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
+          ]
         }
       }
 
