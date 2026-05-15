@@ -547,6 +547,8 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
 
   def dumpString: String
 
+  def mergeDynamicChanges(newConfig: Self): Self
+
   protected def nodePortsDescription(
       nodeName: InstanceName,
       portDescriptions: Seq[String],

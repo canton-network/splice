@@ -119,12 +119,12 @@ case class SpliceConfig(
   override def withDefaults(defaults: Option[DefaultPorts]): SpliceConfig =
     this
 
-  // TODO(DACH-NY/canton-network-node#736): we want to remove all of the configurations options below:
-  override val participants: Map[InstanceName, ParticipantNodeConfig] = Map.empty
-  override val mediators: Map[InstanceName, MediatorNodeConfig] = Map.empty
-  override val remoteMediators: Map[InstanceName, RemoteMediatorConfig] = Map.empty
-  override val sequencers: Map[InstanceName, SequencerNodeConfig] = Map.empty
-  override val remoteSequencers: Map[InstanceName, RemoteSequencerConfig] = Map.empty
+  // TODO(#546): we want to remove all of the configurations options below:
+  override val participants: Map[InstanceName, Nothing] = Map.empty
+  override val mediators: Map[InstanceName, Nothing] = Map.empty
+  override val remoteMediators: Map[InstanceName, Nothing] = Map.empty
+  override val sequencers: Map[InstanceName, Nothing] = Map.empty
+  override val remoteSequencers: Map[InstanceName, Nothing] = Map.empty
   override def portDescription: String = {
     def nodePorts(config: LocalNodeConfig): Seq[String] =
       portDescriptionFromConfig(config)(Seq(("http-api", _.adminApi)))
@@ -306,6 +306,9 @@ case class SpliceConfig(
     import writers.*
     ConfigWriter[SpliceConfig].to(this).render(SpliceConfig.defaultConfigRenderer)
   }
+
+  override def mergeDynamicChanges(newConfig: SpliceConfig) =
+    this // dynamic changes not supported
 }
 
 // NOTE: the below is patterned after CantonCommunityConfig.
