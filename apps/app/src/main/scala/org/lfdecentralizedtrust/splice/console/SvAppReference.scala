@@ -393,6 +393,16 @@ class SvAppBackendReference(
     }
   }
 
+  @Help.Summary(
+    "Archive dry-run CalculateRewardsV2 and ProcessRewardsV2 contracts for the given rounds (via admin API)"
+  )
+  def archiveDryRunRewardAccountingContracts(rounds: Seq[Long]): Unit =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.ArchiveDryRunRewardAccountingContracts(rounds)
+      )
+    }
+
   @Help.Summary("Get the CometBFT node debug dump")
   def cometBftNodeDump(): definitions.CometBftNodeDumpResponse =
     consoleEnvironment.run {

@@ -544,6 +544,45 @@ trait SvDsoStore
     splice.round.SummarizingMiningRound,
   ]]]
 
+  def listCalculateRewardsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+  ]]]
+
+  def listProcessRewardsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+  ]]]
+
+  def listRewardCouponsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ]]]
+
+  /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
+    * round number is in the given set.
+    */
+  def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+        ]],
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+        ]],
+    )
+  ]
+
   /** All `ClosedMiningRound` contracts that should be confirmed to be archived.
     *
     * These are all `ClosedMiningRound` contracts for which

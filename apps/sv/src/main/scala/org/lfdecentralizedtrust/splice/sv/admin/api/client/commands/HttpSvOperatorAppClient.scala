@@ -360,6 +360,28 @@ object HttpSvOperatorAppClient {
     }
   }
 
+  case class ArchiveDryRunRewardAccountingContracts(rounds: Seq[Long])
+      extends BaseCommand[http.ArchiveDryRunRewardAccountingContractsResponse, Unit] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.ArchiveDryRunRewardAccountingContractsResponse] =
+      client.archiveDryRunRewardAccountingContracts(
+        body = definitions.ArchiveDryRunRewardAccountingContractsRequest(rounds.toVector),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.ArchiveDryRunRewardAccountingContractsResponse.OK =>
+      Right(())
+    }
+  }
+
   case class GetPartyToParticipant(partyId: String)
       extends BaseCommand[
         http.GetPartyToParticipantResponse,
