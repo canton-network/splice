@@ -21,7 +21,7 @@ function buildSynchronizerMap(
       return [
         {
           fieldName: `decentralizedSynchronizer${idx}`,
-          label: `Decentralized synchronizer ${idx}: Synchronizer Identifier`,
+          label: `Decentralized synchronizer ${idx}: Synchronizer identifier`,
           currentValue: baseSynchronizer[0] || '',
           newValue: currentSynchronizer?.[0] || '',
           isId: true,
@@ -112,7 +112,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'dsoDelegateInactiveTimeout',
-      label: '(Deprecated) Decentralized Synchronizer Operations delegate inactivity timeout',
+      label: '(Deprecated) Decentralized Synchronizer Operations (DSO) delegate inactivity timeout',
       currentValue: before?.dsoDelegateInactiveTimeout.microseconds || '',
       newValue: after?.dsoDelegateInactiveTimeout.microseconds || '',
     },
@@ -136,7 +136,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxNodeIdLength',
-      label: 'Super Validator node limits: CometBFT: Maximum node Identifier length',
+      label: 'Super Validator node limits: CometBFT: Maximum node identifier length',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxNodeIdLength || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxNodeIdLength || '',
     },
@@ -151,7 +151,7 @@ export function buildDsoConfigChanges(
 
     {
       fieldName: 'decentralizedSynchronizerLastSynchronizerId',
-      label: 'Decentralized synchronizer: Last synchronizer Identifier',
+      label: 'Decentralized synchronizer: Last synchronizer identifier',
       currentValue: before?.decentralizedSynchronizer.lastSynchronizerId || '',
       newValue: after?.decentralizedSynchronizer.lastSynchronizerId || '',
       isId: true,
@@ -159,7 +159,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'decentralizedSynchronizerActiveSynchronizerId',
-      label: 'Decentralized synchronizer: Active synchronizer Identifier',
+      label: 'Decentralized synchronizer: Active synchronizer identifier',
       currentValue: before?.decentralizedSynchronizer.activeSynchronizerId || '',
       newValue: after?.decentralizedSynchronizer.activeSynchronizerId || '',
       isId: true,
@@ -173,7 +173,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'nextScheduledSynchronizerUpgradeMigrationId',
-      label: 'Next scheduled synchronizer upgrade migration Identifier',
+      label: 'Next scheduled synchronizer upgrade migration identifier',
       currentValue: before?.nextScheduledSynchronizerUpgrade?.migrationId || '',
       newValue: after?.nextScheduledSynchronizerUpgrade?.migrationId || '',
     },
