@@ -20,6 +20,8 @@ import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeA
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.CompactJson
 import definitions.GetRewardAccountingBatchResponse
+import definitions.GetRewardAccountingActivityTotalsResponse
+import definitions.GetRewardAccountingRootHashResponse
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
@@ -139,9 +141,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     assertOldestOpenRound(0)
 
-    clue("Reward accounting endpoints return 404 before any data is available") {
+    clue("Reward accounting endpoints report Undetermined before any data is available") {
       sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe None
-      sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe None
+      sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe an[
+        GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
+      ]
     }
 
     // Here we perform all settlements with verdict ingestion paused just to
@@ -361,23 +365,28 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     clue("Scan computes activity totals through round 10 on all SVs") {
       eventually() {
-        allScanBackends.foreach(
-          _.getRewardAccountingActivityTotals(10L) shouldBe defined
-        )
+        allScanBackends.foreach { backend =>
+          backend.getRewardAccountingActivityTotals(10L) shouldBe an[
+            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
+          ]
+        }
       }
     }
 
-    val totalsByRound: Map[Long, definitions.GetRewardAccountingActivityTotalsResponse] =
+    val totalsByRound: Map[Long, definitions.RewardAccountingActivityTotalsOk] =
       clue("Rounds 6..10 activity totals and root hash are computed") {
         (6L to 10L).map { round =>
-          val totals = sv1ScanBackend.getRewardAccountingActivityTotals(round)
-          totals shouldBe defined withClue s"Round $round should have totals"
-          totals.value.roundNumber shouldBe round
-          val rootHash = sv1ScanBackend.getRewardAccountingRootHash(round)
-          rootHash shouldBe defined withClue s"Round $round should have a root hash"
-          rootHash.value.roundNumber shouldBe round
-          rootHash.value.rootHash should have length 64 // hex-encoded SHA-256
-          round -> totals.value
+          val totalsOk = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+            case GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(t) =>
+              t
+          } withClue s"Round $round should have totals"
+          val rootHashOk = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+              h
+          } withClue s"Round $round should have a root hash"
+          rootHashOk.rootHash should have length 64 // hex-encoded SHA-256
+          round -> totalsOk
         }.toMap
       }
 
@@ -564,7 +573,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): Seq[definitions.RewardAccountingMintingAllowance] = {
-    val hash = sv1ScanBackend.getRewardAccountingRootHash(round).value.rootHash
+    val hash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+        h.rootHash
+    }
     def walk(h: String): Seq[definitions.RewardAccountingMintingAllowance] =
       sv1ScanBackend.getRewardAccountingBatch(round, h).toList.flatMap {
         case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfBatches(b) =>
