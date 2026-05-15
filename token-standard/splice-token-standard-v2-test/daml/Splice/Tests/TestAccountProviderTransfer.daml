@@ -32,33 +32,13 @@ import DA.Foldable (sequence_)
 -- Shared test setup
 --------------------
 
-make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
-make_account_if_missing env config = do
+makeAndFundAccount : TestRegistries.Env -> AccountConfig -> Script ()
+makeAndFundAccount env config = do
+  TestTokenRegistryV2.makeAccountIfMissing config
   let owner = fromSomeNote ("Unexpected special account: " <> show config.account) config.account.owner
-  -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
         id = "X"
         admin = env.testTokenV2.admin
-
-  -- Create an AccountConfig contract as needed.
-  case config.account.provider of
-    None -> return ()
-    Some provider -> do
-      oAccount <- queryFilter @AccountConfig owner (\ac -> ac.account == config.account)
-      case oAccount of
-        [(_, config')] -> assertMsg ("Account already exists with different config: " <> show config) (config' == config)
-        [] -> do
-          accountProposalCid <- submit provider do
-            createCmd AccountConfig.AccountProposal with
-              config
-
-          submit owner do
-            exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
-
-          return ()
-        _ -> abort ("Multiple accounts found for config: " <> show config)
-
-  -- mint
   cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account owner instrX
   when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
@@ -251,8 +231,8 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
   let
     senderConfig = mkacSender "sender" env.testTokenV2.admin sender senderProvider
     receiverConfig = mkacReceiver "receiver" env.testTokenV2.admin receiver receiverProvider
-  make_account_if_missing env senderConfig
-  make_account_if_missing env receiverConfig
+  makeAndFundAccount env senderConfig
+  makeAndFundAccount env receiverConfig
 
   debug $ "Test case: Sender: " <> show senderConfig <> "; Receiver: " <> show receiverConfig <> "; Initiator: " <> show initiator <> "; Actions: " <> show actions
 
@@ -265,7 +245,7 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
   let executeBefore = now `addRelTime` days 1
 
   -- Initiate transfer
-  oInstrCid <- WalletClientV2.transfer registries initiator V2.TransferFactory_Transfer with
+  oInstrCid <- WalletClientV2.transferV2 registries initiator V2.TransferFactory_Transfer with
     actors = [initiator]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with
@@ -369,7 +349,7 @@ test_transfers_between_accounts = do
   let executeBefore = now `addRelTime` days 1
 
   -- test that alice can directly transfer between self-custodied accounts
-  None <- WalletClientV2.transfer registries alice V2.TransferFactory_Transfer with
+  None <- WalletClientV2.transferV2 registries alice V2.TransferFactory_Transfer with
     actors = [alice]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with
@@ -386,7 +366,7 @@ test_transfers_between_accounts = do
   WalletClientV2.checkAccountBalance alice aliceSelf2 instrX 10.0
 
   -- test self-transfer to custodied account
-  Some instrCid1 <- WalletClientV2.transfer registries alice V2.TransferFactory_Transfer with
+  Some instrCid1 <- WalletClientV2.transferV2 registries alice V2.TransferFactory_Transfer with
     actors = [alice]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with
@@ -406,7 +386,7 @@ test_transfers_between_accounts = do
   WalletClientV2.checkAccountBalance custodian1 aliceCustody instrX 220.0
 
   -- test alice initiating transfer out of custody account to a third-party
-  Some instrCid2 <- WalletClientV2.transfer registries alice V2.TransferFactory_Transfer with
+  Some instrCid2 <- WalletClientV2.transferV2 registries alice V2.TransferFactory_Transfer with
     actors = [alice]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with
@@ -428,7 +408,7 @@ test_transfers_between_accounts = do
   WalletClientV2.checkAccountBalance bob bobSelf instrX 1.0
 
   -- test transfer to custodied account
-  Some instrCid1 <- WalletClientV2.transfer registries bob V2.TransferFactory_Transfer with
+  Some instrCid1 <- WalletClientV2.transferV2 registries bob V2.TransferFactory_Transfer with
     actors = [bob]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with
@@ -448,7 +428,7 @@ test_transfers_between_accounts = do
   WalletClientV2.checkAccountBalance bob bobSelf instrX 0.5
 
   -- test custodian initiating transfer out of custody account to themselves
-  Some instrCid4 <- WalletClientV2.transfer registries custodian1 V2.TransferFactory_Transfer with
+  Some instrCid4 <- WalletClientV2.transferV2 registries custodian1 V2.TransferFactory_Transfer with
     actors = [custodian1]
     extraArgs = emptyExtraArgs
     transfer = V2.Transfer with

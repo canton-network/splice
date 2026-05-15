@@ -178,22 +178,25 @@ executeTokenStandardAction
   -> Update (HoldingMap, [TokenStandardActionResult])
 executeTokenStandardAction actor (holdingMap, results) action = case action of
   TSA_AllocationFactory_AllocateV1 call -> do
-    callChoiceV1 @V1.AllocationFactory actor (holdingMap, results) call
+    callChoiceV1 @V1.AllocationFactory (holdingMap, results) call
       (\_cid arg -> do
         let transferLeg = arg.allocation.transferLeg
-        pure (transferLeg.instrumentId, transferLeg))
-      (\cid arg inputHoldingCids leg -> do
+        let account = accountFromMeta transferLeg.sender "sender" transferLeg.meta
+        pure (transferLeg.instrumentId, account))
+      (\cid arg inputHoldingCids -> do
           result <- exercise cid arg with inputHoldingCids
-          let newHoldingMap = holdingMapForV1 actor leg.instrumentId result.senderChangeCids
+          let iid = arg.allocation.transferLeg.instrumentId
+          let newHoldingMap = holdingMapForV1 actor iid result.senderChangeCids
           pure (newHoldingMap, TSAR_AllocationInstructionResultV1 result)
       )
 
   TSA_TransferFactory_TransferV1 call -> do
-    callChoiceV1 @V1.TransferFactory actor (holdingMap, results) call
+    callChoiceV1 @V1.TransferFactory (holdingMap, results) call
       (\_cid arg -> do
           let transfer = arg.transfer
-          pure (transfer.instrumentId, ()))
-      (\cid arg inputHoldingCids () -> do
+          let account = accountFromMeta transfer.sender "sender" transfer.meta
+          pure (transfer.instrumentId, account))
+      (\cid arg inputHoldingCids -> do
           let transfer' = arg.transfer with inputHoldingCids
           result <- exercise cid arg with transfer = transfer'
           let newHoldingCids = holdingMapFromTransferV1 transfer' result
@@ -201,21 +204,17 @@ executeTokenStandardAction actor (holdingMap, results) action = case action of
       )
 
   TSA_TransferInstruction_AcceptV1 call -> do
-    callChoiceV1 @V1.TransferInstruction actor (holdingMap, results) call
-      (\cid _arg -> do
+    callChoiceNoInput @V1.TransferInstruction (holdingMap, results) call
+      (\cid arg -> do
           instr <- fetch cid
           let transfer = (view instr).transfer
-          pure (transfer.instrumentId, transfer))
-      (\cid arg inputHoldingCids transfer -> do
           result <- exercise cid arg
-          let newHoldingCids =
-                holdingMapFromTransferV1 transfer result <>
-                holdingMapForV1 actor transfer.instrumentId inputHoldingCids
+          let newHoldingCids = holdingMapFromTransferV1 transfer result
           pure (newHoldingCids, TSAR_TransferInstructionResultV1 result)
       )
 
   TSA_TransferInstruction_AcceptV2 call -> do
-    callChoiceV2NoInput @V2.TransferInstruction (holdingMap, results) call
+    callChoiceNoInput @V2.TransferInstruction (holdingMap, results) call
       (\cid arg -> do
           instr <- fetch cid
           let transfer = (view instr).transfer
@@ -255,18 +254,16 @@ executeTokenStandardAction actor (holdingMap, results) action = case action of
 
 callChoiceV1
   : forall i arg params r.
-     Party
-  -> (HoldingMap, [TokenStandardActionResult])
+     (HoldingMap, [TokenStandardActionResult])
   -> ChoiceCall arg
-  -> (ContractId i -> arg -> Update (V1.InstrumentId, params))
-  -> (ContractId i -> arg -> [ContractId V1.Holding] -> params -> Update (HoldingMap, TokenStandardActionResult))
+  -> (ContractId i -> arg -> Update (V1.InstrumentId, V2.Account))
+  -> (ContractId i -> arg -> [ContractId V1.Holding] -> Update (HoldingMap, TokenStandardActionResult))
   -> Update (HoldingMap, [TokenStandardActionResult])
-callChoiceV1 actor (holdingMap, results) (ChoiceCall with cid; arg) getParams exerciseChoice = do
-  let account = basicAccount actor
+callChoiceV1 (holdingMap, results) (ChoiceCall with cid; arg) getParams exerciseChoice = do
   let cid' = fromAnyContractId cid : ContractId i
-  (instrumentId, params) <- getParams cid' arg
+  (instrumentId, account) <- getParams cid' arg
   let (inputHoldingCids, newHoldingMap) = getHoldingsForInstrument account (upcast instrumentId) holdingMap
-  (newHoldingCids, result) <- exerciseChoice cid' arg (map downcast inputHoldingCids) params
+  (newHoldingCids, result) <- exerciseChoice cid' arg (map downcast inputHoldingCids)
   let holdingMapWithOutputs = newHoldingCids <> newHoldingMap
   pure (holdingMapWithOutputs, result :: results)
 
@@ -288,13 +285,13 @@ callChoiceV2 (holdingMap, results) (ChoiceCall with cid; arg) getParams exercise
   (outputHoldingMap, result) <- exerciseChoice cid' arg inputHoldingCids
   pure (newHoldingMap <> outputHoldingMap, result :: results)
 
-callChoiceV2NoInput
+callChoiceNoInput
   : forall i arg params r.
      (HoldingMap, [TokenStandardActionResult])
   -> ChoiceCall arg
   -> (ContractId i -> arg -> Update (HoldingMap, TokenStandardActionResult))
   -> Update (HoldingMap, [TokenStandardActionResult])
-callChoiceV2NoInput (holdingMap, results) (ChoiceCall with cid; arg) exerciseChoice = do
+callChoiceNoInput (holdingMap, results) (ChoiceCall with cid; arg) exerciseChoice = do
   let cid' = fromAnyContractId cid : ContractId i
   (outputHoldingMap, result) <- exerciseChoice cid' arg
   pure (holdingMap <> outputHoldingMap, result :: results)
@@ -310,12 +307,12 @@ holdingMapForV1 actor instrumentId cids =
 holdingMapFromTransferV1 : V1.Transfer -> V1.TransferInstructionResult -> HoldingMap
 holdingMapFromTransferV1 transfer result =
   holdingMapFromList $
-    [ (mkAccount transfer.sender, TextMap.fromList [(transfer.instrumentId.id, senderCids)])
-    , (mkAccount transfer.receiver, TextMap.fromList [(transfer.instrumentId.id, receiverCids)])
+    [ (mkAccount transfer.sender "sender", TextMap.fromList [(transfer.instrumentId.id, senderCids)])
+    , (mkAccount transfer.receiver "receiver", TextMap.fromList [(transfer.instrumentId.id, receiverCids)])
     ]
   where
     admin = transfer.instrumentId.admin
-    mkAccount party = ScopedAccount admin (basicAccount party)
+    mkAccount party name = ScopedAccount admin (accountFromMeta party name transfer.meta)
     senderCids = map upcast result.senderChangeCids
     receiverCids = map upcast $ case result.output of
         V1.TransferInstructionResult_Completed receiverHoldingCids -> receiverHoldingCids

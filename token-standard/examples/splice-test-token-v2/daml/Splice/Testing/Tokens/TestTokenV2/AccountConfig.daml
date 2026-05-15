@@ -46,7 +46,7 @@ module Splice.Testing.Tokens.TestTokenV2.AccountConfig
 
 import DA.Action (foldlA)
 import DA.List (dedupSort, dedup, (\\))
-import DA.Optional (whenSome, fromSomeNote, isSome, isNone, fromOptional)
+import DA.Optional (fromSomeNote, isSome, isNone, fromOptional)
 import qualified DA.TextMap as TextMap
 import qualified DA.Traversable as Traversable
 import DA.Map qualified as Map
@@ -526,35 +526,27 @@ mkAvailableActions admin spec authState accountMap =
 -- Advances an on-ledger state machine by calling transition functions.
 applyStateMachineTransitions
   : forall actionType stateType templateTp interfaceTp viewTp resType .
-    (Ord actionType, Show actionType, Ord stateType, Enum stateType, Show stateType
-    , HasArchive interfaceTp, HasInterfaceView interfaceTp viewTp
-    , HasToInterface templateTp interfaceTp
-    , GetField "actionAuthorizers" templateTp (AuthState actionType)) =>
-  Party
-  -> templateTp
-  -> Optional (ContractId interfaceTp)
+    (Ord actionType, Show actionType, Ord stateType, Enum stateType, Show stateType)
+  => Party
+  -> AuthState actionType
   -> [Party]
   -> actionType
-  -> (viewTp -> AuthStateMachine actionType stateType)
+  -> AuthStateMachine actionType stateType
   -> AccountConfigMap
   -> (stateType -> stateType -> Update resType)
   -> (AuthState actionType -> Map.Map actionType [[Party]] -> Update resType)
   -> ([Party] -> actionType -> resType -> AuthState actionType -> AccountConfigMap -> ExtraArgs -> Update (Optional resType))
   -> ExtraArgs
   -> Update resType
-applyStateMachineTransitions admin this oSelf actors action mkStateMachine accountMap transition mkPending tryUseAccountAuth extraArgs = do
+applyStateMachineTransitions admin authState actors action stateMachine accountMap transition mkPending tryUseAccountAuth extraArgs = do
   -- Make the state machine
   let
-    iThis = toInterface @interfaceTp this
-    vThis = view iThis
-    spec = mkStateMachine vThis
-    authState = this.actionAuthorizers
-    stateBefore = getState admin spec authState
+    stateBefore = getState admin stateMachine authState
 
     -- Apply the account authorization rules
     -- First check the actors are allowed to authorize the action.
   let
-    availableActions = mkAvailableActions admin spec authState accountMap
+    availableActions = mkAvailableActions admin stateMachine authState accountMap
     possibleActors = fromSomeNote
       ("Unexpected: applyStateMachineTransitions called with unavailable action " <> show action)
       $ Map.lookup action availableActions
@@ -565,8 +557,8 @@ applyStateMachineTransitions admin this oSelf actors action mkStateMachine accou
   let
     -- Compute the new available actions after adding the actors.
     newAuthState = insertWithUnion action actors authState
-    stateAfter = getState admin spec newAuthState
-    newAvailableActions = mkAvailableActions admin spec newAuthState accountMap
+    stateAfter = getState admin stateMachine newAuthState
+    newAvailableActions = mkAvailableActions admin stateMachine newAuthState accountMap
 
     -- Did the state change?
     stateChange = stateBefore /= stateAfter
@@ -576,7 +568,6 @@ applyStateMachineTransitions admin this oSelf actors action mkStateMachine accou
     else do mkPending newAuthState newAvailableActions
   oRes <- tryUseAccountAuth actors action res newAuthState accountMap extraArgs
 
-  whenSome oSelf archive
   return $ fromOptional res oRes
 
 

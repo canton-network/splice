@@ -42,9 +42,9 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 
 ---
 
-## Appendix: Planned Cleanup (Non-blocking)
+## Appendix: Cleanup applied
 
-Cleanup and improvements applied so far:
+### API Changes (no more changes expected)
 
 * Replace `ChoiceExecutionMetadata` with concrete result types for `AllocationRequest_Reject`
   and `AllocationRequest_Withdraw` choices to prepare for an eventual future where interface definitions
@@ -207,3 +207,14 @@ Cleanup and improvements applied so far:
   - enables: creating a single allocation request for different `authorizer`s whose account parties
     are the same
   - required moving `AllocationSpecification.settlement` up to the `AllocationView` level
+
+### Utility and test library changes
+
+- Implement the full V1 API for `TestTokenV2` in a reusable way; add the shared parts as compatibility tooling
+  to `splice-token-standard-utils` to allow other token registries to reuse it
+- Fix bug in `BatchingUtilityV2`, which was selecting the right holding contract-ids for non-basic accounts
+  when batching V1 choices.
+- Add `allocationSettlementTxHistoryV1ToMeta` utility function to `splice-token-standard-utils` to
+  aid in creating metadata for V1 transaction history parsing for `V2.Allocation_Settle` choices.
+- Add `transferAcceptanceTxHistoryV1ToMeta` utility function to `splice-token-standard-utils` to
+  aid in creating metadata for V1 transaction history parsing for `V2.TransferInstruction_Accept` choices.

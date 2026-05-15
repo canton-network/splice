@@ -106,7 +106,7 @@ querySettleableTrades registries venue = do
     -- check whether the required authorization are present
     let otcTrade = trade.otcTrade
     let receiversWithAgreements = map basicAccount (Map.keys agreementsByTrader)
-    let minimallyRequiredAuthorizations = do
+    let minimallyRequiredAuthorizations = Set.fromList $ do
           (authorizer, leg) <- concatMap (\tradeleg -> transferLegSidesWithAuthorizer tradeleg.leg) otcTrade.tradeLegs
           -- the venue can create their own allocations directly as part of settlement
           guard (regularAccountOwner authorizer /= venue)
@@ -114,7 +114,7 @@ querySettleableTrades registries venue = do
           guard (leg.side == V2.SenderSide || authorizer `notElem` receiversWithAgreements)
           pure (authorizer, leg)
 
-    let actualAuthorizations =
+    let actualAuthorizations = Set.fromList $
           do
             (_cid, allocView) <- trade.allocationsV2
             leg <- allocView.allocation.transferLegSides
@@ -127,10 +127,11 @@ querySettleableTrades registries venue = do
             -- V1 allocations authorize both sides of the transfer
             transferLegSidesWithAuthorizer legV2
 
-    if Set.fromList minimallyRequiredAuthorizations `Set.isSubsetOf` Set.fromList actualAuthorizations
+    if minimallyRequiredAuthorizations `Set.isSubsetOf` actualAuthorizations
       then do
         Some <$> mkSettleableTrade trade agreementsByTrader
-      else pure None
+      else
+        pure None
   where
     mkSettleableTrade trade agreementsByTrader = do
       let otcTrade = trade.otcTrade

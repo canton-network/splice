@@ -7,6 +7,7 @@ module Splice.Testing.Tokens.TestTokenV2.Holding
 ) where
 
 import DA.Optional
+import Splice.Api.Token.HoldingV1 qualified as V1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.TokenStandard.Utils
 
@@ -21,6 +22,9 @@ template Token with
     ensure
       holding.amount > 0.0 -- positive amounts
       && isSome holding.account.owner -- holdings for regular accounts only
+
+    interface instance V1.Holding for Token where
+      view = downcast holding
 
     interface instance V2.Holding for Token where
       view = holding
