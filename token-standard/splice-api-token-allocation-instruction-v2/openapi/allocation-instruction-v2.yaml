@@ -15,6 +15,19 @@ paths:
       operationId: "getAllocationFactory"
       description: |
         Get the factory and choice context for creating allocations using the `AllocationFactory_Allocate` choice.
+
+        Registries MAY limit the size of the allocations that they support.
+
+        To ensure wide compatibility with apps, registries MUST support creating
+        allocations that involve at most 25 transfer legs. In a worst case scenario
+        this means supporting the creation of an allocation with:
+
+        - 25 transfer legs
+        - 25 distinct instrument ids
+        - 50 distinct accounts
+        - 100 distinct parties
+
+        Registries MAY support larger allocations.
       requestBody:
         required: true
         content:

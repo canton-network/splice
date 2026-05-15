@@ -191,3 +191,7 @@ Cleanup and improvements applied so far:
 - Rename `splice-token-standard-test-v1` to `splice-token-standard-v1-test`,
   and `splice-token-standard-test-v2` to `splice-token-standard-v2-test` so that the
   Splice build infrastructure correctly identifies them as test packages.
+- Call out explicit limits on the number of legs, accounts, instruments, and parties that
+  must be supported by registries when creating and settling allocations. The limits are chosen
+  to be generous, while avoiding that the off-ledger APIs have to serve more than a few 100kB
+  of reference data.
