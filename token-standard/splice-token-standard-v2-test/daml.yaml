@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 sdk-version: 3.4.11
-name: splice-token-standard-test-v2
+name: splice-token-standard-v2-test
 description: |
   Test infrastructure for the token standard.
 
@@ -44,7 +44,7 @@ data-dependencies:
   - ../../daml/splice-amulet/.daml/dist/splice-amulet-current.dar
 
 
-  - ../splice-token-standard-test-v1/.daml/dist/splice-token-standard-test-v1-current.dar
+  - ../splice-token-standard-v1-test/.daml/dist/splice-token-standard-v1-test-current.dar
 
   - ../examples/splice-token-test-trading-app-v2/.daml/dist/splice-token-test-trading-app-v2-current.dar
   - ../examples/splice-test-token-v1/.daml/dist/splice-test-token-v1-current.dar

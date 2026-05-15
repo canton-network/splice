@@ -188,3 +188,6 @@ Cleanup and improvements applied so far:
 - Polished documentation of Daml and HTTP APIs for the V2 token standard
   - introduced the `409` reponse code to report in-flight reassignments in the
   OpenAPI specs of the off-ledger APIs
+- Rename `splice-token-standard-test-v1` to `splice-token-standard-v1-test`,
+  and `splice-token-standard-test-v2` to `splice-token-standard-v2-test` so that the
+  Splice build infrastructure correctly identifies them as test packages.

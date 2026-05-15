@@ -3,9 +3,9 @@
 ..
    SPDX-License-Identifier: Apache-2.0
 
-.. _splice-token-standard-test-v1-docs:
+.. _splice-token-standard-v1-test-docs:
 
-splice-token-standard-test-v1 docs
+splice-token-standard-v1-test docs
 ==================================
 
 Copy the code of this package from https://github.com/canton-network/splice
