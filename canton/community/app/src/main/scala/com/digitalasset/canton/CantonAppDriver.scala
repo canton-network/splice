@@ -246,6 +246,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
   val environment = environmentFactory.create(Config.startupConfig, loggerFactory)
   val runner: Runner[Config] = cliOptions.command match {
     case Some(Command.Sandbox) =>
+      startupConfigFileMonitoring(environment)
       new ServerRunner(
         bootstrapScript,
         loggerFactory,
@@ -253,12 +254,14 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
         cliOptions.dars,
       )
     case Some(Command.Daemon) =>
+      startupConfigFileMonitoring(environment)
       new ServerRunner(bootstrapScript, loggerFactory)
     case Some(Command.RunScript(script)) => ConsoleScriptRunner(script, loggerFactory)
     case Some(Command.Generate(target)) =>
       Generate.process(target, Config.startupConfig)
       sys.exit(0)
     case _ =>
+      startupConfigFileMonitoring(environment)
       new ConsoleInteractiveRunner(
         cliOptions.noTty,
         bootstrapScript,
@@ -277,6 +280,47 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
       config: com.typesafe.config.Config,
       defaultPorts: Option[DefaultPorts],
   ): Either[CantonConfigError, Config]
+
+  protected[this] def startupConfigFileMonitoring(environment: E): Unit =
+    TraceContext.withNewTraceContext("config_file_monitoring") { implicit traceContext =>
+      def modificationTimestamp(): Long =
+        Config.configFiles.map(_.lastModified()).foldLeft(0L) { case (acc, item) =>
+          Math.max(acc, item)
+        }
+
+      val lastModified = new AtomicLong(modificationTimestamp())
+      def updateDeclarativeApi(): Unit = {
+        val modified = modificationTimestamp()
+        val previous = lastModified.getAndSet(modified)
+        if (modified != previous) {
+          val loaded =
+            Config.loadConfigFromFiles("Reloaded config after file change").leftMap(_.toString)
+          environment.pokeOrUpdateConfig(newConfig = Some(loaded))
+        } else {
+          environment.pokeOrUpdateConfig(newConfig = None)
+        }
+
+      }
+
+      def refresh(update: Boolean, interval: config.NonNegativeFiniteDuration): Unit = {
+        if (update) updateDeclarativeApi()
+        environment.scheduler
+          .schedule(
+            (() => refresh(update = true, interval)): Runnable,
+            interval.duration.toMillis,
+            TimeUnit.MILLISECONDS,
+          )
+          .discard
+      }
+
+      environment.config.parameters.stateRefreshInterval match {
+        case None => ()
+        case Some(interval) =>
+          logger.debug(s"Starting config file monitoring at interval=$interval")
+          refresh(update = false, interval)
+      }
+    }
+
 }
 
 object CantonAppDriver {

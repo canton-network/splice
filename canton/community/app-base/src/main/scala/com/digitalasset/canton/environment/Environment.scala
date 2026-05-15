@@ -85,6 +85,34 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
     )
 
   def config: Config = currentConfig.get()
+  def pokeOrUpdateConfig(
+      newConfig: Option[Either[String, Config]]
+  )(implicit traceContext: TraceContext): Unit = {
+    def pokeDeclarativeApis(configState: Either[Unit, Boolean]): Unit =
+      Seq(sequencers, mediators, participants).foreach { group =>
+        group.pokeDeclarativeApis(configState)
+      }
+    newConfig match {
+      case Some(Left(error)) =>
+        logger.error(s"Failed to load new dynamic configuration: $error")
+        pokeDeclarativeApis(Left(()))
+      case Some(Right(newConfig)) if currentConfig.get().parameters.alphaVersionSupport =>
+        logger.info(
+          s"Loaded new configuration. Static node changes will only be applied after a node restart."
+        )
+        currentConfig.set(newConfig)
+        pokeDeclarativeApis(Right(true))
+      case Some(Right(newConfig)) =>
+        val changedConfig = config.mergeDynamicChanges(newConfig)
+        logger.info(
+          s"Loaded new configuration. As we are running without alpha-features enabled, only the dynamic changes will be reused"
+        )
+        currentConfig.set(changedConfig)
+        pokeDeclarativeApis(Right(true))
+      case None =>
+        pokeDeclarativeApis(Right(false))
+    }
+  }
 
   private val currentConfig = new AtomicReference[Config](initialConfig)
   private val histogramInventory = new HistogramInventory()
