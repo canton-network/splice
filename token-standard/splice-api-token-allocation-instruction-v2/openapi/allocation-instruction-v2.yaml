@@ -19,14 +19,15 @@ paths:
         Registries MAY limit the size of the allocations that they support.
 
         To ensure wide compatibility with apps, registries MUST support creating
-        allocations that involve at most
+        allocations that involve at most 25 transfer legs. In a worst case scenario
+        this means supporting the creation of an allocation with:
 
-        - 100 transfer legs
-        - 25 distinct accounts
-        - 25 distinct parties
+        - 25 transfer legs
         - 25 distinct instrument ids
+        - 50 distinct accounts
+        - 100 distinct parties
 
-        Note: 50 distinct parties are allowed as there may be an account owner and provider for each account.
+        Registries MAY support larger allocations.
       requestBody:
         required: true
         content:
