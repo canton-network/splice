@@ -5,6 +5,8 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.{NonEmptyList, OptionT}
 import cats.implicits.*
+import com.daml.metrics.api.MetricHandle.Timer.TimerHandle
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
@@ -97,6 +99,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   VoteRequest,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.tokenstandard.{
   allocation,
   allocationinstruction,
@@ -120,6 +123,7 @@ class BftScanConnection(
     protected val clock: Clock,
     val retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
+    val connectionMetrics: Option[ScanConnectionMetrics] = None,
 )(implicit protected val ec: ExecutionContextExecutor, protected val mat: Materializer)
     extends FlagCloseableAsync
     with NamedLogging
@@ -684,19 +688,35 @@ class BftScanConnection(
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[T] = {
     val connections = scanList.scanConnections
+
+    def markBftFailure(outcome: String): Unit =
+      connectionMetrics.foreach { m =>
+        MetricsContext.withMetricLabels(("outcome", outcome)) { implicit ctx =>
+          m.bftCallFailures.mark()
+        }
+      }
+    def startTimer(): Option[TimerHandle] =
+      connectionMetrics.map(_.bftReadLatency.startAsync())
+    def stopTimer(t: Option[TimerHandle]): Unit = t.foreach(_.stop())
+
     if (!callConfig.enoughAvailableScans) {
       val totalNumber = connections.totalNumber
       val msg =
-        s"Only ${callConfig.connections.size} scan instances can be used (out of $totalNumber configured ones), which are fewer than the necessary ${callConfig.targetSuccess} to achieve BFT guarantees."
-      val exception = HttpErrorWithHttpCode(
-        StatusCodes.BadGateway,
-        msg,
-      )
+        s"Only ${callConfig.connections.size} scan instances can be used " +
+          s"(out of $totalNumber configured ones), which are fewer than the necessary " +
+          s"${callConfig.targetSuccess} to achieve BFT guarantees."
+      val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
       LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
+      markBftFailure("not_enough_scans")
       Future.failed(exception)
     } else {
+      val timer = startTimer()
+
       retryProvider
         .retryForClientCalls(
           "bft_call",
@@ -712,12 +732,24 @@ class BftScanConnection(
           (_: String) => ConsensusNotReachedRetryable,
         )
         .recoverWith { case c: ConsensusNotReached =>
-          val httpError = HttpErrorWithHttpCode(
-            StatusCodes.BadGateway,
-            s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, requiring ${callConfig.targetSuccess} matching responses.",
+          LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
+          markBftFailure("consensus_not_reached")
+          Future.failed(
+            HttpErrorWithHttpCode(
+              StatusCodes.BadGateway,
+              s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, " +
+                s"requiring ${callConfig.targetSuccess} matching responses.",
+            )
           )
-          LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, s"Consensus not reached.", c)
-          Future.failed(httpError)
+        }
+        .andThen {
+          case Failure(_: HttpErrorWithHttpCode) =>
+            stopTimer(timer)
+          case Failure(_) =>
+            markBftFailure("transport_error")
+            stopTimer(timer)
+          case Success(_) =>
+            stopTimer(timer)
         }
     }
   }
@@ -1261,6 +1293,7 @@ object BftScanConnection {
       loggerFactory: NamedLoggerFactory,
       builder: (Uri, NonNegativeFiniteDuration) => Future[SingleScanConnection],
       refreshScanUrlsCallback: Seq[(String, String)] => Future[Unit],
+      connectionMetrics: Option[ScanConnectionMetrics],
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -1308,6 +1341,7 @@ object BftScanConnection {
             clock,
             retryProvider,
             loggerFactory,
+            connectionMetrics,
           )
           logger.info(s"Bootstrapping with seed nodes to fetch the full network scan list.")
           Future.successful(connection)
@@ -1323,6 +1357,7 @@ object BftScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
       lastPersistedScanUrlList: () => Future[Option[List[(String, String)]]] = () =>
         Future.successful(None),
       persistScanUrlsCallback: Seq[(String, String)] => Future[Unit] = _ => Future.unit,
@@ -1334,7 +1369,8 @@ object BftScanConnection {
       templateDecoder: TemplateJsonDecoder,
   ): Future[BftScanConnection] = {
 
-    val builder = buildScanConnection(upgradesConfig, clock, retryProvider, loggerFactory)
+    val builder =
+      buildScanConnection(upgradesConfig, clock, retryProvider, loggerFactory, connectionMetrics)
     val logger = loggerFactory.getTracedLogger(getClass)
 
     config match {
@@ -1349,6 +1385,7 @@ object BftScanConnection {
           clock,
           retryProvider,
           loggerFactory,
+          connectionMetrics,
         )
 
       case ts @ BftScanClientConfig.BftCustom(_, _, _, _, _, _) =>
@@ -1383,6 +1420,7 @@ object BftScanConnection {
             builder,
             if (ts.useLastKnownConnectionsForInitialization) { persistScanUrlsCallback }
             else { _ => Future.unit },
+            connectionMetrics,
           )
 
           // Use the temporary connection to get a consensus on the full list of scans
@@ -1438,6 +1476,7 @@ object BftScanConnection {
             clock,
             retryProvider,
             loggerFactory,
+            None,
           )
 
           _ <- retryProvider.waitUntil(
@@ -1489,6 +1528,7 @@ object BftScanConnection {
             builder,
             if (bft.useLastKnownConnectionsForInitialization) { persistScanUrlsCallback }
             else { _ => Future.unit },
+            connectionMetrics,
           )
           _ <- retryProvider.waitUntil(
             RetryFor.WaitingOnInitDependency,
@@ -1529,7 +1569,7 @@ object BftScanConnection {
       httpClient: HttpClient,
       templateDecoder: TemplateJsonDecoder,
   ): Future[BftScanConnection] = {
-    val builder = buildScanConnection(upgradesConfig, clock, retryProvider, loggerFactory)
+    val builder = buildScanConnection(upgradesConfig, clock, retryProvider, loggerFactory, None)
 
     for {
       scans <- retryProvider.retry(
@@ -1584,6 +1624,7 @@ object BftScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics],
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -1607,6 +1648,7 @@ object BftScanConnection {
           // We only need f+1 Scans to be available, so as long as those are connected we don't need to slow init down.
           // Furthermore, the refresh (either on init, or periodically) will retry anyway.
           retryConnectionOnInitialFailure = false,
+          connectionMetrics,
         )
 
   sealed trait BftScanClientConfig {

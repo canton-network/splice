@@ -214,6 +214,7 @@ class ValidatorApp(
                 clock,
                 retryProvider,
                 loggerFactory,
+                Some(metrics.scanConnections),
                 ValidatorScanConnection.getPersistedScanList(configProvider),
                 ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
               )
@@ -495,6 +496,7 @@ class ValidatorApp(
         clock,
         retryProvider,
         loggerFactory,
+        Some(metrics.scanConnections),
       ) { scanConnection =>
         // We don't set the record time for now here. We assume recover node from
         // keys
@@ -710,6 +712,7 @@ class ValidatorApp(
           clock,
           retryProvider,
           loggerFactory,
+          Some(metrics.scanConnections),
           ValidatorScanConnection.getPersistedScanList(configProvider),
           ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
         )
