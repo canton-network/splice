@@ -18,20 +18,20 @@ import scala.util.control.NonFatal
 /** Result for exposing the process exit code. All logging is expected to take place inside the
   * runner.
   */
-trait Runner[C <: SharedCantonConfig[C]] extends NamedLogging {
+trait Runner extends NamedLogging {
 
-  def run(environment: Environment[C]): Unit
+  def run(environment: Environment[?]): Unit
 }
 
-class ServerRunner[C <: SharedCantonConfig[C]](
+class ServerRunner(
     bootstrapScript: Option[CantonScript] = None,
     override val loggerFactory: NamedLoggerFactory,
     exitAfterBootstrap: Boolean = false,
     dars: Seq[String] = Seq.empty,
-) extends Runner[C]
+) extends Runner
     with NoTracing {
 
-  def run(environment: Environment[C]): Unit =
+  def run(environment: Environment[?]): Unit =
     try {
       // TODO(#24954): Convert to using declarative api, when it becomes available
       def uploadDar(darPath: String): Unit = {
@@ -80,13 +80,13 @@ class ServerRunner[C <: SharedCantonConfig[C]](
     }
 }
 
-class ConsoleInteractiveRunner[C <: SharedCantonConfig[C]](
+class ConsoleInteractiveRunner(
     noTty: Boolean = false,
     bootstrapScript: Option[CantonScript],
     postScriptCallback: => Unit,
     override val loggerFactory: NamedLoggerFactory,
-) extends Runner[C] {
-  def run(environment: Environment[C]): Unit = {
+) extends Runner {
+  def run(environment: Environment[?]): Unit = {
     val success =
       try {
         val consoleEnvironment = environment.createConsole()
@@ -100,14 +100,14 @@ class ConsoleInteractiveRunner[C <: SharedCantonConfig[C]](
   }
 }
 
-class ConsoleScriptRunner[C <: SharedCantonConfig[C]](
+class ConsoleScriptRunner(
     scriptPath: CantonScript,
     override val loggerFactory: NamedLoggerFactory,
-) extends Runner[C] {
+) extends Runner {
   private val Ok = 0
   private val Error = 1
 
-  override def run(environment: Environment[C]): Unit = {
+  override def run(environment: Environment[?]): Unit = {
     val exitCode =
       ConsoleScriptRunner.run(environment, scriptPath, logger) match {
         case Right(_unit) =>
@@ -174,21 +174,21 @@ final case class CantonScriptFromFile(scriptPath: File) extends CantonScript {
 }
 
 object ConsoleScriptRunner extends NoTracing {
-  def apply[C <: SharedCantonConfig[C]](
+  def apply(
       scriptPath: File,
       loggerFactory: NamedLoggerFactory,
-  ): ConsoleScriptRunner[C] =
+  ): ConsoleScriptRunner =
     new ConsoleScriptRunner(CantonScriptFromFile(scriptPath), loggerFactory)
 
-  def run[C <: SharedCantonConfig[C]](
-      environment: Environment[C],
+  def run(
+      environment: Environment[?],
       scriptPath: File,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] =
     run(environment, CantonScriptFromFile(scriptPath), logger)
 
-  def run[C <: SharedCantonConfig[C]](
-      environment: Environment[C],
+  def run(
+      environment: Environment[?],
       cantonScript: CantonScript,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] = {
