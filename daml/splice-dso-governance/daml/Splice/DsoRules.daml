@@ -119,7 +119,7 @@ data DsoRules_ActionRequiringConfirmation
   | SRARC_AddSvRewardWeight DsoRules_AddSvRewardWeight
     -- ^ Voted action to add the weight of an SV.
   | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2
-    -- ^ Voted action to add update the weight of an SV.
+    -- ^ Voted action to update the weight of an SV.
   | SRARC_RemoveSvRewardWeight DsoRules_RemoveSvRewardWeight
     -- ^ Voted action to remove the weight of an SV.
   deriving (Eq, Show)
