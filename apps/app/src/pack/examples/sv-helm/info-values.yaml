@@ -1,5 +1,5 @@
-nginxImage: nginx:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
-updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
+#nginxImage: nginx:<version>@sha256:<digest>
+#updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:<version>@sha256:<digest>
 
 runtimeDetails:
   migrationId: MIGRATION_ID
