@@ -21,8 +21,8 @@ jq -n \
   --arg status "/$status_json_path" \
   '
     {
-      dso,
-      status,
+      $dso,
+      $status,
     }
   ' > "$runtime_index_file"
 
