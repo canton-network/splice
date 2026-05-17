@@ -212,7 +212,7 @@ For example:
 Additionally, there's three flags that can be set:
 
 * ``includeInterfaceView``: to include the interface view of the contract in the response.
-* ``includeCreatedEventBlob``: to include a binary blob that is required for `explicit disclosure <https://docs.daml.com/app-dev/explicit-contract-disclosure.html>`_.
+* ``includeCreatedEventBlob``: to include a binary blob that is required for `explicit disclosure <https://docs.canton.network/appdev/deep-dives/explicit-contract-disclosure>`_.
 * ``verbose``: to include additional information in the response.
 
 The response for such a query will contain the ``createdEvent`` of the contract, including the interface views requested (if any).

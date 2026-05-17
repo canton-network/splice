@@ -67,7 +67,7 @@ Contract Payload Encoding
 
 The ``Contract`` schema defined in ``common.yaml`` includes the
 ``payload`` of the given contract. This payload is encoded using the
-same `schema used by the HTTP JSON API <https://docs.daml.com/json-api/lf-value-specification.html>`_.
+same `schema used by the HTTP JSON API <https://docs.canton.network/appdev/reference/daml-lf-reference#daml-lf-json-encoding>`_.
 
 
 .. _app-auth:
@@ -137,5 +137,4 @@ the validator API on port 5003:
        }
      }
    }
-
 

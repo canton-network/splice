@@ -44,13 +44,13 @@ Since the API exposes the underlying Daml transactions directly, there are a cou
 * The events need to be parsed in a flexible manner. Choices and optional fields can be added over time, and new templates and data types can be introduced.
   A parser should be able to ignore these kinds of changes, and not fail when they occur.
   This means that parsing logic should be selective, and not fail when unknown fields or templates are encountered.
-  Please see `Daml upgrades <https://docs.daml.com/upgrade/index.html>`_ for more information.
+  Please see `Daml upgrades <https://docs.canton.network/appdev/modules/m6-overview>`_ for more information.
   The rules for Daml upgrades align well with a relaxed, intuitive approach to JSON parsing, e.g. not asserting absence of unexpected fields and not assuming key-presence for optional fields.
 
 .. _Reference Documentation:
 .. note::
-   Please see `Ledger Structure <https://docs.daml.com/concepts/ledger-model/ledger-structure.html>`_ on how actions are executed in transactions to change the ledger, creating contracts and exercising choices,
-   which gets described further in `Transform Data Using Choices <https://docs.daml.com/daml/intro/4_Transformations.html>`_.
+   Please see `Ledger Structure <https://docs.canton.network/overview/reference/ledger-model-detailed#structure>`_ on how actions are executed in transactions to change the ledger, creating contracts and exercising choices,
+   which gets described further in `Working with Choices <https://docs.canton.network/appdev/modules/m3-choices>`_.
 
 Open API Specification
 ----------------------

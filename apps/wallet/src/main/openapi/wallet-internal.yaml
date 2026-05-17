@@ -1593,7 +1593,7 @@ components:
             Expiry time of the transfer offer as unix timestamp in microseconds. After this time, the offer can no longer be accepted
             and automation in the wallet will eventually expire the transfer offer.
             Note that this time is compared against the ledger effective time of the Daml transaction accepting or expiring an offer, and can skew from the wall clock
-            time measured on the caller's machine. See https://docs.daml.com/concepts/time.html
+            time measured on the caller's machine. See https://docs.canton.network/overview/reference/transaction-lifecycle#phase-4-validation-and-confirmation
             for how ledger effective time is bound to the record time of a transaction on a domain.
           type: integer
           format: int64

@@ -76,7 +76,7 @@ Thus CC and CNS users that are willing to assume that no more than ``f`` SV
 nodes are dishonest can rely on the following guarantees:
 
 - **valid transactions**: every transaction that requires confirmation from the DSO party is
-  `valid <https://docs.daml.com/concepts/ledger-model/ledger-integrity.html#valid-ledgers>`_.
+  `valid <https://docs.canton.network/overview/reference/ledger-model-detailed#valid-ledgers>`_.
 - **timely automation**: actions required to be taken by the DSO party are taken in a timely fashion.
 - **predictable fees and configuration values**: fees and configuration values are reasonably
   predictable as they represent the *aggregate preferences* of ~2/3 of SV

@@ -8,11 +8,11 @@ The mock configuration below for GCP KMS is included in ``splice-node/examples/s
 .. literalinclude:: ../../../apps/app/src/pack/examples/sv-helm/kms-participant-gcp-values.yaml
     :language: yaml
 
-Please refer to the `Canton documentation <https://docs.daml.com/canton/usermanual/kms/kms_gcp_setup.html>`_
+Please refer to the `Canton documentation <https://docs.canton.network/global-synchronizer/production-operations/kms-operations#configure-a-google-cloud-provider-gcp-kms>`_
 for a list of supported configuration options and their meaning,
 as well as for instructions on configuring authentication to the KMS.
 Note again that Splice participants support the External Key Storage mode of KMS usage,
-so that (per the `relevant Canton docs <https://docs.daml.com/canton/usermanual/kms/external_key_storage/external_key_storage_gcp.html>`_)
+so that (per the `relevant Canton docs <https://docs.canton.network/global-synchronizer/production-operations/kms-operations#enable-external-key-storage-with-a-kms>`_)
 the authentication credentials you supply must correspond to a GCP service account with the following IAM permissions:
 
 * `cloudkms.cryptoKeyVersions.create`

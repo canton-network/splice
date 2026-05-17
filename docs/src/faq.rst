@@ -52,7 +52,7 @@ Validators
     1. Ensure you have ``DEBUG`` logs enabled in your participant configuration.
     2. Determine the trace-id of your command submission in your participant logs.
     3. Search for the ``DEBUG`` log lines containing ``EventCost`` and that ``trace-id``.
-       There are typically two such log lines, due to how the `Canton protocol <https://docs.daml.com/canton/architecture/overview.html#transaction-processing-in-canton>`_ works.
+       There are typically two such log lines, due to how the `Canton protocol <https://docs.canton.network/overview/reference/transaction-lifecycle>`_ works.
        The first one is the cost of the submission of the confirmation request, and the second one
        is the cost for the submission of the confirmation response for the tx validation done by the participant node.
 

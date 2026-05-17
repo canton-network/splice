@@ -1,5 +1,5 @@
 # Participant using GCP KMS (mock values; please modify to match your setup)
-# See https://docs.daml.com/canton/usermanual/kms/kms_gcp_setup.html
+# See https://docs.canton.network/global-synchronizer/production-operations/kms-operations#configure-a-google-cloud-provider-gcp-kms
 
 kms:
   type: gcp

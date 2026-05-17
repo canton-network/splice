@@ -154,7 +154,7 @@ the sequence of pages terminates with an absent or null token as follows:
 Parties' Hosting Participants
 -----------------------------
 
-In any Canton deployment, `each party is hosted on a participant <https://docs.daml.com/canton/architecture/overview.html#synchronization-domain-entities>`_.
+In any Canton deployment, `each party is hosted on a participant <https://docs.canton.network/overview/reference/topology#parties-in-the-topology-state>`_.
 This can be accessed through Scan with `/v0/domains/{domain_id}/parties/{party_id}/participant-id <scan_openapi.html#get--v0-domains-domain_id-parties-party_id-participant-id>`_.
 
 For example, looking up ``/v0/domains/global-domain::122084177677350389dd0710d6516f700a33fe348c5f2702dffef6d36e1dedcbfc17/parties/digitalasset-testValidator-1::1220e92bbc9d80cb6e283184017b307b9f44f23d32d7d195cdbcac033ae91eac2f28/participant-id`` on a test network yields

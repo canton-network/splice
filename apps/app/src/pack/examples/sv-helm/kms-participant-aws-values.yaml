@@ -1,5 +1,5 @@
 # Participant using AWS KMS (mock values; please modify to match your setup)
-# See https://docs.daml.com/canton/usermanual/kms/kms_aws_setup.html
+# See https://docs.canton.network/global-synchronizer/production-operations/kms-operations#configure-a-amazon-web-services-aws-kms
 kms:
   type: aws
   # Replace REGION based on your AWS KMS setup

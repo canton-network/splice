@@ -33,7 +33,7 @@ messages that the group of sequencers has to order, persist (up to a pruning int
 and deliver to recipients (typically mediators and other participants).
 
 Most prominently, traffic is used for Daml workflows as part of the
-`Canton transaction processing protocol <https://docs.daml.com/canton/architecture/overview.html#transaction-processing-in-canton>`_.
+`Canton transaction processing protocol <https://docs.canton.network/overview/reference/transaction-lifecycle>`_.
 This includes:
 
 - Confirmation requests; sent when a participant initiates the committing of a ledger transaction.

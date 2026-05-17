@@ -3,7 +3,7 @@
 ..
    SPDX-License-Identifier: Apache-2.0
 
-Please refer to the `Canton documentation on configuring KMS support <https://docs.daml.com/canton/usermanual/kms/kms_setup.html>`_ for determining the right configuration options to match your desired KMS provider and setup.
+Please refer to the `Canton documentation on configuring KMS support <https://docs.canton.network/global-synchronizer/production-operations/kms-operations#configure-a-kms>`_ for determining the right configuration options to match your desired KMS provider and setup.
 We provide minimal Helm configuration examples for Google Cloud (GCP) KMS and Amazon Web Services (AWS) KMS below.
 
 .. warning::

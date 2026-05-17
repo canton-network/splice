@@ -770,8 +770,8 @@ recovery guidelines).
 
 Refer to the Canton documentation for more details on participant pruning:
 
-* https://docs.daml.com/ops/pruning.html
-* https://docs.daml.com/canton/usermanual/pruning.html
+* https://docs.canton.network/global-synchronizer/production-operations/pruning#participant-node-pruning
+* https://docs.canton.network/global-synchronizer/reference/canton-console-commands#pruning.prune
 
 .. literalinclude:: ../../../apps/app/src/pack/examples/sv-helm/validator-values.yaml
     :language: yaml
