@@ -7,7 +7,7 @@
 --
 -- Uses Amulet as the test token, but can be extened to use multiple tokens from
 -- different registries as well.
-module Splice.Tests.TestAmuletTokenDvP_V1V2Mixed where
+module Splice.Tests.TestSettlement_V1V2Mixed where
 
 import Daml.Script
 

@@ -1,28 +1,19 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- | Daml script tests wrt batching transfer actions.
-module Splice.Tests.TestBatchedTokenTransfer where
+-- | Daml script tests checking mixed V1 and V2 transfers using TesTokenV2.
+module Splice.Tests.TestTokenV2.TestTransfer_V1V2Mixed where
 
 import Daml.Script
 
-import DA.Assert
-import DA.Action (void, when)
-import DA.Foldable (forA_)
 import DA.Time
-import DA.TextMap qualified as TextMap
 
-import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
-import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
 import Splice.TokenStandard.Utils (basicAccount)
 
-import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
-
 import Splice.Testing.Utils
-import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
@@ -30,33 +21,14 @@ import Splice.Testing.TokenStandard.WalletClientV2 (SimpleTransfer(..))
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 
+{- FIXME
+
 -- Shared test setup
 --------------------
 
--- TODO(#4813): add and test missing transfer instruction actions; test v2 transfers; test preapproved transfers
--- TODO(#4540): test with multiple accounts, and acting as an account provider
-
-data TestSetup = TestSetup with
-  registries : MultiRegistry.MultiRegistry
-  mint : Party -> Decimal -> V2.InstrumentId -> Script ()
-  instrX : V2.InstrumentId
-  instrY : V2.InstrumentId
-  mkTransfer : SimpleTransfer -> Script WalletClientV2.TSABatch
-  checkMetadata : Bool
 
 testTokenV1_test_v1_transfers : Script ()
 testTokenV1_test_v1_transfers = do
-  -- setup
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-  let instrX = V2.InstrumentId with
-        id = "X1"
-        admin = env.testTokenV1.admin
-  let instrY = V2.InstrumentId with
-        id = "Y1"
-        admin = env.testTokenV1.admin
-
-  let mint owner amount instrId =
-        void $ TestTokenRegistryV1.mint env.testTokenV1 owner instrId.id amount
 
   genericTestTransfers TestSetup with
       registries = env.registries
@@ -69,17 +41,6 @@ testTokenV1_test_v1_transfers = do
 
 testTokenV2_test_v1_transfers : Script ()
 testTokenV2_test_v1_transfers = do
-  -- setup
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-  let instrX = V2.InstrumentId with
-        id = "X1"
-        admin = env.testTokenV2.admin
-  let instrY = V2.InstrumentId with
-        id = "Y1"
-        admin = env.testTokenV2.admin
-
-  let mint owner amount instrId =
-        void $ TestTokenRegistryV2.mint env.testTokenV2 (basicAccount owner) instrId.id amount
 
   genericTestTransfers TestSetup with
       registries = env.registries
@@ -114,23 +75,56 @@ testTokenV2_test_v2_transfer = do
       instrY
       mkTransfer = WalletClientV2.mkTransferFactory_TransferV2' registries
       checkMetadata = True
+-}
 
-genericTestTransfers : TestSetup -> Script ()
-genericTestTransfers TestSetup {..} = do
+test_transfer_v1_v2_mixed : Script ()
+test_transfer_v1_v2_mixed = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let instrX = V2.InstrumentId with
+        id = "X"
+        admin = env.testTokenV2.admin
   let mkParty name = do
         party <- allocatePartyExact name
         WalletClientV2.createBatchingUtility party
         pure party
+  let registries = env.registries
 
   alice <- mkParty "alice"
   bob <- mkParty "bob"
-  charlie <- mkParty "charlie"
-  dora <- mkParty "dora"
-  let allParties = [alice, bob, charlie, dora]
+  let aliceAccount1 = V2.Account with owner = Some alice; provider = None; id = "alice-acc-1"
+  let aliceBasic = basicAccount alice
 
-  mint alice 1000.0 instrX
-  mint alice 1000.0 instrY
+  TestTokenRegistryV2.mint env.testTokenV2 aliceAccount1 "X" 1000.0
 
+  at1 <- WalletClientV2.mkTransferFactory_TransferV2' registries SimpleTransfer with
+      sender = aliceAccount1
+      receiver = basicAccount bob
+      amount = 10.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> bob - test transfer 1"
+  at2 <- WalletClientV2.mkTransferFactory_TransferV2' registries SimpleTransfer with
+      sender = aliceAccount1
+      receiver = aliceBasic
+      amount = 25.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> self - test transfer 2"
+  at3 <- WalletClientV2.mkTransferFactory_TransferV1' registries SimpleTransfer with
+      sender = aliceBasic
+      receiver = basicAccount bob
+      amount = 25.0
+      instrumentId = instrX
+      offerTime = days 1
+      reason = "alice -> bob - test transfer 3"
+  WalletClientV2.executeTSABatch registries alice (at1 <> at2 <> at3)
+
+  transfers <- queryInterface @V1.TransferInstruction bob
+
+  trace transfers $ pure ()
+
+{-
   -- test creating three outgoing transfers in on batch
   at1 <- mkTransfer SimpleTransfer with
         sender = basicAccount alice
@@ -212,6 +206,7 @@ genericTestTransfers TestSetup {..} = do
     [] <- queryInterface @V1.TransferInstruction p
     [] <- queryInterface @V2.TransferInstruction p
     pure ()
+-}
 
   pure ()
 
@@ -221,3 +216,4 @@ acceptTransferOffers registries actor instrumentId = do
   offers <- WalletClientV2.listTransferOffers actor instrumentId
   acceptChoices <- forA offers (WalletClientV2.mkAcceptTransferOffer registries actor)
   pure (mconcat acceptChoices)
+

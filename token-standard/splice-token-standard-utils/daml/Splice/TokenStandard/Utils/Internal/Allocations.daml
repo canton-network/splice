@@ -38,7 +38,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
   downcast_v2_v1_TransferLeg,
 
   downcast_v2_v1_SettlementInfo,
-  upcast_v1_v2_Allocation,
+  upcast_v1_v2_AllocationView,
 
   -- ** Choice implementations
   allocationV2_withdrawDefaultImplUsingV1,
@@ -492,13 +492,13 @@ instance BackwardCompatible AllocationV1.AllocationSpecification AllocationV2.Al
 -- | Use this instance only if your allocation does not evolve over time, as it
 -- always uses `None` for the `originalAllocationCid`.
 instance BackwardCompatible AllocationV1.AllocationView AllocationV2.AllocationView where
-  upcast thisView = upcast_v1_v2_Allocation None (allocationV1_availableActionsDefault thisView) thisView
+  upcast thisView = upcast_v1_v2_AllocationView None (allocationV1_availableActionsDefault thisView) thisView
 
 -- | Generic method that allows to upcast a V1 allocation specification to a V2 one with custom available actions,
 -- and a custom `originalAllocationCid`.
-upcast_v1_v2_Allocation
+upcast_v1_v2_AllocationView
   : Optional (ContractId AllocationV2.Allocation) -> Map.Map  AllocationV2.AllocationAction [[Party]] -> AllocationV1.AllocationView -> AllocationV2.AllocationView
-upcast_v1_v2_Allocation originalAllocationCid availableActions (AllocationV1.AllocationView with allocation, holdingCids, meta) =
+upcast_v1_v2_AllocationView originalAllocationCid availableActions (AllocationV1.AllocationView with allocation, holdingCids, meta) =
   AllocationV2.AllocationView with
     originalAllocationCid
     allocation = upcast allocation
@@ -544,6 +544,23 @@ instance BackwardCompatible AllocationInstructionV1.AllocationInstructionResult_
       allocationCid = upcast allocationCid
   upcast AllocationInstructionV1.AllocationInstructionResult_Failed =
     AllocationInstructionV2.AllocationInstructionResult_Failed
+
+instance ForwardCompatible AllocationInstructionV1.AllocationInstructionResult_Output AllocationInstructionV2.AllocationInstructionResult_Output where
+  downcast (AllocationInstructionV2.AllocationInstructionResult_Pending with allocationInstructionCid) =
+    AllocationInstructionV1.AllocationInstructionResult_Pending with
+      allocationInstructionCid = coerceContractId allocationInstructionCid
+  downcast (AllocationInstructionV2.AllocationInstructionResult_Completed with allocationCid) =
+    AllocationInstructionV1.AllocationInstructionResult_Completed with
+      allocationCid = coerceContractId allocationCid
+  downcast AllocationInstructionV2.AllocationInstructionResult_Failed =
+    AllocationInstructionV1.AllocationInstructionResult_Failed
+
+instance ForwardCompatible AllocationInstructionV1.AllocationInstructionResult AllocationInstructionV2.AllocationInstructionResult where
+  downcast (AllocationInstructionV2.AllocationInstructionResult with output, authorizerChangeCids, meta) =
+    AllocationInstructionV1.AllocationInstructionResult with
+      senderChangeCids = concatMap (map coerceContractId) $ textMapValues authorizerChangeCids
+      output = downcast output
+      meta
 
 
 -- Allocation requests

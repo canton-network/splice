@@ -7,7 +7,12 @@ module Splice.Testing.Tokens.TestTokenV2.Util
 , union
 , insertWithUnion
 , tokenRulesContextKey
+, getTokenRulesFromContext
 , getEventLogFromContext
+
+  -- * V1/V2 compatibility
+, CallSource(..)
+, archiveIfCalledFromV2
 ) where
 
 import DA.List (dedupSort)
@@ -45,3 +50,15 @@ getTokenRulesFromContext context = do
 
 getEventLogFromContext : ChoiceContext -> Update (ContractId TransferEventsV2.EventLog)
 getEventLogFromContext context = coerceInterfaceContractId <$> getTokenRulesFromContext context
+
+
+-- V1/V2 compatibility
+----------------------
+
+
+data CallSource = CalledFromV1 | CalledFromV2
+
+archiveIfCalledFromV2 : CallSource -> Optional (ContractId t) -> Optional (ContractId t)
+archiveIfCalledFromV2 CalledFromV2 cid = cid
+archiveIfCalledFromV2 CalledFromV1 _ = None
+
