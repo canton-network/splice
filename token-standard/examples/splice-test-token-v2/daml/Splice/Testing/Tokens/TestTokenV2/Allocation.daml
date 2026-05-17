@@ -29,6 +29,8 @@ import Splice.Testing.Tokens.TestTokenV2.Util
 import Splice.TokenStandard.Utils
 
 -- FIXME
+import Splice.Api.Token.AllocationV1 qualified as AllocationV1
+import Splice.Api.Token.AllocationV2 qualified as AllocationV2
 import Splice.Api.Token.AllocationInstructionV1 qualified as AllocationInstructionV1
 import Splice.Api.Token.AllocationInstructionV2 qualified as AllocationInstructionV2
 
@@ -95,7 +97,7 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
 
   let
     admin = this.admin
-    mkStateMachine v = allocationInstructionStateMachineSpec v.allocation.authorizer
+    stateMachine = allocationInstructionStateMachineSpec this.allocation.authorizer
 
     mkPending newActionAuthorizers newAvailableActions = do
       pendingInstrCid <- create this with
@@ -139,36 +141,10 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
       x -> abort $ "Unsupported state transition: " <> show x
 
   applyStateMachineTransitions
-    admin this oSelf actors action mkStateMachine accountMap transition
+    admin this oSelf actors action stateMachine accountMap transition
     mkPending tryUseAuthority extraArgs
 
 
--- | We model V1 allocations as a subset of V2 allocations.
---
--- We can't directly implement the `V1.Allocation` interface on `TokenAllocationV2`
--- as that would result in errors in the interface view implementation when it has to downcast
--- a V2.Allocation with multiple legs. This approach here let's us share the logic while
--- keeping the templates separate.
-template TokenAllocationV1 with
-    allocationV2 : TokenAllocationV2
-  where
-    ensure (ensure allocationV2) && canBeDowncastToV1 allocationV2
-    signatory allocationV2.allocation.admin
-
-    interface instance V1.Allocation for TokenAllocationV1 where
-      view = -- FIXME: implement downcast as partial method
-
-      allocation_executeTransferImpl self arg =
-        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Settle arg.extraArgs
-
-      allocation_cancelImpl self arg =
-        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Cancel arg.extraArgs
-
-      allocation_withdrawImpl self arg =
-        applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Withdraw arg.extraArgs
-
-canBeDowncastToV1 : TokenAllocationV2 -> Bool
-canBeDowncastToV1 _ = True -- FIXME: check number of transfer legs
 
 
 -- | Implementation of a V2-only allocation.
@@ -224,8 +200,9 @@ template TokenAllocationV2 with
 
 
 applyAllocationTransitions
-  : TokenAllocationV2
-  -> Optional (ContractId V2.Allocation)
+  : HasArchive allocation
+  => TokenAllocationV2
+  -> Optional (ContractId allocation)
   -> [Party]
   -> V2.AllocationAction
   -> ExtraArgs
@@ -239,7 +216,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
 
   let
     admin = this.allocation.admin
-    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors v.allocation.admin
+    stateMachine = allocationStateMachineSpec this.allocation.authorizer this.allocation.settlement.executors this.allocation.admin
 
     mkPending newActionAuthorizers newAvailableActions = do
       pendingInstrCid <- create this with
@@ -335,7 +312,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
       x -> abort $ "Unsupported state transition: " <> show x
 
   applyStateMachineTransitions
-    admin this oSelf actors action mkStateMachine accountMap
+    admin this oSelf actors action stateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
 
 -- | Create a locked input for an allocation.
@@ -438,8 +415,71 @@ unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
   pure authorizerCids
 
 
--- V1/V2 compatibility
-----------------------
+-- V1 compatibility for allocations
+-----------------------------------
+
+-- FIXME: run the pure V1 API tests against this implementation
+
+-- | We model V1 allocations as a subset of V2 allocations.
+--
+-- We can't directly implement the `V1.Allocation` interface on `TokenAllocationV2`
+-- as that would result in errors in the interface view implementation when it has to downcast
+-- a V2.Allocation with multiple legs. This approach here let's us share the logic while
+-- keeping the templates separate.
+template TokenAllocationV1 with
+    allocationV2 : TokenAllocationV2
+    settleAt : Time
+  where
+    ensure
+      (ensure allocationV2) &&
+      isSome (downcast_v2_v1_allocationView settleAt (view (toInterface @V2.Allocation allocationV2)))
+    signatory allocationV2.allocation.admin
+
+    interface instance AllocationV1.Allocation for TokenAllocationV1 where
+      view = fromSomeNote "unexpected: downcast failed for TokenAllocationV1" $
+        downcast_v2_v1_allocationView settleAt (view (toInterface @V2.Allocation allocationV2))
+
+      allocation_executeTransferImpl self arg = do
+        tokenRulesCid <- getTokenRulesFromContext arg.extraArgs.context
+        let allocationFactoryCid = coerceContractId tokenRulesCid
+        let settlementFactoryCid = coerceContractId tokenRulesCid
+        allocation_v1_executeTransferDefaultImplUsingV2
+          allocationFactoryCid
+          settlementFactoryCid
+          (toInterface allocationV2) self arg
+        -- applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Settle arg.extraArgs
+
+      allocation_cancelImpl self arg =
+        error "impl"
+        -- applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Cancel arg.extraArgs
+
+      allocation_withdrawImpl self arg =
+        error "impl"
+        -- applyAllocationTransitions allocationV2 (allocationV2.originalAllocationCid) arg.actors V2.AA_Withdraw arg.extraArgs
+
+-- canDowncast_v2_v1_allocationView : HasToInterface t V2.Allocation => t -> Bool
+-- canDowncast_v2_v1_allocationView = isSome . downcast_v2_v1_allocationView . view . toInterface @V2.Allocation
+
+-- FIXME
+downcast_v2_v1_allocationView : Time -> V2.AllocationView -> Optional AllocationV1.AllocationView
+downcast_v2_v1_allocationView settleAt v2View = do
+  -- FIXME: check that settlement is allowed
+  let v2Allocation = v2View.allocation
+  guard (isNone v2Allocation.nextIterationFunding && not v2Allocation.committed)
+  [transferLegSide] <- Some v2View.allocation.transferLegSides
+  guard (transferLegSide.side == AllocationV2.SenderSide)
+  let v2TransferLeg = transferLegFromSide v2Allocation.authorizer transferLegSide
+  pure AllocationV1.AllocationView with
+    allocation = AllocationV1.AllocationSpecification with
+      settlement = downcast_v2_v1_SettlementInfo v2View.createdAt settleAt v2View.allocation.settlement
+      transferLegId = v2TransferLeg.transferLegId
+      transferLeg = downcast_v2_v1_TransferLeg v2View.allocation.admin v2TransferLeg
+    holdingCids = map downcast v2View.holdingCids
+    meta = v2View.meta
+
+-- canBeDowncastToV1 : TokenAllocationV2 -> Bool
+-- canBeDowncastToV1 _ = True -- FIXME: check number of transfer legs
+
 
 
 
@@ -474,5 +514,58 @@ allocationFactory_v1_allocationDefaultImplUsingV2 this self arg = do
     extraArgs = arg.extraArgs
   pure (downcast result)
 
+allocation_v1_executeTransferDefaultImplUsingV2
+  : ContractId AllocationInstructionV2.AllocationFactory
+  -> ContractId AllocationV2.SettlementFactory
+  -> AllocationV2.Allocation
+  -> ContractId AllocationV1.Allocation
+  -> AllocationV1.Allocation_ExecuteTransfer -> Update AllocationV1.Allocation_ExecuteTransferResult
+allocation_v1_executeTransferDefaultImplUsingV2 allocationFactoryCid settlementFactoryCid v2SenderAllocation v1SenderAllocCid arg = do
+  -- prudent engineering: check that sender allocation has v1 shape
+  let v2SenderAllocView = view (toInterface @V2.Allocation v2SenderAllocation)
+  let v1SenderAllocView =
+        fromSomeNote "unexpected: downcast failed for sender allocation in allocation_v1_executeTransferDefaultImplUsingV2" $
+        downcast_v2_v1_allocationView v2SenderAllocView.createdAt v2SenderAllocView -- Note: for the downcast it is OK to pass createdAt as a stub
+  guard (isSome (downcast_v2_v1_allocationView v2SenderAllocView.createdAt v2SenderAllocView))
+  [v2SenderTransferLegSide] <- pure v2SenderAllocView.allocation.transferLegSides -- FIXME: erro message
+  -- allocate receiver allocation
+  let v2TransferLeg = transferLegFromSide v2SenderAllocView.allocation.authorizer v2SenderTransferLegSide
+  let v2ReceiverAlloc = AllocationV2.AllocationSpecification with
+          admin = v2SenderAllocView.allocation.admin
+          authorizer = v2TransferLeg.receiver
+          settlement = v2SenderAllocView.allocation.settlement
+          transferLegSides = [receiverSide v2TransferLeg]
+          nextIterationFunding = None
+          committed = False
+          meta = emptyMetadata
+
+  allocResult <- exercise allocationFactoryCid AllocationInstructionV2.AllocationFactory_Allocate with
+    allocation = v2ReceiverAlloc
+    inputHoldingCids = []
+    requestedAt = v1SenderAllocView.allocation.settlement.requestedAt
+    actors = [v1SenderAllocView.allocation.transferLeg.receiver]
+    extraArgs = arg.extraArgs
+
+  let v2ReceiverAllocCid = case allocResult.output of
+        V2.AllocationInstructionResult_Completed allocCid -> allocCid
+        _ -> error "unexpected: allocation failed in allocation_v1_executeTransferDefaultImplUsingV2"
+
+  -- settle batch of the two allocations
+  result <- exercise settlementFactoryCid AllocationV2.SettlementFactory_SettleBatch with
+    settlement = v2SenderAllocView.allocation.settlement
+    transferLegs = [v2TransferLeg]
+    allocations =
+      [ nonIteratedAllocation (coerceInterfaceContractId v1SenderAllocCid)
+      , nonIteratedAllocation v2ReceiverAllocCid
+      ]
+    actors = [v1SenderAllocView.allocation.settlement.executor]
+    extraArgs = arg.extraArgs
+
+  let [senderResult, receiverResult] = result.allocationSettleResults
+
+  pure AllocationV1.Allocation_ExecuteTransferResult with
+    senderHoldingCids = map downcast $ concat $ textMapValues senderResult.authorizerHoldingCids
+    receiverHoldingCids = map downcast $ concat $ textMapValues receiverResult.authorizerHoldingCids
+    meta = emptyMetadata -- FIXME
 
 

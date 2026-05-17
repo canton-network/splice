@@ -7,6 +7,7 @@ module Splice.Testing.Tokens.TestTokenV2.Util
 , union
 , insertWithUnion
 , tokenRulesContextKey
+, getTokenRulesFromContext
 , getEventLogFromContext
 
   -- * V1/V2 compatibility

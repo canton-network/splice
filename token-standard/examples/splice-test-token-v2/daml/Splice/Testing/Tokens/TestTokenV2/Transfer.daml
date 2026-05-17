@@ -228,7 +228,7 @@ applyTransferInstructionTransitions callSource this@TokenTransferOffer{..} oSelf
       [transfer.sender, transfer.receiver]
 
   let
-    mkStateMachine v = transferInstructionStateMachineSpec v.transfer.sender v.transfer.receiver
+    stateMachine = transferInstructionStateMachineSpec this.transfer.sender this.transfer.receiver
 
     mkPending newActionAuthorizers newAvailableActions = do
       pendingInstrCid <- create this with
@@ -251,7 +251,7 @@ applyTransferInstructionTransitions callSource this@TokenTransferOffer{..} oSelf
     cidToArchive = archiveIfCalledFromV2 callSource oSelf
 
   applyStateMachineTransitions
-    admin this cidToArchive actors action mkStateMachine accountMap
+    admin this cidToArchive actors action stateMachine accountMap
     transition mkPending tryUseAuthority extraArgs
 
 

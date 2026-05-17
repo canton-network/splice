@@ -555,6 +555,13 @@ instance ForwardCompatible AllocationInstructionV1.AllocationInstructionResult_O
   downcast AllocationInstructionV2.AllocationInstructionResult_Failed =
     AllocationInstructionV1.AllocationInstructionResult_Failed
 
+instance ForwardCompatible AllocationInstructionV1.AllocationInstructionResult AllocationInstructionV2.AllocationInstructionResult where
+  downcast (AllocationInstructionV2.AllocationInstructionResult with output, authorizerChangeCids, meta) =
+    AllocationInstructionV1.AllocationInstructionResult with
+      senderChangeCids = concatMap (map coerceContractId) $ textMapValues authorizerChangeCids
+      output = downcast output
+      meta
+
 
 -- Allocation requests
 ----------------------
