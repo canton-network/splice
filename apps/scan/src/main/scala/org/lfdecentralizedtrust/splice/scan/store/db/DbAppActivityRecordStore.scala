@@ -12,6 +12,7 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.*
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.lifecycle.*
 import com.digitalasset.canton.config.ProcessingTimeout
+import com.google.common.annotations.VisibleForTesting
 import io.grpc.Status
 import slick.jdbc.{GetResult, PostgresProfile}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
@@ -73,8 +74,7 @@ object DbAppActivityRecordStore {
   ) extends MetaCheckResult {
     def message: String =
       s"Activity ingestion version downgrade detected: " +
-        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser). " +
-        s"Shutting down to prevent data corruption."
+        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser)."
   }
 
   def checkMetaVersions(
@@ -244,6 +244,7 @@ class DbAppActivityRecordStore(
       )
     )
 
+  @VisibleForTesting
   def getRecordByVerdictRowId(verdictRowId: Long)(implicit
       tc: TraceContext
   ): Future[Option[AppActivityRecordT]] = {
@@ -327,16 +328,15 @@ class DbAppActivityRecordStore(
       ensureResult <- ensureMetaDBIO(ingestionStart)
     } yield ensureResult match {
       case Checked(d: DowngradeDetected) =>
-        logger.error(d.message)
+        logger.error(s"${d.message} Shutting down to prevent data corruption.")
         sys.exit(1)
       case _ => ()
     }
   }
 
   /** Insert multiple app activity records in a single transaction.
-    *
-    * The unique constraint on verdict_row_id (PK) serves as a safety net against duplicates.
     */
+  @VisibleForTesting
   def insertAppActivityRecords(
       items: Seq[AppActivityRecordT]
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -383,6 +383,21 @@ class DbAppActivityRecordStore(
       "appActivity.lookupActivityRecordMeta",
     )
 
+  def insertActivityRecordMetaDBIO(
+      codeVersion: Int,
+      userVersion: Int,
+      startedIngestingAt: Long,
+      earliestIngestedRound: Long,
+  ) =
+    sql"""insert into #${Tables.activityRecordMeta}
+            (history_id, activity_ingestion_code_version,
+             activity_ingestion_user_version, started_ingesting_at,
+             earliest_ingested_round)
+          values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
+                  $earliestIngestedRound)
+    """.asUpdate
+
+  @VisibleForTesting
   def insertActivityRecordMeta(
       codeVersion: Int,
       userVersion: Int,
@@ -391,13 +406,12 @@ class DbAppActivityRecordStore(
   )(implicit tc: TraceContext): Future[Unit] =
     futureUnlessShutdownToFuture(
       storage.update_(
-        sql"""insert into #${Tables.activityRecordMeta}
-                (history_id, activity_ingestion_code_version,
-                 activity_ingestion_user_version, started_ingesting_at,
-                 earliest_ingested_round)
-              values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
-                      $earliestIngestedRound)
-        """.asUpdate,
+        insertActivityRecordMetaDBIO(
+          codeVersion,
+          userVersion,
+          startedIngestingAt,
+          earliestIngestedRound,
+        ),
         "appActivity.insertActivityRecordMeta",
       )
     )
@@ -434,24 +448,18 @@ class DbAppActivityRecordStore(
               case None =>
                 DBIO.successful(NotReady: EnsureResult)
               case Some((firstRecordTimeMicros, earliestRound)) =>
-                sql"""insert into #${Tables.activityRecordMeta}
-                        (history_id, activity_ingestion_code_version,
-                         activity_ingestion_user_version, started_ingesting_at,
-                         earliest_ingested_round)
-                      values ($historyId, $codeVersion, $userVersion,
-                              $firstRecordTimeMicros, $earliestRound)
-                """.asUpdate.map { _ =>
+                insertActivityRecordMetaDBIO(
+                  codeVersion,
+                  userVersion,
+                  firstRecordTimeMicros,
+                  earliestRound,
+                ).map { _ =>
                   metaChecked.set(true)
                   Checked(InsertMeta): EnsureResult
                 }
             }
           case Resume =>
-            sql"""select started_ingesting_at
-                  from #${Tables.activityRecordMeta}
-                  where history_id = $historyId
-                    and activity_ingestion_code_version = $codeVersion
-                    and activity_ingestion_user_version = $userVersion
-               """.as[Long].headOption.map { _ =>
+            DBIO.successful {
               metaChecked.set(true)
               Checked(Resume): EnsureResult
             }
