@@ -258,7 +258,7 @@ template OTCTrade with
         resultsV2 <- forA allocationsWithContextV2 $ \(allocCid, extraArgs) -> do
             alloc <- fetch allocCid
             let allocView = view alloc
-            requireMatchExpected ("Allocation.settlement", allocView.allocation.settlement) settlementV2
+            requireMatchExpected ("Allocation.settlement", allocView.settlement) settlementV2
             result <- exercise allocCid $ V2.Allocation_Cancel with
               actors = [venue]
               extraArgs

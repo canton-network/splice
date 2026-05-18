@@ -98,8 +98,6 @@ data TransferLegSide = TransferLegSide with
 -- | An approval by the authorizer to receive or send assets as part of
 -- settlement.
 data AllocationSpecification = AllocationSpecification with
-    settlement : SettlementInfo
-      -- ^ The settlement for which this allocation is made.
     admin : Party
       -- ^ The asset admin of the instruments that are transferred as part of
       -- the settlement.
@@ -160,6 +158,8 @@ data AllocationView = AllocationView with
       -- This SHOULD be used by wallets to correlate the same allocation across
       -- updates to its state. It should not be used to correlate different allocations
       -- for the same settlement. That can be done using the `allocation.settlement` field.
+    settlement : SettlementInfo
+      -- ^ The settlement for which this allocation is made.
     allocation : AllocationSpecification
       -- ^ The specification of the allocation.
     holdingCids : [ContractId Holding]

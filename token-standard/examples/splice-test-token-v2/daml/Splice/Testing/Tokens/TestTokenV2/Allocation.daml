@@ -43,6 +43,8 @@ template TokenAllocationInstructionV2 with
       -- ^ Stored results of mkAvailableAllocationActions at time of creation as we cannot
       -- access account contracts in view function.
     inputHoldingCids : TextMap.TextMap [ContractId V2.Holding]
+    settlement : V2.SettlementInfo
+      -- ^ Settlement for which the allocation is being requested.
     allocation : V2.AllocationSpecification
       -- ^ Allocation to create.
     admin : Party
@@ -55,6 +57,7 @@ template TokenAllocationInstructionV2 with
     interface instance V2.AllocationInstruction for TokenAllocationInstructionV2 where
       view = V2.AllocationInstructionView with
         originalInstructionCid
+        settlement
         allocation
         requestedAt
         inputHoldingCids = Foldable.concat inputHoldingCids
@@ -118,9 +121,9 @@ applyAllocationInstructionTransitions this@TokenAllocationInstructionV2{..} oSel
             meta = emptyMetadata
 
       (AIS_Init, AIS_Accepted) -> do
-          let allocationSpec = allocationStateMachineSpec allocation.authorizer allocation.settlement.executors allocation.admin
+          let allocationSpec = allocationStateMachineSpec allocation.authorizer this.settlement.executors allocation.admin
           eventLogCid <- getEventLogFromContext extraArgs.context
-          (lockedTokens, authorizerChangeCids) <- splitAndLock eventLogCid allocation inputHoldingCids
+          (lockedTokens, authorizerChangeCids) <- splitAndLock this.settlement eventLogCid allocation inputHoldingCids
           allocationCid <- create TokenAllocationV2 with
             originalAllocationCid = None
             availableActions = mkAvailableActions admin allocationSpec Map.empty accountMap
@@ -153,12 +156,14 @@ template TokenAllocationV2 with
       -- access account contracts in view function.
     lockedTokens : TextMap.TextMap [ContractId V2.Holding]
       -- ^ Map from instrumentId to holdings.
+    settlement : V2.SettlementInfo
+      -- ^ Settlement for which the allocation is being requested.
     allocation : V2.AllocationSpecification
     createdAt : Time
   where
     ensure isValidAllocationSpecificationV2 (const True) allocation
     signatory accountParties allocation.admin allocation.authorizer, allocation.admin
-    observer allocation.settlement.executors
+    observer settlement.executors
 
     interface instance V2.Allocation for TokenAllocationV2 where
       view = V2.AllocationView with
@@ -166,9 +171,10 @@ template TokenAllocationV2 with
         expiresAt = None
           -- Note: in a production implementation we would also want to add a choice
           -- for the `admin` to expire the allocation. We don't need it for testing though.
+        settlement
         allocation
         holdingCids = Foldable.concat lockedTokens
-        availableActions = allocationV2_availableActionsDefault allocation
+        availableActions = allocationV2_availableActionsDefault settlement.executors allocation
         createdAt
         numIterations = 0  -- TODO(#5464): support iterated settlement in V2 token
         meta = emptyMetadata
@@ -179,7 +185,7 @@ template TokenAllocationV2 with
       allocation_cancelExtraObservers _arg = []
 
       -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = allocation.settlement.executors
+      allocation_withdrawExtraObservers _arg = settlement.executors
 
       allocation_withdrawImpl self arg = do
         applyAllocationTransitions this (Some self) arg.actors V2.AA_Withdraw arg.extraArgs
@@ -207,7 +213,7 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
 
   let
     admin = this.allocation.admin
-    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.allocation.settlement.executors v.allocation.admin
+    mkStateMachine v = allocationStateMachineSpec v.allocation.authorizer v.settlement.executors v.allocation.admin
 
     mkPending newActionAuthorizers newAvailableActions = do
       pendingInstrCid <- create this with
@@ -307,8 +313,8 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
     transition mkPending tryUseAuthority extraArgs
 
 -- | Create a locked input for an allocation.
-splitAndLock : ContractId TransferEventsV2.EventLog -> V2.AllocationSpecification -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
-splitAndLock eventLogCid allocation inputTokenCids = do
+splitAndLock : V2.SettlementInfo -> ContractId TransferEventsV2.EventLog -> V2.AllocationSpecification -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
+splitAndLock settlement eventLogCid allocation inputTokenCids = do
 
   -- debit all input amounts
   inputAmounts <- TextMap.fromListWithR (+) . concat <$> forA (TextMap.toList inputTokenCids) (\(_, cids) -> forA cids (\cid -> do
@@ -342,7 +348,7 @@ splitAndLock eventLogCid allocation inputTokenCids = do
               holders = allocation.admin :: accountParties allocation.admin allocation.authorizer
               expiresAt = allocation.settlementDeadline
               expiresAfter = None
-              context = Some $ "allocation for settlement of " <> allocation.settlement.id
+              context = Some $ "allocation for settlement of " <> settlement.id
             meta = emptyMetadata
         pure [(instrumentId, [toInterfaceContractId cid])]
     changeTokens <-
