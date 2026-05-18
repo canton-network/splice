@@ -11,11 +11,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.console.TestConsoleOutput
 import com.digitalasset.canton.environment.EnvironmentFactory
-import com.digitalasset.canton.integration.{
-  BaseEnvironmentDefinition,
-  TestConsoleEnvironment,
-  TestEnvironment,
-}
+import com.digitalasset.canton.integration.{BaseEnvironmentDefinition, TestEnvironment}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, SuppressingLogger}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
@@ -569,7 +565,7 @@ case class EnvironmentDefinition(
   override def createTestConsole(
       environment: SpliceEnvironment,
       loggerFactory: NamedLoggerFactory,
-  ): TestConsoleEnvironment[SpliceConfig, SpliceEnvironment] = {
+  ): SpliceTestConsoleEnvironment = {
     val env = new SpliceConsoleEnvironment(
       environment,
       new TestConsoleOutput(loggerFactory),

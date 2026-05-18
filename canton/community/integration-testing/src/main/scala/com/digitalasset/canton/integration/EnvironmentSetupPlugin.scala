@@ -29,13 +29,13 @@ trait EnvironmentSetupPlugin[C <: SharedCantonConfig[C], E <: Environment[C]] ex
   def beforeEnvironmentCreated(config: C): C = config
 
   /** Hook after the environment has been created but no tests have yet been run */
-  def afterEnvironmentCreated(config: C, environment: TestConsoleEnvironment[C, E]): Unit = {}
+  def afterEnvironmentCreated(config: C, environment: BaseTestConsoleEnvironment[C, E]): Unit = {}
 
   /** Hook after all tests from the test class have completed but the environment is still running
     */
   def beforeEnvironmentDestroyed(
       config: C,
-      environment: TestConsoleEnvironment[C, E],
+      environment: BaseTestConsoleEnvironment[C, E],
   ): Unit = {}
 
   /** Hook after the tests have been run and the environment has been shutdown */

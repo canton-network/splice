@@ -53,13 +53,13 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
   /** Provide an environment for an individual test either by reusing an existing one or creating a
     * new one depending on the approach being used.
     */
-  def provideEnvironment(testName: String): TestConsoleEnvironment[C, E]
+  def provideEnvironment(testName: String): BaseTestConsoleEnvironment[C, E]
 
   /** Optional hook for implementors to know when a test has finished and be provided the
     * environment instance. This is required over a afterEach hook as we need the environment
     * instance passed.
     */
-  def testFinished(testName: String, environment: TestConsoleEnvironment[C, E]): Unit = {}
+  def testFinished(testName: String, environment: BaseTestConsoleEnvironment[C, E]): Unit = {}
 
   override val loggerFactory: SuppressingLogger = SuppressingLogger(getClass)
 
@@ -91,8 +91,8 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
       runPlugins: EnvironmentSetupPlugin[C, E] => Boolean = _ => true,
       testConfigTransform: TestingConfigInternal => TestingConfigInternal = identity,
       testName: Option[String],
-  ): TestConsoleEnvironment[C, E] = TraceContext.withNewTraceContext("manualCreateEnvironment") {
-    tc =>
+  ): BaseTestConsoleEnvironment[C, E] =
+    TraceContext.withNewTraceContext("manualCreateEnvironment") { tc =>
       logger.debug(
         s"Starting creating environment for $suiteName${testName.fold("")(n => s", test '$n'")}:"
       )(tc)
@@ -156,7 +156,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
         }
 
       try {
-        val testEnvironment: TestConsoleEnvironment[C, E] = step("Creating test console") {
+        val testEnvironment: BaseTestConsoleEnvironment[C, E] = step("Creating test console") {
           envDef.createTestConsole(environmentFixture, loggerFactory)
         }
 
@@ -236,7 +236,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
           // rethrow exception
           throw ex
       }
-  }
+    }
 
   /** Creates a new environment manually for a test with the storage plugins disabled, so that we
     * can keep the persistent state from an old environment.
@@ -257,7 +257,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
       configTransform: C => C = identity,
       runPlugins: EnvironmentSetupPlugin[C, E] => Boolean = _ => true,
       testName: Option[String],
-  ): TestConsoleEnvironment[C, E] =
+  ): BaseTestConsoleEnvironment[C, E] =
     manualCreateEnvironment(
       oldEnvConfig,
       configTransform,
@@ -272,13 +272,13 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
       testName = testName,
     )
 
-  protected def createEnvironment(testName: Option[String]): TestConsoleEnvironment[C, E] = {
+  protected def createEnvironment(testName: Option[String]): BaseTestConsoleEnvironment[C, E] = {
     ConcurrentEnvironmentLimiter.create(getClass.getName, numPermits) {
       manualCreateEnvironment(testName = testName)
     }
   }
 
-  protected def manualDestroyEnvironment(environment: TestConsoleEnvironment[C, E]): Unit = {
+  protected def manualDestroyEnvironment(environment: BaseTestConsoleEnvironment[C, E]): Unit = {
     val config = environment.actualConfig
     plugins.foreach(_.beforeEnvironmentDestroyed(config, environment))
     try {
@@ -291,7 +291,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
 
   protected def destroyEnvironment(
       testName: Option[String],
-      environment: TestConsoleEnvironment[C, E],
+      environment: BaseTestConsoleEnvironment[C, E],
   ): Unit = {
     // Run the Ledger API integrity check before destroying the environment
     val checker = new LedgerApiStoreIntegrityChecker(loggerFactory)
@@ -327,7 +327,7 @@ trait SharedEnvironment[C <: SharedCantonConfig[C], E <: Environment[C]]
   this: Suite with NamedLogging =>
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  private var sharedEnvironment: Option[TestConsoleEnvironment[C, E]] = None
+  private var sharedEnvironment: Option[BaseTestConsoleEnvironment[C, E]] = None
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -339,7 +339,7 @@ trait SharedEnvironment[C <: SharedCantonConfig[C], E <: Environment[C]]
       sharedEnvironment.foreach(destroyEnvironment(None, _))
     } finally super.afterAll()
 
-  override def provideEnvironment(testName: String): TestConsoleEnvironment[C, E] =
+  override def provideEnvironment(testName: String): BaseTestConsoleEnvironment[C, E] =
     sharedEnvironment.getOrElse(
       sys.error("beforeAll should have run before providing a shared environment")
     )
@@ -355,9 +355,9 @@ trait IsolatedEnvironments[C <: SharedCantonConfig[C], E <: Environment[C]]
     extends EnvironmentSetup[C, E] {
   this: Suite with NamedLogging =>
 
-  override def provideEnvironment(testName: String): TestConsoleEnvironment[C, E] =
+  override def provideEnvironment(testName: String): BaseTestConsoleEnvironment[C, E] =
     createEnvironment(Some(testName))
-  override def testFinished(testName: String, environment: TestConsoleEnvironment[C, E]): Unit =
+  override def testFinished(testName: String, environment: BaseTestConsoleEnvironment[C, E]): Unit =
     destroyEnvironment(
       Some(testName),
       environment,

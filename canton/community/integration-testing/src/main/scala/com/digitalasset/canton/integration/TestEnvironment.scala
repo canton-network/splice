@@ -17,7 +17,6 @@ import com.digitalasset.canton.config.{
   CachingConfigs,
   CryptoConfig,
   SessionEncryptionKeyCacheConfig,
-  SharedCantonConfig,
 }
 import com.digitalasset.canton.console.{
   ConsoleEnvironment,
@@ -40,7 +39,7 @@ import scala.collection.mutable
 import scala.concurrent.Await
 
 /** Type including all environment macros and utilities to appear as you're using canton console */
-trait TestEnvironment[C <: SharedCantonConfig[C]]
+trait TestEnvironment[+C]
     extends ConsoleEnvironmentTestHelpers
     with ConsoleMacros
     with ConsoleEnvironment.Implicits

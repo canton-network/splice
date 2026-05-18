@@ -132,7 +132,7 @@ class UseOtlp(
       .replace(BatchSpanProcessor(batchSize = Some(64), scheduleDelay = Some(50.millis)))
 
   private def startServer(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): CloseableServer = {
     import env.*
 
@@ -167,13 +167,13 @@ class UseOtlp(
 
   override def afterEnvironmentCreated(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit =
     grpcServer = startServer(environment)
 
   override def beforeEnvironmentDestroyed(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit = {}
 
   override def afterEnvironmentDestroyed(config: CantonConfig): Unit =

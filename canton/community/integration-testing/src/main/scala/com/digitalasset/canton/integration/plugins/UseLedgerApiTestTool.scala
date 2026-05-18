@@ -131,7 +131,7 @@ class UseLedgerApiTestTool(
       exclude: Seq[String],
       concurrency: Int,
       kv: (String, String)*
-  )(implicit env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]): String = {
+  )(implicit env: TestConsoleEnvironment): String = {
     val excludeParameter = NonEmpty.from(exclude) match {
       case Some(suitesNE) => Seq("--exclude", suitesNE.mkString(","))
       case None => Nil
@@ -152,7 +152,7 @@ class UseLedgerApiTestTool(
       suites: String, // comma-separated list of suites
       exclude: Seq[String],
       kv: (String, String)*
-  )(implicit env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]): String =
+  )(implicit env: TestConsoleEnvironment): String =
     runSuites(suites = suites, exclude = exclude, concurrency = 1, kv*)
 
   def runShardedSuites(
@@ -161,7 +161,7 @@ class UseLedgerApiTestTool(
       exclude: Seq[String],
       concurrentTestRuns: Int = 4,
   )(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): String = {
     val allTests = execTestTool("--list-all").split("\n")
     val listing = allTests
@@ -227,7 +227,7 @@ class UseLedgerApiTestTool(
   private def endpointAsString(config: ClientConfig) = s"${config.address}:${config.port.toString}"
 
   private def testParticipants(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): Seq[String] =
     env.participants.all
       .map { p =>

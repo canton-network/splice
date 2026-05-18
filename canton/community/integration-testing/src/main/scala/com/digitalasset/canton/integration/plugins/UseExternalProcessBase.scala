@@ -65,7 +65,7 @@ trait UseExternalProcessBase[Config]
 
   override def beforeEnvironmentDestroyed(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit =
     if (shutdownPhase == ShutdownPhase.BeforeEnvironment) handler.killAndRemove()
 

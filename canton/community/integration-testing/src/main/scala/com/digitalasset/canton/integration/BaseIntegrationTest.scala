@@ -63,7 +63,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     with TestPredicateFiltersFixtureAnyWordSpec {
   this: EnvironmentSetup[C, E] =>
 
-  type FixtureParam = TestConsoleEnvironment[C, E]
+  type FixtureParam = BaseTestConsoleEnvironment[C, E]
 
   override protected def withFixture(test: OneArgTest): Outcome = {
     super[RepeatableTestSuiteTest].withFixture(new TestWithSetup(test))

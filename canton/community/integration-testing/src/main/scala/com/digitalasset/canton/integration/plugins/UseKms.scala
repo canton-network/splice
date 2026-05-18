@@ -165,7 +165,7 @@ abstract class UseKms
 
   override def beforeEnvironmentDestroyed(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit = {
     implicit val ec: ExecutionContext = kmsKeyDeletionExecutionContext
 

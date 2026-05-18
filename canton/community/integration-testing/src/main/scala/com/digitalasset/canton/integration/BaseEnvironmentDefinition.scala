@@ -25,7 +25,7 @@ abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
 ], E <: Environment[C]](
     val baseConfig: C,
     val testingConfig: TestingConfigInternal,
-    val setups: List[TestConsoleEnvironment[C, E] => Unit] = Nil,
+    val setups: List[BaseTestConsoleEnvironment[C, E] => Unit] = Nil,
     val teardown: Unit => Unit = _ => (),
     val configTransforms: Seq[C => C],
 ) {
@@ -42,5 +42,5 @@ abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
   def createTestConsole(
       environment: E,
       loggerFactory: NamedLoggerFactory,
-  ): TestConsoleEnvironment[C, E]
+  ): BaseTestConsoleEnvironment[C, E]
 }
