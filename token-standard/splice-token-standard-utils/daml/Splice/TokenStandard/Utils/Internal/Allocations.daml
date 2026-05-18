@@ -193,7 +193,6 @@ isValidAllocationSpecificationV2
     -- ^ Validation for the instrument ID.
   -> AllocationV2.AllocationSpecification -> Bool
 isValidAllocationSpecificationV2 validInstrumentId AllocationV2.AllocationSpecification{..} =
-    isValidSettlementInfoV2 settlement &&
     (not (null transferLegSides) || isSome nextIterationFunding) && -- empty transfer legs are only allowed for iterated settlement
     unique (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides) &&
     all isValidLeg transferLegSides &&
@@ -220,8 +219,8 @@ ensureIsReceiptAllocation executors receiver receiptAccount choiceArg = do
   let (AllocationInstructionV2.AllocationFactory_Allocate with
         allocation; requestedAt = _ignore; inputHoldingCids; extraArgs; actors) = choiceArg
   let (ExtraArgs with context = _ignore; meta) = extraArgs
-  let (AllocationV2.AllocationSpecification with settlement; transferLegSides; authorizer) = allocation
-  requireMatchExpected ("allocation.settlement.executor", settlement.executors) executors
+  let (AllocationV2.AllocationSpecification with transferLegSides; authorizer) = allocation
+  requireMatchExpected ("choiceArg.settlement.executor", choiceArg.settlement.executors) executors
   require' ("choiceArg.allocation.authorizer", authorizer) isEqualR ("receiptAccount", receiptAccount)
   -- restrict to single actor choices with the receiver as the actor
   requireMatchExpected ("choiceArg.actors", actors) [receiver]
@@ -357,7 +356,7 @@ settlementFactoryV2_settleBatchDefaultImpl admin self arg = do
   allocationSettleResults <- forA allocations $ \(finalizedAlloc, allocView) -> do
     exercise finalizedAlloc.allocationCid AllocationV2.Allocation_Settle with
       -- Use default controllers as the actors
-      actors = allocView.allocation.admin :: allocView.allocation.settlement.executors
+      actors = allocView.allocation.admin :: allocView.settlement.executors
       extraTransferLegSides = finalizedAlloc.extraTransferLegSides
       nextIterationFunding = finalizedAlloc.nextIterationFunding
       extraArgs
@@ -382,7 +381,7 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
     let allocationView = view allocation0
     let allocation = allocationView.allocation
 
-    requireMatchExpected ("allocation.settlement", allocation.settlement) settlement
+    requireMatchExpected ("allocation.settlement", allocationView.settlement) settlement
     requireMatchExpected ("allocation.admin", allocation.admin) admin
     -- prudent engineering: check that iterated settlement is allowed, when it is used
     unless (isSome (allocation.nextIterationFunding)) $ do
@@ -482,7 +481,6 @@ instance BackwardCompatible AllocationV1.AllocationSpecification AllocationV2.Al
       admin = transferLeg.instrumentId.admin
       authorizer = accountFromMeta transferLeg.sender "sender" transferLeg.meta
       settlementDeadline = Some settlement.settleBefore
-      settlement = upcast settlement
       -- V1 allocations only approve the sending side of the transfer leg; as receipt authorization is implicit in V1
       transferLegSides = [senderSide $ upcast_v1_v2_TransferLeg transferLegId transferLeg]
       nextIterationFunding = None
@@ -508,6 +506,7 @@ upcast_v1_v2_Allocation originalAllocationCid expiresAt availableActions (Alloca
     holdingCids = map upcast holdingCids
     expiresAt
     availableActions
+    settlement = upcast allocation.settlement
     createdAt = allocation.settlement.requestedAt
     numIterations = 0
     meta
@@ -525,11 +524,11 @@ allocationV1_availableActionsDefault allocView = Map.fromList
     leg = allocation.transferLeg
 
 -- | Available actions for a V2 allocation that uses the default controllers for its actions.
-allocationV2_availableActionsDefault : AllocationV2.AllocationSpecification -> Map.Map AllocationV2.AllocationAction [[Party]]
-allocationV2_availableActionsDefault allocation = Map.fromList
+allocationV2_availableActionsDefault : [Party] -> AllocationV2.AllocationSpecification -> Map.Map AllocationV2.AllocationAction [[Party]]
+allocationV2_availableActionsDefault executors allocation = Map.fromList
   [ (AllocationV2.AA_Withdraw, [[accountPrincipal allocation.admin allocation.authorizer]])
-  , (AllocationV2.AA_Cancel, [dedupSort allocation.settlement.executors])
-  , (AllocationV2.AA_Settle, [dedupSort (allocation.admin :: allocation.settlement.executors)])
+  , (AllocationV2.AA_Cancel, [dedupSort executors])
+  , (AllocationV2.AA_Settle, [dedupSort (allocation.admin :: executors)])
   ]
 
 instance BackwardCompatible (ContractId AllocationV1.Allocation) (ContractId AllocationV2.Allocation) where
@@ -728,14 +727,14 @@ instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationR
 -- created allocation.
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl arg =
-  arg.allocation.settlement.executors <> accountParties arg.allocation.admin arg.allocation.authorizer
+  arg.settlement.executors <> accountParties arg.allocation.admin arg.allocation.authorizer
 
 -- | Default for private assets, where the settlement executors are only be
 -- observers of the allocation choice itself if no funding is required.
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
     accountParties allocation.admin allocation.authorizer <>
-    (if all (>= 0.0) (textMapValues creditAmounts) then arg.allocation.settlement.executors else [])
+    (if all (>= 0.0) (textMapValues creditAmounts) then arg.settlement.executors else [])
   where
     allocation = arg.allocation
     creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides

@@ -589,10 +589,11 @@ mkAllocationFactory_AllocateV1 registry actor allocation = do
     senderAccount = TSU.basicAccount actor
 
 mkAllocationFactory_AllocateV2
-  : V2.RegistryApi api => api -> Party -> V2.AllocationSpecification -> Script TSABatch
-mkAllocationFactory_AllocateV2 registryV2 actor allocation = do
+  : V2.RegistryApi api => api -> Party -> V2.SettlementInfo -> V2.AllocationSpecification -> Script TSABatch
+mkAllocationFactory_AllocateV2 registryV2 actor settlement allocation = do
   now <- getTime
   enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
+    settlement
     allocation
     inputHoldingCids = []
     requestedAt = now
@@ -650,10 +651,9 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
     case (apis.v2Api, apis.v1Api) of
       (Some registryV2, _) -> do
         -- when possible use the V2 factory
-        mkAllocationFactory_AllocateV2 registryV2 actor V2.AllocationSpecification with
+        mkAllocationFactory_AllocateV2 registryV2 actor req.settlement V2.AllocationSpecification with
           admin = alloc.admin
           authorizer = req.authorizer
-          settlement = req.settlement
           settlementDeadline = alloc.settlementDeadline
           transferLegSides = alloc.transferLegSides
           nextIterationFunding = alloc.nextIterationFunding

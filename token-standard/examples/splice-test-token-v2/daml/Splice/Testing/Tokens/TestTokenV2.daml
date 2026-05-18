@@ -179,6 +179,7 @@ token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
       actionAuthorizers = Map.empty
       availableActions = Map.empty -- Will be computed.
       inputHoldingCids = inputHoldingMap
+      settlement = arg.settlement
       allocation = arg.allocation
       admin = tokenRules.admin
       requestedAt = arg.requestedAt

@@ -52,7 +52,6 @@ test_locked_funds = do
         cid = None
         meta = emptyMetadata
   let alloc = V2.AllocationSpecification with
-        settlement
         authorizer = basicAccount alice
         admin = instrId.admin
         transferLegSides = []
@@ -63,6 +62,7 @@ test_locked_funds = do
   now <- getTime
   inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement
     allocation = alloc
     requestedAt = now
     inputHoldingCids
@@ -88,8 +88,8 @@ test_locked_funds = do
         instrumentId = instrId.id
         meta = reasonToMeta "daily license fee" emptyMetadata
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement
     allocation = V2.AllocationSpecification with
-      settlement
       authorizer = basicAccount provider
       admin = instrId.admin
       transferLegSides = [receiverSide billingLeg]
@@ -139,8 +139,8 @@ test_locked_funds = do
         meta = reasonToMeta "topup funds for fee payments" emptyMetadata
   inputHoldingCids <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount alice) alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement
     allocation = V2.AllocationSpecification with
-      settlement
       authorizer = basicAccount alice
       admin = instrId.admin
       transferLegSides = [senderSide topupLeg] -- This is key: here we approve the sender-side, which locks the funds
@@ -214,7 +214,6 @@ test_refresh_and_withdrawal = do
         cid = None
         meta = emptyMetadata
   let alloc = V2.AllocationSpecification with
-        settlement
         authorizer = basicAccount alice
         admin = instrId.admin
         transferLegSides = []
@@ -224,6 +223,7 @@ test_refresh_and_withdrawal = do
         meta = reasonToMeta "fund regular billing" emptyMetadata
   inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement
     allocation = alloc
     requestedAt = now
     inputHoldingCids

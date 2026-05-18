@@ -40,6 +40,7 @@ template AmuletAllocationV2
     lockedAmulet : Optional (ContractId LockedAmulet)
       -- ^ Locked amulet that holds the funds for the allocation.
       -- Empty if the net fund movement is positive.
+    settlement : V2.SettlementInfo
     allocation : V2.AllocationSpecification
     dso : Party
     expiresAt : Time
@@ -47,10 +48,11 @@ template AmuletAllocationV2
     createdAt : Time
   where
     signatory dso, allocation.authorizer.owner
-    observer allocation.settlement.executors
+    observer settlement.executors
 
     ensure
       isBasicAccount allocation.authorizer &&
+      isValidSettlementInfoV2 settlement &&
       isValidAllocationSpecificationV2 (== amuletInstrumentIdName) allocation
 
     -- TODO(#4525): add expiry choice for the DSO party and hook it up to AmuletRules, so that AmuletAllocationV2 is also auto-expired
@@ -61,11 +63,12 @@ template AmuletAllocationV2
         createdAt
         numIterations
         expiresAt = Some expiresAt
+        settlement
         allocation
         holdingCids = case lockedAmulet of
           None -> mempty
           Some cid -> [toInterfaceContractId cid]
-        availableActions = allocationV2_availableActionsDefault allocation
+        availableActions = allocationV2_availableActionsDefault settlement.executors allocation
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -74,7 +77,7 @@ template AmuletAllocationV2
       allocation_cancelExtraObservers _arg = []
 
       -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = allocation.settlement.executors
+      allocation_withdrawExtraObservers _arg = settlement.executors
 
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
         archiveAndCheckActors self arg.actors [[accountPrincipal dso allocation.authorizer]]
@@ -86,7 +89,7 @@ template AmuletAllocationV2
             meta = emptyMetadata
 
       allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
-        archiveAndCheckActors self arg.actors [allocation.settlement.executors]
+        archiveAndCheckActors self arg.actors [settlement.executors]
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
         pure V2.AllocationResult with
             output = V2.AllocationResult_Cancelled
@@ -95,7 +98,7 @@ template AmuletAllocationV2
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
-        archiveAndCheckActors self arg.actors [dso :: allocation.settlement.executors]
+        archiveAndCheckActors self arg.actors [dso :: settlement.executors]
         forA_ allocation.settlementDeadline $ \deadline ->
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
@@ -145,7 +148,7 @@ template AmuletAllocationV2
               lock = TimeLock with
                 holders = [authorizer, dso]
                 expiresAt = newExpiresAt
-                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast allocation.settlement)
+                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement)
               amulet = Amulet with
                 dso
                 owner = authorizer
@@ -157,6 +160,7 @@ template AmuletAllocationV2
           if isNone arg.nextIterationFunding then pure None else do
             nextAllocationCid <- create AmuletAllocationV2 with
               lockedAmulet
+              settlement
               allocation = this.allocation with
                 transferLegSides = []
                 nextIterationFunding = arg.nextIterationFunding
@@ -174,7 +178,7 @@ template AmuletAllocationV2
           outputHoldingCids
 
         -- return the result
-        let v1Reason = "Settle allocation for settlement " <> allocation.settlement.id
+        let v1Reason = "Settle allocation for settlement " <> settlement.id
         pure V2.AllocationResult with
           authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, outputHoldingCids) | not (null outputHoldingCids)]
           output = V2.AllocationResult_Settled with

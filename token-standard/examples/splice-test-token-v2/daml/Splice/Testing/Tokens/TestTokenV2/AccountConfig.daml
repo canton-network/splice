@@ -369,7 +369,7 @@ tryUseAccountAuthorityForAA' actors action allocationCid authState accountMap ex
   alloc <- view <$> fetch allocationCid
   let
     admin = alloc.allocation.admin
-    spec = allocationStateMachineSpec alloc.allocation.authorizer alloc.allocation.settlement.executors alloc.allocation.admin
+    spec = allocationStateMachineSpec alloc.allocation.authorizer alloc.settlement.executors alloc.allocation.admin
     state = getState admin spec authState
     oTransition = authorizationTransferFromState admin actors action state spec authState accountMap
 

@@ -421,6 +421,7 @@ amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
   (lockedAmulet, senderChangeCids, expiresAt, meta) <-
     amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg requiredFundingAmount
   allocationCid <- toInterfaceContractId <$> create AmuletAllocationV2 with
+    settlement = arg.settlement
     allocation = arg.allocation
     lockedAmulet
     dso
@@ -440,7 +441,7 @@ amulet_allocationFactoryV2_allocateImplCore
   -> Update (Optional (ContractId LockedAmulet), [ContractId V1.Holding], Time, Metadata)
 amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmount = do
   let dso = externalAmuletRules.dso
-  let (V2.AllocationFactory_Allocate with allocation, requestedAt, inputHoldingCids, extraArgs, actors) = arg
+  let (V2.AllocationFactory_Allocate with settlement, allocation, requestedAt, inputHoldingCids, extraArgs, actors) = arg
 
   -- We are using an unfeatured payment context, as the locking to self should not be featured.
   paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
@@ -498,7 +499,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
           dso
           sender = authorizer
           amount = fundingAmount
-          lockContext = AmuletAllocationV1.mkAllocationLockContext (downcast allocation.settlement)
+          lockContext = AmuletAllocationV1.mkAllocationLockContext (downcast settlement)
           transferBefore = expiresAt
           transferBeforeDeadline = "allocation.expiresAt"
           -- Minor hack: we use the authorizer for receiver and provider as these fields are irrlevant
@@ -524,6 +525,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   -- as V2 uses net amounts and V1 uses gross amounts, which are different for self-transfers
   let fundingAmount = arg.allocation.transferLeg.amount
   let argV2 = V2.AllocationFactory_Allocate with
+        settlement = upcast arg.allocation.settlement
         allocation = upcast arg.allocation
         requestedAt = arg.requestedAt
         inputHoldingCids = map upcast arg.inputHoldingCids
