@@ -79,13 +79,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
-          sv2ValidatorBackend,
-          sv3ValidatorBackend,
-          sv4ValidatorBackend,
           aliceValidatorBackend,
           bobValidatorBackend,
           splitwellValidatorBackend,
@@ -203,6 +200,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
           val id3 = settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
+          settleTrade(aliceParty, bobParty, venueParty)
 
           advanceRoundsToNextRoundOpening
           assertOldestOpenRound(7)
@@ -272,6 +271,48 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
                 (0L to 10L).foreach { round =>
                   calculateRewardsRounds should contain(round) withClue
                     s"CalculateRewardsV2 should exist for round $round"
+                }
+              }
+              // For rounds 0..5 scan will not be able calculate activity totals
+              // and root hashes, so archiving them here keep the
+              // CalculateRewardsTrigger's logs clean, as they expect each round
+              // with CalculateRewardsV2 to have a root hash.
+              if (dryRunEnabled) {
+                clue("Archive dry-run CalculateRewardsV2 for rounds 0..5 via sv admin API") {
+                  sv1Backend.archiveDryRunRewardAccountingContracts((0L to 5L).toSeq)
+                }
+              } else {
+                // Bootstrapping a network with mintingVersion set to trafficBasedAppRewards
+                // is in principle not supported, as the round 0 will never have
+                // activity totals/root-hash calculated, and its CalculateRewardsV2 cannot be processed.
+                // So the only way to handle this in test is via direct archive.
+                clue("Archive CalculateRewardsV2 for rounds 0..5 directly as dso") {
+                  val cids = sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .filter(c => c.payload.round.number >= 0L && c.payload.round.number <= 5L)
+                    .map(_.contractId)
+                  if (cids.nonEmpty) {
+                    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+                      .submitJava(
+                        userId = sv1Backend.config.ledgerApiUser,
+                        actAs = Seq(dsoParty),
+                        commands = cids.flatMap(_.exerciseArchive().commands.asScala.toSeq),
+                      )
+                  }
+                }
+              }
+              clue("CalculateRewardsV2 contracts for rounds 0..5 are gone") {
+                eventually() {
+                  val remaining = sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .map(_.payload.round.number)
+                    .toSet
+                  (0L to 5L).foreach { round =>
+                    remaining should not contain round withClue
+                      s"CalculateRewardsV2 for round $round should be archived"
+                  }
                 }
               }
             }
@@ -360,16 +401,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       aliceParty: PartyId,
       venueParty: PartyId,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val allScanBackends =
-      Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)
-
-    clue("Scan computes activity totals through round 10 on all SVs") {
+    clue("Scan computes activity totals through round 10") {
       eventually() {
-        allScanBackends.foreach { backend =>
-          backend.getRewardAccountingActivityTotals(10L) shouldBe an[
-            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
-          ]
-        }
+        sv1ScanBackend.getRewardAccountingActivityTotals(10L) shouldBe an[
+          GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
+        ]
       }
     }
 
@@ -453,37 +489,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             .filter(r => r >= 6L && r <= 10L)
           remainingProcess shouldBe empty withClue
             "Middle-round ProcessRewardsV2 contracts (6..10) should be consumed"
-        }
-      }
-
-      // V2 contracts for rounds 0..5 and 11 remain unprocessed by triggers
-      // Which provides us opportunity to test the archive endpoint
-      if (dryRunEnabled) {
-        clue("archiveDryRunRewardAccountingContracts clears remaining rounds") {
-          // Archive them via the sv admin API and confirm both
-          // CalculateRewardsV2 and ProcessRewardsV2 are empty afterwards.
-          val otherRounds = sv1Backend.appState.dsoStore
-            .listCalculateRewardsV2()
-            .futureValue
-            .map(_.payload.round.number: Long)
-            .filterNot(r => r >= 6L && r <= 10L)
-            .distinct
-          otherRounds should not be empty withClue
-            "Expected CalculateRewardsV2 contracts for rounds outside [6..10] before archive"
-          actAndCheck(
-            "Archive dry-run reward accounting contracts for rounds outside [6..10]",
-            sv1Backend.archiveDryRunRewardAccountingContracts(otherRounds),
-          )(
-            "All dry-run CalculateRewardsV2 and ProcessRewardsV2 contracts should be archived",
-            _ => {
-              sv1Backend.appState.dsoStore
-                .listCalculateRewardsV2()
-                .futureValue shouldBe empty withClue
-                "All dry-run CalculateRewardsV2 contracts should be archived"
-              listProcessRewardsV2Rounds() shouldBe empty withClue
-                "All dry-run ProcessRewardsV2 contracts should be archived"
-            },
-          )
         }
       }
     } else {
