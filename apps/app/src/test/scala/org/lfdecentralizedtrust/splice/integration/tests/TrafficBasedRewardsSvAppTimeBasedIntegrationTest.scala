@@ -50,7 +50,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
@@ -101,14 +101,15 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         changeRewardConfig(enableDryRun = true, enableMinting = true)
       }
 
-      val calculateRewardsDryRunTrigger =
-        sv1Backend.dsoAutomation.trigger[CalculateRewardsDryRunTrigger]
-      val calculateRewardsTrigger =
-        sv1Backend.dsoAutomation.trigger[CalculateRewardsTrigger]
+      val svBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
+      val calculateRewardsDryRunTriggers =
+        svBackends.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
+      val calculateRewardsTriggers =
+        svBackends.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
 
       // Create activity for 6, 7, and 8 and confirm creation of CalculateRewardsV2
       setTriggersWithin(
-        triggersToPauseAtStart = Seq(calculateRewardsDryRunTrigger, calculateRewardsTrigger)
+        triggersToPauseAtStart = calculateRewardsDryRunTriggers ++ calculateRewardsTriggers
       ) {
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(6)
