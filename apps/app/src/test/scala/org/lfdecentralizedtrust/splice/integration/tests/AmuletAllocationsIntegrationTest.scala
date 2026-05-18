@@ -71,8 +71,8 @@ class AmuletAllocationsIntegrationTest
     def wantedAllocationV2() = new allocationv2.AllocationSpecification(
       new allocationv2.SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
-        new allocationv2.Reference("some_reference", Optional.empty),
-        java.util.Optional.of(settlementDeadline.toInstant),
+        "some_reference",
+        Optional.empty,
         new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
       dsoParty.toProtoPrimitive,
@@ -90,6 +90,7 @@ class AmuletAllocationsIntegrationTest
           ),
         )
       ),
+      java.util.Optional.of(settlementDeadline.toInstant),
       java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
       false,
       new Metadata(java.util.Map.of("k4", "v4")),

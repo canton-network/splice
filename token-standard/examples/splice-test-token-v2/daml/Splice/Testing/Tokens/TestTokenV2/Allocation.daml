@@ -61,7 +61,7 @@ template TokenAllocationInstructionV2 with
         availableActions
         expiresAt =
           -- Note: in prod you would probably want to limit the maximal TTL to avoid a storage leak
-          allocation.settlement.settlementDeadline
+          allocation.settlementDeadline
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -246,8 +246,8 @@ applyAllocationTransitions this@TokenAllocationV2{..} oSelf actors action extraA
 
       (AS_Init, AS_Settled) -> do
         -- check deadline
-        forA_ allocation.settlement.settlementDeadline $ \deadline ->
-          assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
+        forA_ allocation.settlementDeadline $ \deadline ->
+          assertWithinDeadline "allocation.settlementDeadline" deadline
 
         -- archive the locked tokens
         debitAmounts <- fmap (TextMap.fromListWithR (+)) $ forA (Foldable.concat lockedTokens) $ \cid -> do
@@ -340,9 +340,9 @@ splitAndLock eventLogCid allocation inputTokenCids = do
               admin = allocation.admin
             lock = Some $ V2.Lock with
               holders = allocation.admin :: accountParties allocation.admin allocation.authorizer
-              expiresAt = allocation.settlement.settlementDeadline
+              expiresAt = allocation.settlementDeadline
               expiresAfter = None
-              context = Some $ "allocation for settlement of " <> allocation.settlement.settlementRef.id
+              context = Some $ "allocation for settlement of " <> allocation.settlement.id
             meta = emptyMetadata
         pure [(instrumentId, [toInterfaceContractId cid])]
     changeTokens <-

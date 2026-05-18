@@ -51,10 +51,8 @@ test_delivery_versus_burn_mint = do
 
   let settlement = V2.SettlementInfo with
         executors = [provider]
-        settlementRef = V2.Reference with
-          id = "deliver-vs-burn/<uuid>"
-          cid = None
-        settlementDeadline = None
+        id = "deliver-vs-burn/<uuid>"
+        cid = None
         meta = emptyMetadata
   let aliceMintLeg = V2.TransferLeg with
         transferLegId = "mint-x"
@@ -90,6 +88,7 @@ test_delivery_versus_burn_mint = do
         authorizer = basicAccount alice
         admin
         transferLegSides = [receiverSide aliceMintLeg, senderSide aliceBobTransferLegX, receiverSide aliceBobTransferLegY]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
@@ -98,6 +97,7 @@ test_delivery_versus_burn_mint = do
         authorizer = basicAccount bob
         admin
         transferLegSides = [senderSide aliceBobTransferLegY, receiverSide aliceBobTransferLegX, senderSide bobBurnLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
@@ -106,6 +106,7 @@ test_delivery_versus_burn_mint = do
         authorizer = mintAccount admin
         admin
         transferLegSides = [senderSide aliceMintLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
@@ -114,6 +115,7 @@ test_delivery_versus_burn_mint = do
         authorizer = burnAccount admin
         admin
         transferLegSides = [receiverSide bobBurnLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata

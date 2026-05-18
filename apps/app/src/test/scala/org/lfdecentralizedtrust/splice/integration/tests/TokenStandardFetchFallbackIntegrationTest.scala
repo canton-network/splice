@@ -145,8 +145,8 @@ class TokenStandardFetchFallbackIntegrationTest
               new allocationv2.AllocationSpecification(
                 new allocationv2.SettlementInfo(
                   java.util.List.of(dsoParty.toProtoPrimitive),
-                  new allocationv2.Reference(referenceIdV2, Optional.empty),
-                  Optional.of(Instant.now.plusSeconds(2 * 3600L)),
+                  referenceIdV2,
+                  Optional.empty,
                   new metadatav1.Metadata(java.util.Map.of()),
                 ),
                 dsoParty.toProtoPrimitive,
@@ -164,6 +164,7 @@ class TokenStandardFetchFallbackIntegrationTest
                     ),
                   )
                 ),
+                Optional.of(Instant.now.plusSeconds(2 * 3600L)),
                 java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
                 false,
                 new metadatav1.Metadata(java.util.Map.of()),
@@ -176,7 +177,7 @@ class TokenStandardFetchFallbackIntegrationTest
                 case _ :+ (v2Alloc: HttpWalletAppClient.TokenStandard.V2AmuletAllocation) =>
                   v2Alloc
               }
-              alloc.contract.payload.allocation.settlement.settlementRef.id should be(
+              alloc.contract.payload.allocation.settlement.id should be(
                 referenceIdV2
               )
               alloc

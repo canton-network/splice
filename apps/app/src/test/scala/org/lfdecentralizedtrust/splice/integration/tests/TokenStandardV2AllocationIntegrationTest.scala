@@ -89,11 +89,8 @@ class TokenStandardV2AllocationIntegrationTest
     // equivalent to mkOtcTradeSettlementInfo in Daml
     val settlementInfo = new allocationv2.SettlementInfo(
       java.util.List.of(venueParty.toProtoPrimitive),
-      new allocationv2.Reference(
-        "OTCTrade",
-        java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
-      ),
-      otcTrade.data.settlementDeadline,
+      "OTCTrade",
+      java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
       emptyMetadata,
     )
     val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
@@ -318,6 +315,7 @@ class TokenStandardV2AllocationIntegrationTest
             requestedAllocation.admin,
             allocationRequestView.authorizer,
             requestedAllocation.transferLegSides,
+            requestedAllocation.settlementDeadline,
             requestedAllocation.nextIterationFunding,
             requestedAllocation.committed,
             requestedAllocation.meta,

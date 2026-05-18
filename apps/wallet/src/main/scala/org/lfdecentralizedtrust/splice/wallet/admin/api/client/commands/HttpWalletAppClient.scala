@@ -1376,10 +1376,10 @@ object HttpWalletAppClient {
             definitions.AllocateAmuletV2Request.Settlement(
               executors = spec.settlement.executors.asScala.toVector,
               settlementRef = definitions.AllocateAmuletV2Request.Settlement.SettlementRef(
-                spec.settlement.settlementRef.id,
-                spec.settlement.settlementRef.cid.map(_.contractId).toScala,
+                spec.settlement.id,
+                spec.settlement.cid.map(_.contractId).toScala,
               ),
-              settlementDeadline = spec.settlement.settlementDeadline
+              settlementDeadline = spec.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
               meta = Some(spec.settlement.meta.values.asScala.toMap),
