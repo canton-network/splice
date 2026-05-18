@@ -18,7 +18,10 @@ export function createCachePvc(
   const filestoreName =
     repo == 'splice'
       ? 'gha_share'
-      : repo.replaceAll(/splice-?/g, '').replaceAll('-', '_').slice(0, 16);
+      : repo
+          .replaceAll(/splice-?/g, '')
+          .replaceAll('-', '_')
+          .slice(0, 16);
   const filestore = new gcp.filestore.Instance(filestoreInstanceName, {
     tier: 'BASIC_SSD',
     fileShares: {
