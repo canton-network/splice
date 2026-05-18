@@ -267,6 +267,7 @@ class ScanVerdictIngestionService(
       // Recover from NO_EVENT_AT_TIMESTAMPS by returning an empty result.
       // See ensureVerdictsHaveTrafficSummaries for when missing summaries are
       // tolerated vs treated as errors.
+      // TODO(#5460): Add a metric recording missed timestamps for alerting.
       .recoverWith { case ex @ GrpcException(status, trailers) =>
         val statusProto = StatusProto.fromStatusAndTrailers(status, trailers)
         val errorDetails = ErrorDetails.from(statusProto)
