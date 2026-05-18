@@ -3,12 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
-import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BftScanConnection,
-  SingleScanConnection,
-}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient

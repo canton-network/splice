@@ -16,7 +16,7 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
 
   private val perConnectionLabels: Map[String, String] = Map(
     "scan_connection" -> "The scan connection (host) handling the request",
-    "request" -> "Name of the HTTP/gRPC command being issued",
+    "request" -> "Name of the scan request being called (no arguments)",
   )
 
   /** Latency of a single HTTP/gRPC call to one scan node. */
@@ -52,6 +52,9 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         name = prefix :+ "bft_read_latency",
         summary = "End-to-end latency of a BFT read across scan connections",
         qualification = Latency,
+        labelsWithDescription = Map(
+          "request" -> "Name of the scan request being called (no arguments)"
+        ),
       )
     )
 
@@ -65,10 +68,11 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         summary = "Count of failed BFT reads",
         qualification = Traffic,
         labelsWithDescription = Map(
+          "request" -> "Name of the scan request being called (no arguments)",
           "outcome" -> ("Why the BFT call failed: " +
             "not_enough_scans (fewer than f+1 reachable scans), " +
             "consensus_not_reached (responses did not agree), " +
-            "transport_error (all underlying calls failed)")
+            "transport_error (all underlying calls failed)"),
         ),
       )
     )
