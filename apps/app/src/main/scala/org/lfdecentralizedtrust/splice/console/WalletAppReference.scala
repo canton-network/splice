@@ -626,7 +626,10 @@ abstract class WalletAppReference(
   @Help.Description(
     "Create an AmuletAllocationV2, which is an implementation of the Allocation Token Standard V2 for Amulet."
   )
-  def allocateAmulet(settlement: allocationv2.SettlementInfo, spec: allocationv2.AllocationSpecification): AllocateAmuletV2Response = {
+  def allocateAmulet(
+      settlement: allocationv2.SettlementInfo,
+      spec: allocationv2.AllocationSpecification,
+  ): AllocateAmuletV2Response = {
     consoleEnvironment.run {
       httpCommand(HttpWalletAppClient.TokenStandard.AllocateAmuletV2(settlement, spec))
     }

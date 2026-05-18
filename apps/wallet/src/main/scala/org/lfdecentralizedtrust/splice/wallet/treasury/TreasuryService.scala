@@ -395,7 +395,9 @@ class TreasuryService(
       dedup: Option[AmuletOperationDedupConfig],
   )(implicit tc: TraceContext): Future[allocationinstructionv2.AllocationInstructionResult] = {
     val p = Promise[allocationinstructionv2.AllocationInstructionResult]()
-    enqueue(EnqueuedAmuletAllocationV2Operation(settlement, specification, requestedAt, p, tc, dedup))
+    enqueue(
+      EnqueuedAmuletAllocationV2Operation(settlement, specification, requestedAt, p, tc, dedup)
+    )
   }
 
   private def enqueue(
