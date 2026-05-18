@@ -12,7 +12,7 @@ import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-
 import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
 
 describe('SV user can', () => {
@@ -241,8 +241,8 @@ describe('Offboard SV Form', () => {
 
   test('should show error on form if submission fails', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.status(503), ctx.json({ error: 'Service Unavailable' }));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
       })
     );
 
@@ -288,8 +288,8 @@ describe('Offboard SV Form', () => {
 
   test('should redirect to governance page after successful submission', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({});
       })
     );
 

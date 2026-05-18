@@ -36,6 +36,7 @@ export function installInfo(
 
   const infoValues = {
     runtimeDetails: {
+      migrationId: decentralizedSynchronizerMigrationConfig.active.id,
       scanUrl: scanUrl,
     },
     deploymentDetails: {

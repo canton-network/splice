@@ -442,10 +442,11 @@ class BftScanConnection(
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: Int,
+      pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Seq[DsoRules_CloseVoteRequestResult]] = bftCall(
+  ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = bftCall(
     _.listVoteRequestResults(
       actionName,
       accepted,
@@ -453,6 +454,7 @@ class BftScanConnection(
       effectiveFrom,
       effectiveTo,
       limit,
+      pageToken,
     )
   )
 

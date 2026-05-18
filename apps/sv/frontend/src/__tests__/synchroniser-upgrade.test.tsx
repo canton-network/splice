@@ -5,7 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { test, expect, describe } from 'vitest';
 
 import App from '../App';
@@ -66,8 +66,8 @@ describe('SV user can', () => {
 
   test('set next scheduled synchronizer upgrade', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithoutSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
 
@@ -94,8 +94,8 @@ describe('SV user can', () => {
 
   test('submit vote request with new valid synchronizer upgrade time', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithoutSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
 
@@ -142,8 +142,8 @@ describe('SV user can', () => {
 
   test('submit vote request with existing and unchanged synchronizer upgrade time', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
 
@@ -169,8 +169,8 @@ describe('SV user can', () => {
 
   test('not submit vote request if new synchronizer upgrade time is before expiry', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithoutSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
 
@@ -225,8 +225,8 @@ describe('SV user can', () => {
 
   test('not submit vote request if synchronizer upgrade time is changed and is before expiry and effective at threshold', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
 
@@ -282,8 +282,8 @@ describe('SV user can', () => {
 
   test('not submit vote request if synchronizer upgrade time is changed and is before effective date', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-        return res(ctx.json(dsoInfoWithSynchronizerUpgrade));
+      http.get(`${svUrl}/v0/dso`, () => {
+        return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
 
@@ -339,8 +339,8 @@ describe('SV user can', () => {
     'make changes with different timezones',
     async () => {
       server.use(
-        rest.get(`${svUrl}/v0/dso`, (_, res, ctx) => {
-          return res(ctx.json(dsoInfoWithoutSynchronizerUpgrade));
+        http.get(`${svUrl}/v0/dso`, () => {
+          return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
         })
       );
 

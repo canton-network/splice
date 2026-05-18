@@ -5,7 +5,7 @@ import { getDsoSetConfigAction } from '@lfdecentralizedtrust/splice-common-test-
 import type { ListDsoRulesVoteRequestsResponse } from '@lfdecentralizedtrust/sv-openapi';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { SetDsoConfigRulesForm } from '../../../components/forms/SetDsoConfigRulesForm';
@@ -85,8 +85,8 @@ describe('DSO Pending Fields', () => {
 describe('Pending Fields', () => {
   test('DSO Pending fields should be disabled and pending info displayed', async () => {
     server.use(
-      rest.get(`${svUrl}/v0/admin/sv/voterequests`, (_, res, ctx) => {
-        return res(ctx.json<ListDsoRulesVoteRequestsResponse>(proposals));
+      http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
+        return HttpResponse.json<ListDsoRulesVoteRequestsResponse>(proposals);
       })
     );
 
