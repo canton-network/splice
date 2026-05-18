@@ -957,7 +957,7 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/reward-accounting-process": {
+        "/api/scan/v0/internal/reward-accounting-process": {
           "name": "reward-accounting-process",
           "type": "unlimited"
         },

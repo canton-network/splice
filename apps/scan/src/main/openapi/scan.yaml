@@ -1859,7 +1859,7 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/reward-accounting-process/rounds/earliest-available:
+  /v0/internal/reward-accounting-process/rounds/earliest-available:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1878,7 +1878,7 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/activity-totals:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1902,7 +1902,7 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingActivityTotalsResponse"
 
-  /v0/reward-accounting-process/rounds/{round_number}/root-hash:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/root-hash:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1925,7 +1925,7 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingRootHashResponse"
 
-  /v0/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
