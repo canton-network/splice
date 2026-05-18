@@ -96,6 +96,36 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "only return records from own history_id" in {
+      for {
+        (store1, historyId1) <- newStore()
+        (store2, historyId2) <- newStore()
+        baseTs = CantonTimestamp.now()
+        // Insert a record in store2
+        rowId2 <- insertVerdictRow(historyId2, baseTs, "update-other")
+        _ <- store2.insertAppActivityRecords(
+          Seq(mkRecord(rowId2, 10L, Seq("app2::provider"), Seq(200L)))
+        )
+        _ <- store2.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
+        // Insert a record in store1
+        rowId1 <- insertVerdictRow(historyId1, baseTs.plusSeconds(1L), "update-own")
+        _ <- store1.insertAppActivityRecords(
+          Seq(mkRecord(rowId1, 20L, Seq("app1::provider"), Seq(100L)))
+        )
+        _ <- store1.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(1L).toMicros, 20L)
+        // store1 should only see its own record
+        single <- store1.getRecordByVerdictRowId(rowId1)
+        otherSingle <- store1.getRecordByVerdictRowId(rowId2)
+        batch <- store1.getRecordsByVerdictRowIds(Seq(rowId1, rowId2))
+      } yield {
+        single shouldBe defined
+        single.value.roundNumber shouldBe 20L
+        otherSingle shouldBe None
+        batch should have size 1
+        batch(rowId1).roundNumber shouldBe 20L
+      }
+    }
+
     "handle empty activities" in {
       for {
         (store, historyId) <- newStore()
@@ -595,6 +625,20 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "startedIngestingAt loads from DB after ensureMetaDBIO inserts" in {
+      for {
+        (store, _) <- newStore()
+        // Before ensure, no meta row — startedIngestingAt returns None
+        beforeO <- store.startedIngestingAt
+        _ <- runEnsureMeta(store, Some((1000000L, 10L)))
+        // After ensure, the read path should load from DB
+        afterO <- store.startedIngestingAt
+      } yield {
+        beforeO shouldBe None
+        afterO shouldBe Some(1000000L)
+      }
+    }
+
     "return Resume when versions match existing meta" in {
       for {
         (store, _) <- newStore()
@@ -661,6 +705,25 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "return None when records exist but no meta row" in {
+      for {
+        (store, historyId) <- newStore()
+        baseTs = CantonTimestamp.now()
+        rowId1 <- insertVerdictRow(historyId, baseTs, "update-no-meta-10")
+        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-no-meta-11")
+        _ <- store.insertAppActivityRecords(
+          Seq(
+            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
+            mkRecord(rowId2, 11L, Seq("app1::provider"), Seq(200L)),
+          )
+        )
+        // No meta row — latestRound returns None, consistent with earliestRound
+        result <- store.latestRoundWithCompleteAppActivity()
+      } yield {
+        result shouldBe None
+      }
+    }
+
     "return the second round when two consecutive rounds have records" in {
       for {
         (store, historyId) <- newStore()
@@ -673,6 +736,7 @@ class DbAppActivityRecordStoreTest
             mkRecord(rowId2, 43L, Seq("app1::provider"), Seq(200L)),
           )
         )
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L)
         result <- store.latestRoundWithCompleteAppActivity()
       } yield {
         // max_round=43, 43-1=42 has records, so latest complete is 42
@@ -694,6 +758,7 @@ class DbAppActivityRecordStoreTest
             mkRecord(rowId3, 12L, Seq("app1::provider"), Seq(300L)),
           )
         )
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
         result <- store.latestRoundWithCompleteAppActivity()
       } yield {
         // max_round=12, 12-1=11 has records, so latest complete is 11

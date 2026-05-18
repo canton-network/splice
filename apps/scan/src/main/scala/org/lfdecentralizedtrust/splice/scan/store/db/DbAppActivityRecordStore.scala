@@ -186,29 +186,32 @@ class DbAppActivityRecordStore(
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
-
-    // `order by ... limit 1` is used instead of min/max to force the query planner
-    // to use the (history_id, round_number) index.
-    runQuerySingle(
-      sql"""select max_round - 1
-            from (
-              select a.round_number as max_round
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              order by a.round_number desc
-              limit 1
-            ) sub
-            where exists (
-              select 1
-              from #${Tables.appActivityRecords} a
-              where a.history_id = $historyId
-              and a.round_number = sub.max_round - 1
-              order by a.round_number desc
-              limit 1
-            )
-      """.as[Option[Long]].headOption.map(_.flatten),
-      "appActivity.latestRoundWithCompleteAppActivity",
-    )
+    startedIngestingAt.flatMap {
+      case None => Future.successful(None)
+      case Some(_) =>
+        // `order by ... limit 1` is used instead of min/max to force the query planner
+        // to use the (history_id, round_number) index.
+        runQuerySingle(
+          sql"""select max_round - 1
+                from (
+                  select a.round_number as max_round
+                  from #${Tables.appActivityRecords} a
+                  where a.history_id = $historyId
+                  order by a.round_number desc
+                  limit 1
+                ) sub
+                where exists (
+                  select 1
+                  from #${Tables.appActivityRecords} a
+                  where a.history_id = $historyId
+                  and a.round_number = sub.max_round - 1
+                  order by a.round_number desc
+                  limit 1
+                )
+          """.as[Option[Long]].headOption.map(_.flatten),
+          "appActivity.latestRoundWithCompleteAppActivity",
+        )
+    }
   }
 
   /** Assert that activity records exist for rounds roundNumber - 1 and
@@ -251,7 +254,7 @@ class DbAppActivityRecordStore(
       sql"""
         select verdict_row_id, round_number, app_provider_parties, app_activity_weights
         from #${Tables.appActivityRecords}
-        where verdict_row_id = $verdictRowId
+        where history_id = $historyId and verdict_row_id = $verdictRowId
         limit 1
       """.as[AppActivityRecordT].headOption,
       "appActivity.getRecordByVerdictRowId",
@@ -271,7 +274,7 @@ class DbAppActivityRecordStore(
               (sql"""
               select verdict_row_id, round_number, app_provider_parties, app_activity_weights
               from #${Tables.appActivityRecords}
-              where """ ++ inClause("verdict_row_id", verdictRowIds))
+              where history_id = $historyId and """ ++ inClause("verdict_row_id", verdictRowIds))
                 .as[AppActivityRecordT],
               "appActivity.getRecordsByVerdictRowIds",
             )
@@ -432,7 +435,6 @@ class DbAppActivityRecordStore(
                       values ($historyId, $codeVersion, $userVersion,
                               $firstRecordTimeMicros, $earliestRound)
                 """.asUpdate.map { _ =>
-                  startedIngestingAtRef.set(Some(firstRecordTimeMicros))
                   metaChecked.set(true)
                   Checked(InsertMeta): EnsureResult
                 }
@@ -443,8 +445,7 @@ class DbAppActivityRecordStore(
                   where history_id = $historyId
                     and activity_ingestion_code_version = $codeVersion
                     and activity_ingestion_user_version = $userVersion
-               """.as[Long].headOption.map { tsO =>
-              tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
+               """.as[Long].headOption.map { _ =>
               metaChecked.set(true)
               Checked(Resume): EnsureResult
             }
