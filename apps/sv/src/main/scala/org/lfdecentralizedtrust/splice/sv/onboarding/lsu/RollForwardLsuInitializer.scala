@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.onboarding.lsu
 
+import cats.syntax.foldable.*
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -201,6 +202,14 @@ class RollForwardLsuInitializer(
               r
             }
         }
-      result <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      result @ (_, _, _, _, store, _) <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      rulesAndState <- store.getDsoRulesWithSvNodeStates()
+      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
+      _ <- currentNode.cometbftNode.traverse_(
+        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
+      )
+      _ <- currentNode.cometbftNode.traverse_(
+        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
+      )
     } yield result
 }

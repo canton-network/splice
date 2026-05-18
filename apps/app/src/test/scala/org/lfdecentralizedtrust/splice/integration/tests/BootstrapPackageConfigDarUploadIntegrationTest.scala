@@ -114,7 +114,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
             DarResources.walletPayments -> initialPackageConfig.walletPaymentsVersion,
           ),
           sv1Backend.appState.participantAdminConnection,
-          3,
+          2,
         )
         checkDarVersions(
           decentralizedSynchronizerId,
@@ -138,7 +138,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
             DarResources.walletPayments -> initialPackageConfig.walletPaymentsVersion,
           ),
           sv2Backend.appState.participantAdminConnection,
-          3,
+          2,
         )
       }
   }
@@ -224,7 +224,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
     clue(
       s"versions for package ${packageResource.latest.metadata.name} should strictly contain the required ones"
     ) {
-      dars.map(_._2) shouldBe DarResourcesUtil
+      dars.map(_._2).toSet shouldBe DarResourcesUtil
         .getRequiredPackageVersions(
           packageResource.latest.metadata.name,
           PackageVersion.assertFromString(requiredVersion),
@@ -232,6 +232,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
         )
         .map(_.metadata.version)
         .distinct
+        .toSet
     }
     if (enableUnsupportedDarsUnvetting) {
       clue(

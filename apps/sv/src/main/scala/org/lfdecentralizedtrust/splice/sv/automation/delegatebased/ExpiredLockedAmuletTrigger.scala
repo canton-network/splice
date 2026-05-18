@@ -60,6 +60,7 @@ class ExpiredLockedAmuletTrigger(
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
         informees.toSeq,
+        Seq(store.key.dsoParty),
         context.clock.now,
       )
       cmds <-
@@ -103,6 +104,8 @@ class ExpiredLockedAmuletTrigger(
             )
           }
         }
+      // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
+      preferredPackageIds = supports24hSubmissionDelay.packageIds
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(
@@ -111,6 +114,7 @@ class ExpiredLockedAmuletTrigger(
           update = cmds,
         )
         .noDedup
+        .withPreferredPackage(preferredPackageIds)
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
     } yield TaskSuccess(s"archived expired locked amulet")

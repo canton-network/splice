@@ -49,7 +49,7 @@ import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.RichOptional
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
-class LogicalSynchronizerUpgradeIntegrationTest
+class LsuIntegrationTest
     extends IntegrationTest
     with ExternallySignedPartyTestUtil
     with ProcessTestUtil
@@ -77,6 +77,10 @@ class LogicalSynchronizerUpgradeIntegrationTest
     super.beforeAll()
     SynchronizerUpgradeUtil.migrationDumpDir.delete()
   }
+  // always set the successor PV to 35
+  // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
+  // otherwise we will run a PV35 -> PV35 LSU
+  val successorPv = ProtocolVersion.v35
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -89,10 +93,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
               localSynchronizerNodes = config.localSynchronizerNodes
                 .copy(successor =
                   config.localSynchronizerNodes.current
-                    // always set the successor PV to 35
-                    // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
-                    // otherwise we will run a PV35 -> PV35 LSU
-                    .copy(protocolVersion = ProtocolVersion.v35)
+                    .copy(protocolVersion = successorPv)
                     .some
                 ),
               domainMigrationDumpPath = Some(
@@ -311,7 +312,10 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
     // account for the cancellation
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
-    val successorPsid = decentralizedSynchronizerPSId.copy(serial = newSynchronizerSerial)
+    val successorPsid = decentralizedSynchronizerPSId.copy(
+      serial = newSynchronizerSerial,
+      protocolVersion = successorPv,
+    )
     // Upload after starting validator which connects to global
     // synchronizers as upload_dar_unless_exists vets on all
     // connected synchronizers.

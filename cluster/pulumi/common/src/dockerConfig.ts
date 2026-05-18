@@ -63,7 +63,7 @@ export class DockerConfig {
 
   public createDockerClientConfigSecret(
     namespaceName: string | pulumi.Input<string>,
-    secretName: string = 'docker-client-config',
+    secretName: string,
     dependsOn: pulumi.Resource[] = []
   ): Secret {
     return new k8s.core.v1.Secret(
@@ -85,7 +85,7 @@ export class DockerConfig {
 
   public createImagePullSecret(
     namespaceName: string,
-    secretName: string = 'docker-reg-cred',
+    secretName: string,
     dependsOn: pulumi.Resource[] = []
   ): Secret {
     return new k8s.core.v1.Secret(

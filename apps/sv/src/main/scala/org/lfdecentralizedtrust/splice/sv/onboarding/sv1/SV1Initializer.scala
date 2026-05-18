@@ -47,7 +47,6 @@ import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
-import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
@@ -77,7 +76,6 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvCantonIdentifierConfig,
   SvOnboardingConfig,
 }
-import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.{
   DsoPartyHosting,
   NodeInitializerUtil,
@@ -86,14 +84,10 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.{
   SynchronizerNodeReconciler,
 }
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState
+import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
-import org.lfdecentralizedtrust.splice.util.{
-  ContractWithState,
-  DarResourcesUtil,
-  TemplateJsonDecoder,
-  UploadablePackage,
-}
+import org.lfdecentralizedtrust.splice.util.{ContractWithState, PackageVetting, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.{defaultAmuletConfig, defaultAnsConfig}
 
 import java.util.concurrent.TimeUnit
@@ -231,38 +225,28 @@ class SV1Initializer(
               BaseLedgerConnection.SV1_INITIAL_PACKAGE_UPLOAD_METADATA_KEY,
             )
             .map(_.nonEmpty), {
-            val packages = requiredDars(sv1Config.initialPackageConfig)
-            logger.info(s"PACKS:: ${packages.size}")
-            if (config.latestPackagesOnly)
-              logger.warn(
-                "latestPackagesOnly is enabled, only the latest versions of the initial packages will be uploaded and vetted"
-              )
-            logger.info(
-              s"Starting with initial package ${sv1Config.initialPackageConfig} and vetting ${packages
-                  .map(_.resourcePath)}"
+            val vetting = new PackageVetting(
+              SvPackageVettingTrigger.packages,
+              clock,
+              participantAdminConnection,
+              loggerFactory,
+              config.latestPackagesOnly,
+              config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
             )
-            participantAdminConnection
-              .uploadDarFiles(
-                packages,
-                RetryFor.WaitingOnInitDependency,
+            vetting
+              .vetCurrentPackages(
+                synchronizerId,
+                sv1Config.initialPackageConfig.toPackageConfig,
+                config.additionalPackagesToUnvet,
               )
-              .flatMap(_ =>
-                participantAdminConnection
-                  .vetDars(
-                    synchronizerId,
-                    packages.map(packageToVet => DarResource(packageToVet.resourcePath)),
-                    None,
-                    maxVettingDelay = None,
-                  )
-                  .flatMap { _ =>
-                    initConnection.ensureUserMetadataAnnotation(
-                      config.ledgerApiUser,
-                      BaseLedgerConnection.SV1_INITIAL_PACKAGE_UPLOAD_METADATA_KEY,
-                      "true",
-                      RetryFor.WaitingOnInitDependency,
-                    )
-                  }
-              )
+              .flatMap { _ =>
+                initConnection.ensureUserMetadataAnnotation(
+                  config.ledgerApiUser,
+                  BaseLedgerConnection.SV1_INITIAL_PACKAGE_UPLOAD_METADATA_KEY,
+                  "true",
+                  RetryFor.WaitingOnInitDependency,
+                )
+              }
           },
           logger,
         ),
@@ -605,26 +589,6 @@ class SV1Initializer(
           )
         } yield (namespace, synchronizerId)
       }
-    }
-  }
-
-  private def requiredDars(
-      initialPackageConfig: InitialPackageConfig
-  )(implicit tc: TraceContext): Seq[UploadablePackage] = {
-    Seq(
-      DarResources.amulet -> initialPackageConfig.amuletVersion,
-      DarResources.dsoGovernance -> initialPackageConfig.dsoGovernanceVersion,
-      DarResources.validatorLifecycle -> initialPackageConfig.validatorLifecycleVersion,
-    ).flatMap { case (packageResource, requiredVersion) =>
-      DarResourcesUtil
-        .getRequiredPackageVersions(
-          packageResource.latest.metadata.name,
-          PackageVersion.assertFromString(requiredVersion),
-          enabledFeatures.enableUnsupportedDarsUnvetting,
-          config.latestPackagesOnly,
-          config.additionalPackagesToUnvet,
-        )
-        .map(UploadablePackage.fromResource)
     }
   }
 

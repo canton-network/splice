@@ -12,7 +12,7 @@ import { Wrapper } from '../../helpers';
 import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { server, svUrl } from '../../setup/setup';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { PROPOSAL_SUMMARY_SUBTITLE } from '../../../utils/constants';
 
 describe('SV user can', () => {
@@ -304,8 +304,8 @@ describe('Update SV Reward Weight Form', () => {
 
   test('should show error on form if submission fails', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.status(503), ctx.json({ error: 'Service Unavailable' }));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
       })
     );
 
@@ -408,8 +408,8 @@ describe('Update SV Reward Weight Form', () => {
 
   test('should redirect to governance page after successful submission', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({});
       })
     );
 
@@ -462,9 +462,9 @@ describe('Update SV Reward Weight Form', () => {
   test('should send reward weight to backend without underscore', async () => {
     let requestBody = '';
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, async (req, res, ctx) => {
-        requestBody = await req.text();
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
       })
     );
 

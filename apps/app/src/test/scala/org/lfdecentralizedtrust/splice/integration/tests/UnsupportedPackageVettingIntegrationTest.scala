@@ -52,11 +52,6 @@ class UnsupportedPackageVettingIntegrationTest
           _.withPausedTrigger[SvPackageVettingTrigger]
         )(config)
       )
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ValidatorPackageVettingTrigger]
-        )(config)
-      )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
     implicit env =>
@@ -66,11 +61,13 @@ class UnsupportedPackageVettingIntegrationTest
         DarResources.amuletNameService_0_1_0,
         DarResources.amulet_0_1_0,
       )
-      // TODO(DACH-NY/cn-test-failures#8034) Consider vetting DSO governance again once the Canton issue is fixed
       val unsupportedDarsToVetValidator = Seq(
         DarResources.walletPayments_0_1_0,
         DarResources.amuletNameService_0_1_0,
         DarResources.amulet_0_1_0,
+        // Vet some non-sense dar to catch potential issues from that
+        // see e.g. https://github.com/DACH-NY/cn-test-failures/issues/8034.
+        DarResources.dsoGovernance_0_1_0,
       )
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
@@ -80,13 +77,6 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
-      )
-      test(
-        sv1ValidatorBackend.appState.participantAdminConnection,
-        synchronizerId,
-        unsupportedDarsToVetSv,
-        unsupportedDarsToVetSv,
-        sv1ValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
       )
       // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(

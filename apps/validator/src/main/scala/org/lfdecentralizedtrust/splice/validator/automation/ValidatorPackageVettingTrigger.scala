@@ -22,7 +22,6 @@ class ValidatorPackageVettingTrigger(
     override protected val context: TriggerContext,
     maxVettingDelay: NonNegativeFiniteDuration,
     latestPackagesOnly: Boolean,
-    svValidator: Boolean,
     enableUnsupportedDarsUnvetting: Boolean,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
 )(implicit
@@ -32,7 +31,7 @@ class ValidatorPackageVettingTrigger(
       ValidatorPackageVettingTrigger.packages,
       maxVettingDelay,
       latestPackagesOnly,
-      svValidator,
+      enableUnvetting = false, // Currently only supported by SVs.
       enableUnsupportedDarsUnvetting,
       additionalPackagesToUnvet,
     ) {
@@ -55,11 +54,5 @@ class ValidatorPackageVettingTrigger(
 }
 
 object ValidatorPackageVettingTrigger {
-  val packages = Set(
-    PackageIdResolver.Package.SpliceAmulet,
-    PackageIdResolver.Package.SpliceAmuletNameService,
-    PackageIdResolver.Package.SpliceValidatorLifecycle,
-    PackageIdResolver.Package.SpliceWallet,
-    PackageIdResolver.Package.SpliceWalletPayments,
-  )
+  val packages = PackageIdResolver.validatorPackages
 }

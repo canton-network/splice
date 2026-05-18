@@ -491,6 +491,7 @@ class SvDsoAutomationService(
         config.domainMigrationId,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
+        useInternalSequencerApi = config.useInternalSequencerApi,
       )
     )
   }
