@@ -1273,13 +1273,14 @@ class HttpWalletHandler(
           new metadatav1.Metadata(side.meta.getOrElse(Map.empty).asJava),
         )
       }
-      val specification = new allocationv2.AllocationSpecification(
+      val settlement =
         new allocationv2.SettlementInfo(
           body.settlement.executors.asJava,
           body.settlement.settlementRef.id,
           body.settlement.settlementRef.cid.map(cid => new AnyContract.ContractId(cid)).toJava,
           new metadatav1.Metadata(body.settlement.meta.getOrElse(Map.empty).asJava),
-        ),
+        )
+      val specification = new allocationv2.AllocationSpecification(
         userWallet.store.key.dsoParty.toProtoPrimitive,
         authorizerAccount,
         transferLegSides.asJava,
@@ -1302,6 +1303,7 @@ class HttpWalletHandler(
       )
       for {
         result <- userWallet.treasury.enqueueAmuletAllocationOperation(
+          settlement,
           specification,
           requestedAt = now,
           dedup = Some(dedupConfig),

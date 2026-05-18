@@ -310,16 +310,8 @@ class TokenStandardV2AllocationIntegrationTest
       val allocateResponse = clue(s"${walletClient.name} accepts the Allocation Request") {
         val requestedAllocation = allocationRequestView.allocations.asScala.loneElement
         walletClient.allocateAmulet(
-          new allocationv2.AllocationSpecification(
-            allocationRequestView.settlement,
-            requestedAllocation.admin,
-            allocationRequestView.authorizer,
-            requestedAllocation.transferLegSides,
-            requestedAllocation.settlementDeadline,
-            requestedAllocation.nextIterationFunding,
-            requestedAllocation.committed,
-            requestedAllocation.meta,
-          )
+          allocationRequestView.settlement,
+          requestedAllocation
         )
       }
       allocateResponse.output match {
