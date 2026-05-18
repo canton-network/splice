@@ -1,6 +1,10 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.daml.ledger.api.v2.event.Event
+import com.daml.ledger.api.v2.transaction_filter
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.TransactionWrapper
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationrequestv1,
@@ -19,6 +23,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
 import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTransferInstructionTrigger
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -27,6 +32,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
+import java.time.Duration
+import java.util.UUID
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 
@@ -99,7 +106,15 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     //   5, 6        | settle id2, cancel venue FAP
     //   6, 7        | settle id3
     //   7, 8        | settle id4
-    val (updateId0, updateId1, updateId2, updateId3, updateId4) =
+    val (
+      updateId0,
+      updateId1,
+      updateId2,
+      updateId3,
+      updateId4,
+      aliceCreateId,
+      svExpireId,
+    ) =
       pauseScanVerdictIngestionWithin(sv1ScanBackend) {
 
         // 3 initial advances to get open rounds with staggered opensAt
@@ -139,7 +154,11 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
 
         val id4 = settleTrade(aliceParty, bobParty, venueParty)
 
-        (id0, id1, id2, id3, id4)
+        // alice creates an AmuletTransferInstruction which is archived by an SV
+        val (aliceCreateId, svExpireId) =
+          aliceCreateAndSvExpireInstruction(aliceParty, bobParty)
+
+        (id0, id1, id2, id3, id4, aliceCreateId, svExpireId)
       }
 
     def fetchEvent(updateId: String, label: String): definitions.EventHistoryItem =
@@ -183,6 +202,20 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       val event = fetchEvent(updateId4, "updateId4")
       assertTrafficSummary(event, "updateId4")
       assertAppActivity(event, "updateId4", Set(aliceParty), expectedRound = 7)
+    }
+
+    clue("Alice-submitted create TransferInstruction has app activity for alice") {
+      val event = fetchEvent(aliceCreateId, "aliceCreateId")
+      event.verdict shouldBe defined
+      assertTrafficSummary(event, "aliceCreateId")
+      assertAppActivity(event, "aliceCreateId", Set(aliceParty), expectedRound = 7)
+    }
+
+    clue("SV-submitted expire TransferInstruction creates no app activity for alice") {
+      val event = fetchEvent(svExpireId, "svExpireId")
+      event.verdict shouldBe defined
+      assertTrafficSummary(event, "svExpireId")
+      assertNoAppActivity(event, "svExpireId")
     }
 
     // -- Reward pipeline endpoint checks --------------------------------------
@@ -301,6 +334,105 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
         roundNumbers.head shouldBe expectedOldestRound
       }
     }
+  }
+
+  /** Alice creates an AmuletTransferInstruction with a short deadline, then we
+    * advance past the deadline and have the SV trigger archive it. Returns
+    * (aliceCreateId, svExpireId).
+    */
+  private def aliceCreateAndSvExpireInstruction(
+      aliceParty: PartyId,
+      bobParty: PartyId,
+  )(implicit env: SpliceTestConsoleEnvironment): (String, String) = {
+    val participant = aliceValidatorBackend.participantClientWithAdminToken
+    val beginOffsetExclusive = participant.ledger_api.state.end()
+
+    val trackingId = s"alice-instr-${UUID.randomUUID()}"
+    val expiry = Duration.ofMinutes(5)
+    val createResult = aliceWalletClient.createTokenStandardTransfer(
+      receiver = bobParty,
+      amount = BigDecimal(1.0),
+      description = "alice-to-bob transfer instruction",
+      expiresAt = getLedgerTime.plus(expiry),
+      trackingId = trackingId,
+    )
+    val instructionCid = inside(createResult.output) {
+      case definitions.TransferInstructionResultOutput.members
+            .TransferInstructionPending(value) =>
+        value.transferInstructionCid
+    }
+
+    advanceTime(expiry.plusSeconds(60))
+
+    aliceWalletClient.tap(1)
+
+    // ExpiredAmuletTransferInstructionTrigger is paused by default in test config
+    // so we explicitly resume it for the contract to be archived.
+    setTriggersWithin(triggersToResumeAtStart =
+      Seq(sv1Backend.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTransferInstructionTrigger])
+    ) {
+      eventually() {
+        aliceWalletClient.listTokenStandardTransfers() shouldBe empty
+      }
+    }
+
+    findCreateAndArchiveUpdateIds(instructionCid, beginOffsetExclusive, aliceParty)
+  }
+
+  /** Query alice's participant ledger for the create and expire `contractId`
+    * between the `beginOffsetExclusive` and the current ledger end.
+    */
+  private def findCreateAndArchiveUpdateIds(
+      contractId: String,
+      beginOffsetExclusive: Long,
+      party: PartyId,
+  )(implicit env: SpliceTestConsoleEnvironment): (String, String) = {
+    val participant = aliceValidatorBackend.participantClientWithAdminToken
+    val ledgerEnd = participant.ledger_api.state.end()
+
+    val txFormat = transaction_filter.TransactionFormat(
+      eventFormat = Some(
+        transaction_filter.EventFormat(
+          filtersByParty = Map(party.toLf -> transaction_filter.Filters(Nil)),
+          filtersForAnyParty = None,
+          verbose = false,
+        )
+      ),
+      transactionShape = transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
+    )
+
+    val updates = participant.ledger_api.updates.updates(
+      updateFormat = transaction_filter.UpdateFormat(
+        includeTransactions = Some(txFormat),
+        includeReassignments = None,
+        includeTopologyEvents = None,
+      ),
+      completeAfter = PositiveInt.MaxValue,
+      beginOffsetExclusive = beginOffsetExclusive,
+      endOffsetInclusive = Some(ledgerEnd),
+    )
+
+    val (createUid, archiveUid) =
+      updates.foldLeft((Option.empty[String], Option.empty[String])) {
+        case ((cu, au), TransactionWrapper(tx)) =>
+          val hasCreate = tx.events.exists(_.event match {
+            case Event.Event.Created(c) => c.contractId == contractId
+            case _ => false
+          })
+          val hasArchive = tx.events.exists(_.event match {
+            case Event.Event.Exercised(e) => e.contractId == contractId && e.consuming
+            case _ => false
+          })
+          (
+            if (cu.isEmpty && hasCreate) Some(tx.updateId) else cu,
+            if (au.isEmpty && hasArchive) Some(tx.updateId) else au,
+          )
+        case (acc, _) => acc
+      }
+
+    withClue(s"create updateId for contract $contractId")(createUid shouldBe defined)
+    withClue(s"archive updateId for contract $contractId")(archiveUid shouldBe defined)
+    (createUid.value, archiveUid.value)
   }
 
   private def settleTrade(

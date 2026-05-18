@@ -99,7 +99,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the Splitwell validator",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Splitwell UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.splitwell.mock.network.canton.global",
         "https://wallet.splitwell.mock.global.canton.network.digitalasset.com",
@@ -169,7 +184,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://cns.sv.mock.network.canton.global",
         "https://cns.sv.mock.global.canton.network.digitalasset.com"
@@ -209,7 +239,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the SV UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SV UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://sv.sv.mock.network.canton.global",
         "https://sv.sv.mock.global.canton.network.digitalasset.com"
@@ -249,7 +294,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv.mock.network.canton.global",
         "https://wallet.sv.mock.global.canton.network.digitalasset.com"
@@ -2491,7 +2551,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SV1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv-2.mock.network.canton.global",
         "https://wallet.sv-2.mock.global.canton.network.digitalasset.com",
@@ -2651,7 +2726,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-da-1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SVDA1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv-1.mock.network.canton.global",
         "https://wallet.sv-1.mock.global.canton.network.digitalasset.com",
@@ -2779,7 +2869,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the standalone Validator1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Validator1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.validator1.mock.network.canton.global",
         "https://wallet.validator1.mock.global.canton.network.digitalasset.com",
@@ -2829,7 +2934,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://cns.validator.mock.network.canton.global",
         "https://cns.validator.mock.global.canton.network.digitalasset.com",
@@ -2877,7 +2997,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.validator.mock.network.canton.global",
         "https://wallet.validator.mock.global.canton.network.digitalasset.com",

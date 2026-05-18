@@ -2373,6 +2373,7 @@
           "host": "info.sv-2.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
+          "migrationId": 9,
           "scanUrl": "http://scan-app.sv-1:5012"
         },
         "tolerations": [
@@ -3577,6 +3578,7 @@
           "host": "info.sv-1.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
+          "migrationId": 9,
           "scanUrl": "http://scan-app.sv-da-1:5012"
         },
         "tolerations": [
