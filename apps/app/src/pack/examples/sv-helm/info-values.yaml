@@ -1,6 +1,8 @@
 nginxImage: nginx:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
+updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
 
 runtimeDetails:
+  migrationId: MIGRATION_ID
   scanUrl: "http://scan-app.sv:5012"
 
 deploymentDetails:  # optional, exposes static configuration under path /

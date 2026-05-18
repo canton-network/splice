@@ -240,6 +240,7 @@
         },
         "nginxImage": "nginx:latest",
         "runtimeDetails": {
+          "migrationId": 2,
           "scanUrl": "http://scan-app.sv:5012"
         },
         "tolerations": [
@@ -248,7 +249,8 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ]
+        ],
+        "updaterImage": "registry.gitlab.com/gitlab-ci-utils/curl-jq:latest"
       },
       "version": "0.3.20"
     },
@@ -947,16 +949,16 @@
           "name": "holdings",
           "type": "unlimited"
         },
+        "/api/scan/v0/internal/reward-accounting-process": {
+          "name": "reward-accounting-process",
+          "type": "unlimited"
+        },
         "/api/scan/v0/migrations": {
           "name": "migrations-schedule",
           "type": "unlimited"
         },
         "/api/scan/v0/open-and-issuing-mining-rounds": {
           "name": "open-and-issuing-mining-rounds",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/reward-accounting-process": {
-          "name": "reward-accounting-process",
           "type": "unlimited"
         },
         "/api/scan/v0/rewards-collected": {

@@ -38,6 +38,8 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetDsoInfoResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
@@ -811,6 +813,18 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
+
+  override def getRewardAccountingRootHash(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingRootHashResponse] =
+    bftCall(_.getRewardAccountingRootHash(roundNumber), "getRewardAccountingRootHash")
+
+  override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[GetRewardAccountingBatchResponse]] =
+    bftCall(_.getRewardAccountingBatch(roundNumber, batchHash), "getRewardAccountingBatch")
 }
 trait HasUrl {
   def url: Uri
