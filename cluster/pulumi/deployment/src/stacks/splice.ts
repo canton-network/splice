@@ -9,6 +9,7 @@ import {
   config,
   DecentralizedSynchronizerUpgradeConfig,
 } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { configForSv } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
@@ -157,11 +158,14 @@ function installSvStacks(
       DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv)
   ) {
     for (const sv of allSvNamesToDeploy) {
+      const isRunbookReset =
+        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
+      const isCatchupTestSv = configForSv(sv)?.testing?.catchup?.enabled ?? false;
       createStackCR(
         `sv.${sv}`,
         'sv',
         namespace,
-        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET'),
+        isRunbookReset || isCatchupTestSv,
         reference,
         envRefs,
         gcpSecret,
