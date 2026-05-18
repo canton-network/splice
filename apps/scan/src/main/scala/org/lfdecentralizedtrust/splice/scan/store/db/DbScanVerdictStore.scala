@@ -486,18 +486,22 @@ class DbScanVerdictStore(
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
-    val firstRecordTimeMicros =
-      if (appActivityRecords.nonEmpty)
-        Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
-      else None
-
     val combinedAction = for {
       rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
       // Resolve placeholder verdictRowId to actual row_ids from the inserted verdicts
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords, firstRecordTimeMicros)
+      _ <- insertAppActivityRecordsDBIO(
+        resolvedAppActivityRecords, {
+          if (appActivityRecords.nonEmpty) {
+            val ts = items.headOption.fold(0L)(_._1.recordTime.toMicros)
+            val earliestRound =
+              appActivityRecords.map(_._2.roundNumber).foldLeft(Long.MaxValue)(math.min)
+            Some((ts, earliestRound))
+          } else None
+        },
+      )
     } yield ()
 
     futureUnlessShutdownToFuture(
@@ -542,13 +546,12 @@ class DbScanVerdictStore(
 
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      firstRecordTimeMicros: Option[Long],
-  )(implicit tc: TraceContext): DBIO[Unit] = {
+      ingestionStart: => Option[(Long, Long)],
+  )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, ingestionStart)
     }
-  }
 
   private def afterFilters(
       afterO: Option[(Long, CantonTimestamp)],
