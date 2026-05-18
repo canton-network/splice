@@ -411,6 +411,54 @@ The response returns a list of objects, each of which may include an ``update`` 
    * **confirming_parties**: The parties responsible for confirming the validity of the transaction view, along with their quorum threshold.
    * **sub_views**: Other views that the current one depends on, referred to by their ``view_id`` fields.
 
+Traffic summary
+^^^^^^^^^^^^^^^
+
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
+
+.. warning::
+
+   This field is experimental while CIP-0104 traffic-based app rewards are in preview.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
+
+Each event includes a ``traffic_summary`` field containing traffic cost data
+from the sequencer for the confirmation request corresponding to the event.
+
+The ``traffic_summary`` object contains:
+
+* **total_traffic_cost** : Total traffic cost in bytes of the confirmation request, paid by the
+  validator node that submitted it.
+* **envelope_traffic_summaries** : An array of per-envelope traffic data. Each entry contains:
+
+   * **traffic_cost**: Traffic cost in bytes for this envelope.
+   * **view_ids**: View IDs from the verdict contained in this envelope. These correspond to the
+     ``view_id`` fields in the ``transaction_views`` array.
+
+App activity records
+^^^^^^^^^^^^^^^^^^^^
+
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
+
+.. warning::
+
+   This field is experimental while CIP-0104 traffic-based app rewards are in preview.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
+
+Each event includes an ``app_activity_records`` field containing per-app-provider
+activity weights computed from traffic summaries as per
+`CIP-0104 <https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md>`_.
+This is present when a traffic summary is available for the event.
+
+The ``app_activity_records`` object contains:
+
+* **round_number** : The minting round number assigned to the activity records.
+* **records** : An array of activity records, one per app provider. Each entry contains:
+
+   * **party**: The app provider party identifier.
+   * **weight**: Activity weight in bytes of traffic attributed to this app provider.
+
 ACS Snapshots
 ~~~~~~~~~~~~~
 
@@ -908,4 +956,3 @@ evolve, the structure of the transactions may change, and future transactions ma
 differently than described here. Specifically, at the time of writing, there is already a planned change
 where traffic purchases do not go through an intermediate ``transfer`` transaction, but are directly
 burning coin.
-

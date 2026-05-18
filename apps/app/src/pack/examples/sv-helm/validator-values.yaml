@@ -9,6 +9,9 @@ auth:
   # replace OIDC_AUTHORITY_VALIDATOR_AUDIENCE with the audience of your choice
   audience: "OIDC_AUTHORITY_VALIDATOR_AUDIENCE"
 
+  # If you IAM provider requires it, set also the scope for the token by uncommenting the follow and replacing OIDC_AUTHORITY_VALIDATOR_SCOPE with that scope
+  # scope: "OIDC_AUTHORITY_VALIDATOR_SCOPE"
+
   # replace OIDC_AUTHORITY_URL with your provider's OIDC URL
   jwksUrl: "https://OIDC_AUTHORITY_URL/.well-known/jwks.json"
 

@@ -2,13 +2,13 @@ package org.lfdecentralizedtrust.splice.integration
 
 import better.files.{File, Resource, *}
 import com.digitalasset.canton.admin.api.client.data.User
-import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.config.{
   ClockConfig,
   NonNegativeFiniteDuration,
   TestingConfigInternal,
 }
+import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.console.TestConsoleOutput
 import com.digitalasset.canton.environment.EnvironmentFactory
 import com.digitalasset.canton.integration.{
@@ -37,15 +37,15 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.{
-  SvCantonIdentifierConfig,
   SvAppBackendConfig,
+  SvCantonIdentifierConfig,
   SvSynchronizerNodeConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.CommonAppInstanceReferences
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorCantonIdentifierConfig
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Inside, Inspectors, OptionValues}
+import org.scalatest.matchers.should.Matchers
 
 /** Analogue to Canton's CommunityEnvironmentDefinition. */
 case class EnvironmentDefinition(
@@ -100,7 +100,8 @@ case class EnvironmentDefinition(
       .withMultiSyncFeatureFlag()
       .withTrafficTopupsEnabled
       .withInitialPackageVersions
-      .withProtocolVersion
+      .withProtocolVersion(ProtocolVersion.v35)
+      .withProtocolVersionFromEnv
       .withEagerAppActivityMarkerConversion
 
   def withAllocatedUsers(
@@ -176,17 +177,19 @@ case class EnvironmentDefinition(
         )(config),
     )
 
-  def withProtocolVersion: EnvironmentDefinition =
-    addConfigTransforms((_, config) => {
-      val protocolVersionO = sys.env.get("PROTOCOL_VERSION").filter(_ != "")
-      protocolVersionO.fold(config)(pv =>
-        ConfigTransforms.updateAllSvAppConfigs_(
-          updateAllSynchronizerNodeConfigs(
-            _.focus(_.protocolVersion).replace(ProtocolVersion.tryCreate(pv))
-          )
-        )(config)
-      )
-    })
+  def withProtocolVersionFromEnv: EnvironmentDefinition = {
+    val protocolVersionO = sys.env.get("PROTOCOL_VERSION").filter(_ != "")
+    protocolVersionO.fold(this)(pv => withProtocolVersion(ProtocolVersion.tryCreate(pv)))
+  }
+
+  def withProtocolVersion(protocolVersion: ProtocolVersion): EnvironmentDefinition =
+    addConfigTransforms((_, config) =>
+      ConfigTransforms.updateAllSvAppConfigs_(
+        updateAllSynchronizerNodeConfigs(
+          _.focus(_.protocolVersion).replace(protocolVersion)
+        )
+      )(config)
+    )
 
   def withInitializedNodes(): EnvironmentDefinition =
     copy(setup = implicit env => {

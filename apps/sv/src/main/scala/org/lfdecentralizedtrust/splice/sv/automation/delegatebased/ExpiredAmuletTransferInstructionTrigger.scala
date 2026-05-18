@@ -64,6 +64,7 @@ class ExpiredAmuletTransferInstructionTrigger(
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(
         allParties.toSeq,
+        Seq(store.key.dsoParty),
         clock.now,
       )
       res <-

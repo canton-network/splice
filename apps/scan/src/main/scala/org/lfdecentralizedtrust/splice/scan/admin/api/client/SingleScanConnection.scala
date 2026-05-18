@@ -31,7 +31,11 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
+  HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
+  HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
 }
@@ -152,6 +156,23 @@ class SingleScanConnection private[client] (
         ownerPartyIds,
         recordTimeMatch,
         asOfRound,
+      ),
+    )
+  }
+
+  override def getHoldingsSummaryAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId],
+      recordTimeMatch: Option[HoldingsSummaryRequestV1.RecordTimeMatch],
+  )(implicit tc: TraceContext): Future[Option[HoldingsSummaryResponseV1]] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetHoldingsSummaryAtV1(
+        at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        migrationId,
+        ownerPartyIds,
+        recordTimeMatch,
       ),
     )
   }
@@ -555,10 +576,11 @@ class SingleScanConnection private[client] (
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: Int,
+      pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Seq[DsoRules_CloseVoteRequestResult]] = runHttpCmd(
+  ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = runHttpCmd(
     config.adminApi.url,
     HttpScanAppClient.ListVoteRequestResults(
       actionName,
@@ -567,6 +589,7 @@ class SingleScanConnection private[client] (
       effectiveFrom,
       effectiveTo,
       limit,
+      pageToken,
     ),
   )
 
@@ -802,6 +825,24 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetActivePhysicalSynchronizerSerial(),
+    )
+
+  override def getRewardAccountingRootHash(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingRootHashResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingRootHash(roundNumber),
+    )
+
+  override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[GetRewardAccountingBatchResponse]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
     )
 }
 

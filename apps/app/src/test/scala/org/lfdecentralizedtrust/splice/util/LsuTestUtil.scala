@@ -23,7 +23,10 @@ trait LsuTestUtil extends SvTestUtil with TestCommon {
         topologyFreezeTime.toInstant,
         upgradeTime.toInstant,
         serial,
-        sv1Backend.config.localSynchronizerNodes.current.protocolVersion.toString,
+        sv1Backend.config.localSynchronizerNodes.successor
+          .map(_.protocolVersion)
+          .getOrElse(sv1Backend.config.localSynchronizerNodes.current.protocolVersion)
+          .toString,
       ),
     )
   }

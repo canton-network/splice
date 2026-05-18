@@ -14,7 +14,7 @@ import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class LogicalSynchronizerUpgradeSequencingTestTrigger(
+class LsuSequencingTestTrigger(
     svAppConfig: SvAppBackendConfig,
     baseContext: TriggerContext,
     currentSynchronizerNode: LocalSynchronizerNode,

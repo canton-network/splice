@@ -99,7 +99,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the Splitwell validator",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Splitwell UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.splitwell.mock.network.canton.global",
         "https://wallet.splitwell.mock.global.canton.network.digitalasset.com",
@@ -169,7 +184,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://cns.sv.mock.network.canton.global",
         "https://cns.sv.mock.global.canton.network.digitalasset.com"
@@ -209,7 +239,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the SV UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SV UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://sv.sv.mock.network.canton.global",
         "https://sv.sv.mock.global.canton.network.digitalasset.com"
@@ -249,7 +294,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the SV runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv.mock.network.canton.global",
         "https://wallet.sv.mock.global.canton.network.digitalasset.com"
@@ -823,6 +883,156 @@
               "number": 26426,
               "protocol": "TCP"
             }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-0-gw",
+              "number": 26506,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-1-gw",
+              "number": 26516,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-5-2-gw",
+              "number": 26526,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-0-gw",
+              "number": 26606,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-1-gw",
+              "number": 26616,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-6-2-gw",
+              "number": 26626,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-0-gw",
+              "number": 26706,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-1-gw",
+              "number": 26716,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-7-2-gw",
+              "number": 26726,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-0-gw",
+              "number": 26806,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-1-gw",
+              "number": 26816,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-8-2-gw",
+              "number": 26826,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-0-gw",
+              "number": 26906,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-1-gw",
+              "number": 26916,
+              "protocol": "TCP"
+            }
+          },
+          {
+            "hosts": [
+              "*"
+            ],
+            "port": {
+              "name": "cometbft-9-2-gw",
+              "number": 26926,
+              "protocol": "TCP"
+            }
           }
         ]
       }
@@ -1145,7 +1355,7 @@
           "istioNamespace": "cluster-ingress"
         }
       },
-      "version": "1.28.1"
+      "version": "1.29.2"
     },
     "name": "istio-base",
     "provider": "",
@@ -1315,6 +1525,96 @@
               "port": 26426,
               "protocol": "TCP",
               "targetPort": 26426
+            },
+            {
+              "name": "cometbft-5-0-gw",
+              "port": 26506,
+              "protocol": "TCP",
+              "targetPort": 26506
+            },
+            {
+              "name": "cometbft-5-1-gw",
+              "port": 26516,
+              "protocol": "TCP",
+              "targetPort": 26516
+            },
+            {
+              "name": "cometbft-5-2-gw",
+              "port": 26526,
+              "protocol": "TCP",
+              "targetPort": 26526
+            },
+            {
+              "name": "cometbft-6-0-gw",
+              "port": 26606,
+              "protocol": "TCP",
+              "targetPort": 26606
+            },
+            {
+              "name": "cometbft-6-1-gw",
+              "port": 26616,
+              "protocol": "TCP",
+              "targetPort": 26616
+            },
+            {
+              "name": "cometbft-6-2-gw",
+              "port": 26626,
+              "protocol": "TCP",
+              "targetPort": 26626
+            },
+            {
+              "name": "cometbft-7-0-gw",
+              "port": 26706,
+              "protocol": "TCP",
+              "targetPort": 26706
+            },
+            {
+              "name": "cometbft-7-1-gw",
+              "port": 26716,
+              "protocol": "TCP",
+              "targetPort": 26716
+            },
+            {
+              "name": "cometbft-7-2-gw",
+              "port": 26726,
+              "protocol": "TCP",
+              "targetPort": 26726
+            },
+            {
+              "name": "cometbft-8-0-gw",
+              "port": 26806,
+              "protocol": "TCP",
+              "targetPort": 26806
+            },
+            {
+              "name": "cometbft-8-1-gw",
+              "port": 26816,
+              "protocol": "TCP",
+              "targetPort": 26816
+            },
+            {
+              "name": "cometbft-8-2-gw",
+              "port": 26826,
+              "protocol": "TCP",
+              "targetPort": 26826
+            },
+            {
+              "name": "cometbft-9-0-gw",
+              "port": 26906,
+              "protocol": "TCP",
+              "targetPort": 26906
+            },
+            {
+              "name": "cometbft-9-1-gw",
+              "port": 26916,
+              "protocol": "TCP",
+              "targetPort": 26916
+            },
+            {
+              "name": "cometbft-9-2-gw",
+              "port": 26926,
+              "protocol": "TCP",
+              "targetPort": 26926
             }
           ]
         },
@@ -1326,7 +1626,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.29.2"
     },
     "name": "istio-ingress-cometbft",
     "provider": "",
@@ -1510,7 +1810,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.29.2"
     },
     "name": "istio-ingress",
     "provider": "",
@@ -1611,7 +1911,7 @@
           }
         ]
       },
-      "version": "1.28.1"
+      "version": "1.29.2"
     },
     "name": "istiod",
     "provider": "",
@@ -1924,11 +2224,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-1-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-1-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv-1.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -1947,7 +2247,7 @@
         }
       }
     },
-    "name": "sv-1-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-1-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -1958,11 +2258,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-1-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-1-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv-1.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -1981,7 +2281,7 @@
         }
       }
     },
-    "name": "sv-1-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-1-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2028,11 +2328,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-da-1-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-da-1-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv-da-1.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv-da-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2051,7 +2351,7 @@
         }
       }
     },
-    "name": "sv-da-1-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-da-1-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2062,11 +2362,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-da-1-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-da-1-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv-da-1.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv-da-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2085,7 +2385,7 @@
         }
       }
     },
-    "name": "sv-da-1-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-da-1-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2096,11 +2396,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-global-domain-3-sequencer-high-perf-grpc-rule",
+        "name": "sv-global-domain-10-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-3-sequencer.sv.svc.cluster.local",
+        "host": "global-domain-10-sequencer.sv.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2119,7 +2419,7 @@
         }
       }
     },
-    "name": "sv-global-domain-3-sequencer-high-perf-grpc-rule",
+    "name": "sv-global-domain-10-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2130,11 +2430,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-global-domain-4-sequencer-high-perf-grpc-rule",
+        "name": "sv-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-4-sequencer.sv.svc.cluster.local",
+        "host": "global-domain-9-sequencer.sv.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2153,7 +2453,7 @@
         }
       }
     },
-    "name": "sv-global-domain-4-sequencer-high-perf-grpc-rule",
+    "name": "sv-global-domain-9-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2251,7 +2551,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SV1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv-2.mock.network.canton.global",
         "https://wallet.sv-2.mock.global.canton.network.digitalasset.com",
@@ -2411,7 +2726,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and SV UIs for SV sv-da-1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "SVDA1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.sv-1.mock.network.canton.global",
         "https://wallet.sv-1.mock.global.canton.network.digitalasset.com",
@@ -2539,7 +2869,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet, ANS and Splitwell UIs for the standalone Validator1",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Validator1 UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.validator1.mock.network.canton.global",
         "https://wallet.validator1.mock.global.canton.network.digitalasset.com",
@@ -2589,7 +2934,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the ANS UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "ANS UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://cns.validator.mock.network.canton.global",
         "https://cns.validator.mock.global.canton.network.digitalasset.com",
@@ -2637,7 +2997,22 @@
       ],
       "crossOriginAuth": false,
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet UI for the validator runbook",
+      "grantTypes": [
+        "authorization_code",
+        "implicit",
+        "refresh_token"
+      ],
       "name": "Wallet UI (Pulumi managed, test-stack)",
+      "oidcConformant": true,
+      "refreshToken": {
+        "expirationType": "expiring",
+        "idleTokenLifetime": 259200,
+        "infiniteIdleTokenLifetime": false,
+        "infiniteTokenLifetime": false,
+        "leeway": 5,
+        "rotationType": "rotating",
+        "tokenLifetime": 604800
+      },
       "webOrigins": [
         "https://wallet.validator.mock.network.canton.global",
         "https://wallet.validator.mock.global.canton.network.digitalasset.com",

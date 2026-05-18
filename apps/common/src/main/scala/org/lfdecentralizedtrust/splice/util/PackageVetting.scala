@@ -43,6 +43,14 @@ class PackageVetting(
   )(implicit tc: TraceContext): Future[Unit] = {
     val schedule = AmuletConfigSchedule(amuletRules)
     val currentPackageConfig = schedule.getConfigAsOf(clock.now).packageConfig
+    vetCurrentPackages(domainId, currentPackageConfig, additionalPackagesToUnvet)
+  }
+
+  def vetCurrentPackages(
+      domainId: SynchronizerId,
+      currentPackageConfig: PackageConfig,
+      additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
+  )(implicit tc: TraceContext): Future[Unit] = {
     val currentRequiredPackages =
       packages.map(pkg => pkg -> PackageIdResolver.readPackageVersion(currentPackageConfig, pkg))
     val packagesToVet = currentRequiredPackages.toSeq.flatMap { case (pkg, packageVersion) =>

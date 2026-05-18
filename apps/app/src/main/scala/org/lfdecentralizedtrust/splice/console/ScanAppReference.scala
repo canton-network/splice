@@ -385,7 +385,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 activity totals for a specific round")
   def getRewardAccountingActivityTotals(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingActivityTotalsResponse] =
+  ): definitions.GetRewardAccountingActivityTotalsResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber))
     }
@@ -393,7 +393,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 root hash for a specific round")
   def getRewardAccountingRootHash(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingRootHashResponse] =
+  ): definitions.GetRewardAccountingRootHashResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingRootHash(roundNumber))
     }
@@ -578,6 +578,25 @@ abstract class ScanAppReference(
           ownerPartyIds,
           recordTimeMatch,
           asOfRound,
+        )
+      )
+    }
+
+  def getHoldingsSummaryAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId] = Vector.empty,
+      recordTimeMatch: Option[definitions.HoldingsSummaryRequestV1.RecordTimeMatch] = Some(
+        definitions.HoldingsSummaryRequestV1.RecordTimeMatch.Exact
+      ),
+  ) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetHoldingsSummaryAtV1(
+          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          migrationId,
+          ownerPartyIds,
+          recordTimeMatch,
         )
       )
     }
@@ -828,7 +847,8 @@ abstract class ScanAppReference(
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ): Seq[DsoRules_CloseVoteRequestResult] = {
+      pageToken: Option[BigInt] = None,
+  ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.ListVoteRequestResults(
@@ -838,6 +858,7 @@ abstract class ScanAppReference(
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         )
       )
     }

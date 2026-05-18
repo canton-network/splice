@@ -12,7 +12,7 @@ import com.digitalasset.canton.admin.api.client.commands.{
   SequencerConnectionAdminCommands,
 }
 import com.digitalasset.canton.admin.api.client.data.{MediatorStatus, NodeStatus}
-import com.digitalasset.canton.config.{ApiLoggingConfig, ClientConfig}
+import com.digitalasset.canton.config.{ApiLoggingConfig, FullClientConfig}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.mediator.admin.v30.MediatorAdministrationServiceGrpc
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -33,7 +33,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
   * on in our own applications.
   */
 class MediatorAdminConnection(
-    config: ClientConfig,
+    val config: FullClientConfig,
     apiLoggingConfig: ApiLoggingConfig,
     loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,

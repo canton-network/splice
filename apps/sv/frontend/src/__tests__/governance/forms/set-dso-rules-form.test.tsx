@@ -8,7 +8,7 @@ import {
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { SetDsoConfigRulesForm } from '../../../components/forms/SetDsoConfigRulesForm';
@@ -51,7 +51,9 @@ describe('Set DSO Config Rules Form', () => {
 
     const actionInput = screen.getByTestId('set-dso-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Set Dso Rules Configuration');
+    expect(actionInput.getAttribute('value')).toBe(
+      'Set Decentralized Synchronizer Operations (DSO) Rules Configuration'
+    );
 
     const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -266,8 +268,8 @@ describe('Set DSO Config Rules Form', () => {
 
   test('should show error on form if submission fails', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.status(503), ctx.json({ error: 'Service Unavailable' }));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
       })
     );
 
@@ -311,8 +313,8 @@ describe('Set DSO Config Rules Form', () => {
 
   test('should redirect to governance page after successful submission', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({});
       })
     );
 
