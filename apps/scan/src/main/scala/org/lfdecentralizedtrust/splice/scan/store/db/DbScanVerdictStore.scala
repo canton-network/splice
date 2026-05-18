@@ -493,14 +493,10 @@ class DbScanVerdictStore(
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
       _ <- insertAppActivityRecordsDBIO(
-        resolvedAppActivityRecords, {
-          if (appActivityRecords.nonEmpty) {
-            val ts = items.headOption.fold(0L)(_._1.recordTime.toMicros)
-            val earliestRound =
-              appActivityRecords.map(_._2.roundNumber).foldLeft(Long.MaxValue)(math.min)
-            Some((ts, earliestRound))
-          } else None
-        },
+        resolvedAppActivityRecords,
+        if (appActivityRecords.nonEmpty)
+          Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
+        else None,
       )
     } yield ()
 
@@ -546,11 +542,11 @@ class DbScanVerdictStore(
 
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      ingestionStart: => Option[(Long, Long)],
+      firstRecordTimeMicros: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items, ingestionStart)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros)
     }
 
   private def afterFilters(
