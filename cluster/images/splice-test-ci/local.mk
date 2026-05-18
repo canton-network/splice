@@ -8,7 +8,7 @@ rpc-source := ${SPLICE_ROOT}/.github/runners/runner-container-hooks/packages/k8s
 
 $(dir)/$(docker-build): $(dir)/target/LICENSE $(rpc-script)
 
-$(dir)/target/LICENSE: ${SPLICE_ROOT}/cluster/images/LICENSE | $(dir)/target
+$(dir)/target/LICENSE: ${SPLICE_ROOT}/LICENSE | $(dir)/target
 	cp $< $@
 
 $(rpc-script): $(rpc-source) | $(dir)/target

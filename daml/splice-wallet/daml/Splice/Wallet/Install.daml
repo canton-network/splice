@@ -680,7 +680,7 @@ template WalletAppInstall
       controller validatorParty
       do
         TokenStandard.Utils.checkActors allocateArg.actors [[endUserParty]]
-        checkAllocationSpecificationV2 dsoParty allocateArg.allocation endUserParty
+        checkAllocationSpecificationV2 allocateArg.allocation endUserParty
         forA_ allocationReqCid $ \reqCid -> do
           req <- fetchUncheckedButArchiveLater reqCid
           TokenStandard.Utils.requireMatchExpected
@@ -690,7 +690,7 @@ template WalletAppInstall
             extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
         exercise allocationFactory allocateArg
 
-    nonconsuming choice WalletAppInstall_AllocationV2_Withdraw : Splice.Api.Token.AllocationV2.Allocation_WithdrawResult
+    nonconsuming choice WalletAppInstall_AllocationV2_Withdraw : Splice.Api.Token.AllocationV2.AllocationResult
       with
         allocationCid : ContractId Splice.Api.Token.AllocationV2.Allocation
         withdrawArg : Splice.Api.Token.AllocationV2.Allocation_Withdraw
@@ -698,8 +698,30 @@ template WalletAppInstall
       do
         TokenStandard.Utils.checkActors withdrawArg.actors [[endUserParty]]
         allocation <- fetchCheckedInterface (ForDso dsoParty) allocationCid
-        checkAllocationSpecificationV2 dsoParty (view allocation).allocation endUserParty
+        checkAllocationSpecificationV2 (view allocation).allocation endUserParty
         exercise allocationCid withdrawArg
+
+    nonconsuming choice WalletAppInstall_AllocationInstructionV2_Accept : Splice.Api.Token.AllocationInstructionV2.AllocationInstructionResult
+      with
+        allocationInstructionCid : ContractId Splice.Api.Token.AllocationInstructionV2.AllocationInstruction
+        acceptArg : Splice.Api.Token.AllocationInstructionV2.AllocationInstruction_Accept
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors acceptArg.actors [[endUserParty]]
+        allocationInstruction <- fetchCheckedInterface (ForDso dsoParty) allocationInstructionCid
+        checkAllocationSpecificationV2 (view allocationInstruction).allocation endUserParty
+        exercise allocationInstructionCid acceptArg
+
+    nonconsuming choice WalletAppInstall_AllocationInstructionV2_Withdraw : Splice.Api.Token.AllocationInstructionV2.AllocationInstructionResult
+      with
+        allocationInstructionCid : ContractId Splice.Api.Token.AllocationInstructionV2.AllocationInstruction
+        withdrawArg : Splice.Api.Token.AllocationInstructionV2.AllocationInstruction_Withdraw
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors withdrawArg.actors [[endUserParty]]
+        allocationInstruction <- fetchCheckedInterface (ForDso dsoParty) allocationInstructionCid
+        checkAllocationSpecificationV2 (view allocationInstruction).allocation endUserParty
+        exercise allocationInstructionCid withdrawArg
 
 
 checkTransferInstructionV2 : Party -> ContractId Splice.Api.Token.TransferInstructionV2.TransferInstruction -> [Party] -> Party -> Update ()
@@ -709,12 +731,11 @@ checkTransferInstructionV2 dsoParty transferInstructionCid actors endUserParty =
   TokenStandard.Utils.requireMatchExpected
     ("instruction.transfer.instrumentId", (view instruction).transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
 
-checkAllocationSpecificationV2 : Party -> Splice.Api.Token.AllocationV2.AllocationSpecification -> Party -> Update ()
-checkAllocationSpecificationV2 dsoParty allocation endUserParty = do
+checkAllocationSpecificationV2 : Splice.Api.Token.AllocationV2.AllocationSpecification -> Party -> Update ()
+checkAllocationSpecificationV2 allocation endUserParty = do
   TokenStandard.Utils.requireMatchExpected ("allocation.authorizer", allocation.authorizer) (TokenStandard.Utils.basicAccount endUserParty)
-  let amuletId = amuletInstrumentIdV2 dsoParty
-  forA_ allocation.transferLegs $ \leg -> do
-    TokenStandard.Utils.requireMatchExpected (leg.transferLegId <> ".instrumentId", leg.instrumentId) amuletId
+  forA_ allocation.transferLegSides $ \leg -> do
+    TokenStandard.Utils.requireMatchExpected (leg.transferLegId <> ".instrumentId", leg.instrumentId) amuletInstrumentIdName
 
 unpackCid : AnyValue -> AnyContractId
 unpackCid (AV_ContractId cid) = cid

@@ -7,9 +7,14 @@ module Splice.TokenStandard.Utils (
   -- * Utilities for both allocation and transfer workflows
 
   -- ** Accounts
+  accountPrincipal,
+  accountParties,
+  isRegularAccount,
+  regularAccountParties,
+  regularAccountOwner,
+
   basicAccount,
   isBasicAccount,
-  accountParties,
 
   ensureBasicAccount,
   ensureNoAccountMeta,
@@ -31,6 +36,8 @@ module Splice.TokenStandard.Utils (
   requireMatchExpected,
   requireUnique,
 
+  expectOneElement,
+
   -- ** Actors pattern
   checkActor,
   checkActors,
@@ -50,6 +57,10 @@ module Splice.TokenStandard.Utils (
   reasonFromMeta,
   reasonToMeta,
   mkMetaTransferFrom,
+
+  -- * Missing Time utilities
+  -- TODO(#4865): upstream these to the Daml stdlib
+  maxTime,
 
   -- * Missing TextMap utilities
 
@@ -72,23 +83,27 @@ module Splice.TokenStandard.Utils (
   burnAccount,
   mintAccount,
 
-  allocationToTransferEventLeg,
-
   logMint,
   logBurn,
-  logNonEmptyChange,
+  logHoldingsChange,
   logMergeSplit,
   logTransfer,
   logAllocationSettlement,
 
+
   -- * Allocation workflows
 
   -- ** Utilities for allocations
-  allocationAdmin,
+
   netAllocationCreditAmounts,
-  filterLegsForAccount,
-  splitLegsByAdmin,
-  splitLegsByAuthorizer,
+  requestedAllocationToSpecification,
+  nonIteratedAllocation,
+
+  -- *** Working with transfer legs and their sides
+  senderSide,
+  receiverSide,
+  transferLegFromSide,
+  transferLegSidesWithAuthorizer,
 
   -- *** Auto-creation of receipt allocations
   ensureIsReceiptAllocation,
@@ -108,11 +123,16 @@ module Splice.TokenStandard.Utils (
 
   -- ** Non-standard conversions
   upcast_v1_v2_TransferLeg,
+  downcast_v2_v1_TransferLeg,
+  downcast_v2_v1_SettlementInfo,
   upcast_v1_v2_Allocation,
 
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImplUsingV1,
+
+  ensureWithdrawIsAllowed,
+  mkCannotWithdrawCommittedAllocationFailure,
 
   -- ** Settlement factory implementation
   settlementFactoryV2_settleBatchDefaultImpl,

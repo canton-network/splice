@@ -6,7 +6,6 @@ import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.http.v0.definitions.AllocationInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -31,8 +30,6 @@ class AmuletAllocationsIntegrationTest
       .simpleTopology1Sv(this.getClass.getSimpleName)
   }
 
-  private val someMetadata = new Metadata(java.util.Map.of("k1", "v1", "k2", "v2"))
-
   private def createAllocationV1(sender: PartyId)(implicit
       ev: SpliceTestConsoleEnvironment
   ) = {
@@ -48,7 +45,7 @@ class AmuletAllocationsIntegrationTest
         requestedAt.toInstant,
         allocateBefore.toInstant,
         settleBefore.toInstant,
-        someMetadata,
+        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
       "some_transfer_leg_id",
       new allocationv1.TransferLeg(
@@ -56,7 +53,7 @@ class AmuletAllocationsIntegrationTest
         receiver.toProtoPrimitive,
         BigDecimal(12).bigDecimal.setScale(10),
         new holdingv1.InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
-        someMetadata,
+        new Metadata(java.util.Map.of("k3", "v3")),
       ),
     )
 
@@ -68,34 +65,37 @@ class AmuletAllocationsIntegrationTest
       ev: SpliceTestConsoleEnvironment
   ) = {
     val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
-    val receiver = validatorPartyId
     val now = CantonTimestamp.now()
-    val allocateBefore = now.plusSeconds(3600)
     val settlementDeadline = now.plusSeconds(3600 * 2)
 
-    def wantedAllocationV2(requestedAt: CantonTimestamp) = new allocationv2.AllocationSpecification(
+    def wantedAllocationV2() = new allocationv2.AllocationSpecification(
       new allocationv2.SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
         new allocationv2.Reference("some_reference", Optional.empty),
-        requestedAt.toInstant,
-        allocateBefore.toInstant,
         java.util.Optional.of(settlementDeadline.toInstant),
-        someMetadata,
+        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
+      dsoParty.toProtoPrimitive,
+      basicAccount(sender),
       java.util.List.of(
-        new allocationv2.TransferLeg(
-          "some_transfer_leg",
-          basicAccount(sender),
-          basicAccount(receiver),
-          BigDecimal(12).bigDecimal.setScale(10),
-          new holdingv2.InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
-          someMetadata,
+        transferLegSideForAuthorizer(
+          sender,
+          new allocationv2.TransferLeg(
+            "some_transfer_leg",
+            basicAccount(sender),
+            basicAccount(validatorPartyId),
+            BigDecimal(12).bigDecimal.setScale(10),
+            amuletInstrumentIdName,
+            new Metadata(java.util.Map.of("k3", "v3")),
+          ),
         )
       ),
-      basicAccount(sender),
+      java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+      false,
+      new Metadata(java.util.Map.of("k4", "v4")),
     )
 
-    val specification = wantedAllocationV2(now)
+    val specification = wantedAllocationV2()
     specification -> aliceWalletClient.allocateAmulet(specification)
   }
 

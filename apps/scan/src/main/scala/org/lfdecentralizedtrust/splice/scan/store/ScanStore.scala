@@ -521,7 +521,7 @@ object ScanStore {
           )
         },
         mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(co =>
-          co.payload.allocation.transferLegs.asScala.exists(_.instrumentId.admin == dso)
+          co.payload.allocation.admin == dso
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract,

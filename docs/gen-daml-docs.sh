@@ -15,7 +15,8 @@ gen_project_docs () (
     dpm docs --index-template "$DOCS_DIR/api-templates/$2-index-template.rst" "${DAML_FILES[@]}" --exclude-modules '**.Scripts.**' -f rst -o "$DOCS_DIR/src/app_dev/api/$2"
     # Workaround for https://github.com/digital-asset/daml/pull/20889/files so we get toctrees again
     # shellcheck disable=SC2016
-    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst' -exec sed -i 's/^* :doc:`\(.*\)`$/   \1/g' {} +
+    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst' -exec sed -i.bak -e 's/^\* :doc:`\(.*\)`$/   \1/g' {} +
+    find "$DOCS_DIR/src/app_dev/api/$2" -name '*.rst.bak' -delete
 )
 
 # We explicitly exclude from the generated docs API packages that were released and must remain stable (thus are also not compiled any more)
@@ -35,7 +36,7 @@ NON_COMPILED_DAML_PROJECTS=(
 DAML_PROJECT_FILES="\
   $(find "$SPLICE_ROOT/daml" "$SPLICE_ROOT/token-standard" "$SPLICE_ROOT/token-standard/examples" -maxdepth 2 \
     \( -name target -o -name .daml -o -name src \) -prune -o -name daml.yaml \
-    -not \( -ipath '*-test*' -not -ipath '*splice-token-standard-test-v1*' -not -ipath '*test-trading-app*' \)  \
+    -not \( -ipath '*-test*' -not -ipath '*splice-token-standard-v1-test*' -not -ipath '*test-trading-app*' \)  \
     -not -ipath '*splitwell*' \
     -not -ipath '*app-manager*' \
     -not -ipath '*dummy-holding*' \

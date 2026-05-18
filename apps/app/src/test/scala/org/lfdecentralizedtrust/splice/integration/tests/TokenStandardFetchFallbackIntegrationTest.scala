@@ -5,10 +5,6 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationv2, metadatav1}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2.{
-  Account as AccountV2,
-  InstrumentId as InstrumentIdV2,
-}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -28,6 +24,7 @@ class TokenStandardFetchFallbackIntegrationTest
     with WalletTestUtil
     with WalletTxLogTestUtil
     with TriggerTestUtil
+    with TokenStandardV2TestUtil
     with HasActorSystem
     with HasExecutionContext {
 
@@ -149,22 +146,27 @@ class TokenStandardFetchFallbackIntegrationTest
                 new allocationv2.SettlementInfo(
                   java.util.List.of(dsoParty.toProtoPrimitive),
                   new allocationv2.Reference(referenceIdV2, Optional.empty),
-                  Instant.now,
-                  Instant.now.plusSeconds(3600L),
                   Optional.of(Instant.now.plusSeconds(2 * 3600L)),
                   new metadatav1.Metadata(java.util.Map.of()),
                 ),
+                dsoParty.toProtoPrimitive,
+                basicAccount(aliceParty),
                 java.util.List.of(
-                  new allocationv2.TransferLeg(
-                    UUID.randomUUID().toString,
-                    new AccountV2(aliceParty.toProtoPrimitive, Optional.empty(), ""),
-                    new AccountV2(bobParty.toProtoPrimitive, Optional.empty(), ""),
-                    BigDecimal(10).bigDecimal,
-                    new InstrumentIdV2(dsoParty.toProtoPrimitive, "Amulet"),
-                    new metadatav1.Metadata(java.util.Map.of()),
+                  transferLegSideForAuthorizer(
+                    aliceParty,
+                    new allocationv2.TransferLeg(
+                      UUID.randomUUID().toString,
+                      basicAccount(aliceParty),
+                      basicAccount(bobParty),
+                      BigDecimal(10).bigDecimal,
+                      amuletInstrumentIdName,
+                      new metadatav1.Metadata(java.util.Map.of()),
+                    ),
                   )
                 ),
-                new AccountV2(aliceParty.toProtoPrimitive, Optional.empty(), ""),
+                java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+                false,
+                new metadatav1.Metadata(java.util.Map.of()),
               )
             ),
           )(

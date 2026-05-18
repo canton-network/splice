@@ -1,0 +1,936 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Daml script test utilities for simulating the actions of token standard V2 wallet.
+--
+-- NOTE: there are likely more functions that could/should be added to this module. PRs welcome.
+module Splice.Testing.TokenStandard.WalletClientV2
+  (
+    -- * Reading/checking holdings
+    listHoldings,
+    listVisibleHoldings,
+    listHoldingCids,
+    listLockedHoldings,
+    listUnlockedHoldingCidsFor,
+
+    checkHoldingWithAmountExists,
+    checkUnlockedBalance,
+    checkBalanceBounds,
+    checkBalance,
+    checkAccountBalance,
+    checkBalanceApprox,
+    checkHolding,
+    checkHoldingBounds,
+    checkHoldingApprox,
+
+    getAccountBalance,
+
+    -- * Managing transfer offers
+    listTransferOffers,
+    listTransferOffersV2,
+
+    transfer,
+    acceptTransferOffer,
+    rejectTransferOffer,
+    withdrawTransferOffer,
+
+    -- * Managing allocations
+    listRequestedAllocationsForAdmin,
+    listAllocationInstructionsV2,
+    listAllocationRequestsV2,
+    listAllocationsV2,
+
+    listAllocationRequestsV1,
+
+    acceptAllocationRequestV1,
+    acceptAllocationRequestV2,
+
+    acceptAllocationInstructionV2,
+    withdrawAllocationInstructionV2,
+
+    withdrawAllocationV2,
+
+    -- * Batching utility usage
+    TSABatch(..),
+    executeTSABatch,
+
+    createBatchingUtility,
+
+    -- ** Allocations
+    extractNextIterationAllocationCid,
+
+    mkAllocationFactory_AllocateV1,
+    mkAllocationFactory_AllocateV2,
+    mkAllocationRequest_AcceptV2,
+    mkAcceptAllocationRequestV1,
+    mkAcceptAllocationRequestV2,
+
+    -- ** Transfers
+    mkTransferFactory_TransferV1,
+    mkTransferInstruction_AcceptV1,
+    mkTransferFactory_TransferV2,
+    mkTransferInstruction_AcceptV2,
+
+    mkAcceptTransferOffer,
+
+    -- *** Transfer test utility
+
+    SimpleTransfer(..),
+    mkTransferFactory_TransferV1',
+    mkTransferFactory_TransferV2',
+
+    -- * Tx history V2 checking utilities
+    submitAndCheckTxHistory,
+    extractAndCheckTxHistory,
+    expectTxHistoryReasons,
+  ) where
+
+import DA.Action (unless, when)
+import DA.Foldable (forA_)
+import DA.List (dedupSort, dedupOn, sort, unique)
+import DA.Map qualified as Map
+import DA.Optional
+import DA.Time
+import DA.Text qualified as T
+import DA.TextMap qualified as TextMap
+import DA.Set qualified as Set
+
+import Splice.Api.Token.MetadataV1 as MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.AllocationInstructionV1 qualified as V1
+import Splice.Api.Token.AllocationRequestV1 qualified as V1
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationRequestV2 qualified as V2
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
+
+import Splice.TokenStandard.Utils qualified as TSU
+import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
+
+import Splice.Testing.TokenStandard.RegistryApi qualified as V1
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.WalletClient qualified as WalletClientV1
+import Splice.Testing.Utils
+
+import Daml.Script
+
+-- | List all holdings of a specific instrument owned by a party.
+listHoldings : Party -> V2.InstrumentId -> Script [(ContractId V2.Holding, V2.HoldingView)]
+listHoldings p instrumentId = do
+  filter (\(_, holding) -> holding.instrumentId == instrumentId && holding.account.owner == Some p) <$> listVisibleHoldings p
+
+-- | List the holdings visible to a party.
+listVisibleHoldings : Party -> Script [(ContractId V2.Holding, V2.HoldingView)]
+listVisibleHoldings p = do
+  holdingsV2 <- queryInterface @V2.Holding p
+  let instrumentHoldingsV2 = Map.fromList $ do
+        (cid, Some holding) <- holdingsV2
+        pure (cid, holding)
+  -- enrich with V1 only holdings
+  holdingsV1 <- queryInterface @V1.Holding p
+  let instrumentHoldingsV1 = do
+        (cidV1, Some holding) <- holdingsV1
+        let cid = TSU.upcast cidV1
+        guard (not $ Map.member cid instrumentHoldingsV2)
+        pure (cid, TSU.upcast holding)
+  pure $ instrumentHoldingsV1 ++ Map.toList instrumentHoldingsV2
+
+listLockedHoldings : Party -> V2.InstrumentId -> Script [(ContractId V2.Holding, V2.HoldingView)]
+listLockedHoldings p instrumentId =
+  filter (\(_, holding) -> isSome (holding.lock)) <$> listHoldings p instrumentId
+
+-- | List the cids of an instrument's holdings owned by a party.
+listHoldingCids : Party -> V2.InstrumentId -> Script [ContractId V2.Holding]
+listHoldingCids p instrumentId = (map fst) <$> listHoldings p instrumentId
+
+listUnlockedHoldingCidsFor : V2.Account -> Party -> V2.InstrumentId -> Script [ContractId V2.Holding]
+listUnlockedHoldingCidsFor account actor instrumentId = do
+  holdings <- listVisibleHoldings actor
+  pure [cid | (cid, holding) <- holdings, holding.instrumentId == instrumentId, holding.account == account, isNone holding.lock]
+
+-- | Check that a holding with a specific amount exists for the given owner.
+checkHoldingWithAmountExists : Party -> V2.InstrumentId -> Decimal -> Script ()
+checkHoldingWithAmountExists p instrumentId amount = do
+  holdings <- map snd <$> listHoldings p instrumentId
+  unless (any (\holding -> holding.amount == amount) holdings) $
+    fail (show p <> " is missing holding of value " <> show amount <> " in " <> show holdings)
+
+-- | Check the bounds on a party's total balance of all holdings of the given instrument.
+checkBalanceBounds : Party -> V2.InstrumentId -> (Decimal, Decimal) -> Script ()
+checkBalanceBounds p instrumentId (lb, ub) = do
+  holdings <- listHoldings p instrumentId
+  let total = sum $ map (._2.amount) holdings
+  unless (total >= lb && total <= ub) $ fail $
+    "Wallet " <> show p <> ": balance of " <> show total <> " for " <> show instrumentId <>
+    " is not within the expected range [" <> show lb <> ", " <> show ub <> "]"
+
+-- | Check the exact value of an individual holding's amount.
+checkHolding : Party -> ContractId V2.Holding -> Decimal -> Script ()
+checkHolding p holdingCid amount = checkHoldingBounds p holdingCid (amount, amount)
+
+-- | Check the bounds on an individual holding's amount.
+checkHoldingBounds : Party -> ContractId V2.Holding -> (Decimal, Decimal) -> Script ()
+checkHoldingBounds p holdingCid (lb, ub) = do
+  holdingO <- queryInterfaceContractId p holdingCid
+  let holding = case holdingO of
+        None -> error $ "Holding " <> show holdingCid <> " was not found"
+        Some holding -> holding
+  unless (holding.amount >= lb && holding.amount <= ub) $ fail $
+    "Holding " <> show holding <>
+    " is not within the expected range [" <> show lb <> ", " <> show ub <> "]"
+
+-- | Check the approximate value (+/- 1.0) a party's total balance of all holdings of the given instrument.
+checkBalanceApprox : Party -> V2.InstrumentId -> Decimal -> Script ()
+checkBalanceApprox p instrumentId approximateBalance =
+  checkBalanceBounds p instrumentId (approximateBalance - 1.0, approximateBalance + 1.0)
+
+-- | Check the approximate (+/- 1.0) amount of an individual holding.
+checkHoldingApprox : Party -> ContractId V2.Holding -> Decimal -> Script ()
+checkHoldingApprox p holdingCid approximateAmount = checkHoldingBounds p holdingCid (approximateAmount - 1.0, approximateAmount + 1.0)
+
+-- | Check the exact value a party's total balance of all holdings of the given instrument.
+checkBalance : Party -> V2.InstrumentId -> Decimal -> Script ()
+checkBalance p instrumentId balance =
+  checkBalanceBounds p instrumentId (balance, balance)
+
+checkAccountBalance : Party -> V2.Account -> V2.InstrumentId -> Decimal -> Script ()
+checkAccountBalance actor account instrumentId balance = do
+  totalAmount <- getAccountBalance actor account instrumentId
+  unless (totalAmount == balance) $ fail $ T.unlines
+    [ "Unexpected account balance:"
+    , "Account: " <> show account
+    , "Instrument: " <> show instrumentId
+    , "Expected balance: " <> show balance
+    , "Actual balance: " <> show totalAmount
+    ]
+
+getAccountBalance : Party -> V2.Account -> V2.InstrumentId -> Script Decimal
+getAccountBalance actor account instrumentId = do
+  holdings <- listVisibleHoldings actor
+  return . sum $ do
+    (_, holding) <- holdings
+    guard (holding.account == account && holding.instrumentId == instrumentId)
+    pure holding.amount
+
+checkUnlockedBalance : Party -> V2.InstrumentId -> Decimal -> Script ()
+checkUnlockedBalance p instrumentId balance = do
+  holdings <- listHoldings p instrumentId
+  let unlockedHoldings = filter (\(_, holding) -> isNone holding.lock) holdings
+  let total = sum $ map (._2.amount) unlockedHoldings
+  unless (total == balance) $ fail $ T.unlines [
+    "Wallet " <> show p <> ": unlocked balance of " <> show total <> " for " <> show instrumentId <>
+    " does not match the expected balance of " <> show balance,
+    "All holdings: " <> show holdings,
+    "Unlocked holdings: " <> show unlockedHoldings ]
+
+
+-- Transfer offers
+------------------
+
+-- | List pending V2 transfer offers (as sender or receiver)
+listTransferOffersV2 : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.TransferInstructionView)]
+listTransferOffersV2 p instrumentId = do
+  instrs <- queryInterface @V2.TransferInstruction p
+  let pendingOffers = do
+        (cid, Some instr) <- instrs
+        guard (instr.transfer.instrumentId == instrumentId)
+        guard (any ([p] `elem`) (Map.values instr.availableActions))
+        pure (cid, instr)
+  pure pendingOffers
+
+-- | List pending transfer offers.
+listTransferOffers : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.Transfer)]
+listTransferOffers p instrumentId = do
+  offersV2 <- listTransferOffersV2 p instrumentId
+  offersV1 <- WalletClientV1.listTransferOffers p (TSU.downcast instrumentId)
+  let adjustedOffersV2 = do
+        (cid, instrView) <- offersV2
+        pure (cid, instrView.transfer)
+  let trimmedOffersV1 = do
+        (cidV1, instrView) <- offersV1
+        let cid = TSU.upcast cidV1
+        guard (all (\(cidV2, _) -> cidV2 /= cid) offersV2) -- filter out any offers that also exist in V2
+        pure (cid, TSU.upcast instrView.transfer)
+  pure (adjustedOffersV2 <> trimmedOffersV1)
+
+
+transfer : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
+transfer registries actor transferArg = do
+  batch <- mkTransferFactory_TransferV2 registries transferArg
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
+
+acceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+acceptTransferOffer registries actor instrCid = do
+  batch <- mkTransferInstruction_AcceptV2 registries actor instrCid
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
+
+-- TODO(#5303): Switch to batching
+rejectTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+rejectTransferOffer registries actor instrCid = do
+  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
+  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
+  context <- V2.getTransferInstruction_RejectContext registry instrCid emptyMetadata
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
+    exerciseCmd instrCid
+      V2.TransferInstruction_Reject with
+        actors = [actor]
+        extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+  return $ case res.output of
+    V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
+    _ -> None
+
+-- TODO(#5303): Switch to batching
+withdrawTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+withdrawTransferOffer registries actor instrCid = do
+  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
+  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
+  context <- V2.getTransferInstruction_WithdrawContext registry instrCid emptyMetadata
+  (res, _changes) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
+    exerciseCmd instrCid
+      V2.TransferInstruction_Withdraw with
+        actors = [actor]
+        extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+  return $ case res.output of
+    V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
+    _ -> None
+
+extractPendingTransferInstructionV2 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V2.TransferInstruction)
+extractPendingTransferInstructionV2 (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) =
+  case result.output of
+    V2.TransferInstructionResult_Pending instrCid -> Some instrCid
+    _ -> None
+extractPendingTransferInstructionV2 result = error $ "Expected a TransferInstructionResultV2, but got: " <> show result
+
+
+-- Allocations
+--------------
+
+-- | List all allocations requested from the account for instruments by the admin.
+listRequestedAllocationsForAdmin : Party -> V2.Account -> Party -> Script [V2.AllocationSpecification]
+listRequestedAllocationsForAdmin admin tradingAccount actor = do
+  reqs <- queryInterface @V2.AllocationRequest actor
+  let allocSpecs = do
+        (_reqCid, Some req) <- reqs
+        guard (req.authorizer == tradingAccount)
+        alloc <- req.allocations
+        guard (alloc.admin == admin)
+        pure $ TSU.requestedAllocationToSpecification req.settlement req.authorizer alloc
+  pure allocSpecs
+
+listAllocationsV2 : V2.Account -> Party -> Script [(ContractId V2.Allocation, V2.AllocationView)]
+listAllocationsV2 tradingAccount actor = do
+  allocs <- queryInterface @V2.Allocation actor
+  pure [ (allocCid, allocView) | (allocCid, Some allocView) <- allocs, tradingAccount == allocView.allocation.authorizer ]
+
+listAllocationInstructionsV2 : V2.Account -> Party -> Script [(ContractId V2.AllocationInstruction, V2.AllocationInstructionView)]
+listAllocationInstructionsV2 tradingAccount actor = do
+  instrs <- queryInterface @V2.AllocationInstruction actor
+  pure [ (instrCid, instrView) | (instrCid, Some instrView) <- instrs, tradingAccount == instrView.allocation.authorizer ]
+
+listAllocationRequestsV1 : Party -> Script [(ContractId V1.AllocationRequest, V1.AllocationRequestView)]
+listAllocationRequestsV1 actor = do
+  reqs <- queryInterface @V1.AllocationRequest actor
+  return [(reqCid, reqView) | (reqCid, Some reqView) <- reqs]
+
+listAllocationRequestsV2 : V2.Account -> Party -> Script [(ContractId V2.AllocationRequest, V2.AllocationRequestView)]
+listAllocationRequestsV2 tradingAccount actor = do
+  reqs <- queryInterface @V2.AllocationRequest actor
+  return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, tradingAccount == reqView.authorizer ]
+
+extractNextIterationAllocationCid : V2.AllocationResult -> Optional (ContractId V2.Allocation)
+extractNextIterationAllocationCid allocResult =
+  case allocResult.output of
+    V2.AllocationResult_Settled with nextIterationAllocationCid -> nextIterationAllocationCid
+    _ -> None
+
+-- | Simulate a V2 wallet accepting an allocation request from a V1 app.
+acceptAllocationRequestV1
+  :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView
+  -> Script (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, [TransferEventsV2.EventLog_HoldingsChange])
+acceptAllocationRequestV1 registries actor req = do
+  batch <- mkAcceptAllocationRequestV1 registries actor req
+  executeTSABatch registries actor batch
+
+-- | Simulate a V2 wallet accepting an allocation request from a V2 app.
+acceptAllocationRequestV2
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationRequest, V2.AllocationRequestView)
+  -> Script (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, [TransferEventsV2.EventLog_HoldingsChange])
+acceptAllocationRequestV2 registries actor (reqCid, req) = do
+  batch <- mkAcceptAllocationRequestV2 registries actor (reqCid, req)
+  executeTSABatch registries actor batch
+
+-- | Simulate a V2 wallet accepting an allocation instruction from a V2 app.
+-- TODO(#5303): Use Batching
+acceptAllocationInstructionV2
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
+  -> Script V2.AllocationInstructionResult
+acceptAllocationInstructionV2 registries actor (instrCid, instrView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+  context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
+  (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
+        V2.AllocationInstruction_Accept with
+          actors = [actor]
+          extraArgs = ExtraArgs with
+            context = context.choiceContext
+            meta = emptyMetadata
+  pure result
+
+-- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
+-- TODO(#5303): Use Batching
+withdrawAllocationInstructionV2
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
+  -> Script (Optional (ContractId V2.AllocationInstruction))
+withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+  context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
+      exerciseCmd instrCid
+      V2.AllocationInstruction_Withdraw with
+        actors = [actor]
+        extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+  return $ case res.output of
+    V2.AllocationInstructionResult_Pending instrCid' -> Some instrCid'
+    _ -> None
+
+-- | Simulate a V2 wallet withdrawing an allocation from a V2 app.
+-- TODO(#5303): Use Batching
+withdrawAllocationV2
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView)
+  -> Script (Optional (ContractId V2.Allocation))
+withdrawAllocationV2 registries actor (allocCid, allocView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
+  context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
+  (res, _change) <-
+    extractAndCheckTxHistory (Map.keys registries) $
+    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
+    exerciseCmd allocCid
+      V2.Allocation_Withdraw with
+        actors = [actor]
+        extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+  return $ case res.output of
+    V2.AllocationResult_Pending instrCid' -> Some instrCid'
+    _ -> None
+
+-- | Execute a batch of token standard actions.
+executeTSABatch
+  : MultiRegistry.MultiRegistry -> Party -> TSABatch
+  -> Script (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, [TransferEventsV2.EventLog_HoldingsChange])
+executeTSABatch registries actor batch
+  | null batch.actions = pure
+    ( BatchingUtilityV2.BatchingUtility_ExecuteBatchResult with
+        actionResults = []
+        outputHoldingMap = mempty
+    , []
+    )
+  | otherwise = do
+    inputHoldingMap <- getHoldingMap actor (Set.toList batch.accountsAndInstruments)
+    [(batchingUtilityCid, _)] <- queryFilter @BatchingUtilityV2.BatchingUtility actor (\u -> u.user == actor)
+    extractAndCheckTxHistory (Map.keys registries) $
+      submitResultAndTree (actAs actor <> discloseMany' batch.disclosures) $
+        exerciseCmd batchingUtilityCid BatchingUtilityV2.BatchingUtility_ExecuteBatch with
+            actions = batch.actions
+            inputHoldingMap
+            archiveAfterExecution = False
+
+
+-- | Execute a batch containing a single token standard action.
+executeSingletonTSABatch : MultiRegistry.MultiRegistry -> Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
+executeSingletonTSABatch registries actor batch = do
+  -- Note: in a production wallet we'd want to execute the action directly without the BatchingUtilityV2
+  -- to save on traffic cost. For testing here, we skip that for code simplicity.
+  (result, _changes) <- executeTSABatch registries actor batch
+  case result.actionResults of
+    [res] -> pure res
+    _ -> fail "Multiple actions were executed in the batch, expected exactly one"
+
+-- | Get a map of unlocked holding cids for the given accounts and instruments.
+getHoldingMap : Party -> [(V2.Account, V2.InstrumentId)] -> Script BatchingUtilityV2.HoldingMap
+getHoldingMap actor accountAndInstruments0 = do
+  taggedHoldings <- forA (dedupSort accountAndInstruments0) $ \(account, instrumentId) -> do
+    holdings <- listVisibleHoldings actor
+    let scopedAccount = BatchingUtilityV2.ScopedAccount instrumentId.admin account
+    pure [ (scopedAccount, TextMap.fromList [(instrumentId.id, [holdingCid])])
+         | (holdingCid, holding) <- holdings, holding.account == account, holding.instrumentId == instrumentId, isNone holding.lock ]
+  pure $ BatchingUtilityV2.holdingMapFromList (concat taggedHoldings)
+
+
+-- Batching utility functions
+---------------------------------
+
+data TSABatch = TSABatch with
+  actions : [BatchingUtilityV2.TokenStandardAction]
+  accountsAndInstruments : Set.Set (V2.Account, V2.InstrumentId)
+  disclosures : Disclosures'
+
+instance Semigroup TSABatch where
+  TSABatch actions1 accountsAndInstruments1 ds1 <> TSABatch actions2 accountsAndInstruments2 ds2 =
+    TSABatch (actions1 <> actions2) (accountsAndInstruments1 <> accountsAndInstruments2) (ds1 <> ds2)
+
+instance Monoid TSABatch where
+  mempty = TSABatch mempty mempty mempty
+
+-- | Create the batching utility for the given party.
+createBatchingUtility : Party -> Script (ContractId BatchingUtilityV2.BatchingUtility)
+createBatchingUtility p =
+  submit p $ createCmd BatchingUtilityV2.BatchingUtility with user = p
+
+
+-- | Create the batch of actions for issuing a transfer from a V1 factory
+mkTransferFactory_TransferV1
+  : MultiRegistry.MultiRegistry -> V1.TransferFactory_Transfer -> Script TSABatch
+mkTransferFactory_TransferV1 registries arg = do
+  registry <- MultiRegistry.getRegistryApiV1 registries arg.transfer.instrumentId.admin
+  enrichedChoice <- V1.getTransferFactory registry arg
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferFactory_TransferV1 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId enrichedChoice.factoryCid
+          arg = enrichedChoice.arg
+      ]
+    disclosures = enrichedChoice.disclosures
+    accountsAndInstruments = Set.singleton
+      ( TSU.basicAccount arg.transfer.sender
+      , TSU.upcast arg.transfer.instrumentId
+      )
+
+-- | Create the batch of actions for issuing a transfer from a V2 factory
+mkTransferFactory_TransferV2
+  : MultiRegistry.MultiRegistry -> V2.TransferFactory_Transfer -> Script TSABatch
+mkTransferFactory_TransferV2 registries arg = do
+  registry <- MultiRegistry.getRegistryApiV2 registries arg.transfer.instrumentId.admin
+  enrichedChoice <- V2.getTransferFactory registry arg
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferFactory_TransferV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId enrichedChoice.factoryCid
+          arg = enrichedChoice.arg
+      ]
+    disclosures = enrichedChoice.disclosures
+    accountsAndInstruments = Set.singleton (arg.transfer.sender, arg.transfer.instrumentId)
+
+mkTransferInstruction_AcceptV1
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script TSABatch
+mkTransferInstruction_AcceptV1 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V1.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV1 registries (instrView.transfer.instrumentId.admin)
+  context <- V1.getTransferInstruction_AcceptContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_AcceptV1 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V1.TransferInstruction_Accept with
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+mkTransferInstruction_AcceptV2
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script TSABatch
+mkTransferInstruction_AcceptV2 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
+  context <- V2.getTransferInstruction_AcceptContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_AcceptV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V2.TransferInstruction_Accept with
+            actors = [actor]
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+mkAllocationFactory_AllocateV1
+  : V1.RegistryApi api => api -> Party -> V1.AllocationSpecification -> Script TSABatch
+mkAllocationFactory_AllocateV1 registry actor allocation = do
+    now <- getTime
+    enrichedChoice <- V1.getAllocationFactory registry V1.AllocationFactory_Allocate with
+      expectedAdmin = admin
+      allocation
+      inputHoldingCids = []
+      requestedAt = now
+      extraArgs = emptyExtraArgs
+    let action = BatchingUtilityV2.TSA_AllocationFactory_AllocateV1 BatchingUtilityV2.ChoiceCall with
+          cid = coerceContractId enrichedChoice.factoryCid
+          arg = enrichedChoice.arg
+    pure TSABatch with
+      actions = [action]
+      accountsAndInstruments = Set.singleton (senderAccount, instrumentId)
+      disclosures = enrichedChoice.disclosures
+  where
+    instrumentId = TSU.upcast allocation.transferLeg.instrumentId
+    admin = instrumentId.admin
+    senderAccount = TSU.basicAccount actor
+
+mkAllocationFactory_AllocateV2
+  : V2.RegistryApi api => api -> Party -> V2.AllocationSpecification -> Script TSABatch
+mkAllocationFactory_AllocateV2 registryV2 actor allocation = do
+  now <- getTime
+  enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
+    allocation
+    inputHoldingCids = []
+    requestedAt = now
+    extraArgs = emptyExtraArgs
+    actors = [actor]
+  let action = BatchingUtilityV2.TSA_AllocationFactory_AllocateV2 BatchingUtilityV2.ChoiceCall with
+        cid = TSU.toAnyContractId enrichedChoice.factoryCid
+        arg = enrichedChoice.arg
+  pure TSABatch with
+    actions = [action]
+    accountsAndInstruments = Set.fromList $ do
+      leg <- allocation.transferLegSides
+      let iid = V2.InstrumentId with
+            id = leg.instrumentId
+            admin = allocation.admin
+      pure (allocation.authorizer, iid)
+    disclosures = enrichedChoice.disclosures
+
+mkAllocationRequest_AcceptV2 : Party -> ContractId V2.AllocationRequest -> Script TSABatch
+mkAllocationRequest_AcceptV2 actor reqCid = do
+  let acceptRequest = BatchingUtilityV2.TSA_AllocationRequestV2_Accept BatchingUtilityV2.ChoiceCall with
+        cid = TSU.toAnyContractId reqCid
+        arg = V2.AllocationRequest_Accept with
+          extraArgs = emptyExtraArgs
+          actors = [actor]
+  pure TSABatch with
+    actions = [acceptRequest]
+    accountsAndInstruments = mempty
+    disclosures = mempty
+
+-- | Combined acceptance of all allocations required to be created by an actor
+-- for a V1 allocation request.
+mkAcceptAllocationRequestV1 :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView -> Script TSABatch
+mkAcceptAllocationRequestV1 registries actor req = do
+  batches <- forA (TextMap.toList req.transferLegs) $ \(legId, leg) -> do
+    let admin = leg.instrumentId.admin
+    if actor == leg.sender
+      then do
+        registry <- MultiRegistry.getRegistryApiV1 registries admin
+        mkAllocationFactory_AllocateV1 registry actor V1.AllocationSpecification with
+          settlement = req.settlement
+          transferLegId = legId
+          transferLeg = leg
+      else pure mempty -- in V1, receivers do not create allocations
+
+  pure $ mconcat batches
+
+-- | Combined acceptance and creation of allocaitons for V2 allocation requests.
+mkAcceptAllocationRequestV2
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationRequest, V2.AllocationRequestView) -> Script TSABatch
+mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
+  acceptRequestBatch <- mkAllocationRequest_AcceptV2 actor reqCid
+  batches <- forA req.allocations $ \alloc -> do
+    apis <- MultiRegistry.getRegistryApis registries alloc.admin
+    case (apis.v2Api, apis.v1Api) of
+      (Some registryV2, _) -> do
+        -- when possible use the V2 factory
+        mkAllocationFactory_AllocateV2 registryV2 actor V2.AllocationSpecification with
+          admin = alloc.admin
+          authorizer = req.authorizer
+          settlement = req.settlement
+          transferLegSides = alloc.transferLegSides
+          nextIterationFunding = alloc.nextIterationFunding
+          committed = alloc.committed
+          meta = alloc.meta
+
+      (None, Some _) -> do
+        -- allocate legs for V1-only admins via their V1 factory
+        let reqV1 = (TSU.downcast req) with
+              -- overwrite the transfer legs to only include the legs relevant for this admin
+              transferLegs = TextMap.fromList $ do
+                leg <- alloc.transferLegSides
+                let legV2 = TSU.transferLegFromSide req.authorizer leg
+                pure (leg.transferLegId, TSU.downcast_v2_v1_TransferLeg alloc.admin legV2)
+        mkAcceptAllocationRequestV1 registries actor reqV1
+
+      (None, None) -> fail $ "unknown registry admin " <> show alloc.admin
+
+  pure (acceptRequestBatch <> mconcat batches)
+
+-- | Accept a transfer offer.
+mkAcceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.TransferInstruction, V2.Transfer) -> Script TSABatch
+mkAcceptTransferOffer registries actor (instrCid, transfer) = do
+  supportsV2 <- MultiRegistry.supportsV2 registries transfer.instrumentId.admin
+  if supportsV2
+    then mkTransferInstruction_AcceptV2 registries actor instrCid
+    else mkTransferInstruction_AcceptV1 registries actor (TSU.downcast instrCid)
+
+
+-- Simplified transfers specifications
+--------------------------------------
+
+-- | Simple transfer spec for testing purposes.
+data SimpleTransfer = SimpleTransfer with
+    sender : V2.Account
+    receiver : V2.Account
+    amount : Decimal
+    instrumentId : V2.InstrumentId
+    offerTime : RelTime
+    reason : Text
+  deriving (Eq, Show)
+
+regularAccountOwner : V2.Account -> Party
+regularAccountOwner account = case account.owner of
+  None -> error $ "unexpected special account: " <> show account
+  Some owner -> owner
+
+-- | Create a simplified transfer.
+mkTransferFactory_TransferV1' : MultiRegistry.MultiRegistry -> SimpleTransfer -> Script TSABatch
+mkTransferFactory_TransferV1' registries t = do
+  now <- getTime
+  mkTransferFactory_TransferV1 registries V1.TransferFactory_Transfer with
+    expectedAdmin = t.instrumentId.admin
+    transfer = V1.Transfer with
+      sender = regularAccountOwner t.sender
+      receiver = regularAccountOwner t.receiver
+      amount = t.amount
+      instrumentId = TSU.downcast t.instrumentId
+      requestedAt = now
+      executeBefore = now `addRelTime` t.offerTime
+      inputHoldingCids = []
+      meta = TSU.reasonToMeta t.reason emptyMetadata
+    extraArgs = emptyExtraArgs
+
+-- | Create a simplified transfer.
+mkTransferFactory_TransferV2' : MultiRegistry.MultiRegistry -> SimpleTransfer -> Script TSABatch
+mkTransferFactory_TransferV2' registries t = do
+  now <- getTime
+  mkTransferFactory_TransferV2 registries V2.TransferFactory_Transfer with
+    actors = optionalToList t.sender.owner
+    transfer = V2.Transfer with
+      sender = t.sender
+      receiver = t.receiver
+      amount = t.amount
+      instrumentId = t.instrumentId
+      requestedAt = now
+      executeBefore = now `addRelTime` t.offerTime
+      inputHoldingCids = []
+      meta = TSU.reasonToMeta t.reason emptyMetadata
+    extraArgs = emptyExtraArgs
+
+-- TODO(#4823): add missing transfer instruction actions
+-- TODO(#4838): add support for allocation instruction actions
+
+
+-- Tx History V2 checking utilities
+-----------------------------------
+
+type HoldingSnapshot = Map.Map (ContractId V2.Holding) V2.HoldingView
+
+submitAndCheckTxHistory : [Party] -> SubmitOptions -> Commands b -> Script b
+submitAndCheckTxHistory adminParties submitOptions action = do
+  (result, _changes) <- extractAndCheckTxHistory adminParties $ submitResultAndTree submitOptions action
+  pure result
+
+extractAndCheckTxHistory : [Party] -> Script (a, TransactionTree) -> Script (a, [TransferEventsV2.EventLog_HoldingsChange])
+extractAndCheckTxHistory adminParties action = do
+  holdingsBefore <- snapshotHoldings adminParties
+  (result, txTree) <- action
+  holdingsAfter <- snapshotHoldings adminParties
+  changes <- validateHoldingsChanges holdingsBefore txTree holdingsAfter
+  pure (result, changes)
+
+expectTxHistoryReasons : [TransferEventsV2.EventLog_HoldingsChange] -> [(V2.Account, [Text], Text)] -> Script ()
+expectTxHistoryReasons changes expectedReasons = do
+    unless (expectedReasons == actualReasons) $
+      fail $ T.unlines [
+        "tx history v2: expected reasons do not match actual reasons",
+        "expected: " <> show expectedReasons,
+        "actual:   " <> show actualReasons
+      ]
+  where
+    actualReasons = sort $ do
+      change <- mergeHoldingChangesByAdminAndAccount changes
+      -- dedup on transferLegId to avoid duplicate reasons for self-transfers
+      let legReasons = [ TSU.reasonFromMeta leg.meta | leg <- dedupOn (.transferLegId) change.transferLegSides ]
+      pure (change.account, legReasons, TSU.reasonFromMeta change.extraArgs.meta)
+
+snapshotHoldings : [Party] -> Script HoldingSnapshot
+snapshotHoldings parties = do
+  holdingsByParty <- forA parties $ \p -> do
+    holdings <- queryInterface @V2.Holding p
+    pure $ Map.fromList [ (cid, holding) | (cid, Some holding) <- holdings ]
+  pure $ mconcat holdingsByParty
+
+validateHoldingsChanges : HoldingSnapshot -> TransactionTree -> HoldingSnapshot -> Script [TransferEventsV2.EventLog_HoldingsChange]
+validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
+    -- check no duplicate reporting of holding changes
+    unless (unique allInputHoldingCids) $
+      fail $ "duplicate input holding cids across changes: " <> show allInputHoldingCids
+    unless (unique allOutputHoldingCids) $
+      fail $ "duplicate output holding cids across changes: " <> show allOutputHoldingCids
+    -- check invariants of individual holding changes
+    forA_ changes $ \change -> do
+      when (null change.transferLegSides && null change.inputHoldingCids && null change.outputHoldingCids) $
+        fail $ "holding change is missing transfer legs or input/output holding cids: " <> show change
+    -- check invariants of merged changes per account
+    outputHoldings <- forA mergedChanges validateMergedHoldingsChange
+    -- check that the changes explain the observed differences in holdings before and after the transaction
+    let expectedHoldingsAfter =
+          Map.filterWithKey (\cid _ -> cid `notElem` allInputHoldingCids) holdingsBefore <>
+          Map.fromList (concat outputHoldings)
+    unless (expectedHoldingsAfter == holdingsAfter) $
+      fail $ T.unlines
+        [ "holdings after change do not match expected holdings after change"
+        , "expected holdings after: " <> show expectedHoldingsAfter
+        , "actual holdings after:   " <> show holdingsAfter
+        ]
+    -- check that transfer legs are reported for both sides of the transfer for all non-admin accounts
+    forA_ changes $ \change -> do
+      forA_ change.transferLegSides $ \leg -> do
+        -- check that the direction of burn accounts is right
+        when (leg.otherside == TSU.burnAccount change.admin && leg.side == TransferEventsV2.ReceiverSide) $
+          fail $ "cannot receiver from a burn account: " <> show leg
+        when (leg.otherside == TSU.mintAccount change.admin && leg.side == TransferEventsV2.SenderSide) $
+          fail $ "cannot send to a mint account: " <> show leg
+        -- check that the other side of the transfer leg is also reported
+        let otherSide = case leg.side of
+              TransferEventsV2.SenderSide -> TransferEventsV2.ReceiverSide
+              TransferEventsV2.ReceiverSide -> TransferEventsV2.SenderSide
+        let othersideLeg =
+              (leg.otherside, leg with side = otherSide; otherside = change.account)
+        unless (othersideLeg `elem` allRegularTransferLegs || isNone othersideLeg._1.owner) $
+          fail $ "transfer leg side " <> show leg <> " is not reported"
+    -- check that total supply changes are reported via burns and mints
+    unless (reportedSupplyChangeByAdmin == actualSupplyChangeByAdmin) $
+      fail $ T.unlines
+        [ "reported total supply changes do not match actual total supply changes"
+        , "reported total supply changes: " <> show reportedSupplyChangeByAdmin
+        , "actual total supply changes:   " <> show actualSupplyChangeByAdmin
+        ]
+    pure changes
+  where
+    changes = getHoldingsChangesFromTree txTree
+    mergedChanges = mergeHoldingChangesByAdminAndAccount changes
+
+    allInputHoldingCids = sort $ concatMap (.inputHoldingCids) changes
+    allOutputHoldingCids = sort $ concatMap (.outputHoldingCids) changes
+
+    reportedSupplyChangeByAdmin = Map.filter (/= 0.0) $ Map.fromListWithR (+) $ do
+      change <- changes
+      -- ignore changes reported on burn and mint accounts since they are not real accounts
+      guard (change.account /= TSU.burnAccount change.admin && change.account /= TSU.mintAccount change.admin)
+      leg <- change.transferLegSides
+      case leg.side of
+        TransferEventsV2.SenderSide ->  do
+          guard (leg.otherside == TSU.burnAccount change.admin)
+          pure (change.admin, negate leg.amount)
+        TransferEventsV2.ReceiverSide ->  do
+          guard (leg.otherside == TSU.mintAccount change.admin)
+          pure (change.admin, leg.amount)
+
+    actualSupplyChangeByAdmin = Map.filter (/= 0.0) $ Map.fromListWithR (+) $
+      [ (holding.instrumentId.admin, negate holding.amount) | (_, holding) <- Map.toList holdingsBefore ] ++
+      [ (holding.instrumentId.admin, holding.amount) | (_, holding) <- Map.toList holdingsAfter ]
+
+    allRegularTransferLegs = do
+      change <- changes
+      guard (isSome change.account.owner)
+      leg <- change.transferLegSides
+      pure (change.account, leg)
+
+    validateMergedHoldingsChange change
+      | not (unique change.inputHoldingCids) = fail $ "duplicate input holding cids in change: " <> show change
+      | not (unique change.outputHoldingCids) = fail $ "duplicate output holding cids in change: " <> show change
+      | otherwise = do
+          -- check input and output holdings are transient or can be read in the expected snapshots
+          let checkHolding cid holding
+                | holding.account /= change.account =
+                    fail $ "holding cid " <> show cid <> " belongs to account " <> show holding.account <> ", expected " <> show change.account
+                | holding.instrumentId.admin /= change.admin =
+                    fail $ "holding cid " <> show cid <> " belongs to admin " <> show holding.instrumentId.admin <> ", expected " <> show change.admin
+                | otherwise = pure ()
+          debits <- forA change.inputHoldingCids $ \cid ->
+            case Map.lookup cid holdingsBefore of
+              None -> do
+                unless (cid `elem` change.outputHoldingCids) $
+                  fail $ "input holding cid " <> show cid <> " not found in before snapshot"
+                pure None
+              Some holding -> do
+                checkHolding cid holding
+                pure $ Some (holding.instrumentId, negate holding.amount)
+          creditsAndOutputs <- forA change.outputHoldingCids $ \cid ->
+            case Map.lookup cid holdingsAfter of
+              None -> do
+                unless (cid `elem` change.inputHoldingCids) $
+                  fail $ "output holding cid " <> show cid <> " not found in after snapshot"
+                pure None
+              Some holding -> do
+                checkHolding cid holding
+                pure $ Some ((holding.instrumentId, holding.amount), (cid, holding))
+          -- check that legs explain the balance changes of the holdings for all non-admin accounts
+          let (credits, outputHoldings) = unzip (catOptionals creditsAndOutputs)
+          let ignoreZeroChanges = Map.filter (/= 0.0)
+          let holdingAmountChanges = ignoreZeroChanges $ Map.fromListWithR (+) (catOptionals debits ++ credits)
+          let legAmountChanges = ignoreZeroChanges $ netAllocationCreditAmountsOfLegs change.admin change.transferLegSides
+          unless (holdingAmountChanges == legAmountChanges || isNone change.account.owner) $
+            fail $ T.unlines
+              [ "holding amount changes do not match leg amount changes for account " <> show change.account
+              , "holding amount changes: " <> show holdingAmountChanges
+              , "leg amount changes:     " <> show legAmountChanges
+              , "change: " <> show change
+              ]
+          pure outputHoldings
+
+netAllocationCreditAmountsOfLegs : Party -> [TransferEventsV2.TransferLegSide] -> Map.Map V2.InstrumentId Decimal
+netAllocationCreditAmountsOfLegs admin transferLegs =
+    Map.fromListWithR (+) $ map legAmount transferLegs
+  where
+    legAmount leg =
+      ( V2.InstrumentId with id = leg.instrumentId; admin
+      , case leg.side of
+          TransferEventsV2.SenderSide -> negate leg.amount
+          TransferEventsV2.ReceiverSide -> leg.amount
+      )
+
+mergeHoldingChangesByAdminAndAccount : [TransferEventsV2.EventLog_HoldingsChange] -> [TransferEventsV2.EventLog_HoldingsChange]
+mergeHoldingChangesByAdminAndAccount events =
+    Map.values eventsWithAdminAndAccount
+  where
+    eventsWithAdminAndAccount =
+      Map.fromListWithR mergeTwoHoldingChangeEvents [ ((event.admin, event.account), event) | event <- events ]
+    mergeTwoHoldingChangeEvents e1 e2 =
+      e1 with
+        inputHoldingCids = e1.inputHoldingCids ++ e2.inputHoldingCids
+        transferLegSides = e1.transferLegSides ++ e2.transferLegSides
+        outputHoldingCids = e1.outputHoldingCids ++ e2.outputHoldingCids
+        observers = dedupSort (e1.observers ++ e2.observers)
+        extraArgs = e1.extraArgs with
+          -- we dont care about the choice context here
+          meta = Metadata with
+            values = e1.extraArgs.meta.values <> e2.extraArgs.meta.values
+
+getHoldingsChangesFromTree : TransactionTree -> [TransferEventsV2.EventLog_HoldingsChange]
+getHoldingsChangesFromTree txTree = do
+  exercised <- concatMap getExercisedFromTreeEvent txTree.rootEvents
+  optionalToList $ fromAnyChoice @TransferEventsV2.EventLog exercised.argument
+
+getExercisedFromTreeEvent : TreeEvent -> [Exercised]
+getExercisedFromTreeEvent (ExercisedEvent e) = e :: concatMap getExercisedFromTreeEvent e.childEvents
+getExercisedFromTreeEvent (CreatedEvent _) = []

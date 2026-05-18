@@ -2164,6 +2164,40 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferInstructionRejectContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionRejectContextResponse,
+        ChoiceContextWithDisclosures,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionRejectContextResponse] = {
+      client.getTransferInstructionRejectContext(
+        transferInstructionId.contractId,
+        body = transferinstruction.v2.definitions.GetChoiceContextRequest(meta = None),
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      transferinstruction.v2.GetTransferInstructionRejectContextResponse,
+      Either[String, ChoiceContextWithDisclosures],
+    ] = { case transferinstruction.v2.GetTransferInstructionRejectContextResponse.OK(context) =>
+      val disclosedContracts =
+        context.disclosedContracts.map(fromTransferInstructionV2HttpDisclosedContract)
+      for {
+        choiceContext <- parseAsChoiceContext(context.choiceContextData)
+      } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
+    }
+  }
+
   case class GetTransferInstructionWithdrawContextRaw(
       transferInstructionId: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
@@ -2220,6 +2254,40 @@ object HttpScanAppClient {
     ] = { case transferinstruction.v1.GetTransferInstructionWithdrawContextResponse.OK(context) =>
       val disclosedContracts =
         context.disclosedContracts.map(fromTransferInstructionV1HttpDisclosedContract)
+      for {
+        choiceContext <- parseAsChoiceContext(context.choiceContextData)
+      } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
+    }
+  }
+
+  case class GetTransferInstructionWithdrawContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionWithdrawContextResponse,
+        ChoiceContextWithDisclosures,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionWithdrawContextResponse] = {
+      client.getTransferInstructionWithdrawContext(
+        transferInstructionId.contractId,
+        body = transferinstruction.v2.definitions.GetChoiceContextRequest(meta = None),
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      transferinstruction.v2.GetTransferInstructionWithdrawContextResponse,
+      Either[String, ChoiceContextWithDisclosures],
+    ] = { case transferinstruction.v2.GetTransferInstructionWithdrawContextResponse.OK(context) =>
+      val disclosedContracts =
+        context.disclosedContracts.map(fromTransferInstructionV2HttpDisclosedContract)
       for {
         choiceContext <- parseAsChoiceContext(context.choiceContextData)
       } yield ChoiceContextWithDisclosures(disclosedContracts, choiceContext)
@@ -2483,7 +2551,7 @@ object HttpScanAppClient {
         val args = new allocationv2.SettlementFactory_SettleBatch(
           choiceArgs.settlement,
           choiceArgs.transferLegs,
-          choiceArgs.allocationCids,
+          choiceArgs.allocations,
           choiceArgs.actors,
           new metadatav1.ExtraArgs(
             choiceContext,
@@ -2961,9 +3029,14 @@ object HttpScanAppClient {
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ) extends InternalBaseCommand[http.ListVoteRequestResultsResponse, Seq[
-        DsoRules_CloseVoteRequestResult
-      ]] {
+      pageToken: Option[BigInt] = None,
+  ) extends InternalBaseCommand[
+        http.ListVoteRequestResultsResponse,
+        (
+            Seq[DsoRules_CloseVoteRequestResult],
+            Option[BigInt],
+        ),
+      ] {
 
     override def submitRequest(
         client: ScanClient,
@@ -2977,6 +3050,7 @@ object HttpScanAppClient {
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         ),
         headers = headers,
       )
@@ -2984,18 +3058,17 @@ object HttpScanAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case http.ListVoteRequestResultsResponse.OK(response) =>
-      Right(
-        response.dsoRulesVoteResults
-          .map(e =>
-            decoder.decodeValue(
-              DsoRules_CloseVoteRequestResult.valueDecoder(),
-              DsoRules_CloseVoteRequestResult._packageId,
-              "Splice.DsoRules",
-              "DsoRules_CloseVoteRequestResult",
-            )(e)
-          )
-          .toSeq
-      )
+      val results = response.dsoRulesVoteResults
+        .map(e =>
+          decoder.decodeValue(
+            DsoRules_CloseVoteRequestResult.valueDecoder(),
+            DsoRules_CloseVoteRequestResult._packageId,
+            "Splice.DsoRules",
+            "DsoRules_CloseVoteRequestResult",
+          )(e)
+        )
+        .toSeq
+      Right((results, response.nextPageToken))
     }
   }
 

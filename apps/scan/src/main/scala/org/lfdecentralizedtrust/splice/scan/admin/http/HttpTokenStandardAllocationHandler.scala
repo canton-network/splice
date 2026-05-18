@@ -138,7 +138,7 @@ class HttpTokenStandardAllocationHandler(
         // TODO (#4949): this only lists V2 allocations, but it should also do V1
         allocations <- contractFetcher.lookupContractsById(
           amuletallocationv2.AmuletAllocationV2.COMPANION
-        )(settleBatch.allocationCids.asScala.toSeq)
+        )(settleBatch.allocations.asScala.toSeq.map(_.allocationCid))
         lockedAmulets <- contractFetcher.lookupContractsById(LockedAmulet.COMPANION)(
           allocations.flatMap(_.payload.lockedAmulet.toScala)
         )

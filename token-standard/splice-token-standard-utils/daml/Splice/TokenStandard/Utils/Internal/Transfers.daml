@@ -62,8 +62,8 @@ instance BackwardCompatible (ContractId TransferInstructionV1.TransferInstructio
 
 instance ForwardCompatible TransferInstructionV1.Transfer TransferInstructionV2.Transfer where
   downcast v2 = TransferInstructionV1.Transfer with
-    sender = v2.sender.owner
-    receiver = v2.receiver.owner
+    sender = accountOwnerForV1 v2.sender
+    receiver = accountOwnerForV1 v2.receiver
     amount = v2.amount
     instrumentId = downcast v2.instrumentId
     requestedAt = v2.requestedAt
@@ -188,7 +188,8 @@ transferFactory_v2_senderActor_transferImpl
 transferFactory_v2_senderActor_transferImpl self arg = do
   ensureNoAccountMeta "transfer." "sender" arg.transfer.meta
   ensureNoAccountMeta "transfer." "receiver" arg.transfer.meta
-  checkActors arg.actors [[arg.transfer.sender.owner]]
+  let admin = arg.transfer.instrumentId.admin
+  checkActors arg.actors [[accountPrincipal admin arg.transfer.sender]]
   upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferFactory) self) TransferInstructionV1.TransferFactory_Transfer with
     expectedAdmin = arg.transfer.instrumentId.admin
     transfer = downcast arg.transfer
@@ -197,13 +198,17 @@ transferFactory_v2_senderActor_transferImpl self arg = do
 -- | For public assets the receivers should be observers as well.
 transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl : TransferInstructionV2.TransferFactory_Transfer -> [Party]
 transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl arg =
-  accountParties arg.transfer.sender <> accountParties arg.transfer.receiver
+    accountParties admin arg.transfer.sender <> accountParties admin arg.transfer.receiver
+  where
+    admin = arg.transfer.instrumentId.admin
 
 -- | Default for private assets, where the only observers are the account
 -- parties of the sender.
 transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl : TransferInstructionV2.TransferFactory_Transfer -> [Party]
 transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl arg =
-  accountParties arg.transfer.sender
+    accountParties admin arg.transfer.sender
+  where
+    admin = arg.transfer.instrumentId.admin
 
 -- | Default observers for the `V2.TransferInstruction_Accept` choice, which are
 -- the observers of the instruction contract.
@@ -226,6 +231,8 @@ transferInstruction_withdrawDefaultExtraObservers this _arg = observer this
 -- | Available actions for a V2 transfer that uses the default controllers for its actions.
 transferInstructionV2_availableActionsDefault : TransferInstructionV2.Transfer -> Map.Map [Party] [TransferInstructionV2.TransferInstructionAction]
 transferInstructionV2_availableActionsDefault transfer = Map.fromList
-  [ ([transfer.sender.owner], [TransferInstructionV2.TIA_Withdraw])
-  , ([transfer.receiver.owner], [TransferInstructionV2.TIA_Accept, TransferInstructionV2.TIA_Reject])
+  [ ([accountPrincipal admin transfer.sender], [TransferInstructionV2.TIA_Withdraw])
+  , ([accountPrincipal admin transfer.receiver], [TransferInstructionV2.TIA_Accept, TransferInstructionV2.TIA_Reject])
   ]
+  where
+    admin = transfer.instrumentId.admin

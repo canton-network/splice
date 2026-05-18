@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   TemplateJsonDecoder,
+  TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
 import com.digitalasset.canton.ProtoDeserializationError
@@ -48,6 +49,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 
 import scala.concurrent.Future
@@ -1098,6 +1100,49 @@ object HttpWalletAppClient {
       }
     }
 
+    final case class CreateTransferV2(
+        receiver: PartyId,
+        amount: BigDecimal,
+        description: String,
+        expiresAt: CantonTimestamp,
+        trackingId: String,
+    ) extends InternalBaseCommand[
+          http.CreateTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.CreateTokenStandardTransferV2Response] =
+        client.createTokenStandardTransferV2(
+          definitions.CreateTokenStandardTransferRequest(
+            Codec.encode(receiver),
+            Codec.encode(amount),
+            description,
+            Codec.encode(expiresAt),
+            trackingId,
+          ),
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.CreateTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = {
+        case http.CreateTokenStandardTransferV2Response.OK(value) =>
+          Right(value)
+        case http.CreateTokenStandardTransferV2Response.Conflict(value) =>
+          Left(value.error)
+        case http.CreateTokenStandardTransferV2Response.TooManyRequests(value) =>
+          Left(value.error)
+      }
+    }
+
     final case class AcceptTransfer(
         contractId: transferinstructionv1.TransferInstruction.ContractId
     ) extends InternalBaseCommand[
@@ -1122,6 +1167,34 @@ object HttpWalletAppClient {
         String,
         definitions.TransferInstructionResultResponse,
       ]] = { case http.AcceptTokenStandardTransferResponse.OK(value) =>
+        Right(value)
+      }
+    }
+
+    final case class AcceptTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.AcceptTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.AcceptTokenStandardTransferV2Response] =
+        client.acceptTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.AcceptTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.AcceptTokenStandardTransferV2Response.OK(value) =>
         Right(value)
       }
     }
@@ -1154,6 +1227,34 @@ object HttpWalletAppClient {
       }
     }
 
+    final case class RejectTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.RejectTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.RejectTokenStandardTransferV2Response] =
+        client.rejectTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.RejectTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.RejectTokenStandardTransferV2Response.OK(value) =>
+        Right(value)
+      }
+    }
+
     final case class WithdrawTransfer(
         contractId: transferinstructionv1.TransferInstruction.ContractId
     ) extends InternalBaseCommand[
@@ -1178,6 +1279,34 @@ object HttpWalletAppClient {
         String,
         definitions.TransferInstructionResultResponse,
       ]] = { case http.WithdrawTokenStandardTransferResponse.OK(value) =>
+        Right(value)
+      }
+    }
+
+    final case class WithdrawTransferV2(
+        contractId: transferinstructionv2.TransferInstruction.ContractId
+    ) extends InternalBaseCommand[
+          http.WithdrawTokenStandardTransferV2Response,
+          definitions.TransferInstructionResultResponse,
+        ] {
+      override def submitRequest(
+          client: WalletClient,
+          headers: List[HttpHeader],
+      ): EitherT[Future, Either[
+        Throwable,
+        HttpResponse,
+      ], http.WithdrawTokenStandardTransferV2Response] =
+        client.withdrawTokenStandardTransferV2(
+          contractId.contractId,
+          headers = headers,
+        )
+
+      override protected def handleOk()(implicit
+          decoder: TemplateJsonDecoder
+      ): PartialFunction[http.WithdrawTokenStandardTransferV2Response, Either[
+        String,
+        definitions.TransferInstructionResultResponse,
+      ]] = { case http.WithdrawTokenStandardTransferV2Response.OK(value) =>
         Right(value)
       }
     }
@@ -1241,7 +1370,7 @@ object HttpWalletAppClient {
       ): EitherT[Future, Either[
         Throwable,
         HttpResponse,
-      ], http.AllocateAmuletV2Response] =
+      ], http.AllocateAmuletV2Response] = {
         client.allocateAmuletV2(
           definitions.AllocateAmuletV2Request(
             definitions.AllocateAmuletV2Request.Settlement(
@@ -1250,26 +1379,34 @@ object HttpWalletAppClient {
                 spec.settlement.settlementRef.id,
                 spec.settlement.settlementRef.cid.map(_.contractId).toScala,
               ),
-              requestedAt =
-                Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.requestedAt)),
-              settleAt = Codec.encode(CantonTimestamp.assertFromInstant(spec.settlement.settleAt)),
               settlementDeadline = spec.settlement.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
               meta = Some(spec.settlement.meta.values.asScala.toMap),
             ),
-            spec.transferLegs.asScala.map { transferLegs =>
-              definitions.TransferLegV2(
-                transferLegs.transferLegId,
-                sender = transferLegs.sender.owner,
-                receiver = transferLegs.receiver.owner,
-                Codec.JavaBigDecimal.instance.encode(transferLegs.amount),
-                Some(transferLegs.meta.values.asScala.toMap),
+            spec.transferLegSides.asScala.map { transferLegSide =>
+              definitions.TransferLegSide(
+                transferLegSide.transferLegId,
+                side = transferLegSide.side match {
+                  case allocationv2.TransferSide.SENDERSIDE =>
+                    definitions.TransferLegSide.Side.Senderside
+                  case allocationv2.TransferSide.RECEIVERSIDE =>
+                    definitions.TransferLegSide.Side.Receiverside
+                },
+                otherside =
+                  TokenStandardAccount.tryGetRegularAccountOwner(transferLegSide.otherside),
+                Codec.JavaBigDecimal.instance.encode(transferLegSide.amount),
+                Some(transferLegSide.meta.values.asScala.toMap),
               )
             }.toVector,
+            nextIterationFunding = spec.nextIterationFunding.toScala
+              .map(_.asScala.toMap.view.mapValues(Codec.JavaBigDecimal.instance.encode).toMap),
+            committed = spec.committed,
+            meta = Some(spec.meta.values.asScala.toMap),
           ),
           headers = headers,
         )
+      }
 
       override protected def handleOk()(implicit
           decoder: TemplateJsonDecoder

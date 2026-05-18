@@ -41,6 +41,8 @@ outliers=$(rg -IN -e \
         $1 != "WalletAppInstall_TransferInstructionV2_Reject" &&
         $1 != "WalletAppInstall_TransferInstructionV2_Withdraw" &&
         $1 != "WalletAppInstall_AllocationFactoryV2_Allocate" &&
+        $1 != "WalletAppInstall_AllocationInstructionV2_Accept" &&
+        $1 != "WalletAppInstall_AllocationInstructionV2_Withdraw" &&
         $1 != "WalletAppInstall_AllocationV2_Withdraw") print $0
     }' \
   )

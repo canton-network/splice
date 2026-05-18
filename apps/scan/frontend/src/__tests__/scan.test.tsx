@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import {
   GetAmuletRulesResponse,
   GetBackfillingStatusResponse,
@@ -54,12 +54,10 @@ test('total circulating amulet balance is displayed', async () => {
 
 test('backfilling indicator shows when backfilling', async () => {
   server.use(
-    rest.get(`${scanUrl}/v0/backfilling/status`, (_, res, ctx) => {
-      return res(
-        ctx.json<GetBackfillingStatusResponse>({
-          complete: false,
-        })
-      );
+    http.get(`${scanUrl}/v0/backfilling/status`, () => {
+      return HttpResponse.json<GetBackfillingStatusResponse>({
+        complete: false,
+      });
     })
   );
   render(<AppWithConfig />);
@@ -69,12 +67,10 @@ test('backfilling indicator shows when backfilling', async () => {
 
 test('backfilling indicator does not shows when not backfilling', async () => {
   server.use(
-    rest.get(`${scanUrl}/v0/backfilling/status`, (_, res, ctx) => {
-      return res(
-        ctx.json<GetBackfillingStatusResponse>({
-          complete: true,
-        })
-      );
+    http.get(`${scanUrl}/v0/backfilling/status`, () => {
+      return HttpResponse.json<GetBackfillingStatusResponse>({
+        complete: true,
+      });
     })
   );
   render(<AppWithConfig />);
@@ -84,8 +80,8 @@ test('backfilling indicator does not shows when not backfilling', async () => {
 
 test('backfilling indicator does not shows when response is unclear', async () => {
   server.use(
-    rest.get(`${scanUrl}/v0/backfilling/status`, (_, res, ctx) => {
-      return res(ctx.status(503, 'Internal Server Error'));
+    http.get(`${scanUrl}/v0/backfilling/status`, () => {
+      return new HttpResponse(null, { status: 503, statusText: 'Internal Server Error' });
     })
   );
   render(<AppWithConfig />);
@@ -119,8 +115,8 @@ test('Fees with value 0 are not shown', async () => {
 test('Fees with value greater than 0 are shown', async () => {
   const amuletConfig = amuletRules(false).configSchedule.initialValue;
   server.use(
-    rest.post(`${scanUrl}/v0/amulet-rules`, (_, res, ctx) => {
-      return res(ctx.json<GetAmuletRulesResponse>(getAmuletRulesResponse(false)));
+    http.post(`${scanUrl}/v0/amulet-rules`, () => {
+      return HttpResponse.json<GetAmuletRulesResponse>(getAmuletRulesResponse(false));
     })
   );
   const user = userEvent.setup();

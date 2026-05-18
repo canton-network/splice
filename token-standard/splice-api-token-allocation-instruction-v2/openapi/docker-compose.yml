@@ -11,8 +11,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # TODO(DACH-NY/canton-network-node#86): split the standards into separate directories
-      # SWAGGER_JSON: /spec/allocation.yaml
-      SWAGGER_JSON: /spec/allocation-instruction.yaml
+      SWAGGER_JSON: /spec/allocation-instruction-v2.yaml
     volumes:
-      - ./allocation-instruction.yaml:/spec/allocation-instruction.yaml
+      - ./allocation-instruction-v2.yaml:/spec/allocation-instruction-v2.yaml

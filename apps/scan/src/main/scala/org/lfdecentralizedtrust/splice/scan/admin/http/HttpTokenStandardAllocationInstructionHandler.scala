@@ -115,6 +115,40 @@ class HttpTokenStandardAllocationInstructionHandler(
       }
     }
   }
+
+  override def getAllocationInstructionAcceptContext(
+      respond: v2.Resource.GetAllocationInstructionAcceptContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: TraceContext
+  ): Future[v2.Resource.GetAllocationInstructionAcceptContextResponse] = {
+    Future.successful(
+      respond.BadRequest(
+        v2.definitions.ErrorResponse(
+          "Allocation instruction choice contexts are unsupported because amulet does not create allocation instructions."
+        )
+      )
+    )
+  }
+
+  override def getAllocationInstructionWithdrawContext(
+      respond: v2.Resource.GetAllocationInstructionWithdrawContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: TraceContext
+  ): Future[v2.Resource.GetAllocationInstructionWithdrawContextResponse] = {
+    Future.successful(
+      respond.BadRequest(
+        v2.definitions.ErrorResponse(
+          "Allocation instruction choice contexts are unsupported because amulet does not create allocation instructions."
+        )
+      )
+    )
+  }
 }
 
 object HttpTokenStandardAllocationInstructionHandler {

@@ -73,8 +73,8 @@ testWithSubscription = script do
         [unlockChange, paymentChange] <- pure changes
         WalletClientV2.expectTxHistoryReasons [unlockChange] [(TSU.basicAccount alice.primaryParty, [], "holders released lock")]
         WalletClientV2.expectTxHistoryReasons [paymentChange] [(TSU.basicAccount alice.primaryParty, [paymentDesc], "")]
-        [paymentLeg] <- pure paymentChange.transferLegs
-        paymentLeg.receiver === TSU.burnAccount app.dso -- ANS entry payment is marked as burn
+        [paymentLeg] <- pure paymentChange.transferLegSides
+        paymentLeg.otherside === TSU.burnAccount app.dso -- ANS entry payment is marked as burn
   checkPaymentCollectionHistory changes
 
   -- the amulet received by sv is brunt

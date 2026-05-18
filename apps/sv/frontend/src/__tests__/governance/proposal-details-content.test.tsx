@@ -18,7 +18,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { SvConfigProvider } from '../../utils';
 import { server, svUrl } from '../setup/setup';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
@@ -867,8 +867,8 @@ describe('Proposal Details > Votes & Voting', () => {
     ];
 
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/votes`, (_, res, ctx) => {
-        return res(ctx.status(201));
+      http.post(`${svUrl}/v0/admin/sv/votes`, () => {
+        return new HttpResponse(null, { status: 201 });
       })
     );
 
@@ -930,8 +930,8 @@ describe('Proposal Details > Votes & Voting', () => {
     ];
 
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/votes`, (_, res, ctx) => {
-        return res(ctx.status(400));
+      http.post(`${svUrl}/v0/admin/sv/votes`, () => {
+        return new HttpResponse(null, { status: 400 });
       })
     );
 

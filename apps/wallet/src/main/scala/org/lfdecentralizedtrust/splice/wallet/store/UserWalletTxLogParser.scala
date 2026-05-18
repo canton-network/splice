@@ -92,6 +92,7 @@ import org.lfdecentralizedtrust.splice.util.{
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
+  TokenStandardAccount,
   TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
@@ -110,22 +111,16 @@ import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.{
   TransferTransactionSubtype,
 }
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv2
 
 class UserWalletTxLogParser(
     override val loggerFactory: NamedLoggerFactory,
     endUserParty: PartyId,
-    dsoParty: PartyId,
 ) extends TxLogStore.Parser[TxLogEntry]
     with NamedLogging {
   import UserWalletTxLogParser.*
 
   private val endUserPartyProtoPrimitive = endUserParty.toProtoPrimitive
-  // TODO (#4973): remove this if/when v1 and v2 InstrumentId are unified
-  private val amuletInstrumentIdV2 = new holdingv2.InstrumentId(
-    dsoParty.toProtoPrimitive,
-    "Amulet",
-  )
+  private val amuletInstrumentIdName = "Amulet"
 
   // ignoreUnexpectedAmuletCreateArchive disables the warning when we
   // hit a bare create/archive of an amulet contract.  We use this for
@@ -1110,7 +1105,9 @@ class UserWalletTxLogParser(
               node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
                 case (stateAcc, transferLeg) =>
                   if (
-                    transferLeg.instrumentId == amuletInstrumentIdV2 && (transferLeg.receiver.owner == endUserPartyProtoPrimitive || transferLeg.sender.owner == endUserPartyProtoPrimitive)
+                    transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner.toScala
+                      .contains(endUserPartyProtoPrimitive) || transferLeg.sender.owner.toScala
+                      .contains(endUserPartyProtoPrimitive))
                   ) {
                     stateAcc.appended(
                       State(
@@ -1127,10 +1124,20 @@ class UserWalletTxLogParser(
                             ),
                             // The sending side should already be handled in AllocationFactoryV2Allocate,
                             // here we just need to handle the coin unlocking
-                            receivers =
-                              Seq(PartyAndAmount(transferLeg.receiver.owner, transferLeg.amount)),
-                            sender =
-                              Some(PartyAndAmount(transferLeg.sender.owner, -transferLeg.amount)),
+                            receivers = Seq(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(
+                                  transferLeg.receiver
+                                ),
+                                transferLeg.amount,
+                              )
+                            ),
+                            sender = Some(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
+                                -transferLeg.amount,
+                              )
+                            ),
                             date = Some(tree.getEffectiveAt),
                             // seems redundant but otherwise parsing fails
                             senderHoldingFees = BigDecimal(0.0),

@@ -11,6 +11,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SWAGGER_JSON: /spec/transfer-instruction.yaml
+      SWAGGER_JSON: /spec/transfer-instruction-v2.yaml
     volumes:
-      - ./transfer-instruction.yaml:/spec/transfer-instruction.yaml
+      - ./transfer-instruction-v2.yaml:/spec/transfer-instruction-v2.yaml

@@ -9,6 +9,7 @@
 module Splice.Api.Token.AllocationRequestV2 where
 
 import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2
@@ -36,8 +37,7 @@ interface AllocationRequest where
   allocationRequest_withdrawExtraObservers : AllocationRequest_Withdraw -> [Party]
 
   nonconsuming choice AllocationRequest_Accept : AllocationRequest_AcceptResult
-    -- ^ Signal to settlement.executors that the requested allocations will be
-    -- created before `settlement.settleAt`.
+    -- ^ Signal to settlement.executors that the requested allocations were or will be created.
     --
     -- Wallets MAY call this choice in the same transaction as the creation
     -- of the requested allocations to protect from creating the same
@@ -50,7 +50,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties accepting the allocation request.
+        -- ^ Set of parties executing the acceptance.
         --
         -- Implementations MUST check these parties to avoid unauthorized acceptance.
         --
@@ -73,7 +73,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties rejecting the allocation request.
+        -- ^ Set of parties executing the rejection.
         --
         -- Implementations MUST check these parties to avoid unauthorized rejection.
         --
@@ -96,7 +96,7 @@ interface AllocationRequest where
     -- consumed by the body of this choice.
     with
       actors : [Party]
-        -- ^ The parties withdrawing the allocation request.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         --
@@ -115,13 +115,31 @@ data AllocationRequestAction
     | -- | Used to represent app-specific actions on allocation requests.
       ARA_Custom with
         id : Text
-          -- ^ Machine-readable identifier of the action, e.g., used for matching in the wallet.
-          -- Namespaced analogously to metadata keys.
-        description : Text
-          -- ^ Brief human-readable description of the action, e.g., used for display in the wallet.
-        meta : Metadata
-          -- ^ Additional metadata specific to the action, used for extensibility.
-    deriving (Show, Eq)
+          -- ^ Identifier of the action. Namespaced analogously to metadata keys.
+    deriving (Show, Ord, Eq)
+
+-- | An allocation of transfers of instruments maintained by the same asset admin.
+data RequestedAllocation = RequestedAllocation with
+    admin : Party
+      -- ^ Admin of the instruments being transferred when settling the allocation.
+    transferLegSides : [TransferLegSide]
+      -- ^ The transfers to include in the allocation.
+      --
+      -- MAY be empty when requesting an iterated settlement.
+    nextIterationFunding : Optional (TextMap.TextMap Decimal)
+      -- ^ Whether the allocation should allow iterated settlement, and if so,
+      -- the amount of funds to reserve for the next settlement.
+      --
+      -- The amounts are keyed by instrument id and MUST be positive.
+    committed : Bool
+      -- ^ Whether to create a committed allocation or not.
+      --
+      -- Committed allocations do not allow the authorizer to withdraw the
+      -- allocation before the settlement deadline.
+    meta : Metadata
+      -- ^ Metadata to attach to the allocation. Used for extensibility; e.g.,
+      -- to attach a reason for the allocation.
+  deriving (Show, Eq)
 
 -- | View of an `AllocationRequest`.
 data AllocationRequestView = AllocationRequestView with
@@ -139,20 +157,27 @@ data AllocationRequestView = AllocationRequestView with
       -- user action or is informational only.
     settlement : SettlementInfo
       -- ^ Settlement for which allocations are requested to be created.
-    transferLegs : [TransferLeg]
-      -- ^ Transfer legs that are requested to be authorized for execution as
+    allocations : [RequestedAllocation]
+      -- ^ The allocations that are requested to be authorized for execution as
       -- part of the settlement.
+    requestedAt : Time
+      -- ^ Timestamp at which the request was created.
+    settleAt : Optional Time
+      -- ^ Timestamp at which the settlement is expected to be executed. The authorizer
+      -- SHOULD create their allocations before this time.
       --
-      -- This may or may not be a complete list of transfer legs that are part of the settlement,
-      -- depending on the confidentiality requirements of the app.
-    availableActions : Map.Map [Party] [AllocationRequestAction]
-      -- ^ The actions that the wallet can present to the user on the allocation request.
+      -- For iterated settlements, this is the expected time of the first iteration.
+    availableActions : Map.Map AllocationRequestAction [[Party]]
+      -- ^ What actions are available to which groups of parties. The list of lists
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
       --
-      -- Supports multiple parties for actions that require joint authorization. Executing them
-      -- will require appropriate, app-specific delegation contracts to be in place.
+      -- Supports multiple parties for actions that require joint authorization. All possible combinations
+      -- of action actors that could call a choice SHOULD be included.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation request, used for extensibility.
   deriving (Show, Eq)

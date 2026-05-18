@@ -56,6 +56,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DisclosedContracts,
   HasHealth,
   SpliceUtil,
+  TokenStandardAccount,
   TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -765,7 +766,9 @@ class TreasuryService(
           operation.requestedAt,
           holdings,
           emptyExtraArgs,
-          List(operation.specification.authorizer.owner).asJava,
+          List(
+            TokenStandardAccount.tryGetRegularAccountOwner(operation.specification.authorizer)
+          ).asJava,
         )
         scanConnection.getAllocationFactoryV2(choiceArgs).map { allocationFactory =>
           allocationFactory.factoryId.exerciseAllocationFactory_Allocate(
@@ -1535,5 +1538,9 @@ object TreasuryService {
     basicAccount(party.toProtoPrimitive)
 
   def basicAccount(partyProtoPrimitive: String): holdingv2.Account =
-    new holdingv2.Account(partyProtoPrimitive, java.util.Optional.empty(), "")
+    new holdingv2.Account(
+      java.util.Optional.of(partyProtoPrimitive),
+      java.util.Optional.empty(),
+      "",
+    )
 }

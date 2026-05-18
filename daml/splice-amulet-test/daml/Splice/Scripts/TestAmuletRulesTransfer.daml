@@ -678,7 +678,7 @@ testInputDevelopmentFundCoupon = do
           [ ("amulet.splice.lfdecentralizedtrust.org/development-fund", show totalAmount)
           , ("splice.lfdecentralizedtrust.org/reason", "mint rewards")]
   [change] <- pure changes
-  [leg] <- pure change.transferLegs
+  [leg] <- pure change.transferLegSides
   leg.meta === expectedMetadata
 
   pure ()

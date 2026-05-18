@@ -64,7 +64,6 @@ class DbUserWalletTxLogStoreConfig(loggerFactory: NamedLoggerFactory, key: UserW
     new UserWalletTxLogParser(
       loggerFactory,
       endUserParty = key.endUserParty,
-      dsoParty = key.dsoParty,
     )
   override def entryToRow: org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry => Option[
     org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.UserWalletTxLogStoreRowData

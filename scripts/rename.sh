@@ -1325,7 +1325,7 @@ function subcmd_ts2_create_base() {
   assert_clean_working_dir
 
   # Rename test directory first to simplify specifying renames below
-  simple_rename 'token-standard-test(?!-v)///token-standard-test-v1'
+  simple_rename 'token-standard-test(?!-v)///token-standard-v1-test'
 
   declare -A STD_DIRS_V1_TO_V2=(
     ['splice-api-token-allocation-instruction-v1']='splice-api-token-allocation-instruction-v2'
@@ -1333,8 +1333,8 @@ function subcmd_ts2_create_base() {
     ['splice-api-token-allocation-v1']='splice-api-token-allocation-v2'
     ['splice-api-token-holding-v1']='splice-api-token-holding-v2'
     ['splice-api-token-transfer-instruction-v1']='splice-api-token-transfer-instruction-v2'
-    ['splice-token-standard-test-v1']='splice-token-standard-test-v2'
-    ['splice-token-standard-test-v1']='splice-token-standard-test-v2'
+    ['splice-token-standard-v1-test']='splice-token-standard-v2-test'
+    ['splice-token-standard-v1-test']='splice-token-standard-v2-test'
   )
 
   # Copy the directories if they are not yet tracked in git
@@ -1345,7 +1345,7 @@ function subcmd_ts2_create_base() {
   done
 
   copy_template 'token-standard/examples/splice-token-test-trading-app/daml/Splice/Testing/Apps/TradingApp.daml' \
-    'token-standard/splice-token-standard-test-v2/daml/Splice/Testing/Apps/TradingAppV2.daml'
+    'token-standard/splice-token-standard-v2-test/daml/Splice/Testing/Apps/TradingAppV2.daml'
 
   # Rename modules and file name references
   simple_rename '(?<![Mm]etadata-)(?<![Mm]etadata/)(?<![Mm]etadata)(?<! )v1///v2' "-i 'token-standard/*-v2/*'"

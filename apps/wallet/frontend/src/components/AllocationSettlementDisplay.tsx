@@ -11,14 +11,7 @@ import { SettlementInfo } from '@daml.js/splice-api-token-allocation-v2/lib/Spli
 const AllocationSettlementDisplay: React.FC<{
   settlement: SettlementInfo;
 }> = ({ settlement }) => {
-  const {
-    settleAt,
-    requestedAt,
-    settlementDeadline,
-    settlementRef,
-    executors,
-    meta: settlementMeta,
-  } = settlement;
+  const { settlementDeadline, settlementRef, executors, meta: settlementMeta } = settlement;
 
   return (
     <Stack>
@@ -46,12 +39,6 @@ const AllocationSettlementDisplay: React.FC<{
           ))}
         </Stack>
         <Stack>
-          <Typography variant="body2">
-            Requested at: <DateWithDurationDisplay datetime={requestedAt} enableDuration />
-          </Typography>
-          <Typography variant="body2">
-            Settle at: <DateWithDurationDisplay datetime={settleAt} enableDuration />
-          </Typography>
           {settlementDeadline ? (
             <Typography variant="body2">
               Settlement deadline:{' '}

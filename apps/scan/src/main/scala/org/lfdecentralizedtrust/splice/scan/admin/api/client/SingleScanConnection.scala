@@ -575,10 +575,11 @@ class SingleScanConnection private[client] (
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: Int,
+      pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Seq[DsoRules_CloseVoteRequestResult]] = runHttpCmd(
+  ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = runHttpCmd(
     config.adminApi.url,
     HttpScanAppClient.ListVoteRequestResults(
       actionName,
@@ -587,6 +588,7 @@ class SingleScanConnection private[client] (
       effectiveFrom,
       effectiveTo,
       limit,
+      pageToken,
     ),
   )
 
@@ -636,6 +638,17 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionRejectContext(instructionCid),
     )
 
+  def getTransferInstructionRejectContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionRejectContextV2(instructionCid),
+    )
+
   def getTransferInstructionWithdrawContext(
       instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
@@ -645,6 +658,17 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetTransferInstructionWithdrawContext(instructionCid),
+    )
+
+  def getTransferInstructionWithdrawContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionWithdrawContextV2(instructionCid),
     )
 
   def getTransferInstructionAcceptContextRaw(
