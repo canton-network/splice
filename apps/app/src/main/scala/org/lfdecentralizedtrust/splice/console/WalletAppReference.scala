@@ -5,7 +5,8 @@ package org.lfdecentralizedtrust.splice.console
 
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletallocationCodegen
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletallocationV1Codegen
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2 as amuletallocationV2Codegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorLicenseCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
   buytrafficrequest as trafficRequestCodegen,
@@ -16,6 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
 import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AllocateAmuletResponse,
+  AllocateAmuletV2Response,
   AllocateDevelopmentFundCouponResponse,
   GetBuyTrafficRequestStatusResponse,
   GetTransferOfferStatusResponse,
@@ -37,10 +39,13 @@ import com.digitalasset.canton.console.Help
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationrequestv1.AllocationRequest
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationrequestv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationrequestv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
+  allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 
 abstract class WalletAppReference(
@@ -505,9 +510,9 @@ abstract class WalletAppReference(
       )
     }
 
-  @Help.Summary("Creates a transfer via the token standard")
+  @Help.Summary("Creates a transfer via the token standard V1")
   @Help.Description(
-    "Send the given amulet to the receiver via the Token Standard. To be accepted by the receiver."
+    "Send the given amulet to the receiver via the Token Standard V1. To be accepted by the receiver."
   )
   def createTokenStandardTransfer(
       receiver: PartyId,
@@ -523,6 +528,24 @@ abstract class WalletAppReference(
       )
     }
 
+  @Help.Summary("Creates a transfer via the token standard V2")
+  @Help.Description(
+    "Send the given amulet to the receiver via the Token Standard V2. To be accepted by the receiver."
+  )
+  def createTokenStandardTransferV2(
+      receiver: PartyId,
+      amount: BigDecimal,
+      description: String,
+      expiresAt: CantonTimestamp,
+      trackingId: String,
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard
+          .CreateTransferV2(receiver, amount, description, expiresAt, trackingId)
+      )
+    }
+
   @Help.Summary("Accepts a transfer created via the token standard")
   @Help.Description("Accept a specific offer for a Token Standard transfer.")
   def acceptTokenStandardTransfer(
@@ -531,6 +554,17 @@ abstract class WalletAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.AcceptTransfer(contractId)
+      )
+    }
+
+  @Help.Summary("Accepts a transfer created via the token standard")
+  @Help.Description("Accept a specific offer for a Token Standard transfer.")
+  def acceptTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.AcceptTransferV2(contractId)
       )
     }
 
@@ -545,6 +579,17 @@ abstract class WalletAppReference(
       )
     }
 
+  @Help.Summary("Rejects a transfer created via the token standard V2")
+  @Help.Description("Reject a specific offer for a Token Standard V2 transfer.")
+  def rejectTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.RejectTransferV2(contractId)
+      )
+    }
+
   @Help.Summary("Withdraws a transfer created via the token standard")
   @Help.Description("Withdraw a specific offer for a Token Standard transfer.")
   def withdrawTokenStandardTransfer(
@@ -553,6 +598,17 @@ abstract class WalletAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpWalletAppClient.TokenStandard.WithdrawTransfer(contractId)
+      )
+    }
+
+  @Help.Summary("Withdraws a transfer created via the token standard V2")
+  @Help.Description("Withdraw a specific offer for a Token Standard V2 transfer.")
+  def withdrawTokenStandardTransferV2(
+      contractId: transferinstructionv2.TransferInstruction.ContractId
+  ): TransferInstructionResultResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpWalletAppClient.TokenStandard.WithdrawTransferV2(contractId)
       )
     }
 
@@ -566,13 +622,37 @@ abstract class WalletAppReference(
     }
   }
 
+  @Help.Summary("Creates an AmuletAllocation (v2)")
+  @Help.Description(
+    "Create an AmuletAllocationV2, which is an implementation of the Allocation Token Standard V2 for Amulet."
+  )
+  def allocateAmulet(spec: allocationv2.AllocationSpecification): AllocateAmuletV2Response = {
+    consoleEnvironment.run {
+      httpCommand(HttpWalletAppClient.TokenStandard.AllocateAmuletV2(spec))
+    }
+  }
+
   @Help.Summary("Withdraws an AmuletAllocation")
   @Help.Description(
     "Withdraw an AmuletAllocation, which is an implementation of the Allocation Token Standard for Amulet."
   )
-  def withdrawAmuletAllocation(contractId: amuletallocationCodegen.AmuletAllocation.ContractId) = {
+  def withdrawAmuletAllocation(
+      contractId: amuletallocationV1Codegen.AmuletAllocation.ContractId
+  ) = {
     consoleEnvironment.run {
       httpCommand(HttpWalletAppClient.TokenStandard.WithdrawAmuletAllocation(contractId))
+    }
+  }
+
+  @Help.Summary("Withdraws an AmuletAllocationV2")
+  @Help.Description(
+    "Withdraw an AmuletAllocationV2, which is an implementation of the Allocation Token Standard V2 for Amulet."
+  )
+  def withdrawAmuletAllocationV2(
+      contractId: amuletallocationV2Codegen.AmuletAllocationV2.ContractId
+  ) = {
+    consoleEnvironment.run {
+      httpCommand(HttpWalletAppClient.TokenStandard.WithdrawAmuletAllocationV2(contractId))
     }
   }
 
@@ -590,7 +670,7 @@ abstract class WalletAppReference(
   @Help.Description(
     "List all contracts that implement the AllocationRequest interface from the Token Standard."
   )
-  def listAllocationRequests() = {
+  def listAllocationRequests(): Seq[HttpWalletAppClient.TokenStandard.AllocationRequestContract] = {
     consoleEnvironment.run {
       httpCommand(HttpWalletAppClient.TokenStandard.ListAllocationRequests)
     }
@@ -600,9 +680,19 @@ abstract class WalletAppReference(
   @Help.Description(
     "Exercises the choice AllocationRequest_Reject from the Token Standard on the passed contract id."
   )
-  def rejectAllocationRequest(id: AllocationRequest.ContractId): Unit = {
+  def rejectAllocationRequest(id: allocationrequestv1.AllocationRequest.ContractId): Unit = {
     consoleEnvironment.run {
       httpCommand(HttpWalletAppClient.TokenStandard.RejectAllocationRequest(id))
+    }
+  }
+
+  @Help.Summary("Reject AllocationRequestV2")
+  @Help.Description(
+    "Exercises the choice AllocationRequest_Reject from the Token Standard V2 on the passed contract id."
+  )
+  def rejectAllocationRequestV2(id: allocationrequestv2.AllocationRequest.ContractId): Unit = {
+    consoleEnvironment.run {
+      httpCommand(HttpWalletAppClient.TokenStandard.RejectAllocationRequestV2(id))
     }
   }
 

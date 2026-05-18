@@ -1,0 +1,185 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Daml script testing delivery versus burn/mint.
+module Splice.Tests.TestDeliveryVersusBurnMint where
+
+import Daml.Script
+
+import DA.Action
+import DA.Assert
+import DA.Map qualified as Map
+import DA.Text qualified as T
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.HoldingV2 qualified as V2
+
+import Splice.TokenStandard.Utils
+
+import Splice.Testing.Utils
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+
+-- Test trade:
+--  alice: mints 100 X, sends 90 X to Bob, receives 2 Y from Bob
+--  bob: receiver 90 X from Alice, sends 2 Y to Alice, burns 10 X
+
+test_delivery_versus_burn_mint : Script ()
+test_delivery_versus_burn_mint = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  bob <- allocateParty "bob"
+
+  -- create some holdings for alice
+  let registry = env.testTokenV2
+  let admin = registry.admin
+  let admins = Map.keys env.registries
+  let iX = V2.InstrumentId with
+        id = "X"
+        admin
+  let iY = V2.InstrumentId with
+        id = "Y"
+        admin
+  TestTokenV2_RegistryV2.mint registry (basicAccount bob) "Y" 100.0
+
+  let settlement = V2.SettlementInfo with
+        executors = [provider]
+        settlementRef = V2.Reference with
+          id = "deliver-vs-burn/<uuid>"
+          cid = None
+        settlementDeadline = None
+        meta = emptyMetadata
+  let aliceMintLeg = V2.TransferLeg with
+        transferLegId = "mint-x"
+        sender = mintAccount admin
+        receiver = basicAccount alice
+        amount = 100.0
+        instrumentId = "X"
+        meta = reasonToMeta "mint 100 X" emptyMetadata
+  let aliceBobTransferLegX = V2.TransferLeg with
+        transferLegId = "alice-bob-x"
+        sender = basicAccount alice
+        receiver = basicAccount bob
+        amount = 90.0
+        instrumentId = "X"
+        meta = reasonToMeta "deliver 90 X to bob" emptyMetadata
+  let aliceBobTransferLegY = V2.TransferLeg with
+        transferLegId = "alice-bob-y"
+        sender = basicAccount bob
+        receiver = basicAccount alice
+        amount = 2.0
+        instrumentId = "Y"
+        meta = reasonToMeta "deliver 2 Y to bob" emptyMetadata
+  let bobBurnLeg = V2.TransferLeg with
+        transferLegId = "burn-x"
+        sender = basicAccount bob
+        receiver = burnAccount admin
+        amount = 10.0
+        instrumentId = "X"
+        meta = reasonToMeta "burn 10 X" emptyMetadata
+
+  let aliceAlloc = V2.AllocationSpecification with
+        settlement
+        authorizer = basicAccount alice
+        admin
+        transferLegSides = [receiverSide aliceMintLeg, senderSide aliceBobTransferLegX, receiverSide aliceBobTransferLegY]
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
+  let bobAlloc = V2.AllocationSpecification with
+        settlement
+        authorizer = basicAccount bob
+        admin
+        transferLegSides = [senderSide aliceBobTransferLegY, receiverSide aliceBobTransferLegX, senderSide bobBurnLeg]
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
+  let adminMintAlloc = V2.AllocationSpecification with
+        settlement
+        authorizer = mintAccount admin
+        admin
+        transferLegSides = [senderSide aliceMintLeg]
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
+  let adminBurnAlloc = V2.AllocationSpecification with
+        settlement
+        authorizer = burnAccount admin
+        admin
+        transferLegSides = [receiverSide bobBurnLeg]
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
+
+  let mkAlloc allocSpec = do
+        now <- getTime
+        let actor = accountPrincipal admin allocSpec.authorizer
+        inputHoldingCids <- WalletClientV2.listHoldingCids actor iY
+        enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+          allocation = allocSpec
+          requestedAt = now
+          inputHoldingCids
+          actors = [actor]
+          extraArgs = emptyExtraArgs
+
+        result <- WalletClientV2.submitAndCheckTxHistory admins (actAs actor <> discloseMany' enrichedChoice.disclosures) $
+          exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+        pure result.output.allocationCid
+
+  finalizedAllocs <- forA [aliceAlloc, bobAlloc, adminMintAlloc, adminBurnAlloc] $ \allocSpec -> do
+    allocCid <- mkAlloc allocSpec
+    pure $ nonIteratedAllocation allocCid
+
+  -- check that neither alice can create the mint or burn allocations themselves
+  let mkAllocMustFail actor allocSpec = do
+        now <- getTime
+        enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+          allocation = allocSpec
+          requestedAt = now
+          inputHoldingCids = []
+          actors = [actor]
+          extraArgs = emptyExtraArgs
+
+        result <- trySubmit (actAs actor <> discloseMany' enrichedChoice.disclosures) $
+          exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+        let (Left (FailureStatusError err)) = result
+        let expectedMsg = "allowed actors: " <> show [[admin]]
+        unless (expectedMsg `T.isInfixOf` err.message ) $ fail $ T.unlines $
+          [ "Expected allocation creation to fail with message containing: " <> expectedMsg
+          , "But got error: " <> err.message
+          ]
+
+  mkAllocMustFail alice adminMintAlloc
+  mkAllocMustFail bob adminBurnAlloc
+
+  -- settle the allocations together
+  enrichedChoice <- V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
+    actors = [provider]
+    settlement
+    transferLegs = [aliceBobTransferLegX, bobBurnLeg, aliceBobTransferLegY, aliceMintLeg ] -- intentionally reversed to test that the order doesn't matter
+    allocations = finalizedAllocs
+    extraArgs = emptyExtraArgs
+
+  WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- check balances, and that no unexpected holdings were created
+  WalletClientV2.checkBalance alice iX 10.0
+  WalletClientV2.checkBalance bob iX 80.0  -- 100.0 from alice, minus 10.0 burned
+
+  WalletClientV2.checkBalance alice iY 2.0
+  WalletClientV2.checkBalance bob iY 98.0  -- 100.0 from alice, minus 10.0 burned
+
+  allHoldings <- queryInterface @V2.Holding admin
+  length allHoldings === 4
+
+  pure ()
+

@@ -25,26 +25,37 @@ import {
   mockDelegationHostedStatusSorted,
   mockProposalHostedStatusSorted,
   mockMintingDelegationProposalsSorted,
+  dsoPartyId,
 } from './mocks/delegation-constants';
 import { requestMocks } from './mocks/handlers/transfers-api';
 import { server } from './setup/setup';
 import {
-  AllocateAmuletRequest,
-  AllocateAmuletResponse,
+  AllocateAmuletRequest as AllocateAmuletV1Request,
+  AllocateAmuletResponse as AllocateAmuletV1Response,
+  AllocateAmuletV2Request,
+  AllocateAmuletV2Response,
+  AmuletAllocationV2WithdrawResult,
   AmuletAllocationWithdrawResult,
   ChoiceExecutionMetadata,
   ListAllocationRequestsResponse,
   ListAllocationsResponse,
 } from '@lfdecentralizedtrust/wallet-openapi';
-import { AllocationRequest } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
+import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
+import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
 import { mkContract } from './mocks/contract';
-import { openApiRequestFromTransferLeg } from '../components/ListAllocationRequests';
+import {
+  openApiV1RequestFromTransferLeg,
+  openApiV2RequestFromAllocationRequest,
+} from '../components/ListAllocationRequests';
 import { shortenPartyId } from '../utils/partyId';
 import * as damlTypes from '@daml/types';
 import { ContractId, Optional, Text } from '@daml/types';
 import { AnyContract } from '@daml.js/splice-api-token-metadata/lib/Splice/Api/Token/MetadataV1/module';
-import { AmuletAllocation } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
+import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { LockedAmulet } from '@daml.js/splice-amulet/lib/Splice/Amulet';
+import { TransferSide } from '@daml.js/splice-api-token-allocation-v2-1.0.0/lib/Splice/Api/Token/AllocationV2';
 
 const dsoEntry = nameServiceEntries.find(e => e.name.startsWith('dso'))!;
 
@@ -63,9 +74,9 @@ function featureSupportHandler(
 }
 
 test('can parse allocation request', async () => {
-  const ar = getAllocationRequest();
-  const res = mkContract(AllocationRequest, ar);
-  const decoded = Contract.decodeOpenAPI(res, AllocationRequest);
+  const ar = getAllocationRequestV1();
+  const res = mkContract(AllocationRequestV1, ar);
+  const decoded = Contract.decodeOpenAPI(res, AllocationRequestV1);
   expect(decoded.contractId).toStrictEqual(res.contract_id);
   expect(decoded.createdAt).toStrictEqual(res.created_at);
   expect(decoded.createdEventBlob).toStrictEqual(res.created_event_blob);
@@ -220,7 +231,7 @@ describe('Wallet user can', () => {
     describe('Allocations', () => {
       test('see allocations', async () => {
         const allocations = Array.from({ length: 3 }, (_, i) =>
-          getAllocation(
+          getAllocationV2(
             `settlement_${i}`,
             `transfer_leg_${i}`,
             `receiver_${i}::party`,
@@ -233,7 +244,7 @@ describe('Wallet user can', () => {
             return HttpResponse.json<ListAllocationsResponse>({
               allocations: allocations.map(allocationPayload => {
                 return {
-                  contract: mkContract(AmuletAllocation, allocationPayload),
+                  contract: mkContract(AmuletAllocationV2, allocationPayload),
                 };
               }),
             });
@@ -260,18 +271,18 @@ describe('Wallet user can', () => {
         );
       });
 
-      test('see allocation requests, and accept them', async () => {
-        const allocationRequest = getAllocationRequest();
+      test('see allocation requests v1, and accept them', async () => {
+        const allocationRequest = getAllocationRequestV1();
         const allocationRequests = [allocationRequest];
-        let calledCreate: (body: AllocateAmuletRequest) => void;
-        const createPromise: Promise<AllocateAmuletRequest> = new Promise(
+        let calledCreate: (body: AllocateAmuletV1Request) => void;
+        const createPromise: Promise<AllocateAmuletV1Request> = new Promise(
           resolve => (calledCreate = resolve)
         );
         server.use(
           http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, () => {
             return HttpResponse.json<ListAllocationRequestsResponse>({
               allocation_requests: allocationRequests.map(contract => {
-                return { contract: mkContract(AllocationRequest, contract) };
+                return { contract: mkContract(AllocationRequestV1, contract) };
               }),
             });
           }),
@@ -307,12 +318,12 @@ describe('Wallet user can', () => {
         expect(acceptButtons.length).toBe(1);
 
         server.use(
-          http.post<PathParams, AllocateAmuletRequest>(
+          http.post<PathParams, AllocateAmuletV1Request>(
             `${walletUrl}/v0/allocations`,
             async ({ request }) => {
               const body = await request.json();
               calledCreate(body);
-              const response: AllocateAmuletResponse = {
+              const response: AllocateAmuletV1Response = {
                 output: {
                   allocation_instruction_cid: 'alloc_instr_cid',
                   allocation_cid: 'alloc_cid',
@@ -328,7 +339,7 @@ describe('Wallet user can', () => {
 
         acceptButtons[0].click();
         const calledWithBody = await createPromise;
-        const expected = openApiRequestFromTransferLeg(
+        const expected = openApiV1RequestFromTransferLeg(
           allocationRequest.settlement,
           allocationRequest.transferLegs.acceptable,
           'acceptable'
@@ -336,13 +347,91 @@ describe('Wallet user can', () => {
         expect(calledWithBody).toStrictEqual(expected);
       });
 
-      test("withdraw allocations from the allocation or the allocation request's leg views", async () => {
-        const allocationRequestPayload = getAllocationRequest();
-        const allocationRequest = mkContract(AllocationRequest, allocationRequestPayload);
+      test('see allocation requests v2, and accept them', async () => {
+        const allocationRequest = getAllocationRequestV2();
+        const allocationRequests = [allocationRequest];
+        let calledCreate: (body: AllocateAmuletV2Request) => void;
+        const createPromise: Promise<AllocateAmuletV2Request> = new Promise(
+          resolve => (calledCreate = resolve)
+        );
+        server.use(
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract: mkContract(AllocationRequestV2, contract) };
+              }),
+            });
+          }),
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
+          })
+        );
+
+        const user = userEvent.setup();
+        render(
+          <WalletConfigProvider>
+            <App />
+          </WalletConfigProvider>
+        );
+        expect(await screen.findByText('Allocations')).toBeDefined();
+
+        const allocationsLink = screen.getByRole('link', { name: 'Allocations' });
+        await user.click(allocationsLink);
+        expect(
+          screen.getByRole('heading', { name: `Allocation Requests ${allocationRequests.length}` })
+        ).toBeDefined();
+
+        expect(
+          await screen.findByText(
+            `SettlementRef id: ${allocationRequest.settlement.settlementRef.id}`
+          )
+        ).toBeDefined();
+
+        const acceptButtons = await screen.findAllByRole('button', { name: 'Accept' });
+        // one has a different sender, and one a different instrument, so those shouldn't be accepted
+        expect(acceptButtons.length).toBe(1);
+
+        server.use(
+          http.post<PathParams, AllocateAmuletV2Request>(
+            `${walletUrl}/v2/allocations`,
+            async ({ request }) => {
+              const body = await request.json();
+              calledCreate(body);
+              const response: AllocateAmuletV2Response = {
+                output: {
+                  allocation_instruction_cid: 'alloc_instr_cid',
+                  allocation_cid: 'alloc_cid',
+                  dummy: {},
+                },
+                sender_change_cids: ['whatever'],
+                meta: {},
+              };
+              return HttpResponse.json(response);
+            }
+          )
+        );
+
+        acceptButtons[0].click();
+        const calledWithBody = await createPromise;
+        const acceptableSides = allocationRequest.allocations
+          .flatMap(alloc => alloc.transferLegSides)
+          .filter(side => side.transferLegId === 'acceptable');
+        const expected = openApiV2RequestFromAllocationRequest(
+          allocationRequest.settlement,
+          acceptableSides
+        );
+        expect(calledWithBody).toStrictEqual(expected);
+      });
+
+      test("withdraw allocations v1 from the allocation or the allocation request's leg views", async () => {
+        const allocationRequestPayload = getAllocationRequestV1();
+        const allocationRequest = mkContract(AllocationRequestV1, allocationRequestPayload);
         const allocationRequests = [allocationRequest];
         const allocation = mkContract(
-          AmuletAllocation,
-          getAllocation(
+          AmuletAllocationV1,
+          getAllocationV1(
             allocationRequestPayload.settlement.settlementRef.id,
             'acceptable',
             allocationRequestPayload.transferLegs.acceptable.receiver,
@@ -405,9 +494,130 @@ describe('Wallet user can', () => {
         expect(calledWithdrawArgs).toStrictEqual([allocation.contract_id, allocation.contract_id]);
       });
 
+      test("withdraw allocations v2 from the allocation or the allocation request's views", async () => {
+        const allocationRequestPayload = getAllocationRequestV2();
+        const allocationRequest = mkContract(AllocationRequestV2, allocationRequestPayload);
+        const allocationRequests = [allocationRequest];
+        const allocation = mkContract(
+          AmuletAllocationV2,
+          getAllocationV2(
+            allocationRequestPayload.settlement.settlementRef.id,
+            'acceptable',
+            bobPartyId,
+            '3',
+            allocationRequestPayload.settlement.executors[0]
+          )
+        );
+        const allocations = [allocation];
+
+        const calledWithdrawArgs: string[] = [];
+
+        server.use(
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
+          }),
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: allocations.map(contract => {
+                return { contract };
+              }),
+            });
+          }),
+          http.post(`${walletUrl}/v2/allocations/:cid/withdraw`, async ({ params }) => {
+            calledWithdrawArgs.push(params!.cid!.toString());
+            return HttpResponse.json<AmuletAllocationV2WithdrawResult>({
+              authorizer_holding_cids: {},
+              meta: {},
+            });
+          })
+        );
+
+        const user = userEvent.setup();
+        render(
+          <WalletConfigProvider>
+            <App />
+          </WalletConfigProvider>
+        );
+        expect(await screen.findByText('Allocations')).toBeDefined();
+        const allocationsLink = screen.getByRole('link', { name: 'Allocations' });
+        await user.click(allocationsLink);
+
+        // there should be one allocation request and one allocation,
+        // both of which with a withdraw button
+        expect(
+          await screen.findByLabelText(`Allocation Requests ${allocationRequests.length}`)
+        ).toBeDefined();
+        expect(await screen.findByLabelText(`Allocations ${allocations.length}`)).toBeDefined();
+
+        const withdrawButtons = await screen.findAllByRole('button', { name: 'Withdraw' });
+        expect(withdrawButtons).to.have.length(2);
+
+        for (const button of withdrawButtons) {
+          await user.click(button);
+        }
+
+        expect(calledWithdrawArgs).toStrictEqual([allocation.contract_id, allocation.contract_id]);
+      });
+
       test('reject allocation requests', async () => {
-        const allocationRequestPayload = getAllocationRequest();
-        const allocationRequest = mkContract(AllocationRequest, allocationRequestPayload);
+        const allocationRequestPayload = getAllocationRequestV1();
+        const allocationRequest = mkContract(AllocationRequestV1, allocationRequestPayload);
+        const allocationRequests = [allocationRequest];
+
+        const calledRejectArgs: string[] = [];
+
+        server.use(
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
+          }),
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
+          }),
+          http.post(
+            `${walletUrl}/v0/wallet/token-standard/allocation-requests/:cid/reject`,
+            async ({ params }) => {
+              calledRejectArgs.push(params!.cid!.toString());
+              return HttpResponse.json<ChoiceExecutionMetadata>({
+                meta: {},
+              });
+            }
+          )
+        );
+
+        const user = userEvent.setup();
+        render(
+          <WalletConfigProvider>
+            <App />
+          </WalletConfigProvider>
+        );
+        expect(await screen.findByText('Allocations')).toBeDefined();
+        const allocationsLink = screen.getByRole('link', { name: 'Allocations' });
+        await user.click(allocationsLink);
+
+        // there should be one allocation request with a reject button
+        expect(
+          await screen.findByLabelText(`Allocation Requests ${allocationRequests.length}`)
+        ).toBeDefined();
+
+        const rejectButton = await screen.findByRole('button', { name: 'Reject' });
+        await user.click(rejectButton);
+
+        expect(calledRejectArgs).toStrictEqual([allocationRequest.contract_id]);
+      });
+
+      test('reject allocation requests v2', async () => {
+        const allocationRequestPayload = getAllocationRequestV2();
+        const allocationRequest = mkContract(AllocationRequestV2, allocationRequestPayload);
         const allocationRequests = [allocationRequest];
 
         const calledRejectArgs: string[] = [];
@@ -1147,7 +1357,7 @@ async function assertCorrectMockIsCalled(
   }
 }
 
-function getAllocationRequest() {
+function getAllocationRequestV1() {
   return {
     settlement: {
       executor: 'executor',
@@ -1167,7 +1377,7 @@ function getAllocationRequest() {
         amount: '3',
         instrumentId: {
           id: 'Amulet',
-          admin: 'dso::party',
+          admin: dsoPartyId,
         },
         meta: { values: {} },
       },
@@ -1177,7 +1387,7 @@ function getAllocationRequest() {
         amount: '3',
         instrumentId: {
           id: 'Amulet',
-          admin: 'dso::party',
+          admin: dsoPartyId,
         },
         meta: { values: {} },
       },
@@ -1187,7 +1397,7 @@ function getAllocationRequest() {
         amount: '3',
         instrumentId: {
           id: 'Another',
-          admin: 'dso::party',
+          admin: dsoPartyId,
         },
         meta: { values: {} },
       },
@@ -1196,15 +1406,103 @@ function getAllocationRequest() {
   };
 }
 
-function getAllocation(
+function getAllocationRequestV2() {
+  return {
+    originalRequestCid: null,
+    requestedAt: new Date().toISOString(),
+    settleAt: new Date().toISOString(),
+    authorizer: { owner: alicePartyId, provider: null, id: '' },
+    settlement: {
+      executors: ['executor'],
+      settlementRef: {
+        id: 'the_id',
+        cid: null as damlTypes.Optional<ContractId<AnyContract>>,
+      },
+      settlementDeadline: null as damlTypes.Optional<string>,
+      meta: { values: {} },
+    },
+    allocations: [
+      {
+        admin: dsoPartyId,
+        meta: { values: {} },
+        committed: false,
+        nextIterationFunding: null,
+        transferLegSides: [
+          {
+            transferLegId: 'acceptable',
+            instrumentId: 'Amulet',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide' as TransferSide,
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+          {
+            transferLegId: 'different_instrument',
+            instrumentId: 'Another',
+            amount: '3',
+            meta: { values: {} },
+            side: 'SenderSide' as TransferSide,
+            otherside: { owner: bobPartyId, provider: null, id: '' },
+          },
+        ],
+      },
+    ],
+    availableActions: [],
+    meta: { values: {} },
+  };
+}
+
+function getAllocationV2(
   settlementId: string,
   transferLegId: string,
   receiver: string,
   amount: string,
   executor: string
-) {
+): AmuletAllocationV2 {
   return {
-    lockedAmulet: `lockedamulet${settlementId}`,
+    lockedAmulet: null as damlTypes.Optional<ContractId<LockedAmulet>>,
+    dso: dsoPartyId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date().toISOString(),
+    numIterations: '0',
+    allocation: {
+      admin: dsoPartyId,
+      meta: { values: {} },
+      committed: false,
+      nextIterationFunding: null,
+      transferLegSides: [
+        {
+          transferLegId,
+          side: 'SenderSide',
+          instrumentId: 'Amulet',
+          meta: { values: {} },
+          otherside: { owner: receiver, provider: null, id: '' },
+          amount,
+        },
+      ],
+      settlement: {
+        executors: [executor],
+        settlementRef: {
+          id: settlementId,
+          cid: null,
+        },
+        settlementDeadline: null,
+        meta: { values: {} },
+      },
+      authorizer: { owner: alicePartyId, provider: null, id: '' },
+    },
+  };
+}
+
+function getAllocationV1(
+  settlementId: string,
+  transferLegId: string,
+  receiver: string,
+  amount: string,
+  executor: string
+): AmuletAllocationV1 {
+  return {
+    lockedAmulet: `lockedamulet${settlementId}` as ContractId<LockedAmulet>,
     allocation: {
       transferLegId,
       transferLeg: {

@@ -1,0 +1,247 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | V2 amulet allocation, which can and should be settled using `V2.SettlementFactory_SettleBatch`.
+module Splice.AmuletAllocationV2 (
+  AmuletAllocationV2(..),
+  netAmuletCreditAmount,
+  validateAmuletNextIterationFunding,
+  computeAllocationExpiry,
+) where
+
+import DA.Action
+import DA.Assert (assertWithinDeadline)
+import DA.Foldable (forA_)
+import DA.Optional
+import DA.TextMap qualified as TextMap
+import DA.Time
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.TokenStandard.Utils hiding (require)
+
+import Splice.Amulet
+import Splice.AmuletRules
+import Splice.AmuletAllocation qualified as AmuletAllocationV1
+import Splice.Amulet.TwoStepTransfer
+import Splice.Amulet.TokenApiUtils
+import Splice.Expiry (TimeLock(..))
+import Splice.Fees (expiringAmount)
+import Splice.Types
+import Splice.Util
+
+
+
+-- | V2 amulet allocation created using the `V2.AllocationFactory_Allocate`
+-- choice and expected to be settled using `V2.SettlementFactory_SettleBatch`.
+template AmuletAllocationV2
+  with
+    lockedAmulet : Optional (ContractId LockedAmulet)
+      -- ^ Locked amulet that holds the funds for the allocation.
+      -- Empty if the net fund movement is positive.
+    allocation : V2.AllocationSpecification
+    dso : Party
+    expiresAt : Time
+    numIterations : Int
+    createdAt : Time
+  where
+    signatory dso, allocation.authorizer.owner
+    observer allocation.settlement.executors
+
+    ensure
+      isBasicAccount allocation.authorizer &&
+      isValidAllocationSpecificationV2 (== amuletInstrumentIdName) allocation
+
+    -- TODO(#4525): add expiry choice for the DSO party and hook it up to AmuletRules, so that AmuletAllocationV2 is also auto-expired
+
+    interface instance V2.Allocation for AmuletAllocationV2 where
+      view = V2.AllocationView with
+        originalAllocationCid = None
+        createdAt
+        numIterations
+        expiresAt = Some expiresAt
+        allocation
+        holdingCids = case lockedAmulet of
+          None -> mempty
+          Some cid -> [toInterfaceContractId cid]
+        availableActions = allocationV2_availableActionsDefault allocation
+        meta = emptyMetadata
+
+      -- No extra observers required, as the choice bodies do not introduce further informees.
+      -- Note that the executors are controllers on these two choices.
+      allocation_settleExtraObservers _arg = []
+      allocation_cancelExtraObservers _arg = []
+
+      -- Add executors as extra observers so there is no extra view for the archival of the holding
+      allocation_withdrawExtraObservers _arg = allocation.settlement.executors
+
+      allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
+        archiveAndCheckActors self arg.actors [[accountPrincipal dso allocation.authorizer]]
+        ensureWithdrawIsAllowed allocation
+        authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
+        pure V2.AllocationResult with
+            output = V2.AllocationResult_Withdrawn
+            authorizerHoldingCids
+            meta = emptyMetadata
+
+      allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
+        archiveAndCheckActors self arg.actors [allocation.settlement.executors]
+        authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
+        pure V2.AllocationResult with
+            output = V2.AllocationResult_Cancelled
+            authorizerHoldingCids
+            meta = emptyMetadata
+
+      allocation_settleImpl self arg = do
+        -- check actors and deadline
+        archiveAndCheckActors self arg.actors [dso :: allocation.settlement.executors]
+        forA_ allocation.settlement.settlementDeadline $ \deadline ->
+          assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
+
+        -- validate the Allocation_Settle choice arguments
+        let actualTransferLegSides = allocation.transferLegSides ++ arg.extraTransferLegSides
+        -- note: we allow allocations with no transfer legs, as they can be used to bump the expiry,
+        -- and the traffic cost of that bump is what protects the SV node's storage space
+        unless (isSome allocation.nextIterationFunding) $ do
+          require "no extra transfer legs allowed when iterated settlement is disabled" (null arg.extraTransferLegSides)
+          require "no next iteration funding allowed when iterated settlement is disabled" (isNone arg.nextIterationFunding)
+        validateAmuletTransferLegs actualTransferLegSides
+        outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
+
+        -- archive the locked tokens
+        let authorizer = accountPrincipal dso allocation.authorizer
+        (inputFundingAmount, inputTokenCids) <-
+          case lockedAmulet of
+            None -> pure (0.0, [])
+            Some lockedAmuletCid -> do
+              lockedAmulet <- fetchAndArchive (ForOwner with dso = dso; owner = authorizer) lockedAmuletCid
+              pure (lockedAmulet.amulet.amount.initialAmount, [toInterfaceContractId lockedAmuletCid])
+
+        -- compute total funds to move
+        let netTransferAmount = netAmuletCreditAmount dso (basicAccount authorizer) actualTransferLegSides
+        let inputAmount = inputFundingAmount + netTransferAmount
+        let payoutAmount = inputAmount - outputFundingAmount
+        require' ("inputAmount", inputAmount) isGreaterOrEqualR ("minimal outputAmount", outputFundingAmount)
+
+        -- read reference data
+        (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+        let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
+
+        -- create the payout
+        payoutHoldingCids <-
+          if payoutAmount <= 0.0 then pure [] else do
+            amuletCid <- create Amulet with
+              dso
+              owner = authorizer
+              amount = expiringAmount configAmulet.holdingFee payoutAmount configState.holdingFeesOpenRoundNumber
+            pure [toInterfaceContractId amuletCid]
+
+        -- create the locked amulet for the next iteration, if needed
+        let settlement = allocation.settlement
+        newExpiresAt <- bumpAllocationExpiry expiresAt settlement
+        lockedAmulet <-
+          if outputFundingAmount <= 0.0 then pure None else do
+            lockedAmuletCid <- create LockedAmulet with
+              lock = TimeLock with
+                holders = [authorizer, dso]
+                expiresAt = newExpiresAt
+                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement.settlementRef)
+              amulet = Amulet with
+                dso
+                owner = authorizer
+                amount = expiringAmount configAmulet.holdingFee outputFundingAmount configState.holdingFeesOpenRoundNumber
+            pure (Some lockedAmuletCid)
+
+        -- create the allocation for the next iteration, if needed
+        nextIterationAllocationCid <-
+          if isNone arg.nextIterationFunding then pure None else do
+            nextAllocationCid <- create AmuletAllocationV2 with
+              lockedAmulet
+              allocation = this.allocation with
+                transferLegSides = []
+                nextIterationFunding = arg.nextIterationFunding
+              dso
+              expiresAt = newExpiresAt
+              numIterations = numIterations + 1
+              createdAt
+            pure (Some (toInterfaceContractId nextAllocationCid))
+
+        -- log the tx history v2 event
+        let outputHoldingCids = optional [] (pure . toInterfaceContractId) lockedAmulet ++ payoutHoldingCids
+        logAllocationSettlement (toInterfaceContractId configStateCid)
+          inputTokenCids
+          (allocation with transferLegSides = actualTransferLegSides)
+          outputHoldingCids
+
+        -- return the result
+        let v1Reason = "Settle allocation for settlement " <> allocation.settlement.settlementRef.id
+        pure V2.AllocationResult with
+          authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, outputHoldingCids) | not (null outputHoldingCids)]
+          output = V2.AllocationResult_Settled with
+            nextIterationAllocationCid
+          meta = simpleHoldingTxMeta TxKind_Transfer (Some v1Reason) None
+          -- Note: we approximate the metadata for V1 history parsing by declaring it as a transfer, even though there
+          -- might be multiple transfers happening at once. It's the best we can do given the limited expressivity
+          -- of V1 tx history metadata.
+
+
+unlockAmuletAllocationV2 : AmuletAllocationV2 -> ExtraArgs -> Update (TextMap.TextMap [ContractId V2.Holding])
+unlockAmuletAllocationV2 amuletAllocation extraArgs = do
+  case amuletAllocation.lockedAmulet of
+    None -> return TextMap.empty
+    Some la -> do
+      let lockExpiresAt = amuletAllocation.expiresAt
+      holdingCids <- abortTwoStepTransfer lockExpiresAt la extraArgs
+      pure $ TextMap.fromList [ (amuletInstrumentIdName, map upcast holdingCids) ]
+
+netAmuletCreditAmount : Party -> V2.Account -> [V2.TransferLegSide] -> Decimal
+netAmuletCreditAmount dso authorizer transferLegs =
+    fromOptional 0.0 $ TextMap.lookup amuletInstrumentIdName creditAmounts
+  where
+    creditAmounts = netAllocationCreditAmounts dso authorizer transferLegs
+
+validateAmuletNextIterationFunding : Optional (TextMap.TextMap Decimal) -> Update Decimal
+validateAmuletNextIterationFunding None = pure 0.0
+validateAmuletNextIterationFunding (Some nextIterationFunding) = do
+  amounts <- forA (TextMap.toList nextIterationFunding) $ \(instrumentId, amount) -> do
+    requireMatchExpected ("nextIterationFunding.instrumentId", instrumentId) amuletInstrumentIdName
+    require' ("nextIterationFunding.amount", amount) isGreaterOrEqualR ("zero", 0.0)
+    pure amount
+  pure (sum amounts)
+
+validateAmuletTransferLegs : [V2.TransferLegSide] -> Update ()
+validateAmuletTransferLegs transferLegs = do
+  requireUnique "transferLegSides" (map (\leg -> (leg.transferLegId, leg.side)) transferLegs)
+  forA_ transferLegs $ \leg -> do
+    requireMatchExpected ("transferLeg.instrumentId", leg.instrumentId) amuletInstrumentIdName
+    require' ("transferLeg.amount", leg.amount) isGreaterOrEqualR ("zero", 0.0)
+
+-- | Minimum time-to-live for an amulet allocation. The maximum is then twice that much.
+-- TODO(#4665): make max duration configurable; and also implement for transfer instructions
+minAmuletAllocationTTL : RelTime
+minAmuletAllocationTTL = days 45
+
+maxAmuletAllocationTTL : RelTime
+maxAmuletAllocationTTL = minAmuletAllocationTTL + minAmuletAllocationTTL
+
+computeAllocationExpiry : Time -> V2.SettlementInfo -> Time
+computeAllocationExpiry now settlement =
+  optional identity min settlement.settlementDeadline $
+  now `addRelTime` maxAmuletAllocationTTL
+
+-- | Bump the allocation expiry such that the allocation has an expiry
+-- time between `minAmuletAllocationTTL` and `maxAmuletAllocationTTL` from now.
+bumpAllocationExpiry : Time -> V2.SettlementInfo -> Update Time
+bumpAllocationExpiry currentExpiresAt settlement = do
+  dontBump <- isLedgerTimeLE (currentExpiresAt `addRelTime` negate minAmuletAllocationTTL)
+  pure $ if dontBump then currentExpiresAt else
+    optional identity min settlement.settlementDeadline $
+    addRelTime currentExpiresAt minAmuletAllocationTTL
+
+
+-- instances
+------------
+
+instance HasCheckedFetch AmuletAllocationV2 ForDso where
+  contractGroupId AmuletAllocationV2{..} = ForDso with dso

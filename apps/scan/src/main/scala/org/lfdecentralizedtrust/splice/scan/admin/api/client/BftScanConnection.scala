@@ -90,10 +90,12 @@ import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.Allocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
@@ -105,7 +107,6 @@ import org.lfdecentralizedtrust.tokenstandard.{
   metadata,
   transferinstruction,
 }
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
 import org.slf4j.event.Level
 
 import java.util.concurrent.ConcurrentHashMap
@@ -543,10 +544,23 @@ class BftScanConnection(
           transferinstructionv1.TransferFactory.ContractId,
           transferinstructionv1.TransferFactory_Transfer,
         ],
-        TransferFactoryWithChoiceContext.TransferKind,
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
     )
   ] =
     bftCall(_.getTransferFactory(choiceArgs))
+
+  def getTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        FactoryChoiceWithDisclosures[
+          transferinstructionv2.TransferFactory.ContractId,
+          transferinstructionv2.TransferFactory_Transfer,
+        ],
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+    )
+  ] =
+    bftCall(_.getTransferFactoryV2(choiceArgs))
 
   def getTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
@@ -554,22 +568,40 @@ class BftScanConnection(
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     bftCall(_.getTransferFactoryRaw(arg))
 
-  def getTransferInstructionAcceptContext(
-      instructionCid: TransferInstruction.ContractId
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionAcceptContext(instructionCid)
   )
 
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionAcceptContextV2(instructionCid)
+  )
+
   def getTransferInstructionRejectContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionRejectContext(instructionCid)
   )
 
+  def getTransferInstructionRejectContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionRejectContextV2(instructionCid)
+  )
+
   def getTransferInstructionWithdrawContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionWithdrawContext(instructionCid)
+  )
+
+  def getTransferInstructionWithdrawContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionWithdrawContextV2(instructionCid)
   )
 
   def getTransferInstructionAcceptContextRaw(
@@ -614,7 +646,7 @@ class BftScanConnection(
     bftCall(_.listInstruments(pageSize, pageToken))
 
   def getAllocationTransferContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -639,6 +671,15 @@ class BftScanConnection(
   ): Future[allocation.v1.definitions.ChoiceContext] =
     bftCall(_.getAllocationCancelContextRaw(allocationId, body))
 
+  def getAllocationV2CancelContextRaw(
+      allocationId: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    bftCall(_.getAllocationV2CancelContextRaw(allocationId, body))
+
   def getAllocationWithdrawContextRaw(
       allocationId: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,
@@ -649,20 +690,28 @@ class BftScanConnection(
     bftCall(_.getAllocationWithdrawContextRaw(allocationId, body))
 
   def getAllocationCancelContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[ChoiceContextWithDisclosures] =
     bftCall(_.getAllocationCancelContext(allocationCid))
 
-  def getAllocationWithdrawContext(
-      allocationCid: Allocation.ContractId
+  def getAllocationWithdrawContextV1(
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[ChoiceContextWithDisclosures] =
-    bftCall(_.getAllocationWithdrawContext(allocationCid))
+    bftCall(_.getAllocationWithdrawContextV1(allocationCid))
+
+  def getAllocationWithdrawContextV2(
+      allocationCid: allocationv2.Allocation.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    bftCall(_.getAllocationWithdrawContextV2(allocationCid))
 
   def getAllocationFactory(choiceArgs: allocationinstructionv1.AllocationFactory_Allocate)(implicit
       ec: ExecutionContext,
@@ -674,6 +723,18 @@ class BftScanConnection(
     ]
   ] =
     bftCall(_.getAllocationFactory(choiceArgs))
+
+  def getAllocationFactoryV2(choiceArgs: allocationinstructionv2.AllocationFactory_Allocate)(
+      implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    FactoryChoiceWithDisclosures[
+      allocationinstructionv2.AllocationFactory.ContractId,
+      allocationinstructionv2.AllocationFactory_Allocate,
+    ]
+  ] =
+    bftCall(_.getAllocationFactoryV2(choiceArgs))
 
   def getAllocationFactoryRaw(arg: allocationinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,

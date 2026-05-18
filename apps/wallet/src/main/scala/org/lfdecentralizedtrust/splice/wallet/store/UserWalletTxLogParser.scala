@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.wallet.store
 import cats.{Eval, Monoid}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import cats.syntax.foldable.*
-import com.daml.ledger.javaapi.data.*
+import com.daml.ledger.javaapi.data.{Contract as _, *}
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AmuletCreateSummary
@@ -50,6 +50,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
   transferoffer as transferCodegen,
 }
 import org.lfdecentralizedtrust.splice.history.{
+  AllocationExecuteTransfer,
+  AllocationFactoryAllocate,
+  AllocationFactoryV2Allocate,
   AmuletArchive,
   AmuletCreate,
   AmuletExpire,
@@ -73,6 +76,7 @@ import org.lfdecentralizedtrust.splice.history.{
   LockedAmuletUnlock,
   LockedAmuletUnlockV2,
   Mint,
+  SettlementFactorySettle,
   Tap,
   Transfer,
   TransferInstructionCreate,
@@ -82,14 +86,13 @@ import org.lfdecentralizedtrust.splice.history.{
   TransferPreapproval_Renew,
   TransferPreapproval_Send,
   TransferPreapproval_SendV2,
-  AllocationFactoryAllocate,
-  AllocationExecuteTransfer,
 }
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.util.{
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
+  TokenStandardAccount,
   TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
@@ -115,6 +118,9 @@ class UserWalletTxLogParser(
 ) extends TxLogStore.Parser[TxLogEntry]
     with NamedLogging {
   import UserWalletTxLogParser.*
+
+  private val endUserPartyProtoPrimitive = endUserParty.toProtoPrimitive
+  private val amuletInstrumentIdName = "Amulet"
 
   // ignoreUnexpectedAmuletCreateArchive disables the warning when we
   // hit a bare create/archive of an amulet contract.  We use this for
@@ -248,7 +254,7 @@ class UserWalletTxLogParser(
                     // Err on the safe side when parsing log entries before the upgrade that introduced the optEndUserParty
                     // annotation in the batch result.
                     actingEndUserParty.isEmpty || actingEndUserParty
-                      .contains(endUserParty.toProtoPrimitive)
+                      .contains(endUserPartyProtoPrimitive)
                   ) {
                     val details = reason match {
                       case r: ITR_InsufficientFunds =>
@@ -1036,6 +1042,7 @@ class UserWalletTxLogParser(
               BigDecimal(0).bigDecimal, // receiver fee ratio is irrelevant, there are no fees
               node.argument.value.amount,
               java.util.Optional.empty(), // lock
+              java.util.Optional.empty(), // meta
             )
             now {
               State
@@ -1083,6 +1090,65 @@ class UserWalletTxLogParser(
                   svRewardsUsed = Some(BigDecimal(0.0)),
                 )
                 state.appended(State(immutable.Queue(transferEntry)))
+              }
+            }
+          case AllocationFactoryV2Allocate(_) =>
+            // We deliberately ignore the locking happening here, and letting the full transfer be reported in
+            // the SettlementFactorySettle branch below to avoid double-reporting of amounts as part of locking
+            now {
+              State.empty
+            }
+          // Using SettlementFactorySettle makes it easier than using AllocationV2Settle,
+          // because that one does not (easily) include the transfer legs whereas this one does
+          case SettlementFactorySettle(node) =>
+            now {
+              node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
+                case (stateAcc, transferLeg) =>
+                  if (
+                    transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner.toScala
+                      .contains(endUserPartyProtoPrimitive) || transferLeg.sender.owner.toScala
+                      .contains(endUserPartyProtoPrimitive))
+                  ) {
+                    stateAcc.appended(
+                      State(
+                        immutable.Queue(
+                          TransferTxLogEntry(
+                            // we need to include the transferLegId because of unique constraint on (store_id, tx_log_id, event_id)
+                            eventId = EventId
+                              .prefixedFromUpdateIdAndNodeId(
+                                tree.getUpdateId,
+                                exercised.getNodeId,
+                              ) + ":" + transferLeg.transferLegId,
+                            subtype = Some(
+                              TransferTransactionSubtype.Transfer.toProto
+                            ),
+                            // The sending side should already be handled in AllocationFactoryV2Allocate,
+                            // here we just need to handle the coin unlocking
+                            receivers = Seq(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(
+                                  transferLeg.receiver
+                                ),
+                                transferLeg.amount,
+                              )
+                            ),
+                            sender = Some(
+                              PartyAndAmount(
+                                TokenStandardAccount.tryGetRegularAccountOwner(transferLeg.sender),
+                                -transferLeg.amount,
+                              )
+                            ),
+                            date = Some(tree.getEffectiveAt),
+                            // seems redundant but otherwise parsing fails
+                            senderHoldingFees = BigDecimal(0.0),
+                            appRewardsUsed = BigDecimal(0.0),
+                            validatorRewardsUsed = BigDecimal(0.0),
+                            svRewardsUsed = Some(BigDecimal(0.0)),
+                          )
+                        )
+                      )
+                    )
+                  } else stateAcc
               }
             }
           case AllocationExecuteTransfer(node) =>
@@ -1188,7 +1254,7 @@ class UserWalletTxLogParser(
             }
 
           case TransferInstructionCreate(create)
-              if create.payload.transfer.receiver == endUserParty.toProtoPrimitive =>
+              if create.payload.transfer.receiver == endUserPartyProtoPrimitive =>
             val sender = create.payload.transfer.sender
             val receiver = create.payload.transfer.receiver
             // We hit this for the receiver which does not see the TransferFactory_Transfer choice.

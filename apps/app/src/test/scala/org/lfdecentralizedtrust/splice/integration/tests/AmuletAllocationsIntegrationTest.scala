@@ -3,13 +3,9 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
-  AllocationSpecification,
-  SettlementInfo,
-  TransferLeg,
-  Reference as SettlementReference,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.http.v0.definitions.AllocationInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -18,6 +14,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.TokenStandard
 
 import java.util.Optional
 
@@ -25,14 +22,15 @@ class AmuletAllocationsIntegrationTest
     extends IntegrationTest
     with HasExecutionContext
     with WalletTestUtil
-    with WalletTxLogTestUtil {
+    with WalletTxLogTestUtil
+    with TokenStandardV2TestUtil {
 
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
   }
 
-  private def createAllocation(sender: PartyId)(implicit
+  private def createAllocationV1(sender: PartyId)(implicit
       ev: SpliceTestConsoleEnvironment
   ) = {
     val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
@@ -40,45 +38,65 @@ class AmuletAllocationsIntegrationTest
     val now = CantonTimestamp.now()
     val allocateBefore = now.plusSeconds(3600)
     val settleBefore = now.plusSeconds(3600 * 2)
-    def wantedAllocation(requestedAt: CantonTimestamp) = new AllocationSpecification(
-      new SettlementInfo(
+    def wantedAllocationV1(requestedAt: CantonTimestamp) = new allocationv1.AllocationSpecification(
+      new allocationv1.SettlementInfo(
         validatorPartyId.toProtoPrimitive,
-        new SettlementReference("some_reference", Optional.empty),
+        new allocationv1.Reference("some_reference", Optional.empty),
         requestedAt.toInstant,
         allocateBefore.toInstant,
         settleBefore.toInstant,
         new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
       ),
       "some_transfer_leg_id",
-      new TransferLeg(
+      new allocationv1.TransferLeg(
         sender.toProtoPrimitive,
         receiver.toProtoPrimitive,
         BigDecimal(12).bigDecimal.setScale(10),
-        new InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
+        new holdingv1.InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
         new Metadata(java.util.Map.of("k3", "v3")),
       ),
     )
 
-    actAndCheck(
-      "create an allocation", {
-        aliceWalletClient.allocateAmulet(wantedAllocation(now))
-      },
-    )(
-      "the allocation is created",
-      created => {
-        inside(created.output) { case members.AllocationInstructionResultCompleted(_) =>
-          succeed
-        }
+    val specification = wantedAllocationV1(now)
+    specification -> aliceWalletClient.allocateAmulet(specification)
+  }
 
-        val allocation = aliceWalletClient.listAmuletAllocations().loneElement
+  private def createAllocationV2(sender: PartyId)(implicit
+      ev: SpliceTestConsoleEnvironment
+  ) = {
+    val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
+    val now = CantonTimestamp.now()
+    val settlementDeadline = now.plusSeconds(3600 * 2)
 
-        val specification = allocation.payload.allocation
-
-        specification should be(
-          wantedAllocation(CantonTimestamp.assertFromInstant(specification.settlement.requestedAt))
+    def wantedAllocationV2() = new allocationv2.AllocationSpecification(
+      new allocationv2.SettlementInfo(
+        java.util.List.of(validatorPartyId.toProtoPrimitive),
+        new allocationv2.Reference("some_reference", Optional.empty),
+        java.util.Optional.of(settlementDeadline.toInstant),
+        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
+      ),
+      dsoParty.toProtoPrimitive,
+      basicAccount(sender),
+      java.util.List.of(
+        transferLegSideForAuthorizer(
+          sender,
+          new allocationv2.TransferLeg(
+            "some_transfer_leg",
+            basicAccount(sender),
+            basicAccount(validatorPartyId),
+            BigDecimal(12).bigDecimal.setScale(10),
+            amuletInstrumentIdName,
+            new Metadata(java.util.Map.of("k3", "v3")),
+          ),
         )
-      },
+      ),
+      java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+      false,
+      new Metadata(java.util.Map.of("k4", "v4")),
     )
+
+    val specification = wantedAllocationV2()
+    specification -> aliceWalletClient.allocateAmulet(specification)
   }
 
   "A wallet" should {
@@ -87,7 +105,40 @@ class AmuletAllocationsIntegrationTest
       val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(1000)
 
-      createAllocation(aliceUserParty)
+      val (v1Spec, v1Cid) = clue("Create Allocation V1") {
+        val (v1Spec, v1Response) = createAllocationV1(aliceUserParty)
+        val v1Cid = v1Response.output match {
+          case members.AllocationInstructionResultCompleted(completed) => completed.allocationCid
+          case _ => fail("Expected allocation v1 to complete")
+        }
+        (v1Spec, v1Cid)
+      }
+
+      val (v2Spec, v2Cid) = clue("Create Allocation V2") {
+        val (v2Spec, v2Response) = createAllocationV2(aliceUserParty)
+        val v2Cid = v2Response.output match {
+          case members.AllocationInstructionResultCompleted(completed) => completed.allocationCid
+          case _ => fail("Expected allocation v2 to complete")
+        }
+        (v2Spec, v2Cid)
+      }
+
+      clue("The allocations can be listed") {
+        eventually() {
+          val allocations = aliceWalletClient.listAmuletAllocations()
+
+          inside(allocations.toList) {
+            case TokenStandard.V1AmuletAllocation(v1) ::
+                TokenStandard.V2AmuletAllocation(v2) ::
+                Nil =>
+              v1.contractId.contractId should be(v1Cid)
+              v2.contractId.contractId should be(v2Cid)
+
+              v1.payload.allocation should be(v1Spec)
+              v2.payload.allocation should be(v2Spec)
+          }
+        }
+      }
     }
 
   }

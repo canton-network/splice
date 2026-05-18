@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationv2, metadatav1}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
@@ -13,6 +14,7 @@ import org.lfdecentralizedtrust.splice.util.{
   TriggerTestUtil,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 import java.time.Instant
 import java.util.{Optional, UUID}
@@ -22,6 +24,7 @@ class TokenStandardFetchFallbackIntegrationTest
     with WalletTestUtil
     with WalletTxLogTestUtil
     with TriggerTestUtil
+    with TokenStandardV2TestUtil
     with HasActorSystem
     with HasExecutionContext {
 
@@ -115,19 +118,79 @@ class TokenStandardFetchFallbackIntegrationTest
           )(
             "Alice sees the Allocation",
             _ => {
-              val allocation =
-                aliceWalletClient
-                  .listAmuletAllocations()
-                  .loneElement
-              allocation.payload.allocation.settlement.settlementRef.id should be(referenceId)
+              val allocation = inside(aliceWalletClient.listAmuletAllocations()) {
+                case (allocationRequest: HttpWalletAppClient.TokenStandard.V1AmuletAllocation) +: Nil =>
+                  allocationRequest
+              }
+              allocation.contract.payload.allocation.settlement.settlementRef.id should be(
+                referenceId
+              )
               allocation
             },
           )
 
-          clue("SV-1's Scan sees it (still, even though ingestion is paused)") {
+          clue("SV-1's Scan sees V1 allocation (still, even though ingestion is paused)") {
             eventuallySucceeds() {
               sv1ScanBackend.getAllocationTransferContext(
-                allocation.contractId.toInterface(Allocation.INTERFACE)
+                allocation.contract.contractId.toInterface(Allocation.INTERFACE)
+              )
+            }
+          }
+
+          val referenceIdV2 = UUID.randomUUID().toString
+
+          val (_, allocationV2) = actAndCheck(
+            "Alice creates a V2 Allocation",
+            aliceWalletClient.allocateAmulet(
+              new allocationv2.AllocationSpecification(
+                new allocationv2.SettlementInfo(
+                  java.util.List.of(dsoParty.toProtoPrimitive),
+                  new allocationv2.Reference(referenceIdV2, Optional.empty),
+                  Optional.of(Instant.now.plusSeconds(2 * 3600L)),
+                  new metadatav1.Metadata(java.util.Map.of()),
+                ),
+                dsoParty.toProtoPrimitive,
+                basicAccount(aliceParty),
+                java.util.List.of(
+                  transferLegSideForAuthorizer(
+                    aliceParty,
+                    new allocationv2.TransferLeg(
+                      UUID.randomUUID().toString,
+                      basicAccount(aliceParty),
+                      basicAccount(bobParty),
+                      BigDecimal(10).bigDecimal,
+                      amuletInstrumentIdName,
+                      new metadatav1.Metadata(java.util.Map.of()),
+                    ),
+                  )
+                ),
+                java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+                false,
+                new metadatav1.Metadata(java.util.Map.of()),
+              )
+            ),
+          )(
+            "Alice sees the V2 Allocation",
+            _ => {
+              val alloc = inside(aliceWalletClient.listAmuletAllocations()) {
+                case _ :+ (v2Alloc: HttpWalletAppClient.TokenStandard.V2AmuletAllocation) =>
+                  v2Alloc
+              }
+              alloc.contract.payload.allocation.settlement.settlementRef.id should be(
+                referenceIdV2
+              )
+              alloc
+            },
+          )
+
+          clue(
+            "SV-1's Scan sees V2 allocation cancel context (still, even though ingestion is paused)"
+          ) {
+            eventuallySucceeds() {
+              sv1ScanBackend.getAllocationV2CancelContext(
+                allocationV2.contract.contractId.toInterface(
+                  allocationv2.Allocation.INTERFACE
+                )
               )
             }
           }

@@ -1,0 +1,186 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | A reference implementation of a test token for the purpose of testing V2 token standard workflows.
+--
+-- Note that this token was built to validate the token standard V2 APIs. It supports a very
+-- rich and generic account authorization model. You probably want to remove that model or
+-- specialize it to your domain if you use TestTokenV2 as a template for your own token
+-- implementation.
+module Splice.Testing.Tokens.TestTokenV2 (
+  TokenRules(..),
+  TokenRules_OfferMint(..),
+  TokenRules_OfferMintResult(..),
+) where
+
+import DA.Assert
+import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
+import DA.Time
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig
+import Splice.Testing.Tokens.TestTokenV2.Util
+import Splice.Testing.Tokens.TestTokenV2.Allocation
+import Splice.Testing.Tokens.TestTokenV2.Holding
+import Splice.Testing.Tokens.TestTokenV2.Transfer
+import Splice.TokenStandard.Utils
+
+
+-- | Template providing all the rules for how the tokens can be changed.
+template TokenRules with
+    admin : Party
+  where
+    signatory admin
+
+    interface instance V2.TransferFactory for TokenRules where
+      view = V2.TransferFactoryView with
+        admin
+        meta = emptyMetadata
+
+      transferFactory_publicFetchImpl = publicFetchDefaultImpl this
+      transferFactory_transferExtraObservers = transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl
+
+      transferFactory_transferImpl _self arg = do
+        token_transferFactory_transferImpl admin arg.actors arg.transfer arg.extraArgs
+
+    interface instance TransferEventsV2.EventLog for TokenRules where
+      view = TransferEventsV2.EventLogView with
+        admin = admin
+        meta = emptyMetadata
+
+      eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl admin
+
+    interface instance V2.SettlementFactory for TokenRules where
+      view = V2.SettlementFactoryView with
+        admin
+        meta = emptyMetadata
+
+      settlementFactory_settleBatchImpl self arg0 =
+        let arg = arg0 with
+              extraArgs = arg0.extraArgs with
+                context = ChoiceContext with
+                  values = textMapSingleton tokenRulesContextKey (AV_ContractId (coerceContractId self))
+        in
+          settlementFactoryV2_settleBatchDefaultImpl this.admin self arg
+
+      -- no extra observers to avoid leaking the settlement of different allocations to the other authorizers
+      settlementFactory_settleBatchExtraObservers _arg = []
+
+      settlementFactory_publicFetchImpl = publicFetchDefaultImpl this
+
+    interface instance V2.AllocationFactory for TokenRules where
+      view = V2.AllocationFactoryView with
+        admin
+        meta = emptyMetadata
+
+      allocationFactory_allocateExtraObservers = allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl
+
+      allocationFactory_allocateImpl self arg = token_allocationFactoryV2_allocateImpl this self arg
+      allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
+
+    nonconsuming choice TokenRules_OfferMint : TokenRules_OfferMintResult with
+        receiver : V2.Account
+        amount : Decimal
+        instrumentId : V2.InstrumentId
+        offeredAt : Time
+        receiverConfig : AccountConfig
+      controller admin
+      do
+        requireMatchExpected ("instrumentId.admin", instrumentId.admin) admin
+        assertDeadlineExceeded "offeredAt" offeredAt
+        let mintConfig = AccountConfig with
+              admin
+              account = mintAccount admin
+              ownerConfig = PartyConfig True True
+              providerConfig = PartyConfig False False
+        let adminApproved = Map.singleton V2.TIA_Accept [admin]
+        let accountMap = Map.fromList [(receiverConfig.account, (receiverConfig, None)), (mintConfig.account, (mintConfig, None))]
+        let transfer = V2.Transfer with
+              sender = mintAccount admin
+              receiver
+              amount
+              instrumentId
+              inputHoldingCids = []
+              requestedAt = offeredAt
+              executeBefore = offeredAt `addRelTime` days 7
+              meta = reasonToMeta "mint offer" emptyMetadata
+        let spec = transferInstructionStateMachineSpec transfer.sender transfer.receiver
+        offerCid <- create TokenTransferOffer with
+          originalInstructionCid = None
+          actionAuthorizers = adminApproved
+          availableActions = mkAvailableActions admin spec adminApproved accountMap
+          mintAmount = amount
+          transfer = V2.Transfer with
+            sender = mintAccount admin
+            receiver
+            amount
+            instrumentId
+            inputHoldingCids = []
+            requestedAt = offeredAt
+            executeBefore = offeredAt `addRelTime` days 7
+            meta = reasonToMeta "mint offer" emptyMetadata
+        pure TokenRules_OfferMintResult with
+          offerCid
+          meta = emptyMetadata
+
+data TokenRules_OfferMintResult = TokenRules_OfferMintResult with
+    offerCid : ContractId TokenTransferOffer
+    meta : Metadata
+  deriving (Eq, Show)
+
+-- | Create a V2 transfer offer.
+--
+-- All this does is to authorize the Accept action on a fresh TransferOffer.
+token_transferFactory_transferImpl
+  : Party
+  -> [Party]
+  -> V2.Transfer
+  -> ExtraArgs
+  -> Update V2.TransferInstructionResult
+token_transferFactory_transferImpl admin actors transfer extraArgs = do
+  require' ("transfer.instrumentId.admin", transfer.instrumentId.admin) isEqualR ("transferFactory.admin", admin)
+
+  let offer = TokenTransferOffer with
+        mintAmount = 0.0
+        actionAuthorizers = Map.empty -- Nothing authorized (yet).
+        availableActions = Map.empty -- Gets recomputed by authorizeTransferOfferAction.
+        originalInstructionCid = None
+        transfer
+
+  applyTransferInstructionTransitions offer None actors V2.TIA_Accept extraArgs
+
+
+-- | Create a V2 allocation.
+token_allocationFactoryV2_allocateImpl
+  : TokenRules
+  -> ContractId V2.AllocationFactory
+  -> V2.AllocationFactory_Allocate
+  -> Update V2.AllocationInstructionResult
+token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
+  let admin = tokenRules.admin
+  requireMatchExpected ("allocation.admin", arg.allocation.admin) admin
+  inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
+    let tokenCid = coerceContractId cid : ContractId Token
+    token <- fetch tokenCid
+    let holding = token.holding
+    require' ("inputHolding.account", holding.account) isEqualR ("allocation.authorizer", arg.allocation.authorizer)
+    requireMatchExpected ("inputHolding.instrumentId.admin", holding.instrumentId.admin) admin
+    pure (holding.instrumentId.id, [cid])
+
+  let
+    allocationInstruction = TokenAllocationInstructionV2 with
+      originalInstructionCid = None
+      actionAuthorizers = Map.empty
+      availableActions = Map.empty -- Will be computed.
+      inputHoldingCids = inputHoldingMap
+      allocation = arg.allocation
+      admin = tokenRules.admin
+      requestedAt = arg.requestedAt
+
+  applyAllocationInstructionTransitions allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs

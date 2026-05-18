@@ -5,24 +5,39 @@ import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { useTokenStandardAllocationRequests } from '../hooks/useTokenStandardAllocationRequests';
 import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-common-frontend';
-import { AllocationRequest } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
+import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
+import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { usePrimaryParty } from '../hooks';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useAmuletAllocations } from '../hooks/useAmuletAllocations';
-import { AmuletAllocation } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import MetaDisplay from './MetaDisplay';
 import TransferLegsDisplay from './TransferLegsDisplay';
-import { useWalletClient } from '../contexts/WalletServiceContext';
+import {
+  useWalletClient,
+  AllocationRequest,
+  AmuletAllocation,
+  isV2Allocation,
+  isV2AllocationRequest,
+} from '../contexts/WalletServiceContext';
 import { useMutation } from '@tanstack/react-query';
-import { AllocateAmuletRequest } from '@lfdecentralizedtrust/wallet-openapi';
+import {
+  AllocateAmuletRequest,
+  AllocateAmuletV2Request,
+} from '@lfdecentralizedtrust/wallet-openapi';
 import {
   SettlementInfo,
   TransferLeg,
-} from '@daml.js/splice-api-token-allocation/lib/Splice/Api/Token/AllocationV1/module';
+  TransferLegSide,
+} from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { damlTimestampToOpenApiTimestamp } from '../utils/timestampConversion';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
+import UseGetAmuletRules from '../hooks/scan-proxy/useGetAmuletRules';
+import { ContractId } from '@daml/types';
+import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
 
 dayjs.extend(relativeTime);
 
@@ -30,14 +45,22 @@ const ListAllocationRequests: React.FC = () => {
   const allocationRequestsQuery = useTokenStandardAllocationRequests();
   const allocationsQuery = useAmuletAllocations();
   const primaryPartyId = usePrimaryParty();
+  const amuletRulesQuery = UseGetAmuletRules();
 
-  if (allocationRequestsQuery.isLoading || !primaryPartyId) {
+  if (allocationRequestsQuery.isLoading || amuletRulesQuery.isLoading || !primaryPartyId) {
     return <Loading />;
   }
   if (allocationRequestsQuery.isError) {
     return (
       <Typography color="error">
         Error loading allocation requests: {JSON.stringify(allocationRequestsQuery.error)}
+      </Typography>
+    );
+  }
+  if (amuletRulesQuery.isError) {
+    return (
+      <Typography color="error">
+        Error loading allocation requests: {JSON.stringify(amuletRulesQuery.error)}
       </Typography>
     );
   }
@@ -62,6 +85,7 @@ const ListAllocationRequests: React.FC = () => {
           request={ar}
           userParty={primaryPartyId}
           allocations={allocations}
+          dso={amuletRulesQuery.data!.contract.payload.dso}
         />
       ))}
     </Stack>
@@ -72,8 +96,15 @@ const AllocationRequestDisplay: React.FC<{
   request: Contract<AllocationRequest>;
   allocations: Contract<AmuletAllocation>[];
   userParty: string;
-}> = ({ request, userParty, allocations }) => {
-  const { settlement, meta: requestMeta } = request.payload;
+  dso: string;
+}> = ({ request, userParty, allocations, dso }) => {
+  const payload = request.payload;
+  const isV2 = isV2AllocationRequest(payload);
+  const { settlement, transferLegs } = isV2
+    ? v2RequestToDisplay(payload)
+    : v1RequestToDisplay(payload);
+  const requestMeta = payload.meta;
+
   const { rejectAllocationRequest } = useWalletClient();
   const rejectAllocationRequestMutation = useMutation({
     mutationFn: async () => {
@@ -97,6 +128,7 @@ const AllocationRequestDisplay: React.FC<{
       >
         <Stack width="100%" spacing={2}>
           <Stack direction="row" width="100%" spacing={2}>
+            <Chip label={isV2 ? 'V2' : 'V1'} color={isV2 ? 'primary' : 'default'} size="small" />
             <AllocationSettlementDisplay settlement={settlement} />
             <Button
               onClick={() => rejectAllocationRequestMutation.mutate()}
@@ -114,36 +146,154 @@ const AllocationRequestDisplay: React.FC<{
               <MetaDisplay meta={requestMeta.values} />
             </>
           ) : null}
-          <TransferLegsDisplay
-            parentId={request.contractId}
-            transferLegs={request.payload.transferLegs}
-            getActionButton={(transferLegId, parentComponentId) => (
-              <AllocationRequestActionButton
-                parentComponentId={parentComponentId}
-                allocationRequest={request}
-                allocations={allocations}
-                transferLegId={transferLegId}
-                userParty={userParty}
+          {isV2 ? (
+            <>
+              <TransferLegsDisplay
+                parentId={request.contractId}
+                transferLegs={transferLegs}
+                // for v2, the action button operates over the entire request, not per transfer-leg
+                getActionButton={() => null}
               />
-            )}
-          />
+              <V2AllocationRequestActionButton
+                allocationRequest={request as Contract<AllocationRequestV2>}
+                allocations={allocations}
+                userParty={userParty}
+                dso={dso}
+              />
+            </>
+          ) : (
+            <TransferLegsDisplay
+              parentId={request.contractId}
+              transferLegs={transferLegs}
+              getActionButton={(transferLegId, parentComponentId) => (
+                <V1AllocationRequestActionButton
+                  parentComponentId={parentComponentId}
+                  allocationRequest={request as Contract<AllocationRequestV1>}
+                  allocations={allocations}
+                  transferLegId={transferLegId}
+                  userParty={userParty}
+                  dso={dso}
+                />
+              )}
+            />
+          )}
         </Stack>
       </CardContent>
     </Card>
   );
 };
 
-const AllocationRequestActionButton: React.FC<{
+/** V2: one Accept button per request, filters amulet legs for userParty */
+const V2AllocationRequestActionButton: React.FC<{
+  allocationRequest: Contract<AllocationRequestV2>;
+  allocations: Contract<AmuletAllocation>[];
+  userParty: string;
+  dso: string;
+}> = ({ allocationRequest, userParty, allocations, dso }) => {
+  const payload = allocationRequest.payload;
+  const amuletLegSidesForUser = payload.allocations
+    .filter(allocation => allocation.admin === dso)
+    .flatMap(allocation => allocation.transferLegSides)
+    .filter(side => side.instrumentId === 'Amulet');
+  const isAuthorizer =
+    payload.authorizer.owner === userParty &&
+    (payload.authorizer.provider === null || payload.authorizer.provider === undefined) &&
+    payload.authorizer.id === '';
+  // basicAccount check: authorizer matches basicAccount(userParty)
+  const canAccept = amuletLegSidesForUser.length > 0 && isAuthorizer;
+
+  const correspondingAllocation = allocations.find(alloc =>
+    isAllocationForRequest(alloc, allocationRequest)
+  );
+
+  const hasExistingAllocation = !!correspondingAllocation;
+
+  const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
+  const createAllocationV2Mutation = useMutation({
+    mutationFn: async () => {
+      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegSidesForUser);
+      return await createAllocationV2(req);
+    },
+    onSuccess: () => {},
+    onError: error => {
+      console.error('Failed to submit allocation', error);
+    },
+  });
+
+  const withdrawAllocationV2Mutation = useMutation({
+    mutationFn: async () => {
+      if (correspondingAllocation) {
+        return await withdrawAllocationV2(
+          correspondingAllocation.contractId as ContractId<AmuletAllocationV2>
+        );
+      } else {
+        throw new Error("This mutation shouldn't be called without a corresponding allocation");
+      }
+    },
+    onSuccess: () => {},
+    onError: error => {
+      console.error('Failed to withdraw allocation', error);
+    },
+  });
+
+  if (!canAccept) return null;
+
+  if (hasExistingAllocation) {
+    return (
+      <DisableConditionally
+        conditions={[
+          {
+            disabled: withdrawAllocationV2Mutation.isPending,
+            reason: 'Withdrawing allocation...',
+          },
+        ]}
+      >
+        <Button
+          variant="pill"
+          size="small"
+          id={`allocation-request-${allocationRequest.contractId}-withdraw`}
+          className="allocation-withdraw"
+          onClick={() => withdrawAllocationV2Mutation.mutate()}
+        >
+          Withdraw
+        </Button>
+      </DisableConditionally>
+    );
+  }
+
+  return (
+    <DisableConditionally
+      conditions={[
+        { disabled: createAllocationV2Mutation.isPending, reason: 'Creating allocation...' },
+      ]}
+    >
+      <Button
+        variant="pill"
+        size="small"
+        id={`allocation-request-${allocationRequest.contractId}-accept`}
+        className="allocation-request-accept"
+        onClick={() => createAllocationV2Mutation.mutate()}
+      >
+        Accept
+      </Button>
+    </DisableConditionally>
+  );
+};
+
+/** V1: one Accept/Withdraw button per transfer leg */
+const V1AllocationRequestActionButton: React.FC<{
   parentComponentId: string;
-  allocationRequest: Contract<AllocationRequest>;
+  allocationRequest: Contract<AllocationRequestV1>;
   allocations: Contract<AmuletAllocation>[];
   userParty: string;
   transferLegId: string;
-}> = ({ parentComponentId, allocationRequest, transferLegId, userParty, allocations }) => {
+  dso: string;
+}> = ({ parentComponentId, allocationRequest, transferLegId, userParty, allocations, dso }) => {
   const transferLeg = allocationRequest.payload.transferLegs[transferLegId];
   const actionAllowed =
-    transferLeg.sender === userParty && transferLeg.instrumentId.id === 'Amulet';
-  const settlement = allocationRequest.payload.settlement;
+    transferLeg.sender === userParty &&
+    transferLeg.instrumentId.id === 'Amulet' &&
+    transferLeg.instrumentId.admin === dso;
   const correspondingAllocation = allocations.find(alloc =>
     isAllocationForTransferLeg(alloc, allocationRequest, transferLegId)
   );
@@ -152,8 +302,8 @@ const AllocationRequestActionButton: React.FC<{
   const { createAllocation, withdrawAllocation } = useWalletClient();
   const createAllocationMutation = useMutation({
     mutationFn: async () => {
-      const payload: AllocateAmuletRequest = openApiRequestFromTransferLeg(
-        settlement,
+      const payload: AllocateAmuletRequest = openApiV1RequestFromTransferLeg(
+        allocationRequest.payload.settlement,
         transferLeg,
         transferLegId
       );
@@ -167,7 +317,9 @@ const AllocationRequestActionButton: React.FC<{
   const withdrawAllocationMutation = useMutation({
     mutationFn: async () => {
       if (correspondingAllocation) {
-        return await withdrawAllocation(correspondingAllocation.contractId);
+        return await withdrawAllocation(
+          correspondingAllocation.contractId as ContractId<AmuletAllocationV1>
+        );
       } else {
         throw new Error("This mutation shouldn't be called without a corresponding allocation");
       }
@@ -200,49 +352,73 @@ const AllocationRequestActionButton: React.FC<{
         </Button>
       </DisableConditionally>
     );
-  } else {
-    return (
-      <DisableConditionally
-        conditions={[
-          {
-            disabled: createAllocationMutation.isPending,
-            reason: 'Creating allocation...',
-          },
-        ]}
-      >
-        <Button
-          id={`${parentComponentId}-accept`}
-          variant="pill"
-          size="small"
-          className="allocation-request-accept"
-          onClick={() => createAllocationMutation.mutate()}
-        >
-          Accept
-        </Button>
-      </DisableConditionally>
-    );
   }
+  return (
+    <DisableConditionally
+      conditions={[
+        { disabled: createAllocationMutation.isPending, reason: 'Creating allocation...' },
+      ]}
+    >
+      <Button
+        id={`${parentComponentId}-accept`}
+        variant="pill"
+        size="small"
+        className="allocation-request-accept"
+        onClick={() => createAllocationMutation.mutate()}
+      >
+        Accept
+      </Button>
+    </DisableConditionally>
+  );
 };
+
+function isAllocationForRequest(
+  allocation: Contract<AmuletAllocation>,
+  allocationRequest: Contract<AllocationRequestV2>
+): boolean {
+  const payload = allocation.payload;
+  return (
+    payload.allocation.settlement.settlementRef.id ===
+      allocationRequest.payload.settlement.settlementRef.id &&
+    payload.allocation.settlement.settlementRef.cid ===
+      allocationRequest.payload.settlement.settlementRef.cid
+  );
+}
 
 function isAllocationForTransferLeg(
   allocation: Contract<AmuletAllocation>,
-  allocationRequest: Contract<AllocationRequest>,
+  allocationRequest: Contract<AllocationRequestV1>,
   legId: string
 ): boolean {
+  let sameExecutor: boolean;
+  let sameLegId: boolean;
+  if (isV2Allocation(allocation.payload)) {
+    sameExecutor = allocation.payload.allocation.settlement.executors.some(
+      e => e === allocationRequest.payload.settlement.executor
+    );
+    sameLegId = allocation.payload.allocation.transferLegSides.some(
+      side => side.transferLegId === legId
+    );
+  } else {
+    sameExecutor =
+      allocation.payload.allocation.settlement.executor ===
+      allocationRequest.payload.settlement.executor;
+    sameLegId = allocation.payload.allocation.transferLegId === legId;
+  }
   return (
-    allocation.payload.allocation.settlement.executor ===
-      allocationRequest.payload.settlement.executor &&
+    sameExecutor &&
     allocation.payload.allocation.settlement.settlementRef.id ===
       allocationRequest.payload.settlement.settlementRef.id &&
     allocation.payload.allocation.settlement.settlementRef.cid ===
       allocationRequest.payload.settlement.settlementRef.cid &&
-    allocation.payload.allocation.transferLegId === legId
+    sameLegId
   );
 }
 
-export function openApiRequestFromTransferLeg(
-  settlement: SettlementInfo,
-  transferLeg: TransferLeg,
+/** V1: build AllocateAmuletRequest from a single transfer leg, copying metadata */
+export function openApiV1RequestFromTransferLeg(
+  settlement: AllocationRequestV1['settlement'],
+  transferLeg: AllocationRequestV1['transferLegs'][string],
   transferLegId: string
 ): AllocateAmuletRequest {
   return {
@@ -255,7 +431,7 @@ export function openApiRequestFromTransferLeg(
       requested_at: damlTimestampToOpenApiTimestamp(settlement.requestedAt),
       allocate_before: damlTimestampToOpenApiTimestamp(settlement.allocateBefore),
       settle_before: damlTimestampToOpenApiTimestamp(settlement.settleBefore),
-      meta: settlement.meta.values,
+      meta: { ...settlement.meta.values, ...transferLeg.meta.values },
     },
     transfer_leg_id: transferLegId,
     transfer_leg: {
@@ -263,6 +439,72 @@ export function openApiRequestFromTransferLeg(
       amount: transferLeg.amount,
       meta: transferLeg.meta.values,
     },
+  };
+}
+
+/** V2: build AllocateAmuletV2Request from settlement + filtered transfer legs */
+export function openApiV2RequestFromAllocationRequest(
+  settlement: SettlementInfo,
+  transferLegSides: TransferLegSide[]
+): AllocateAmuletV2Request {
+  return {
+    settlement: {
+      executors: settlement.executors,
+      settlement_ref: {
+        id: settlement.settlementRef.id,
+        cid: settlement.settlementRef.cid as string,
+      },
+      meta: settlement.meta.values,
+      ...(settlement.settlementDeadline
+        ? { settlement_deadline: damlTimestampToOpenApiTimestamp(settlement.settlementDeadline) }
+        : {}),
+    },
+    transfer_leg_sides: transferLegSides.map(side => ({
+      transfer_leg_id: side.transferLegId,
+      amount: side.amount,
+      otherside: side.otherside.owner ?? '<unexpected: missing owner party>',
+      side: side.side === 'SenderSide' ? 'SENDERSIDE' : 'RECEIVERSIDE',
+      meta: side.meta.values,
+    })),
+    // TODO (#5498): make the FE specify these
+    committed: false,
+    next_iteration_funding: {},
+    meta: {},
+  };
+}
+
+type DisplayRequest = {
+  settlement: SettlementInfo;
+  transferLegs: TransferLeg[];
+};
+function v2RequestToDisplay(payload: AllocationRequestV2): DisplayRequest {
+  const transferLegs = transferLegSidesToTransferLegs(
+    payload.authorizer,
+    payload.allocations.flatMap(allocation => allocation.transferLegSides)
+  );
+  return {
+    settlement: payload.settlement,
+    transferLegs,
+  };
+}
+
+/** Convert V1 AllocationRequest fields to V2 shapes for display */
+function v1RequestToDisplay(payload: AllocationRequestV1): DisplayRequest {
+  return {
+    settlement: {
+      executors: [payload.settlement.executor],
+      settlementRef: payload.settlement.settlementRef,
+      settlementDeadline: null,
+      meta: payload.settlement.meta,
+    },
+    transferLegs: Object.entries(payload.transferLegs).map(([legId, leg]) => ({
+      transferLegId: legId,
+      sender: { owner: leg.sender, provider: null, id: '' },
+      receiver: { owner: leg.receiver, provider: null, id: '' },
+      amount: leg.amount,
+      instrumentId: leg.instrumentId.id,
+      meta: leg.meta,
+    })),
   };
 }
 

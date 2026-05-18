@@ -163,16 +163,20 @@ class TokenStandardTransferIntegrationTest
       }
 
       // Thanks for zero fees we can check the exact balances w/o complex fee calculations.
+      val aliceExpectedUnlocked = BigDecimal(19980.0)
+      val aliceExpectedLocked = BigDecimal(10.0)
       clue("Check the exact balances of alice ") {
         val balances = aliceWalletClient.balance()
-        balances.unlockedQty shouldBe BigDecimal(19980.0)
-        balances.lockedQty shouldBe BigDecimal(10.0)
+        balances.unlockedQty shouldBe aliceExpectedUnlocked
+        balances.lockedQty shouldBe aliceExpectedLocked
       }
 
+      val bobExpectedUnlocked = BigDecimal(10.0)
+      val bobExpectedLocked = BigDecimal(0.0)
       clue("Check the exact balances of bob ") {
         val balances = bobWalletClient.balance()
-        balances.unlockedQty shouldBe BigDecimal(10.0)
-        balances.lockedQty shouldBe BigDecimal(0.0)
+        balances.unlockedQty shouldBe bobExpectedUnlocked
+        balances.lockedQty shouldBe bobExpectedLocked
       }
 
       checkTxHistory(
@@ -308,7 +312,8 @@ class TokenStandardTransferIntegrationTest
         ),
       )
 
-      // TODO(#2254): check the exact balances once the scan backend supports it
+      sv1ScanBackend
+        .getTotalAmuletBalance() shouldBe (bobExpectedLocked + bobExpectedUnlocked + aliceExpectedLocked + aliceExpectedUnlocked)
 
       val activityTxs = eventually() {
         val activityTxs = sv1ScanBackend
