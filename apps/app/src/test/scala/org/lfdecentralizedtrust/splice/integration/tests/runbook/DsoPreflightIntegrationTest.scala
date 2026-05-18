@@ -42,6 +42,7 @@ class DsoPreflightIntegrationTest
       val urls = Array(
         s"${infoUrl}",
         s"${infoUrl}/runtime/dso.json",
+        s"${infoUrl}/runtime/status.json",
       )
 
       urls.foreach { url =>

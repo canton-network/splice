@@ -7,13 +7,13 @@ export const DAML_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}
 export function isValidDamlTimestamp(str: string): boolean {
   return DAML_TIMESTAMP_REGEX.test(str);
 }
-// only call this if the timestamp is valid
+// only call this if the timestamp is valid or produced by Daml JSON codec
 // this is necessary only because JS doesn't support microsecond precision
 export function damlTimestampToOpenApiTimestamp(str: string): number {
   const timestampWithMillisecondPrecision = new Date(str);
   // valueOf returns milliseconds since epoch
   const millis = timestampWithMillisecondPrecision.valueOf();
-  // get the last 3 characters (microseconds), excluding the Z (timezone, UTC)
-  const micros = Number(str.slice(str.length - 4, str.length - 1));
-  return millis * 1000 + micros;
+  const frac = str.match(/\.(\d+)Z$/)?.[1] ?? '';
+  const subMillisMicros = Number(frac.padEnd(6, '0').slice(3, 6));
+  return millis * 1000 + subMillisMicros;
 }

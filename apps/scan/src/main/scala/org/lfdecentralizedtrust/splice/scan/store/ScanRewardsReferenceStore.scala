@@ -47,7 +47,7 @@ trait ScanRewardsReferenceStore extends AppStore {
     * On the other hand if round info could not be obtained for a particular record_time
     * then the Map will not contain the entry for that.
     * This could happen in two scenarios
-    * 1. If the record_time is before the ingestion start.
+    * 1. If the record_time or the round's openAt is before the ingestion start.
     * 2. When the ingestion start could not be determined
     *    This will happen if no contracts ingestion has happened in the archived table,
     *    ie the store ingestion has just begun and no OpenMiningRound archival has been observed.
@@ -57,6 +57,13 @@ trait ScanRewardsReferenceStore extends AppStore {
   )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]]
 
   def lookupFeaturedAppPartiesAsOf(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Set[String]]
+
+  /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
+    * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.
+    */
+  def lookupSvParticipantIdsAsOf(
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Set[String]]
 
@@ -134,6 +141,9 @@ object ScanRewardsReferenceStore {
               featuredAppRightProvider =
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
+        },
+        mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
+          ScanRewardsReferenceStoreRowData(contract = contract)
         },
       ),
       interfaceFilters = Map.empty,

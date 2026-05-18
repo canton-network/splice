@@ -4,6 +4,8 @@ updates:
     directory: "/cluster/pulumi"
     schedule:
       interval: "daily"
+    # Keep enough PR capacity so later npm directories are not starved.
+    open-pull-requests-limit: 20
     assignees:
       - "krzysztofczyz-da"
       - "mblaze-da"
@@ -36,6 +38,8 @@ updates:
     directory: "/load-tester"
     schedule:
       interval: "daily"
+    # Keep enough PR capacity so later npm directories are not starved.
+    open-pull-requests-limit: 20
     assignees:
       - "krzysztofczyz-da"
       - "mblaze-da"
@@ -66,6 +70,8 @@ updates:
     directory: "/apps"
     schedule:
       interval: "daily"
+    # Keep enough PR capacity so later npm directories are not starved.
+    open-pull-requests-limit: 20
     assignees:
       - "krzysztofczyz-da"
       - "pawelperek-da"
@@ -96,6 +102,8 @@ updates:
     directory: "/token-standard/cli"
     schedule:
       interval: "daily"
+    # Keep enough PR capacity so later npm directories are not starved.
+    open-pull-requests-limit: 20
     assignees:
       - "krzysztofczyz-da"
       - "pawelperek-da"
@@ -128,6 +136,8 @@ updates:
     directory: "/party-allocator"
     schedule:
       interval: "daily"
+    # Keep enough PR capacity so later npm directories are not starved.
+    open-pull-requests-limit: 20
     assignees:
       - "krzysztofczyz-da"
       - "pawelperek-da"

@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.onboarding.lsu
 
+import cats.syntax.foldable.*
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -11,6 +12,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.environment.{
   ParticipantAdminConnection,
@@ -45,6 +47,7 @@ class RollForwardLsuInitializer(
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     override protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
+    override protected val grpcClientMetrics: GrpcClientMetrics,
     newJoiningNodeInitializer: Option[SvOnboardingConfig.JoinWithKey] => JoiningNodeInitializer,
     rollForwardConfig: SvOnboardingConfig.RollForwardLsu,
 )(implicit
@@ -199,6 +202,14 @@ class RollForwardLsuInitializer(
               r
             }
         }
-      result <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      result @ (_, _, _, _, store, _) <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      rulesAndState <- store.getDsoRulesWithSvNodeStates()
+      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
+      _ <- currentNode.cometbftNode.traverse_(
+        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
+      )
+      _ <- currentNode.cometbftNode.traverse_(
+        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
+      )
     } yield result
 }

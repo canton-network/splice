@@ -58,7 +58,8 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       }
 
     val configs =
-      conditionalConf(svs123 && participants, "standalone-participants-sv123.conf") ++
+      Seq(testResourcesPath / "include" / "canton-basic.conf") ++
+        conditionalConf(svs123 && participants, "standalone-participants-sv123.conf") ++
         conditionalConf(
           svs123 && sequencersMediators,
           "standalone-sequencers-mediators-sv123.conf",

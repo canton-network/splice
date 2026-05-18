@@ -4,13 +4,25 @@ import { allSvsToDeploy } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
 
 import {
   cantonNetworkAuth0Config,
+  infraStackOutputsProvider,
   initDumpConfig,
   SecretsFixtureMap,
   svRunbookAuth0Config,
 } from '../common/src/dump-config-common';
 
 async function main() {
-  await initDumpConfig();
+  await initDumpConfig({
+    stackOutputsProvider: (project: string, stack: string) => {
+      if (project === 'sv-canton') {
+        return {
+          participantDatabaseId: `${stack}-participant-db`,
+          participantDatabaseSecretName: `${stack}-participant-db-secret`,
+        };
+      } else {
+        return infraStackOutputsProvider(project, stack);
+      }
+    },
+  });
   const installNode = await import('./src/installNode');
   const secrets = new SecretsFixtureMap();
   for (const sv of allSvsToDeploy) {

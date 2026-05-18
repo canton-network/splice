@@ -10,6 +10,11 @@ import { CreateProposal } from '../../routes/createProposal';
 import userEvent from '@testing-library/user-event';
 import { Wrapper } from '../helpers';
 import { createProposalActions } from '../../utils/governance';
+import { http, HttpResponse } from 'msw';
+import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+import { server, svUrl } from '../setup/setup';
+import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import dayjs from 'dayjs';
 
 const TestWrapper: React.FC<React.PropsWithChildren> = ({ children }) => {
   return (
@@ -49,6 +54,36 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
 }
 
 describe('Create Proposal', () => {
+  test('Does not render the form while dsoInfo is pending, then lands on +7d default', async () => {
+    let releaseDso!: () => void;
+    const dsoReady = new Promise<void>(resolve => {
+      releaseDso = resolve;
+    });
+
+    server.use(
+      http.get(`${svUrl}/v0/dso`, async () => {
+        await dsoReady;
+        return HttpResponse.json(dsoInfo);
+      })
+    );
+
+    render(
+      <Wrapper initialEntries={['/?action=SRARC_OffboardSv']}>
+        <CreateProposal />
+      </Wrapper>
+    );
+
+    await screen.findByTestId('loading-spinner');
+    expect(screen.queryByTestId('offboard-sv-expiry-date-field')).not.toBeInTheDocument();
+
+    releaseDso();
+
+    const expiryDateInput = await screen.findByTestId('offboard-sv-expiry-date-field');
+    const expectedExpiry = dayjs().add(7, 'days');
+    const actualExpiry = dayjs(expiryDateInput.getAttribute('value')!, dateTimeFormatISO);
+    expect(Math.abs(actualExpiry.diff(expectedExpiry, 'minute'))).toBeLessThan(2);
+  });
+
   test('Display action selection and all actions', async () => {
     const user = userEvent.setup();
     render(
@@ -70,9 +105,11 @@ describe('Create Proposal', () => {
       expect(screen.getByText('Offboard Member')).toBeInTheDocument();
       expect(screen.getByText('Feature Application')).toBeInTheDocument();
       expect(screen.getByText('Unfeature Application')).toBeInTheDocument();
-      expect(screen.getByText('Set Dso Rules Configuration')).toBeInTheDocument();
+      expect(
+        screen.getByText('Set Decentralized Synchronizer Operations (DSO) Rules Configuration')
+      ).toBeInTheDocument();
       expect(screen.getByText('Set Amulet Rules Configuration')).toBeInTheDocument();
-      expect(screen.getByText('Update SV Reward Weight')).toBeInTheDocument();
+      expect(screen.getByText('Update Super Validator Reward Weight')).toBeInTheDocument();
       expect(screen.getByText('Create Unclaimed Activity Record')).toBeInTheDocument();
     });
   });
@@ -97,9 +134,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Set Dso Rules Configuration Form is rendered after action selection', async () => {
+  test('Set Decentralized Synchronizer Operations (DSO) Rules Configuration Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Set Dso Rules Configuration',
+      'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
       'SRARC_SetConfig',
       'set-dso-config-rules-action'
     );
@@ -113,9 +150,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Update SV Reward Weight Form is rendered after action selection', async () => {
+  test('Update Super Validator Reward Weight Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Update SV Reward Weight',
+      'Update Super Validator Reward Weight',
       'SRARC_UpdateSvRewardWeight',
       'update-sv-reward-weight-action'
     );

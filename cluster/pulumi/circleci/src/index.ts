@@ -45,8 +45,7 @@ new gcp.projects.IAMMember('cci-gcp-service-account-workload-identity-role', {
 // Grant the CCI GCP SA the necessary roles to access GCP resources.
 // => via infra Pulumi project as it affects other GCP projects
 
-// filestore minimum capacity to provision a hdd instance is 1TB
-const capacityGb = 1024;
+const capacityGb = 2048;
 const filestore = new gcp.filestore.Instance(`cci-filestore`, {
   tier: 'BASIC_HDD',
   fileShares: {
