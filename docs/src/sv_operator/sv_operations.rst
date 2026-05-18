@@ -861,10 +861,8 @@ Consequences of incrementing the user version:
   by asking other SV nodes for the data for the rounds for which
   the SV node does not have complete activity records.
 - Scan will note serve activity records ingested before bumping the user version.
-  activity records while there is no metadata row for the new version.
-  The results of the ``v0/events`` scan API may therefore differ from
-  those of other scans for event record times around the time the user
-  version was bumped.
+  The results of this SV nodes ``v0/events`` Scan API may therefore
+  miss some activity records compared to the responses from other Scan APIs.
 
 This is useful for recovering from unexpected ingestion or reward processing errors without
 reprocessing historical data.
