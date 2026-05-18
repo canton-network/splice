@@ -46,6 +46,25 @@ import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
   * Streams verdicts from the current mediator and, if the mediator returns a LSU complete on the stream, continues from the successor.
   * It also checks the last ingestion compared to the LSU upgrade time to determine whether to start streaming from the current or successor mediator.
   */
+object ScanVerdictIngestionService {
+
+  /** Returns record times of verdicts that are missing traffic summaries.
+    * Only considers verdicts at or after the ingestion start time.
+    */
+  def findMissingTrafficSummaries(
+      verdictRecordTimes: Seq[CantonTimestamp],
+      summaryTimes: Set[CantonTimestamp],
+      startedIngestingAtMicros: Option[Long],
+  ): Seq[CantonTimestamp] = startedIngestingAtMicros match {
+    case None => Seq.empty
+    case Some(startMicros) =>
+      val start = CantonTimestamp.ofEpochMicro(startMicros)
+      verdictRecordTimes
+        .filter(_ >= start)
+        .filterNot(summaryTimes.contains)
+  }
+}
+
 class ScanVerdictIngestionService(
     config: ScanAppBackendConfig,
     synchronizerNodes: LocalSynchronizerNodes[ScanSynchronizerNode],
@@ -311,29 +330,29 @@ class ScanVerdictIngestionService(
     (pairs.map(_._1), pairs.toMap)
   }
 
-  /** After activity ingestion has started, every verdict must have a
-    * traffic summary.
+  /** After activity ingestion has started, every verdict at or after the
+    * ingestion start time must have a traffic summary.
     */
   private def ensureVerdictsHaveTrafficSummaries(
       verdicts: Seq[v30.Verdict],
       summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
   )(implicit tc: TraceContext): Future[Unit] =
     (store.appActivityRecordStoreO match {
-      case None => Future.successful(false)
-      case Some(s) => s.startedIngestingAt.map(_.isDefined)
-    }).map { started =>
-      if (started) {
-        val missingTimes = verdicts
-          .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-          .filterNot(summaryByTime.keySet.contains)
-        if (missingTimes.nonEmpty)
-          throw Status.INTERNAL
-            .withDescription(
-              s"${missingTimes.size} verdicts missing traffic summaries " +
-                s"after ingestion start: $missingTimes"
-            )
-            .asRuntimeException()
-      }
+      case None => Future.successful(None)
+      case Some(s) => s.startedIngestingAt
+    }).map { startO =>
+      val missingTimes = ScanVerdictIngestionService.findMissingTrafficSummaries(
+        verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)),
+        summaryByTime.keySet,
+        startO,
+      )
+      if (missingTimes.nonEmpty)
+        throw Status.INTERNAL
+          .withDescription(
+            s"${missingTimes.size} verdicts missing traffic summaries " +
+              s"after ingestion start: $missingTimes"
+          )
+          .asRuntimeException()
     }
 
   private def processWhenUnpaused(
