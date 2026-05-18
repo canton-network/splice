@@ -318,7 +318,10 @@ class ScanVerdictIngestionService(
       verdicts: Seq[v30.Verdict],
       summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
   )(implicit tc: TraceContext): Future[Unit] =
-    store.activityIngestionStarted.map { started =>
+    (store.appActivityRecordStoreO match {
+      case None => Future.successful(false)
+      case Some(s) => s.startedIngestingAt.map(_.isDefined)
+    }).map { started =>
       if (started) {
         val missingTimes = verdicts
           .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))

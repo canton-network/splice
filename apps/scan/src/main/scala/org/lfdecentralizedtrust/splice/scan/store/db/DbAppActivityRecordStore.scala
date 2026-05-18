@@ -305,12 +305,21 @@ class DbAppActivityRecordStore(
   /** DBIO action that inserts app activity records and ensures the meta row.
     *
     * @param items activity records to insert
-    * @param ingestionStart meta row params, or `None` to skip the meta check
+    * @param firstRecordTimeMicros record time of the first verdict in the batch,
+    *                              or `None` to skip the meta check
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      ingestionStart: Option[(Long, Long)] = None,
+      firstRecordTimeMicros: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
+    val ingestionStart = firstRecordTimeMicros.flatMap { ts =>
+      if (items.nonEmpty) {
+        val earliestRound = items
+          .map(_.roundNumber)
+          .foldLeft(Long.MaxValue)(math.min)
+        Some((ts, earliestRound))
+      } else None
+    }
     for {
       _ <-
         if (items.isEmpty) DBIO.successful(())

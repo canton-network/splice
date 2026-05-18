@@ -486,13 +486,10 @@ class DbScanVerdictStore(
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
-    val ingestionStart = if (appActivityRecords.nonEmpty) {
-      val firstRecordTimeMicros = items.headOption.fold(0L)(_._1.recordTime.toMicros)
-      val earliestRound = appActivityRecords
-        .map(_._2.roundNumber)
-        .foldLeft(Long.MaxValue)(math.min)
-      Some((firstRecordTimeMicros, earliestRound))
-    } else None
+    val firstRecordTimeMicros =
+      if (appActivityRecords.nonEmpty)
+        Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
+      else None
 
     val combinedAction = for {
       rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
@@ -500,7 +497,7 @@ class DbScanVerdictStore(
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords, ingestionStart)
+      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords, firstRecordTimeMicros)
     } yield ()
 
     futureUnlessShutdownToFuture(
@@ -513,13 +510,6 @@ class DbScanVerdictStore(
       maxRt.foreach(advanceLastIngestedRecordTime)
     }
   }
-
-  /** Whether activity record ingestion has started (meta row confirmed). */
-  def activityIngestionStarted(implicit tc: TraceContext): Future[Boolean] =
-    appActivityRecordStoreO match {
-      case Some(store) => store.startedIngestingAt.map(_.isDefined)
-      case None => Future.successful(false)
-    }
 
   def getVerdictByUpdateId(updateId: String)(implicit
       tc: TraceContext
@@ -552,11 +542,11 @@ class DbScanVerdictStore(
 
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      ingestionStart: Option[(Long, Long)],
+      firstRecordTimeMicros: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] = {
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items, ingestionStart)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros)
     }
   }
 
