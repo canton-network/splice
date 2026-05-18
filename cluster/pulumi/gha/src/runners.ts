@@ -719,7 +719,11 @@ function installPodMonitor(runnersNamespace: Namespace, repo: string) {
   );
 }
 
-export function installRunnerScaleSets(controller: k8s.helm.v3.Release, namespace_name: string, repo: string): void {
+export function installRunnerScaleSets(
+  controller: k8s.helm.v3.Release,
+  namespace_name: string,
+  repo: string
+): void {
   const runnersNamespace = new Namespace(namespace_name, {
     metadata: {
       name: namespace_name,

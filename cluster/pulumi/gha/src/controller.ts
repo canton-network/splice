@@ -16,7 +16,7 @@ export function installController(repo: string, runnersNamespaceName: string): k
     },
   });
 
-  const releaseName = repo == "splice" ? "gha-runner-scale-set-controller-splice" : `ssc-${repo}`;
+  const releaseName = repo == 'splice' ? 'gha-runner-scale-set-controller-splice' : `ssc-${repo}`;
   return new k8s.helm.v3.Release(releaseName, {
     chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller',
     version: ghaConfig.runnerScaleSetVersion,
