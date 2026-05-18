@@ -73,23 +73,4 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
       )
     )
 
-  /** Count of round-aggregate fetches that failed because round data was missing.
-    * Distinguishes between network-wide unavailability, per-round unavailability,
-    * and per-scan inconsistency via the `reason` label.
-    */
-  val missingRounds: Meter =
-    metricsFactory.meter(
-      MetricInfo(
-        name = prefix :+ "missing_rounds",
-        summary = "Count of round-aggregate fetches that failed because round data was missing",
-        qualification = Traffic,
-        labelsWithDescription = Map(
-          "reason" ->
-            ("Why the round was missing: " +
-              "no_scans_aggregated (no scan has any aggregated rounds), " +
-              "no_scans_have_round (no scan has the requested round), " +
-              "no_aggregate_found (a scan claimed to have it but returned None)")
-        ),
-      )
-    )
 }
