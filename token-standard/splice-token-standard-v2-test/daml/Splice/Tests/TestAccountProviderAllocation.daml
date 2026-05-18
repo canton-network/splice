@@ -13,7 +13,6 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
-import Splice.Api.Token.AllocationRequestV2 qualified as V2
 import Splice.TokenStandard.Utils as TSU
 
 
@@ -202,11 +201,11 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
       cid = None
       meta = emptyMetadata
     request = TradingAppV2.OTCTradeAllocationRequest with
-      authorizer = accountConfig.account
       requestedAt
       settleAt
       settlement
-      allocations = pure $ V2.RequestedAllocation with
+      allocations = pure $ V2.AllocationSpecification with
+        authorizer = accountConfig.account
         admin = instrX.admin
         transferLegSides
         nextIterationFunding = None

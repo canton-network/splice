@@ -24,21 +24,23 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 
 import Splice.TokenStandard.Utils
 
+affectedAccountParties : OTCTradeAllocationRequest -> [Party]
+affectedAccountParties req = concatMap (regularAccountParties . (.authorizer)) req.allocations
+
 -- | A request to a single trading account to authorize their legs to the trade.
 template OTCTradeAllocationRequest with
-    authorizer : V2.Account
     settlement : V2.SettlementInfo
     requestedAt : Time
     settleAt : Time
-    allocations : [V2.RequestedAllocation]
+    allocations : [V2.AllocationSpecification]
   where
     signatory settlement.executors
-    observer regularAccountParties authorizer
+    observer affectedAccountParties this
 
     interface instance V1.AllocationRequest for OTCTradeAllocationRequest where
       view = downcast (view @V2.AllocationRequest (toInterface this))
 
-      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (regularAccountParties authorizer)
+      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (affectedAccountParties this)
       allocationRequest_WithdrawImpl = allocationRequestV1_withdrawDefaultImpl (toInterface this)
 
     interface instance V2.AllocationRequest for OTCTradeAllocationRequest where
@@ -48,9 +50,8 @@ template OTCTradeAllocationRequest with
         requestedAt
         settleAt = Some settleAt
         allocations
-        authorizer
         availableActions =
-          let possibleActors = [ [p] | p <- regularAccountParties authorizer] in
+          let possibleActors = [ [p] | p <- affectedAccountParties this] in
           Map.fromList [ (action, possibleActors) | action <- [V2.ARA_Accept, V2.ARA_Reject]]
         meta = emptyMetadata
 
@@ -58,8 +59,8 @@ template OTCTradeAllocationRequest with
       allocationRequest_rejectExtraObservers = allocationRequestV2_rejectDefaultExtraObservers this
       allocationRequest_withdrawExtraObservers = allocationRequestV2_withdrawDefaultExtraObservers this
 
-      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- regularAccountParties authorizer]
-      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- regularAccountParties authorizer]
+      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- affectedAccountParties this]
+      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- affectedAccountParties this]
       allocationRequest_withdrawImpl = allocationRequestV2_withdrawDefaultImplUsingV1 (toInterface this)
 
 -- | A V1 allocation with enough context to settle or cancel it.
@@ -131,14 +132,14 @@ template OTCTrade with
         let settlement = mkOtcTradeSettlementInfoV2 self this
         forA (Map.toList $ splitTradeLegsByAuthorizer tradeLegs) $ \(authorizer, authorizerLegs) -> do
           create OTCTradeAllocationRequest with
-            authorizer
             settlement
             settleAt = settleAt
             requestedAt = createdAt
             allocations = do
               (admin, legs) <- Map.toList $ splitLegsBy (._1) authorizerLegs
-              pure V2.RequestedAllocation with
+              pure V2.AllocationSpecification with
                 admin
+                authorizer
                 transferLegSides = map (._2) legs
                 settlementDeadline
                 nextIterationFunding = None -- Note: this trading app does not make use of iterated settlement

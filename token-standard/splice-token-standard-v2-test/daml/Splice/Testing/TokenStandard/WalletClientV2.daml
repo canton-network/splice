@@ -324,10 +324,9 @@ listRequestedAllocationsForAdmin admin tradingAccount actor = do
   reqs <- queryInterface @V2.AllocationRequest actor
   let allocSpecs = do
         (_reqCid, Some req) <- reqs
-        guard (req.authorizer == tradingAccount)
         alloc <- req.allocations
-        guard (alloc.admin == admin)
-        pure $ TSU.requestedAllocationToSpecification req.settlement req.authorizer alloc
+        guard (alloc.admin == admin && alloc.authorizer == tradingAccount)
+        pure alloc
   pure allocSpecs
 
 listAllocationsV2 : V2.Account -> Party -> Script [(ContractId V2.Allocation, V2.AllocationView)]
@@ -348,7 +347,7 @@ listAllocationRequestsV1 actor = do
 listAllocationRequestsV2 : V2.Account -> Party -> Script [(ContractId V2.AllocationRequest, V2.AllocationRequestView)]
 listAllocationRequestsV2 tradingAccount actor = do
   reqs <- queryInterface @V2.AllocationRequest actor
-  return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, tradingAccount == reqView.authorizer ]
+  return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, any (\alloc -> tradingAccount == alloc.authorizer) reqView.allocations ]
 
 extractNextIterationAllocationCid : V2.AllocationResult -> Optional (ContractId V2.Allocation)
 extractNextIterationAllocationCid allocResult =
@@ -651,14 +650,7 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
     case (apis.v2Api, apis.v1Api) of
       (Some registryV2, _) -> do
         -- when possible use the V2 factory
-        mkAllocationFactory_AllocateV2 registryV2 actor req.settlement V2.AllocationSpecification with
-          admin = alloc.admin
-          authorizer = req.authorizer
-          settlementDeadline = alloc.settlementDeadline
-          transferLegSides = alloc.transferLegSides
-          nextIterationFunding = alloc.nextIterationFunding
-          committed = alloc.committed
-          meta = alloc.meta
+        mkAllocationFactory_AllocateV2 registryV2 actor req.settlement alloc
 
       (None, Some _) -> do
         -- allocate legs for V1-only admins via their V1 factory
@@ -666,7 +658,7 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
               -- overwrite the transfer legs to only include the legs relevant for this admin
               transferLegs = TextMap.fromList $ do
                 leg <- alloc.transferLegSides
-                let legV2 = TSU.transferLegFromSide req.authorizer leg
+                let legV2 = TSU.transferLegFromSide alloc.authorizer leg
                 pure (leg.transferLegId, TSU.downcast_v2_v1_TransferLeg alloc.admin legV2)
         mkAcceptAllocationRequestV1 registries actor reqV1
 

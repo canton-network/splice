@@ -96,7 +96,6 @@ module Splice.TokenStandard.Utils (
   -- ** Utilities for allocations
 
   netAllocationCreditAmounts,
-  requestedAllocationToSpecification,
   nonIteratedAllocation,
 
   -- *** Working with transfer legs and their sides
