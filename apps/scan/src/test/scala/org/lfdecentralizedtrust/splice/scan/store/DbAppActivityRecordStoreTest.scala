@@ -101,16 +101,13 @@ class DbAppActivityRecordStoreTest
         (store1, historyId1) <- newStore()
         (store2, historyId2) <- newStore()
         baseTs = CantonTimestamp.now()
-        // Insert a record in store2
-        rowId2 <- insertVerdictRow(historyId2, baseTs, "update-other")
-        _ <- store2.insertAppActivityRecords(
-          Seq(mkRecord(rowId2, 10L, Seq("app2::provider"), Seq(200L)))
-        )
+        Seq(rowId2) <- insertRecordsForRounds(store2, historyId2, baseTs, ("other", 10L))
         _ <- store2.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
-        // Insert a record in store1
-        rowId1 <- insertVerdictRow(historyId1, baseTs.plusSeconds(1L), "update-own")
-        _ <- store1.insertAppActivityRecords(
-          Seq(mkRecord(rowId1, 20L, Seq("app1::provider"), Seq(100L)))
+        Seq(rowId1) <- insertRecordsForRounds(
+          store1,
+          historyId1,
+          baseTs.plusSeconds(1L),
+          ("own", 20L),
         )
         _ <- store1.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(1L).toMicros, 20L)
         // store1 should only see its own record
@@ -321,10 +318,7 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L)
-        rowId <- insertVerdictRow(historyId, baseTs, "update-single-round")
-        _ <- store.insertAppActivityRecords(
-          Seq(mkRecord(rowId, 42L, Seq("app1::provider"), Seq(100L)))
-        )
+        _ <- insertRecordsForRounds(store, historyId, baseTs, ("single-round", 42L))
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
@@ -336,13 +330,12 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L)
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-earliest-42")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-earliest-43")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 42L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 43L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("earliest-42", 42L),
+          ("earliest-43", 43L),
         )
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
@@ -355,15 +348,13 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-multi-10")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-multi-11")
-        rowId3 <- insertVerdictRow(historyId, baseTs.plusSeconds(2L), "update-multi-12")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 11L, Seq("app1::provider"), Seq(200L)),
-            mkRecord(rowId3, 12L, Seq("app1::provider"), Seq(300L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("multi-10", 10L),
+          ("multi-11", 11L),
+          ("multi-12", 12L),
         )
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
@@ -376,14 +367,7 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-gap-10")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-gap-12")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 12L, Seq("app1::provider"), Seq(200L)),
-          )
-        )
+        _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L), ("gap-12", 12L))
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
@@ -395,13 +379,12 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 20L)
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-latest-20")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-latest-21")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 20L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 21L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("latest-20", 20L),
+          ("latest-21", 21L),
         )
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
@@ -469,20 +452,16 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
         _ <- store2.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
         // store2 has consecutive rounds 10,11
-        rowId2a <- insertVerdictRow(historyId2, baseTs, "update-other-10")
-        rowId2b <- insertVerdictRow(historyId2, baseTs.plusSeconds(1L), "update-other-11")
-        _ <- store2.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId2a, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2b, 11L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store2,
+          historyId2,
+          baseTs,
+          ("other-10", 10L),
+          ("other-11", 11L),
         )
         // store1 has only one round — no consecutive pair
         _ <- store1.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(2L).toMicros, 50L)
-        rowId1 <- insertVerdictRow(historyId1, baseTs.plusSeconds(2L), "update-own-50")
-        _ <- store1.insertAppActivityRecords(
-          Seq(mkRecord(rowId1, 50L, Seq("app1::provider"), Seq(300L)))
-        )
+        _ <- insertRecordsForRounds(store1, historyId1, baseTs.plusSeconds(2L), ("own-50", 50L))
         result <- store1.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
@@ -709,13 +688,12 @@ class DbAppActivityRecordStoreTest
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-no-meta-10")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-no-meta-11")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 11L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("no-meta-10", 10L),
+          ("no-meta-11", 11L),
         )
         // No meta row — latestRound returns None, consistent with earliestRound
         result <- store.latestRoundWithCompleteAppActivity()
@@ -728,13 +706,12 @@ class DbAppActivityRecordStoreTest
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-latest-42")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-latest-43")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 42L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 43L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("latest-42", 42L),
+          ("latest-43", 43L),
         )
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L)
         result <- store.latestRoundWithCompleteAppActivity()
@@ -748,15 +725,13 @@ class DbAppActivityRecordStoreTest
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-multi-10")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-multi-11")
-        rowId3 <- insertVerdictRow(historyId, baseTs.plusSeconds(2L), "update-multi-12")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 11L, Seq("app1::provider"), Seq(200L)),
-            mkRecord(rowId3, 12L, Seq("app1::provider"), Seq(300L)),
-          )
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("multi-10", 10L),
+          ("multi-11", 11L),
+          ("multi-12", 12L),
         )
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
         result <- store.latestRoundWithCompleteAppActivity()
@@ -770,14 +745,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
-        rowId1 <- insertVerdictRow(historyId, baseTs, "update-gap-10")
-        rowId2 <- insertVerdictRow(historyId, baseTs.plusSeconds(1L), "update-gap-12")
-        _ <- store.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId1, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2, 12L, Seq("app1::provider"), Seq(200L)),
-          )
-        )
+        _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L), ("gap-12", 12L))
         result <- store.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
@@ -790,19 +758,15 @@ class DbAppActivityRecordStoreTest
         (store2, historyId2) <- newStore()
         baseTs = CantonTimestamp.now()
         // store2 has consecutive rounds 10,11
-        rowId2a <- insertVerdictRow(historyId2, baseTs, "update-other-10")
-        rowId2b <- insertVerdictRow(historyId2, baseTs.plusSeconds(1L), "update-other-11")
-        _ <- store2.insertAppActivityRecords(
-          Seq(
-            mkRecord(rowId2a, 10L, Seq("app1::provider"), Seq(100L)),
-            mkRecord(rowId2b, 11L, Seq("app1::provider"), Seq(200L)),
-          )
+        _ <- insertRecordsForRounds(
+          store2,
+          historyId2,
+          baseTs,
+          ("other-10", 10L),
+          ("other-11", 11L),
         )
         // store1 has only one round — no consecutive pair
-        rowId1 <- insertVerdictRow(historyId1, baseTs.plusSeconds(2L), "update-own-50")
-        _ <- store1.insertAppActivityRecords(
-          Seq(mkRecord(rowId1, 50L, Seq("app1::provider"), Seq(300L)))
-        )
+        _ <- insertRecordsForRounds(store1, historyId1, baseTs.plusSeconds(2L), ("own-50", 50L))
         result <- store1.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
@@ -822,6 +786,27 @@ class DbAppActivityRecordStoreTest
       appProviderParties = appProviderParties,
       appActivityWeights = appActivityWeights,
     )
+
+  /** Insert verdict rows with incrementing timestamps and matching activity records.
+    * Returns the generated verdict row IDs.
+    */
+  private def insertRecordsForRounds(
+      store: DbAppActivityRecordStore,
+      historyId: Long,
+      baseTs: CantonTimestamp,
+      rounds: (String, Long)*
+  ): Future[Seq[Long]] =
+    for {
+      pairs <- Future.traverse(rounds.zipWithIndex.toList) { case ((suffix, round), i) =>
+        insertVerdictRow(historyId, baseTs.plusSeconds(i.toLong), s"update-$suffix")
+          .map(_ -> round)
+      }
+      _ <- store.insertAppActivityRecords(
+        pairs.zipWithIndex.map { case ((rowId, round), i) =>
+          mkRecord(rowId, round, Seq("app1::provider"), Seq((i + 1).toLong * 100L))
+        }
+      )
+    } yield pairs.map(_._1)
 
   private def runEnsureMeta(
       store: DbAppActivityRecordStore,
