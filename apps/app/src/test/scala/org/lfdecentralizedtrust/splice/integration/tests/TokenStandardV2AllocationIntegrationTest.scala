@@ -311,7 +311,7 @@ class TokenStandardV2AllocationIntegrationTest
         val requestedAllocation = allocationRequestView.allocations.asScala.loneElement
         walletClient.allocateAmulet(
           allocationRequestView.settlement,
-          requestedAllocation
+          requestedAllocation,
         )
       }
       allocateResponse.output match {

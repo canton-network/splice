@@ -1359,8 +1359,10 @@ object HttpWalletAppClient {
       }
     }
 
-    final case class AllocateAmuletV2(settlement : allocationv2.SettlementInfo, spec: allocationv2.AllocationSpecification)
-        extends InternalBaseCommand[
+    final case class AllocateAmuletV2(
+        settlement: allocationv2.SettlementInfo,
+        spec: allocationv2.AllocationSpecification,
+    ) extends InternalBaseCommand[
           http.AllocateAmuletV2Response,
           definitions.AllocateAmuletV2Response,
         ] {

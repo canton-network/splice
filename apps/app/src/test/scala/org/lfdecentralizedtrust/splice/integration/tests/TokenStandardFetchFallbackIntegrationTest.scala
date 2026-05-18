@@ -168,7 +168,7 @@ class TokenStandardFetchFallbackIntegrationTest
                 java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
                 false,
                 new metadatav1.Metadata(java.util.Map.of()),
-              )
+              ),
             ),
           )(
             "Alice sees the V2 Allocation",
