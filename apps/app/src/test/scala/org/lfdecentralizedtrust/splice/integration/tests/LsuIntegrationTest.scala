@@ -17,7 +17,6 @@ import com.digitalasset.canton.topology.transaction.TopologyChangeOp
 import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.{
-  CircuitBreakerConfig,
   CircuitBreakersConfig,
   ConfigTransforms,
   NetworkAppClientConfig,
@@ -87,20 +86,6 @@ class LsuIntegrationTest
   // otherwise we will run a PV35 -> PV35 LSU
   val successorPv = ProtocolVersion.v35
 
-  // sv-4 is intentionally a late-joining node in this test, which means the sequencer spends some time catching up.
-  // This can cause the sv-app's circuit breakers to trip, which makes annoying logs and delays init.
-  // The circuit breakers tripping a bit during catchup would be just fine IRL,
-  // so as a simple fix to this test we're simply disabling circuit breakers for sv-4.
-  private val disabledCircuitBreakers: CircuitBreakersConfig = {
-    val neverTrips = CircuitBreakerConfig(maxFailures = Int.MaxValue)
-    CircuitBreakersConfig(
-      highPriority = neverTrips,
-      mediumPriority = neverTrips,
-      lowPriority = neverTrips,
-      amuletExpiry = neverTrips,
-    )
-  }
-
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
@@ -124,8 +109,13 @@ class LsuIntegrationTest
                 spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
                   physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
                 ),
+                // sv-4 is intentionally a late-joining node in this test, which means the
+                // sequencer spends some time catching up. This can cause the sv-app's
+                // circuit breakers to trip, which makes annoying logs and delays init.
+                // The circuit breakers tripping a bit during catchup would be just fine
+                // IRL, so as a simple fix to this test we disable them for sv-4.
                 circuitBreakers =
-                  if (name == "sv4") disabledCircuitBreakers
+                  if (name == "sv4") CircuitBreakersConfig.never
                   else config.parameters.circuitBreakers,
               ),
             )
