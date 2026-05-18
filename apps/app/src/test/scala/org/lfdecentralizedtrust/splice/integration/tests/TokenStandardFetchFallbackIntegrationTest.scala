@@ -142,13 +142,13 @@ class TokenStandardFetchFallbackIntegrationTest
           val (_, allocationV2) = actAndCheck(
             "Alice creates a V2 Allocation",
             aliceWalletClient.allocateAmulet(
+              new allocationv2.SettlementInfo(
+                java.util.List.of(dsoParty.toProtoPrimitive),
+                referenceIdV2,
+                Optional.empty,
+                new metadatav1.Metadata(java.util.Map.of()),
+              ),
               new allocationv2.AllocationSpecification(
-                new allocationv2.SettlementInfo(
-                  java.util.List.of(dsoParty.toProtoPrimitive),
-                  referenceIdV2,
-                  Optional.empty,
-                  new metadatav1.Metadata(java.util.Map.of()),
-                ),
                 dsoParty.toProtoPrimitive,
                 basicAccount(aliceParty),
                 java.util.List.of(
@@ -177,7 +177,7 @@ class TokenStandardFetchFallbackIntegrationTest
                 case _ :+ (v2Alloc: HttpWalletAppClient.TokenStandard.V2AmuletAllocation) =>
                   v2Alloc
               }
-              alloc.contract.payload.allocation.settlement.id should be(
+              alloc.contract.payload.settlement.id should be(
                 referenceIdV2
               )
               alloc

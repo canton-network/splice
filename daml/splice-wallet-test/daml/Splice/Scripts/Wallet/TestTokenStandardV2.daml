@@ -198,9 +198,9 @@ testTokenStandardAllocateV2 = script do
         then WalletClientV2.listUnlockedHoldingCidsFor authorizer actor amuletId
         else pure []
       enrichedChoice <- RegistryApiV2.getAllocationFactory registry Api.Token.AllocationInstructionV2.AllocationFactory_Allocate with
+        settlement = req.settlement
         allocation = Api.Token.AllocationV2.AllocationSpecification with
           authorizer
-          settlement = req.settlement
           admin = registry.dso
           transferLegSides = amuletAlloc.transferLegSides  -- no filter in this example, as the test trade affects only amulet
           settlementDeadline

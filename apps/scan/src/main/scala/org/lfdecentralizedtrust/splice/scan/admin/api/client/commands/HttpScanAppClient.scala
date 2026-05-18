@@ -2425,6 +2425,7 @@ object HttpScanAppClient {
             fromAllocationInstructionV2HttpDisclosedContract
           )
         val args = new allocationinstructionv2.AllocationFactory_Allocate(
+          choiceArgs.settlement,
           choiceArgs.allocation,
           choiceArgs.requestedAt,
           choiceArgs.inputHoldingCids,
