@@ -153,6 +153,49 @@ class GcpProject extends pulumi.ComponentResource {
       },
       opts
     );
+
+    // Service account for GitHub Actions to read mainnet history dumps from gs://mainnet-history-dumps
+    // This SA uses Workload Identity Federation to exchange a GitHub OIDC token for a GCP access token.
+    const mainnetReaderSa = new GcpServiceAccount(
+      'mainnet-history-dumps-reader',
+      {
+        accountId: 'mainnet-history-dumps-reader',
+        displayName: 'Mainnet History Dumps Reader',
+        description: 'Service account for GitHub Actions to read gs://mainnet-history-dumps (managed by Pulumi)',
+        roles: [],
+      },
+      opts
+    );
+
+    // Grant read access on the mainnet history dumps bucket (cross-project in da-cn-shared)
+    new gcp.storage.BucketIAMMember(
+      'mainnet-history-dumps-bucket-reader',
+      {
+        bucket: 'mainnet-history-dumps',
+        role: 'roles/storage.objectViewer',
+        member: mainnetReaderSa.account.email,
+      },
+      opts
+    );
+
+    // Impersonate SA via WIF
+    // wipProjectNumber: da-cn-ci project hosting the shared GitHub WIF pool
+    /*eslint no-process-env: "off"*/
+    const wipProjectNumber = '656816146299'; // da-cn-ci project
+    const ghRepo = process.env.GITHUB_REPOSITORY;
+    if (!ghRepo) {
+      throw new Error('GITHUB_REPOSITORY is undefined — set it to owner/repo, e.g. canton-network/splice');
+    }
+
+    new gcp.projects.IAMMember(
+      'mainnet-history-dumps-reader-github-wif',
+      {
+        project: gcpProjectId,
+        role: 'roles/iam.workloadIdentityUser',
+        member: pulumi.interpolate`principalSet://iam.googleapis.com/projects/${wipProjectNumber}/locations/global/workloadIdentityPools/github/attribute.repository/${ghRepo}`,
+      },
+      opts
+    );
   }
 }
 
