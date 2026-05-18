@@ -126,6 +126,11 @@ data RequestedAllocation = RequestedAllocation with
       -- ^ The transfers to include in the allocation.
       --
       -- MAY be empty when requesting an iterated settlement.
+    settlementDeadline : Optional Time
+      -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
+      --
+      -- After this time, if set, the allocation can no longer be settled, and
+      -- the authorizer can withdraw the allocation to release the funds.
     nextIterationFunding : Optional (TextMap.TextMap Decimal)
       -- ^ Whether the allocation should allow iterated settlement, and if so,
       -- the amount of funds to reserve for the next settlement.

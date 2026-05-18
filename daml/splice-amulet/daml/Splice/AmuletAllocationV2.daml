@@ -96,7 +96,7 @@ template AmuletAllocationV2
       allocation_settleImpl self arg = do
         -- check actors and deadline
         archiveAndCheckActors self arg.actors [dso :: allocation.settlement.executors]
-        forA_ allocation.settlement.settlementDeadline $ \deadline ->
+        forA_ allocation.settlementDeadline $ \deadline ->
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
         -- validate the Allocation_Settle choice arguments
@@ -138,15 +138,14 @@ template AmuletAllocationV2
             pure [toInterfaceContractId amuletCid]
 
         -- create the locked amulet for the next iteration, if needed
-        let settlement = allocation.settlement
-        newExpiresAt <- bumpAllocationExpiry expiresAt settlement
+        newExpiresAt <- bumpAllocationExpiry expiresAt allocation.settlementDeadline
         lockedAmulet <-
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
               lock = TimeLock with
                 holders = [authorizer, dso]
                 expiresAt = newExpiresAt
-                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement.settlementRef)
+                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast allocation.settlement)
               amulet = Amulet with
                 dso
                 owner = authorizer
@@ -175,7 +174,7 @@ template AmuletAllocationV2
           outputHoldingCids
 
         -- return the result
-        let v1Reason = "Settle allocation for settlement " <> allocation.settlement.settlementRef.id
+        let v1Reason = "Settle allocation for settlement " <> allocation.settlement.id
         pure V2.AllocationResult with
           authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, outputHoldingCids) | not (null outputHoldingCids)]
           output = V2.AllocationResult_Settled with
@@ -225,18 +224,18 @@ minAmuletAllocationTTL = days 45
 maxAmuletAllocationTTL : RelTime
 maxAmuletAllocationTTL = minAmuletAllocationTTL + minAmuletAllocationTTL
 
-computeAllocationExpiry : Time -> V2.SettlementInfo -> Time
-computeAllocationExpiry now settlement =
-  optional identity min settlement.settlementDeadline $
+computeAllocationExpiry : Time -> Optional Time -> Time
+computeAllocationExpiry now settlementDeadline =
+  optional identity min settlementDeadline $
   now `addRelTime` maxAmuletAllocationTTL
 
 -- | Bump the allocation expiry such that the allocation has an expiry
 -- time between `minAmuletAllocationTTL` and `maxAmuletAllocationTTL` from now.
-bumpAllocationExpiry : Time -> V2.SettlementInfo -> Update Time
-bumpAllocationExpiry currentExpiresAt settlement = do
+bumpAllocationExpiry : Time -> Optional Time -> Update Time
+bumpAllocationExpiry currentExpiresAt settlementDeadline = do
   dontBump <- isLedgerTimeLE (currentExpiresAt `addRelTime` negate minAmuletAllocationTTL)
   pure $ if dontBump then currentExpiresAt else
-    optional identity min settlement.settlementDeadline $
+    optional identity min settlementDeadline $
     addRelTime currentExpiresAt minAmuletAllocationTTL
 
 

@@ -70,22 +70,22 @@ queryTradesWithAllocations : Party -> Script [TradeWithAllocations]
 queryTradesWithAllocations venue = do
   otcTrades <- query @OTCTrade venue
   forA otcTrades $ \(otcTradeCid, otcTrade) -> do
-    let settlementRef = makeTradeRef otcTradeCid
+    let settlement = mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade
     -- query matching allocation requests
     allocationRequests <- queryFilter @OTCTradeAllocationRequest venue
-      (\req -> req.settlement.settlementRef == settlementRef)
+      (\req -> req.settlement == settlement)
     -- query matching allocations
     allAllocationsV2 <- queryInterface @V2.Allocation venue
     let allocationsV2 = do
           (cid, Some allocView) <- allAllocationsV2
-          guard (allocView.allocation.settlement.settlementRef == settlementRef)
+          guard (allocView.allocation.settlement == settlement)
           pure (cid, allocView)
     let allocationCidsV1 = Set.fromList $ map fst allocationsV2
     allAllocationsV1 <- queryInterface @V1.Allocation venue
-    let settlementRefV1 = downcast settlementRef
+    let settlementRefV1 = mkOtcTradeSettlementInfoV1 otcTradeCid otcTrade
     let allocationsV1 = do
           (cid, Some allocView) <- allAllocationsV1
-          guard (allocView.allocation.settlement.settlementRef == settlementRefV1)
+          guard (allocView.allocation.settlement == settlementRefV1)
           guard (upcast cid `Set.notMember` allocationCidsV1)
           pure (cid, allocView)
 
@@ -188,6 +188,7 @@ querySettleableTrades registries venue = do
                   admin
                   transferLegSides = map snd missingLegs
                   settlement
+                  settlementDeadline = None -- OK for receipt allocations that are immediately settled
                   nextIterationFunding = None
                   committed = False
                   authorizer

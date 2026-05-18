@@ -525,7 +525,7 @@ object ScanStore {
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract,
-            contractExpiresAt = contract.payload.allocation.settlement.settlementDeadline
+            contractExpiresAt = contract.payload.allocation.settlementDeadline
               .map(Timestamp.assertFromInstant(_))
               .toScala,
           )

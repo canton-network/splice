@@ -451,20 +451,21 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   checkActors actors [[authorizer]]
 
   -- == validate each field of the requested allocation
-  let settlement = allocation.settlement
-  let transferLegSides = allocation.transferLegSides
+
+  -- allocation.settlementDeadline:
+  whenSome allocation.settlementDeadline \d -> do
+    assertWithinDeadline "Allocation.settlementDeadline" d
 
   -- settlement.executors: no check
-  -- settlement.settlementRef: no check
-  -- settlement.settlementDeadline:
-  whenSome settlement.settlementDeadline \d -> do
-    assertWithinDeadline "Allocation.settlement.settlementDeadline" d
-
+  -- settlement.id: no check
+  -- settlement.cid: no check
+  -- settlement.meta: no check
 
   -- note: nextIterationFunding is validated in `amulet_allocationFactoryV2_allocateImpl`,
   -- as it is only supported for V2 factories
 
   -- transferLegs:
+  let transferLegSides = allocation.transferLegSides
   requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
   unless (isSome allocation.nextIterationFunding) $
     require' ("transferLegSides", transferLegSides) (notR isEqualR) ("empty list", [])
@@ -485,7 +486,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   assertDeadlineExceeded "requestedAt" requestedAt
 
   -- create locked amulet if required
-  let expiresAt = computeAllocationExpiry requestedAt settlement
+  let expiresAt = computeAllocationExpiry requestedAt allocation.settlementDeadline
   if fundingAmount <= 0.0
   then do
     -- return input cids as change, so they can be reused on chaining
@@ -497,7 +498,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
           dso
           sender = authorizer
           amount = fundingAmount
-          lockContext = AmuletAllocationV1.mkAllocationLockContext (downcast settlement.settlementRef)
+          lockContext = AmuletAllocationV1.mkAllocationLockContext (downcast allocation.settlement)
           transferBefore = expiresAt
           transferBeforeDeadline = "allocation.expiresAt"
           -- Minor hack: we use the authorizer for receiver and provider as these fields are irrlevant
