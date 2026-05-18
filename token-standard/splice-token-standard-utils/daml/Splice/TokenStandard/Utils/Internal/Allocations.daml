@@ -8,7 +8,6 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
   -- * Allocation utilities
   netAllocationCreditAmounts,
-  requestedAllocationToSpecification,
   nonIteratedAllocation,
 
   -- ** Working with transfer legs and their sides
@@ -137,13 +136,6 @@ nonIteratedAllocation allocationCid = AllocationV2.FinalizedAllocation with
   allocationCid
   extraTransferLegSides = []
   nextIterationFunding = None
-
--- | Convert a requested allocation to a specification.
-requestedAllocationToSpecification
-  : AllocationV2.SettlementInfo -> HoldingV2.Account -> AllocationRequestV2.RequestedAllocation
-  -> AllocationV2.AllocationSpecification
-requestedAllocationToSpecification settlement authorizer (AllocationRequestV2.RequestedAllocation with ..) =
-  AllocationV2.AllocationSpecification with ..
 
 -- | Net amounts of credit from an allocation's transfer leg sides.
 --
@@ -699,7 +691,7 @@ allocationRequestV2_withdrawDefaultImplV2Only this self arg = do
 -- V1 wallets will create one V1 allocation per transfer leg with their wallet party as the
 -- sender. Their authorizer will thus be set to the `sender.owner` of each individual transfer leg.
 instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationRequestV2.AllocationRequestView where
-  downcast (AllocationRequestV2.AllocationRequestView with settlement, requestedAt, authorizer, settleAt, allocations, meta) =
+  downcast (AllocationRequestV2.AllocationRequestView with settlement, requestedAt, settleAt, allocations, meta) =
       AllocationRequestV1.AllocationRequestView with
         settlement = downcast_v2_v1_SettlementInfo requestedAt (fromOptional maxTime settleAt) maxSettlementDeadline settlement
         transferLegs = TextMap.fromList $ do
@@ -707,7 +699,7 @@ instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationR
           leg <- alloc.transferLegSides
           -- Note: self-transfers will be present twice, but building the map
           -- based on the transfer leg id will take care of deduplicating them.
-          let legV2 = transferLegFromSide authorizer leg
+          let legV2 = transferLegFromSide alloc.authorizer leg
           pure (leg.transferLegId, downcast_v2_v1_TransferLeg alloc.admin legV2)
         meta
     where
