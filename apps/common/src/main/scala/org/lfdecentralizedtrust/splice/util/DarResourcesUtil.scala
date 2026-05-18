@@ -39,7 +39,7 @@ object DarResourcesUtil extends NamedLogging {
   def lookupAllPackageVersions(name: PackageName): Seq[DarResource] =
     packageResources.view.flatMap(_.all).toSeq.filter(_.metadata.name == name)
 
-  // TODO(hyperledger-labs/splice#4049): remove `enableUnsupportedDarsUnvetting` once not needed anymore
+  // TODO(canton-network/splice#4049): remove `enableUnsupportedDarsUnvetting` once not needed anymore
   def getRequiredPackageVersions(
       name: PackageName,
       upToRequiredVersion: PackageVersion,
@@ -52,11 +52,11 @@ object DarResourcesUtil extends NamedLogging {
     val unsupportedVersions = additionalPackagesToUnvet
       .getOrElse(name, Set.empty)
       .filter { v =>
-        if (minimumInitializationVersion < v && v <= upToRequiredVersion) {
+        if (minimumInitializationVersion <= v && v <= upToRequiredVersion) {
           true
         } else {
           logger.debug(
-            s"Version $v of package $name configured in `additionalPackagesToUnvet` is smaller or equal to the minimum initialization version $minimumInitializationVersion or larger than $upToRequiredVersion."
+            s"Version $v of package $name configured in `additionalPackagesToUnvet` is smaller than the minimum initialization version $minimumInitializationVersion or larger than $upToRequiredVersion."
           )
           false
         }

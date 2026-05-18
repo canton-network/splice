@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.sv.lsu.LogicalSyncUpgradeTransferTrafficT
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
 
-class LogicalSyncUpgradeTransferTrafficTrigger(
+class LsuTransferTrafficTrigger(
     baseContext: TriggerContext,
     currentSynchronizerNode: SvSynchronizerNode,
     successorSynchronizerNode: SvSynchronizerNode,

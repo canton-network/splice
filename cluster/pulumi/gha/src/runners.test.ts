@@ -11,7 +11,8 @@ import { installRunnerScaleSets } from './runners';
 jest.mock('./config', () => ({
   __esModule: true,
   ghaConfig: {
-    githubRepo: 'https://dummy-gh-repo.com',
+    githubOrg: 'https://dummy-gh-repo.com',
+    githubRepo: ['test-repo'],
     runnerVersion: '1.2',
     runnerHookVersion: '1.1',
     runnerScaleSetVersion: '1.1',
@@ -57,7 +58,7 @@ jest.mock('@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig', () 
   },
 }));
 
-test('GHA runner k8s resources are in the gha-runners namespace', async () => {
+test('GHA runner k8s resources are in the gha-runners-<repo> namespace', async () => {
   await pulumi.runtime.setMocks({
     newResource(args) {
       return {
@@ -83,7 +84,7 @@ test('GHA runner k8s resources are in the gha-runners namespace', async () => {
   } as unknown as k8s.helm.v3.Release;
 
   const [, resources] = await collectResources(() => {
-    installRunnerScaleSets(mockController);
+    installRunnerScaleSets(mockController, 'test-repo');
   });
 
   // check that each k8s resource is in the gha-runners namespace
@@ -102,7 +103,7 @@ test('GHA runner k8s resources are in the gha-runners namespace', async () => {
     // check the namespace and return useful information on error
     pulumi.all([resource.urn, namespace]).apply(([urn, namespace]) => {
       try {
-        expect(namespace).toEqual('gha-runners');
+        expect(namespace).toEqual('gha-runners-test-repo');
       } catch (error) {
         throw new Error(
           `Resource [${urn}] should be created in namespace [gha-runners] but is in [${namespace}].`

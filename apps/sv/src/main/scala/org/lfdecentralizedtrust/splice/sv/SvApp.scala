@@ -299,6 +299,7 @@ class SvApp(
           loggerFactory,
           retryProvider,
           config.spliceInstanceNames,
+          metrics.grpcClientMetrics,
           config.svAcsStoreDescriptorUserVersion,
           config.dsoAcsStoreDescriptorUserVersion,
         )
@@ -332,6 +333,7 @@ class SvApp(
               retryProvider,
               config.spliceInstanceNames,
               loggerFactory,
+              metrics.grpcClientMetrics,
               config.parameters.enabledFeatures,
               config.svAcsStoreDescriptorUserVersion,
               config.dsoAcsStoreDescriptorUserVersion,
@@ -357,6 +359,7 @@ class SvApp(
               loggerFactory,
               retryProvider,
               config.spliceInstanceNames,
+              metrics.grpcClientMetrics,
               newJoiningNodeInitializer,
               rollForwardLsuConfig,
             ).rollForward()

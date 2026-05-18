@@ -5,8 +5,4 @@
 
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
-- Validator app
-
-    - the configuration ``domain-migration-dump-path`` was removed
-
-.. .. release-notes:: Upcoming
+.. release-notes:: Upcoming
