@@ -1091,6 +1091,9 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+    testing:
+      catchup:
+        enabled: true
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
