@@ -231,15 +231,13 @@ final case class EnvironmentDefinition(
     copy(staticSynchronizerParametersMap = map)
 
   def createTestConsole(
-      baseEnvironment: CantonEnvironment,
+      environment: CantonEnvironment,
       loggerFactory: NamedLoggerFactory,
   ): TestConsoleEnvironment =
     new CantonConsoleEnvironment(
-      baseEnvironment,
+      environment,
       new TestConsoleOutput(loggerFactory),
-    ) with TestEnvironment[CantonConfig] {
-      override val actualConfig: CantonConfig = baseEnvironment.config
-    }
+    ) with TestEnvironment[CantonConfig]
 
   override lazy val environmentFactory =
     CommunityEnvironmentFactory

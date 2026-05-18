@@ -571,7 +571,6 @@ case class EnvironmentDefinition(
       new TestConsoleOutput(loggerFactory),
     ) with TestEnvironment[SpliceConfig] {
       override lazy val actorSystem = super[TestEnvironment].actorSystem
-      override val actualConfig: SpliceConfig = this.environment.config
     }
     this.preAppStart(env)
     env

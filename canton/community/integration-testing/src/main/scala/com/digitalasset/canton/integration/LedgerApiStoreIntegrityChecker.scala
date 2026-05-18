@@ -63,8 +63,6 @@ class LedgerApiStoreIntegrityChecker(
               s"Checking participant Ledger API Store integrity, for $participantLoggingName..."
             )
 
-            implicit val ec = env.executionContext
-
             try {
               Using.resource(
                 justWaitForIt(

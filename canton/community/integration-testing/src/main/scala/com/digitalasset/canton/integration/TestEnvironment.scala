@@ -45,7 +45,7 @@ trait TestEnvironment[+C]
     with ConsoleEnvironment.Implicits
     with EnvironmentTestHelpers
     with CommonTestAliases {
-  this: ConsoleEnvironment =>
+  this: ConsoleEnvironment { type Config <: C } =>
 
   implicit val executionContext: ExecutionContextIdlenessExecutorService =
     environment.executionContext
@@ -53,7 +53,7 @@ trait TestEnvironment[+C]
   implicit val executionSequencerFactory: ExecutionSequencerFactory =
     environment.executionSequencerFactory
 
-  def actualConfig: C
+  def actualConfig: C = environment.config
 
   private lazy val storage =
     new MemoryStorage(loggerFactory, environmentTimeouts)
