@@ -11,5 +11,5 @@ $(dir)/$(docker-build): $(target-load-tester)  $(dir)/target/LICENSE
 $(target-load-tester): $(load-tester) | $(dir)/target
 	cp -r $< $@
 
-$(dir)/target/LICENSE: ${SPLICE_ROOT}/cluster/images/LICENSE | $(dir)/target
+$(dir)/target/LICENSE: ${SPLICE_ROOT}/LICENSE | $(dir)/target
 	cp $< $@
