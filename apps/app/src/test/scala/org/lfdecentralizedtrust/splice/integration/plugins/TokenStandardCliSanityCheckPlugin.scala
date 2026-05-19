@@ -48,8 +48,7 @@ class TokenStandardCliSanityCheckPlugin(
     with OptionValues {
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     try {
       TraceContext.withNewTraceContext("beforeEnvironmentDestroyed") { implicit tc =>

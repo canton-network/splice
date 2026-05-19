@@ -160,8 +160,7 @@ abstract class UseKms extends EnvironmentSetupPlugin with AutoCloseable with NoT
   }
 
   override def beforeEnvironmentDestroyed(
-      config: CantonConfig,
-      environment: TestConsoleEnvironment,
+      environment: TestConsoleEnvironment
   ): Unit = {
     implicit val ec: ExecutionContext = kmsKeyDeletionExecutionContext
 

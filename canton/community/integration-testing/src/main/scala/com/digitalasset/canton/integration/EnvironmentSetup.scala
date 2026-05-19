@@ -280,7 +280,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
 
   protected def manualDestroyEnvironment(environment: BaseTestConsoleEnvironment[C, E]): Unit = {
     val config = environment.actualConfig
-    plugins.foreach(_.beforeEnvironmentDestroyed(config, environment))
+    plugins.foreach(_.beforeEnvironmentDestroyed(environment))
     try {
       environment.close()
     } finally {

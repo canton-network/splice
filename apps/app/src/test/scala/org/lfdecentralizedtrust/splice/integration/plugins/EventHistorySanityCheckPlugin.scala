@@ -30,8 +30,7 @@ class EventHistorySanityCheckPlugin(
     with LoneElement {
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     val initializedScans = environment.scans.local.filter(_.is_initialized)
     if (initializedScans.nonEmpty) {

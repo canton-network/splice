@@ -23,8 +23,7 @@ abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin wit
   protected def topologyType: String
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      env: SpliceTests.SpliceTestConsoleEnvironment,
+      env: SpliceTests.SpliceTestConsoleEnvironment
   ): Unit = {
 
     // Stop all nodes to stop them from submitting topology TXs.

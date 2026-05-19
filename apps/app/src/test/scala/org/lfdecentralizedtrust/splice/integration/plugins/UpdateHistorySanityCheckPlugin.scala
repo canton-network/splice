@@ -45,8 +45,7 @@ class UpdateHistorySanityCheckPlugin(
   }
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     TraceContext.withNewTraceContext("beforeEnvironmentDestroyed") { implicit tc =>
       // A scan might not be initialized if the test uses `manualStart` and it wasn't ever started.

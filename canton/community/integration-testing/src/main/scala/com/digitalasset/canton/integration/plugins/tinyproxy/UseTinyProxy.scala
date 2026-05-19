@@ -105,10 +105,9 @@ final case class UseTinyProxy(tinyProxyConfig: TinyProxyConfig)
   }
 
   override def beforeEnvironmentDestroyed(
-      config: CantonConfig,
-      environment: TestConsoleEnvironment,
+      environment: TestConsoleEnvironment
   ): Unit =
-    externalPlugin.beforeEnvironmentDestroyed(config, environment)
+    externalPlugin.beforeEnvironmentDestroyed(environment)
 }
 
 object UseTinyProxy {
