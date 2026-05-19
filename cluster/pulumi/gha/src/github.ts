@@ -6,21 +6,28 @@ import { DockerConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/doc
 import { ghaConfig } from './config';
 
 export function installGithubRepo(repo: string): void {
-
-  const orgProvider = new github.Provider("canton-network-provider", {
-    owner: ghaConfig.githubOrg.replaceAll('https://github.com/', ''), // FIXME: This is ugly. change the config to not include the url prefix
+  const orgProvider = new github.Provider('canton-network-provider', {
+    owner: ghaConfig.githubOrg.replaceAll('https://github.com/', ''), // TODO(#5570): after we change the config to be just the org, remove the replaceAll
   });
 
   DockerConfig.fetchCredentialsFromSecret('artifactory-keys').apply(creds => {
-    new github.ActionsVariable('example-variable', {
-      repository: repo,
-      variableName: 'test_var',
-      value: creds.username,
-    }, { provider: orgProvider });
-    new github.ActionsSecret('example-secret', {
-      repository: repo,
-      secretName: 'test_secret',
-      value: creds.password,
-    }, { provider: orgProvider });
+    new github.ActionsVariable(
+      'artifactory-user',
+      {
+        repository: repo,
+        variableName: 'ARTIFACTORY_USER',
+        value: creds.username,
+      },
+      { provider: orgProvider }
+    );
+    new github.ActionsSecret(
+      'artifactory-password',
+      {
+        repository: repo,
+        secretName: 'ARTIFACTORY_PASSWORD',
+        value: creds.password,
+      },
+      { provider: orgProvider }
+    );
   });
 }

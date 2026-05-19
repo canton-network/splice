@@ -79,7 +79,8 @@ function installDockerRunnerScaleSet(
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
       values: {
-        githubConfigUrl: `${ghaConfig.githubOrg}/${repo}`,
+        // TODO(#5570): Change the org to not include the url, and drop the condition below (we made it conditional for backwards compatibility for now).
+        githubConfigUrl: `${ghaConfig.githubOrg.startsWith('https://github.com/') ? ghaConfig.githubOrg : `https://github.com/${ghaConfig.githubOrg}`}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,
         runnerScaleSetName: name,
         listenerTemplate: {
