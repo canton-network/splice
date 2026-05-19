@@ -2504,6 +2504,30 @@ object HttpScanAppClient {
     }
   }
 
+  case class LookupSvRewardWeightBefore(
+      svParty: String,
+      before: Instant,
+  ) extends InternalBaseCommand[http.LookupSvRewardWeightBeforeResponse, Option[Long]] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.LookupSvRewardWeightBeforeResponse] =
+      client.lookupSvRewardWeightBefore(
+        body = definitions.LookupSvRewardWeightBeforeRequest(
+          svParty = svParty,
+          before = java.time.OffsetDateTime.ofInstant(before, java.time.ZoneOffset.UTC),
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.LookupSvRewardWeightBeforeResponse.OK(response) =>
+      Right(response.priorWeight)
+    }
+  }
+
   case class ListVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId]
   ) extends InternalBaseCommand[http.ListVoteRequestsByTrackingCidResponse, Seq[

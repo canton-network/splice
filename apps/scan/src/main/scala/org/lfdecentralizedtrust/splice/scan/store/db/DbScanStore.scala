@@ -40,10 +40,13 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.scan.store.{
   OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
+  SvOnboardingTxLogEntry,
   TransferCommandTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
@@ -846,6 +849,75 @@ class DbScanStore(
         .map(_.result.getOrElse(throw txMissingField()))
       afterToken = limited.lastOption.map(_.entryNumber)
     } yield ResultsPage(recentVoteResults, afterToken)
+  }
+
+  override def lookupSvRewardWeightBefore(
+      svParty: PartyId,
+      before: Instant,
+  )(implicit tc: TraceContext): Future[Option[Long]] = {
+    val beforeIso = before.toString
+    val beforeMicros = before.getEpochSecond * 1_000_000L + before.getNano / 1_000L
+    for {
+      voteHit <- storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = sql"""
+              entry_type = ${EntryType.VoteRequestTxLogEntry}
+              and vote_action_name = 'SRARC_UpdateSvRewardWeight'
+              and vote_accepted = true
+              and vote_sv_party = ${svParty.toProtoPrimitive}
+              and vote_effective_at::timestamptz < $beforeIso::timestamptz
+            """,
+            orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
+          ).headOption,
+          "lookupSvRewardWeightBefore.vote",
+        )
+        .value
+      addSvHit <- voteHit match {
+        case Some(_) =>
+          Future.successful(Option.empty[TxLogQueries.SelectFromTxLogTableResult])
+        case None =>
+          futureUnlessShutdownToFuture(
+            storage
+              .querySingle(
+                selectFromTxLogTable(
+                  txLogTableName,
+                  txLogStoreId,
+                  where = sql"""
+                    entry_type = ${EntryType.SvOnboardingTxLogEntry}
+                    and sv_onboarding_party = ${svParty.toProtoPrimitive}
+                    and sv_onboarding_effective_at < $beforeMicros
+                  """,
+                  orderLimit = sql"order by sv_onboarding_effective_at desc limit 1",
+                ).headOption,
+                "lookupSvRewardWeightBefore.addSv",
+              )
+              .value
+          )
+      }
+    } yield {
+      val voteWeight: Option[Long] = voteHit.map { row =>
+        val vr = txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig)(row)
+        val result = vr.result.getOrElse(throw txMissingField())
+        result.request.action match {
+          case arc: ARC_DsoRules =>
+            arc.dsoAction match {
+              case u: SRARC_UpdateSvRewardWeight =>
+                u.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.toLong
+              case other =>
+                sys.error(s"vote_sv_party set but action is not weight update: $other")
+            }
+          case other =>
+            sys.error(s"vote_sv_party set but action is not ARC_DsoRules: $other")
+        }
+      }
+      val addSvWeight: Option[Long] = addSvHit.map { row =>
+        txLogEntryFromRow[SvOnboardingTxLogEntry](txLogConfig)(row).initialWeight
+      }
+      voteWeight.orElse(addSvWeight)
+    }
   }
 
   override def listVoteRequestsByTrackingCid(

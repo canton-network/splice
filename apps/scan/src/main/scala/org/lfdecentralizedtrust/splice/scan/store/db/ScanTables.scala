@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
   ARC_DsoRules,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.scan.store.{
   AbortTransferInstructionTxLogEntry,
   AppRewardTxLogEntry,
@@ -23,6 +24,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ExtraTrafficPurchaseTxLogEntry,
   MintTxLogEntry,
   OpenMiningRoundTxLogEntry,
+  SvOnboardingTxLogEntry,
   SvRewardTxLogEntry,
   TapTxLogEntry,
   TransferTxLogEntry,
@@ -150,6 +152,10 @@ object ScanTables extends AcsTables {
       transferCommandContractId: Option[TransferCommand.ContractId] = None,
       transferCommandSender: Option[PartyId] = None,
       transferCommandNonce: Option[Long] = None,
+      svOnboardingParty: Option[PartyId] = None,
+      svOnboardingWeight: Option[Long] = None,
+      svOnboardingEffectiveAt: Option[CantonTimestamp] = None,
+      voteSvParty: Option[PartyId] = None,
   ) extends TxLogRowData {
 
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
@@ -170,6 +176,10 @@ object ScanTables extends AcsTables {
       "transfer_command_contract_id" -> transferCommandContractId,
       "transfer_command_sender" -> transferCommandSender,
       "transfer_command_nonce" -> transferCommandNonce,
+      "sv_onboarding_party" -> svOnboardingParty,
+      "sv_onboarding_weight" -> svOnboardingWeight,
+      "sv_onboarding_effective_at" -> svOnboardingEffectiveAt,
+      "vote_sv_party" -> voteSvParty,
     )
   }
 
@@ -252,6 +262,7 @@ object ScanTables extends AcsTables {
                 case Some(effectiveAt) => Some(effectiveAt.toString)
                 case None => None
               },
+              voteSvParty = extractSvPartyFromUpdateRewardWeight(result.request.action),
             )
           case entry: TransferCommandTxLogEntry =>
             ScanTxLogRowData(
@@ -271,6 +282,13 @@ object ScanTables extends AcsTables {
           case entry: AbortTransferInstructionTxLogEntry =>
             ScanTxLogRowData(
               entry = entry
+            )
+          case entry: SvOnboardingTxLogEntry =>
+            ScanTxLogRowData(
+              entry = entry,
+              svOnboardingParty = Some(entry.svParty),
+              svOnboardingWeight = Some(entry.initialWeight),
+              svOnboardingEffectiveAt = entry.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
           case _ =>
             throw txEncodingFailed()
@@ -298,6 +316,18 @@ object ScanTables extends AcsTables {
           arcAnsEntryContext.ansEntryContextAction.getClass.getSimpleName
         case _ => ""
       }
+    }
+
+    private def extractSvPartyFromUpdateRewardWeight(
+        action: ActionRequiringConfirmation
+    ): Option[PartyId] = action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case u: SRARC_UpdateSvRewardWeight =>
+            Some(PartyId.tryFromProtoPrimitive(u.dsoRules_UpdateSvRewardWeightValue.svParty))
+          case _ => None
+        }
+      case _ => None
     }
 
   }

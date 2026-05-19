@@ -1266,6 +1266,29 @@ paths:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ListDsoRulesVoteResultsResponse"
 
+  /v0/admin/sv/reward-weight-before:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "lookupSvRewardWeightBefore"
+      description: |
+        Returns the SV's reward weight as it stood immediately before the
+        given timestamp. Used by the SV frontend to render the "before"
+        value on completed DsoRules_UpdateSvRewardWeight proposals.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupSvRewardWeightBeforeRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupSvRewardWeightBeforeResponse"
+
   /v0/backfilling/migration-info:
     post:
       tags: [internal, scan]
@@ -4679,3 +4702,30 @@ components:
           type: string
         amount:
           type: string
+
+    LookupSvRewardWeightBeforeRequest:
+      type: object
+      required: [sv_party, before]
+      properties:
+        sv_party:
+          type: string
+          description: SV party id.
+        before:
+          type: string
+          format: date-time
+          description: |
+            Exclusive upper bound. Typically the effective_at of the
+            proposal whose "before" weight you want to display.
+
+    LookupSvRewardWeightBeforeResponse:
+      type: object
+      required: [prior_weight]
+      properties:
+        prior_weight:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Null when neither a prior accepted weight-change vote nor an
+            SV onboarding event has been recorded — caller should fall
+            back to the current weight from DsoRules in that case.

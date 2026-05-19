@@ -14,6 +14,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AmuletCreateSummary
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferResult
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_AddSv,
+  DsoRules_AddSvResult,
   DsoRules_CloseVoteRequest,
   DsoRules_CloseVoteRequestResult,
 }
@@ -25,7 +27,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions 
 import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.*
 import org.lfdecentralizedtrust.splice.store.TxLogStore
-import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
+import org.lfdecentralizedtrust.splice.store.events.{DsoRulesAddSv, DsoRulesCloseVoteRequest}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.dollarsToCC
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
 import org.lfdecentralizedtrust.splice.util.{
@@ -358,7 +360,15 @@ class ScanTxLogParser(
               State.empty
             }
           case DsoRulesCloseVoteRequest(node) =>
-            State.fromCloseVoteRequest(eventId, node)
+            val childState = parseTrees(
+              tree,
+              synchronizerId,
+              tree.getChildNodeIds(exercised).asScala.toList,
+              ignoreUnexpectedAmuletCreateArchive,
+            )
+            childState.appended(State.fromCloseVoteRequest(eventId, node))
+          case DsoRulesAddSv(node) =>
+            State.fromAddSv(eventId, tree.getEffectiveAt, node)
           case ExternalPartyAmuletRules_CreateTransferCommand(node) =>
             State.fromCreateTransferCommand(eventId, node)
           case TransferCommand_Send(node) =>
@@ -985,6 +995,23 @@ object ScanTxLogParser {
           VoteRequestTxLogEntry(
             eventId,
             result = Some(node.result.value),
+          )
+        )
+      )
+    }
+
+    def fromAddSv(
+        eventId: String,
+        effectiveAt: java.time.Instant,
+        node: ExerciseNode[DsoRules_AddSv, DsoRules_AddSvResult],
+    ): State = {
+      State(
+        immutable.Queue(
+          SvOnboardingTxLogEntry(
+            eventId = eventId,
+            svParty = PartyId.tryFromProtoPrimitive(node.argument.value.newSvParty),
+            initialWeight = node.argument.value.newSvRewardWeight,
+            effectiveAt = Some(effectiveAt),
           )
         )
       )

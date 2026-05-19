@@ -34,6 +34,7 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import { useSvRewardWeightBefore } from '../../hooks/useSvRewardWeightBefore';
 
 dayjs.extend(relativeTime);
 
@@ -230,6 +231,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               svToUpdate={proposalDetails.proposal.svToUpdate}
               currentWeight={proposalDetails.proposal.currentWeight}
               weightChange={proposalDetails.proposal.weightChange}
+              before={proposalDetails.isVoteRequest ? undefined : proposalDetails.createdAt}
             />
           )}
 
@@ -653,13 +655,22 @@ interface UpdateSvRewardWeightSectionProps {
   svToUpdate: string;
   currentWeight: string;
   weightChange: string;
+  before?: string;
 }
 
 const UpdateSvRewardWeightSection = ({
   svToUpdate,
   currentWeight,
   weightChange,
+  before,
 }: UpdateSvRewardWeightSectionProps) => {
+  const { data: priorWeight } = useSvRewardWeightBefore(svToUpdate, before);
+
+  const beforeValue =
+    before && priorWeight !== null && priorWeight !== undefined
+      ? String(priorWeight)
+      : currentWeight;
+
   return (
     <>
       <Box
@@ -687,7 +698,7 @@ const UpdateSvRewardWeightSection = ({
               {
                 label: 'Weight',
                 fieldName: 'svRewardWeight',
-                currentValue: currentWeight,
+                currentValue: beforeValue,
                 newValue: weightChange,
               },
             ]}

@@ -24,10 +24,15 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
+  DsoRules_AddSv,
+  DsoRules_AddSvResult,
+  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -48,7 +53,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
+import org.lfdecentralizedtrust.splice.store.events.{DsoRulesAddSv, DsoRulesCloseVoteRequest}
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.damlDecimal
 import org.lfdecentralizedtrust.splice.util.*
@@ -68,6 +73,8 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.I
   UpdateHistoryInitAtLatestPrunedOffset,
   ResumeAtOffset,
 }
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
+import slick.jdbc.GetResult
 
 abstract class ScanStoreTest
     extends StoreTestBase
@@ -671,6 +678,68 @@ abstract class ScanStoreTest
             votes should contain theSameElementsAs (goodVotes.flatten)
           }
         }
+      }
+    }
+
+    "sv onboarding" should {
+
+      "ingestion writes an SvOnboardingTxLogEntry for DsoRules_AddSv" in {
+        val sv = providerParty(7)
+        val weightLong: java.lang.Long = 5L
+        val roundLong: java.lang.Long = 1L
+        val addSvArg = new DsoRules_AddSv(
+          sv.toProtoPrimitive,
+          "sv7",
+          weightLong,
+          "sv7ParticipantId",
+          new org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round(roundLong),
+        )
+        val addSvResult = new DsoRules_AddSvResult(
+          new DsoRules.ContractId(nextCid())
+        )
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.exercise(
+            contract = dsoRules(dsoParty),
+            interfaceId = None,
+            choiceName = DsoRulesAddSv.choice.name,
+            addSvArg.toValue,
+            addSvResult.toValue,
+          )(store.multiDomainAcsStore)
+          entries <- listAllSvOnboardings(store)
+        } yield {
+          entries should have length 1
+          entries.head.svParty shouldBe sv
+          entries.head.initialWeight shouldBe 5L
+        }
+      }
+
+      "lookupSvRewardWeightBefore returns None when no events exist" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+        } yield result shouldBe None
+      }
+
+      "lookupSvRewardWeightBefore falls back to AddSv when no prior vote exists" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          _ <- ingestAddSv(store, sv, initialWeight = 5L)
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+        } yield result shouldBe Some(5L)
+      }
+
+      "lookupSvRewardWeightBefore returns most recent accepted vote when one exists before T" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          _ <- ingestAddSv(store, sv, initialWeight = 5L)
+          _ <- ingestUpdateSvRewardWeightVote(store, sv, newWeight = 10L, effectiveAt = time(75))
+          _ <- ingestUpdateSvRewardWeightVote(store, sv, newWeight = 15L, effectiveAt = time(125))
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+        } yield result shouldBe Some(10L)
       }
     }
 
@@ -1343,8 +1412,65 @@ abstract class ScanStoreTest
       migrationId: Long
   ): Future[UpdateHistory]
 
-  private lazy val user1 = userParty(1)
-  private lazy val user2 = userParty(2)
+  protected def listAllSvOnboardings(store: ScanStore): Future[Seq[SvOnboardingTxLogEntry]]
+
+  /** Ingest a DsoRules_AddSv exercise for the given SV with the given initial weight.
+    * Uses txEffectiveAt = time(50).toInstant so that it falls before the default
+    * "before" boundaries used in the lookupSvRewardWeightBefore tests.
+    */
+  private def ingestAddSv(
+      store: ScanStore,
+      sv: PartyId,
+      initialWeight: Long,
+  ): Future[?] = {
+    val weightLong: java.lang.Long = initialWeight
+    val roundLong: java.lang.Long = 1L
+    val addSvArg = new DsoRules_AddSv(
+      sv.toProtoPrimitive,
+      "sv-name",
+      weightLong,
+      "svParticipantId",
+      new org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round(roundLong),
+    )
+    val addSvResult = new DsoRules_AddSvResult(new DsoRules.ContractId(nextCid()))
+    dummyDomain.exercise(
+      contract = dsoRules(dsoParty),
+      interfaceId = None,
+      choiceName = DsoRulesAddSv.choice.name,
+      addSvArg.toValue,
+      addSvResult.toValue,
+      txEffectiveAt = time(50).toInstant,
+    )(store.multiDomainAcsStore)
+  }
+
+  /** Ingest an accepted SRARC_UpdateSvRewardWeight vote result for the given SV.
+    * The effectiveAt of the vote result is controlled by the `effectiveAt` parameter.
+    */
+  private def ingestUpdateSvRewardWeightVote(
+      store: ScanStore,
+      sv: PartyId,
+      newWeight: Long,
+      effectiveAt: com.digitalasset.canton.data.CantonTimestamp,
+  ): Future[?] = {
+    val newWeightLong: java.lang.Long = newWeight
+    val action = new ARC_DsoRules(
+      new SRARC_UpdateSvRewardWeight(
+        new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, newWeightLong)
+      )
+    )
+    val voteReq = voteRequest(requester = userParty(1), votes = Seq.empty, action = action)
+    val result = mkVoteRequestResult(voteReq, effectiveAt = effectiveAt.toInstant)
+    dummyDomain.exercise(
+      contract = dsoRules(dsoParty),
+      interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+      choiceName = DsoRulesCloseVoteRequest.choice.name,
+      mkCloseVoteRequest(voteReq.contractId),
+      result.toValue,
+    )(store.multiDomainAcsStore)
+  }
+
+  protected lazy val user1 = userParty(1)
+  protected lazy val user2 = userParty(2)
 
   implicit class ScanStoreExt(store: ScanStore) {
     @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
@@ -2006,5 +2132,37 @@ class DbScanStoreTest
         storeReingest.listVoteRequests().futureValue.toList should contain(activeVoteRequest)
       }
     }
+  }
+
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  override protected def listAllSvOnboardings(
+      store: ScanStore
+  ): Future[Seq[SvOnboardingTxLogEntry]] = {
+    implicit val GetResultRow: GetResult[(String, String)] =
+      GetResult(prs => (prs.<<[String], prs.<<[String]))
+    val dbStore = store.asInstanceOf[DbScanStore]
+    val storeId = dbStore.txLogStoreId
+    val entryType = TxLogEntry.EntryType.SvOnboardingTxLogEntry.str
+    storage
+      .query(
+        sql"""
+          select entry_type, entry_data
+          from scan_txlog_store
+          where store_id = $storeId
+            and entry_type = $entryType
+        """.as[(String, String)],
+        "listAllSvOnboardings",
+      )
+      .failOnShutdown
+      .map { rows =>
+        rows.map { case (entryTypeStr, entryData) =>
+          TxLogEntry
+            .decode(
+              com.digitalasset.canton.config.CantonRequireTypes.String3.tryCreate(entryTypeStr),
+              entryData,
+            )
+            .asInstanceOf[SvOnboardingTxLogEntry]
+        }
+      }
   }
 }

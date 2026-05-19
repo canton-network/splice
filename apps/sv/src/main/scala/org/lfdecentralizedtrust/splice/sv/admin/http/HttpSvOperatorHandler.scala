@@ -162,6 +162,27 @@ class HttpSvOperatorHandler(
     }
   }
 
+  override def lookupSvRewardWeightBefore(
+      respond: r0.LookupSvRewardWeightBeforeResponse.type
+  )(
+      body: definitions.LookupSvRewardWeightBeforeRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.LookupSvRewardWeightBeforeResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.lookupSvRewardWeightBefore") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        priorWeight <- scanConnection.lookupSvRewardWeightBefore(
+          body.svParty,
+          body.before.toInstant,
+        )
+      } yield r0.LookupSvRewardWeightBeforeResponse.OK(
+        definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
+      )
+    }
+  }
+
   override def listValidatorLicenses(
       respond: r0.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(
