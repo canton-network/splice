@@ -30,15 +30,15 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
       )
     )
 
-  /** Count of failed HTTP/gRPC calls to one scan node. */
-  val failuresPerConnection: Meter =
+  /** Count of succeeded and failed HTTP/gRPC calls to one scan node. */
+  val callPerConnection: Meter =
     metricsFactory.meter(
       MetricInfo(
-        name = prefix :+ "per_connection_errors",
-        summary = "Count of failed requests to a scan connection",
+        name = prefix :+ "per_connection_calls",
+        summary = "Count of succeeded and failed requests to a scan connection",
         qualification = Traffic,
         labelsWithDescription = perConnectionLabels ++ Map(
-          "error_class" -> "Category of failure"
+          "outcome" -> "Category of failure or success"
         ),
       )
     )
@@ -58,18 +58,19 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
       )
     )
 
-  /** Count of BFT reads that failed (consensus not reached, not enough scans
+  /** Count of BFT reads that succeeded and failed (ok, consensus not reached, not enough scans
     * available, or any underlying transport error).
     */
-  val bftCallFailures: Meter =
+  val bftCalls: Meter =
     metricsFactory.meter(
       MetricInfo(
-        name = prefix :+ "bft_errors",
-        summary = "Count of failed BFT reads",
+        name = prefix :+ "bft_calls",
+        summary = "Count of BFT reads",
         qualification = Traffic,
         labelsWithDescription = Map(
           "request" -> "Name of the scan request being called (no arguments)",
-          "outcome" -> ("Why the BFT call failed: " +
+          "outcome" -> ("BFT outcome: " +
+            "ok (succeeded), " +
             "not_enough_scans (fewer than f+1 reachable scans), " +
             "consensus_not_reached (responses did not agree), " +
             "transport_error (all underlying calls failed)"),

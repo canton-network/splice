@@ -734,10 +734,10 @@ class BftScanConnection(
 
     val connections = scanList.scanConnections
 
-    def markBftFailure(outcome: String): Unit =
+    def markBftCall(outcome: String): Unit =
       connectionMetrics.foreach { m =>
         MetricsContext.withExtraMetricLabels(("outcome", outcome)) { implicit mc =>
-          m.bftCallFailures.mark()
+          m.bftCalls.mark()
         }
       }
     def startTimer(): Option[TimerHandle] =
@@ -752,7 +752,7 @@ class BftScanConnection(
           s"${callConfig.targetSuccess} to achieve BFT guarantees."
       val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
       LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
-      markBftFailure("not_enough_scans")
+      markBftCall("not_enough_scans")
       Future.failed(exception)
     } else {
       val timer = startTimer()
@@ -773,7 +773,7 @@ class BftScanConnection(
         )
         .recoverWith { case c: ConsensusNotReached =>
           LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
-          markBftFailure("consensus_not_reached")
+          markBftCall("consensus_not_reached")
           Future.failed(
             HttpErrorWithHttpCode(
               StatusCodes.BadGateway,
@@ -784,11 +784,14 @@ class BftScanConnection(
         }
         .andThen {
           case Failure(_: HttpErrorWithHttpCode) =>
+            // Already marked by the recoverWith above ("consensus_not_reached")
+            // or by the not_enough_scans branch — nothing more to do.
             stopTimer(timer)
           case Failure(_) =>
-            markBftFailure("transport_error")
+            markBftCall("transport_error")
             stopTimer(timer)
           case Success(_) =>
+            markBftCall("ok")
             stopTimer(timer)
         }
     }

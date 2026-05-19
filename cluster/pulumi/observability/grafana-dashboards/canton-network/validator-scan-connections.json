@@ -205,7 +205,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (namespace, scan_connection, request)(rate(splice_validator_scan_per_connection_errors_total{namespace=~\"$namespace\", scan_connection=~\"$scan_connection\", request=~\"$per_connection_request\"}[$__rate_interval]))",
+          "expr": "sum by (namespace, scan_connection, request)(rate(splice_validator_scan_per_connection_calls_total{namespace=~\"$namespace\", scan_connection=~\"$scan_connection\", request=~\"$per_connection_request\", outcome!=\"ok\"}[$__rate_interval]))",
           "legendFormat": "{{namespace}} - {{scan_connection}} - {{request}}",
           "range": true,
           "refId": "A"
@@ -394,7 +394,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (outcome, namespace, request) (\n  rate(splice_validator_scan_bft_errors_total{namespace=~\"$namespace\", request=~\"${bft_request}\"}[$__rate_interval])\n)",
+          "expr": "sum by (outcome, namespace, request) (\n  rate(splice_validator_scan_bft_calls_total{namespace=~\"$namespace\", request=~\"${bft_request}\", outcome!=\"ok\"}[$__rate_interval])\n)",
           "legendFormat": "{{namespace}} - {{outcome}} - {{request}}",
           "range": true,
           "refId": "A"

@@ -141,12 +141,15 @@ class SingleScanConnection private[client] (
             .runHttpCmd(url, command, headers)
             .andThen {
               case Failure(e) =>
-                MetricsContext.withMetricLabels(("error_class", e.getClass.getSimpleName)) {
+                MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
                   implicit ec2 =>
                     metrics.failuresPerConnection.mark()(m.merge(ec2))
                 }
                 timer.stop()(m)
               case Success(_) =>
+                MetricsContext.withMetricLabels(("outcome", "ok")) { implicit ec2 =>
+                  metrics.failuresPerConnection.mark()(m.merge(ec2))
+                }
                 timer.stop()(m)
             }
         }
