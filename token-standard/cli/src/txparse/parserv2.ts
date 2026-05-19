@@ -108,18 +108,22 @@ export class V2TransactionParser {
     holdingsChange: EventLog_HoldingsChange,
     cachedHoldings: Map<string, Holding>,
   ): Promise<TokenStandardEvent> {
-    const resolvedInputHoldings = await Promise.all(
-      holdingsChange.inputHoldingCids.map((cid) =>
-        this.resolveHolding(cid, cachedHoldings),
-      ),
-    );
+    const resolvedInputHoldings = (
+      await Promise.all(
+        holdingsChange.inputHoldingCids.map((cid) =>
+          this.resolveHolding(cid, cachedHoldings),
+        ),
+      )
+    ).filter((h) => h !== null);
     const unlockedInputHoldings = resolvedInputHoldings.filter((h) => !h.lock);
     const lockedInputHoldings = resolvedInputHoldings.filter((h) => !!h.lock);
-    const resolvedOutputHoldings = await Promise.all(
-      holdingsChange.outputHoldingCids.map((cid) =>
-        this.resolveHolding(cid, cachedHoldings),
-      ),
-    );
+    const resolvedOutputHoldings = (
+      await Promise.all(
+        holdingsChange.outputHoldingCids.map((cid) =>
+          this.resolveHolding(cid, cachedHoldings),
+        ),
+      )
+    ).filter((h) => h !== null);
     const unlockedOutputHoldings = resolvedOutputHoldings.filter(
       (h) => !h.lock,
     );
@@ -166,7 +170,7 @@ export class V2TransactionParser {
   async resolveHolding(
     cid: string,
     cachedHoldings: Map<string, Holding>,
-  ): Promise<HoldingResult> {
+  ): Promise<HoldingResult | null> {
     let result = cachedHoldings.get(cid);
     if (!result) {
       const fromEvent = await getEventsOfContract(
@@ -176,9 +180,8 @@ export class V2TransactionParser {
         [HoldingInterfaceV2],
       );
       if (!fromEvent || !fromEvent.created) {
-        throw new Error(
-          `Holding ${cid} appears in the ledger but no create found.`,
-        );
+        // User is likely not an observer or events of contract were pruned
+        return null;
       }
 
       const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);
