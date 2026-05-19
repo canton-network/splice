@@ -41,6 +41,7 @@ export function createProgram(): Command {
           "What version of Token Standard to parse as (V1/V2)",
         )
           .choices(["V1", "V2"])
+          .default("V1")
           .makeOptionMandatory(true),
       )
       .option(

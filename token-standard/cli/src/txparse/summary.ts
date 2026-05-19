@@ -9,6 +9,7 @@ import {
   HoldingsChangeSummary,
   TokenStandardEvent,
 } from "./types";
+import BigNumber from "bignumber.js";
 
 export function sumHoldingsChange(
   change: HoldingsChange,
