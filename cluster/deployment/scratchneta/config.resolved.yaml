@@ -1094,6 +1094,8 @@ svs:
     testing:
       catchup:
         enabled: true
+        thresholds:
+          minBackupAgeHours: 1
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'

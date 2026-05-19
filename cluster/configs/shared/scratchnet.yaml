@@ -20,6 +20,8 @@ svs:
     testing:
       catchup:
         enabled: true
+        thresholds:
+          minBackupAgeHours: 1
   sv-3: !include(scratchnet-sv.yaml) {}
   sv-4: !include(scratchnet-sv.yaml) {}
   sv-5: !include(scratchnet-sv.yaml) {}
