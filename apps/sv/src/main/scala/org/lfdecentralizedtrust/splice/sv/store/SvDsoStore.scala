@@ -1255,6 +1255,14 @@ object SvDsoStore {
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
         )
       },
+      mkFilter(splice.validatorlicenserequest.ValidatorLicenseRequest.COMPANION)(co =>
+        co.payload.dso == dso
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+        )
+      },
       mkFilter(splice.validatorpermission.ValidatorPermission.COMPANION)(vp =>
         vp.payload.dso == dso
       ) { contract =>
