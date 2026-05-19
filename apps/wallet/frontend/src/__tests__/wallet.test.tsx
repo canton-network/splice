@@ -265,9 +265,9 @@ describe('Wallet user can', () => {
           screen.getByRole('heading', { name: `Allocations ${allocations.length}` })
         ).toBeDefined();
 
-        const settlementRefIds = await screen.findAllByText(/SettlementRef id.*/);
+        const settlementRefIds = await screen.findAllByText(/Settlement id.*/);
         expect(settlementRefIds.map(e => e.textContent)).toStrictEqual(
-          allocations.map(a => `SettlementRef id: ${a.settlement.id}`)
+          allocations.map(a => `Settlement id: ${a.settlement.id}`)
         );
       });
 
@@ -308,9 +308,7 @@ describe('Wallet user can', () => {
         ).toBeDefined();
 
         expect(
-          await screen.findByText(
-            `SettlementRef id: ${allocationRequest.settlement.settlementRef.id}`
-          )
+          await screen.findByText(`Settlement id: ${allocationRequest.settlement.settlementRef.id}`)
         ).toBeDefined();
 
         const acceptButtons = await screen.findAllByRole('button', { name: 'Accept' });
@@ -384,7 +382,7 @@ describe('Wallet user can', () => {
         ).toBeDefined();
 
         expect(
-          await screen.findByText(`SettlementRef id: ${allocationRequest.settlement.id}`)
+          await screen.findByText(`Settlement id: ${allocationRequest.settlement.id}`)
         ).toBeDefined();
 
         const acceptButtons = await screen.findAllByRole('button', { name: 'Accept' });
