@@ -408,12 +408,12 @@ class AllocationsFrontendIntegrationTest
     seleniumText(
       parent.childElement(className("settlement-id"))
     ) should be(
-      s"SettlementRef id: $id"
+      s"Settlement id: $id"
     )
     cid.foreach(cid =>
       seleniumText(
         parent.childElement(className("settlement-cid"))
-      ) should be(s"SettlementRef cid: $cid")
+      ) should be(s"Settlement cid: $cid")
     )
     val executorElements = parent.findAllChildElements(className("settlement-executor")).toSeq
     executorElements.map(seleniumText).zip(executors).foreach { case (actual, expected) =>

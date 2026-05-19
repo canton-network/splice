@@ -5,7 +5,6 @@ import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { useTokenStandardAllocationRequests } from '../hooks/useTokenStandardAllocationRequests';
 import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-common-frontend';
-import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
 import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
@@ -29,15 +28,16 @@ import {
   AllocateAmuletV2Request,
 } from '@lfdecentralizedtrust/wallet-openapi';
 import {
+  AllocationSpecification as AllocationSpecificationV2,
   SettlementInfo,
-  TransferLeg,
   TransferLegSide,
 } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { damlTimestampToOpenApiTimestamp } from '../utils/timestampConversion';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import UseGetAmuletRules from '../hooks/scan-proxy/useGetAmuletRules';
 import { ContractId } from '@daml/types';
-import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
+import { getSettlement } from '../utils/tokenStandard';
+import AllocationSpecificationDisplay from './AllocationSpecificationDisplay';
 
 dayjs.extend(relativeTime);
 
@@ -100,10 +100,8 @@ const AllocationRequestDisplay: React.FC<{
 }> = ({ request, userParty, allocations, dso }) => {
   const payload = request.payload;
   const isV2 = isV2AllocationRequest(payload);
-  const { settlement, transferLegs } = isV2
-    ? v2RequestToDisplay(payload)
-    : v1RequestToDisplay(payload);
   const requestMeta = payload.meta;
+  const settlement = getSettlement(payload);
 
   const { rejectAllocationRequest } = useWalletClient();
   const rejectAllocationRequestMutation = useMutation({
@@ -147,24 +145,33 @@ const AllocationRequestDisplay: React.FC<{
             </>
           ) : null}
           {isV2 ? (
-            <>
-              <TransferLegsDisplay
-                parentId={request.contractId}
-                transferLegs={transferLegs}
-                // for v2, the action button operates over the entire request, not per transfer-leg
-                getActionButton={() => null}
-              />
-              <V2AllocationRequestActionButton
-                allocationRequest={request as Contract<AllocationRequestV2>}
-                allocations={allocations}
-                userParty={userParty}
-                dso={dso}
-              />
-            </>
+            payload.allocations.map((allocationSpec, idx) => {
+              // key as index is fine because they won't move around
+              return (
+                <Stack key={idx}>
+                  <AllocationSpecificationDisplay
+                    parentId={request.contractId}
+                    spec={allocationSpec}
+                    // for v2, the action button operates over an allocation specification, not per transfer-leg
+                    getActionButton={() => (
+                      <V2AllocationRequestActionButton
+                        requestCid={request.contractId}
+                        allocationIndex={idx}
+                        allocationSpecification={allocationSpec}
+                        settlement={payload.settlement}
+                        allocations={allocations}
+                        userParty={userParty}
+                        dso={dso}
+                      />
+                    )}
+                  />
+                </Stack>
+              );
+            })
           ) : (
             <TransferLegsDisplay
               parentId={request.contractId}
-              transferLegs={transferLegs}
+              transferLegs={payload.transferLegs}
               getActionButton={(transferLegId, parentComponentId) => (
                 <V1AllocationRequestActionButton
                   parentComponentId={parentComponentId}
@@ -185,25 +192,36 @@ const AllocationRequestDisplay: React.FC<{
 
 /** V2: one Accept button per request, filters amulet legs for userParty */
 const V2AllocationRequestActionButton: React.FC<{
-  allocationRequest: Contract<AllocationRequestV2>;
+  requestCid: string;
+  allocationIndex: number;
+  settlement: SettlementInfo;
+  allocationSpecification: AllocationSpecificationV2;
   allocations: Contract<AmuletAllocation>[];
   userParty: string;
   dso: string;
-}> = ({ allocationRequest, userParty, allocations, dso }) => {
-  const payload = allocationRequest.payload;
-  const amuletLegSidesForUser = payload.allocations
-    .filter(allocation => allocation.admin === dso)
-    .flatMap(allocation => allocation.transferLegSides)
-    .filter(side => side.instrumentId === 'Amulet');
-  const isAuthorizer =
-    payload.authorizer.owner === userParty &&
-    (payload.authorizer.provider === null || payload.authorizer.provider === undefined) &&
-    payload.authorizer.id === '';
-  // basicAccount check: authorizer matches basicAccount(userParty)
-  const canAccept = amuletLegSidesForUser.length > 0 && isAuthorizer;
+}> = ({
+  requestCid,
+  allocationIndex,
+  settlement,
+  allocationSpecification,
+  userParty,
+  allocations,
+  dso,
+}) => {
+  const validSpecification =
+    allocationSpecification.admin === dso &&
+    // basicAccount check: authorizer matches basicAccount(userParty)
+    allocationSpecification.authorizer.owner === userParty &&
+    !allocationSpecification.authorizer.provider &&
+    allocationSpecification.authorizer.id === '';
+
+  const amuletLegSidesForUser = allocationSpecification.transferLegSides.filter(
+    side => side.instrumentId === 'Amulet'
+  );
+  const canAccept = validSpecification && amuletLegSidesForUser.length > 0;
 
   const correspondingAllocation = allocations.find(alloc =>
-    isAllocationForRequest(alloc, allocationRequest)
+    isAllocationForRequest(alloc, settlement, allocationSpecification)
   );
 
   const hasExistingAllocation = !!correspondingAllocation;
@@ -211,7 +229,11 @@ const V2AllocationRequestActionButton: React.FC<{
   const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
-      const req = openApiV2RequestFromAllocationRequest(payload.settlement, amuletLegSidesForUser);
+      const req = openApiV2RequestFromAllocationRequest(
+        settlement,
+        amuletLegSidesForUser,
+        allocationSpecification.settlementDeadline
+      );
       return await createAllocationV2(req);
     },
     onSuccess: () => {},
@@ -251,7 +273,7 @@ const V2AllocationRequestActionButton: React.FC<{
         <Button
           variant="pill"
           size="small"
-          id={`allocation-request-${allocationRequest.contractId}-withdraw`}
+          id={`allocation-request-${requestCid}-${allocationIndex}-withdraw`}
           className="allocation-withdraw"
           onClick={() => withdrawAllocationV2Mutation.mutate()}
         >
@@ -270,7 +292,7 @@ const V2AllocationRequestActionButton: React.FC<{
       <Button
         variant="pill"
         size="small"
-        id={`allocation-request-${allocationRequest.contractId}-accept`}
+        id={`allocation-request-${requestCid}-${allocationIndex}-accept`}
         className="allocation-request-accept"
         onClick={() => createAllocationV2Mutation.mutate()}
       >
@@ -374,14 +396,45 @@ const V1AllocationRequestActionButton: React.FC<{
 
 function isAllocationForRequest(
   allocation: Contract<AmuletAllocation>,
-  allocationRequest: Contract<AllocationRequestV2>
+  requestSettlement: SettlementInfo,
+  allocationSpec: AllocationSpecificationV2
 ): boolean {
-  const payload = allocation.payload;
+  const allocationPayload = allocation.payload;
+  const isV2 = isV2Allocation(allocationPayload);
+  const allocationSettlementId = isV2
+    ? allocationPayload.settlement.id
+    : allocationPayload.allocation.settlement.settlementRef.id;
+  const allocationSettlementCid = isV2
+    ? allocationPayload.settlement.cid
+    : allocationPayload.allocation.settlement.settlementRef.cid;
+  const sameTransferLegs = isV2
+    ? allocationPayload.allocation.transferLegSides.map(allocSide =>
+        allocationSpec.transferLegSides.some(
+          specSide =>
+            allocSide.transferLegId === specSide.transferLegId && allocSide.side === specSide.side
+        )
+      )
+    : allocationSpec.transferLegSides.some(
+        side => side.transferLegId === allocationPayload.allocation.transferLegId
+      );
+  const sameExecutor = isV2
+    ? allocationPayload.settlement.executors.every(
+        executor => requestSettlement.executors.indexOf(executor) !== -1
+      )
+    : requestSettlement.executors.indexOf(allocationPayload.allocation.settlement.executor) !== -1;
+  const allocationMeta = isV2
+    ? allocationPayload.settlement.meta
+    : allocationPayload.allocation.settlement.meta;
+  const sameMeta = Object.entries(allocationMeta.values).every(
+    ([key, value]) => value === requestSettlement.meta.values[key]
+  );
+
   return (
-    payload.allocation.settlement.settlementRef.id ===
-      allocationRequest.payload.settlement.settlementRef.id &&
-    payload.allocation.settlement.settlementRef.cid ===
-      allocationRequest.payload.settlement.settlementRef.cid
+    allocationSettlementId === requestSettlement.id &&
+    allocationSettlementCid === requestSettlement.cid &&
+    sameTransferLegs &&
+    sameExecutor &&
+    sameMeta
   );
 }
 
@@ -392,25 +445,29 @@ function isAllocationForTransferLeg(
 ): boolean {
   let sameExecutor: boolean;
   let sameLegId: boolean;
+  let allocationSettlementId: string;
+  let allocationSettlementCid: string | null;
   if (isV2Allocation(allocation.payload)) {
-    sameExecutor = allocation.payload.allocation.settlement.executors.some(
+    sameExecutor = allocation.payload.settlement.executors.some(
       e => e === allocationRequest.payload.settlement.executor
     );
     sameLegId = allocation.payload.allocation.transferLegSides.some(
       side => side.transferLegId === legId
     );
+    allocationSettlementId = allocation.payload.settlement.id;
+    allocationSettlementCid = allocation.payload.settlement.cid;
   } else {
     sameExecutor =
       allocation.payload.allocation.settlement.executor ===
       allocationRequest.payload.settlement.executor;
     sameLegId = allocation.payload.allocation.transferLegId === legId;
+    allocationSettlementId = allocation.payload.allocation.settlement.settlementRef.id;
+    allocationSettlementCid = allocation.payload.allocation.settlement.settlementRef.cid;
   }
   return (
     sameExecutor &&
-    allocation.payload.allocation.settlement.settlementRef.id ===
-      allocationRequest.payload.settlement.settlementRef.id &&
-    allocation.payload.allocation.settlement.settlementRef.cid ===
-      allocationRequest.payload.settlement.settlementRef.cid &&
+    allocationSettlementId === allocationRequest.payload.settlement.settlementRef.id &&
+    allocationSettlementCid === allocationRequest.payload.settlement.settlementRef.cid &&
     sameLegId
   );
 }
@@ -445,18 +502,19 @@ export function openApiV1RequestFromTransferLeg(
 /** V2: build AllocateAmuletV2Request from settlement + filtered transfer legs */
 export function openApiV2RequestFromAllocationRequest(
   settlement: SettlementInfo,
-  transferLegSides: TransferLegSide[]
+  transferLegSides: TransferLegSide[],
+  settlementDeadline: string | null
 ): AllocateAmuletV2Request {
   return {
     settlement: {
       executors: settlement.executors,
       settlement_ref: {
-        id: settlement.settlementRef.id,
-        cid: settlement.settlementRef.cid as string,
+        id: settlement.id,
+        cid: settlement.cid as string,
       },
       meta: settlement.meta.values,
-      ...(settlement.settlementDeadline
-        ? { settlement_deadline: damlTimestampToOpenApiTimestamp(settlement.settlementDeadline) }
+      ...(settlementDeadline
+        ? { settlement_deadline: damlTimestampToOpenApiTimestamp(settlementDeadline) }
         : {}),
     },
     transfer_leg_sides: transferLegSides.map(side => ({
@@ -470,41 +528,6 @@ export function openApiV2RequestFromAllocationRequest(
     committed: false,
     next_iteration_funding: {},
     meta: {},
-  };
-}
-
-type DisplayRequest = {
-  settlement: SettlementInfo;
-  transferLegs: TransferLeg[];
-};
-function v2RequestToDisplay(payload: AllocationRequestV2): DisplayRequest {
-  const transferLegs = transferLegSidesToTransferLegs(
-    payload.authorizer,
-    payload.allocations.flatMap(allocation => allocation.transferLegSides)
-  );
-  return {
-    settlement: payload.settlement,
-    transferLegs,
-  };
-}
-
-/** Convert V1 AllocationRequest fields to V2 shapes for display */
-function v1RequestToDisplay(payload: AllocationRequestV1): DisplayRequest {
-  return {
-    settlement: {
-      executors: [payload.settlement.executor],
-      settlementRef: payload.settlement.settlementRef,
-      settlementDeadline: null,
-      meta: payload.settlement.meta,
-    },
-    transferLegs: Object.entries(payload.transferLegs).map(([legId, leg]) => ({
-      transferLegId: legId,
-      sender: { owner: leg.sender, provider: null, id: '' },
-      receiver: { owner: leg.receiver, provider: null, id: '' },
-      amount: leg.amount,
-      instrumentId: leg.instrumentId.id,
-      meta: leg.meta,
-    })),
   };
 }
 
