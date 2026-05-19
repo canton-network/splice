@@ -339,6 +339,7 @@ executeAllDefinitiveVotes app = do
         requestCid
         amuletRulesCid = Some amuletRulesCid
         sv = Some s.dsoDelegate
+        currentBindings = None
 
 -- | Look up the represented SV's self-binding. SV onboarding installs a
 -- self-binding atomically, so this returns the binding established by
@@ -447,6 +448,8 @@ castVoteOnRequest app dsoRulesCid sv requestCid accept body = do
       optCastAt = None
       castBy = Some sv
       castByRole = Some castByRole
+      bindingCid = None
+        -- ^ Server-set by DsoRules_CastVote from the choice-arg `bindingCid`.
     bindingCid = optBindingCid
     castBy = optCastBy
   pure result.voteRequest

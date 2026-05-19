@@ -70,6 +70,19 @@ which an operator can overwrite a governance voter's vote on an eligible
 action. The operator and governance-voter paths intentionally share the
 represented SV's cooldown because there is still only one vote slot per SV.
 
+Each recorded vote carries the ``SvGovernanceVoter`` binding it was cast
+under (``Vote.bindingCid``). When ``DsoRules_CloseVoteRequest`` is invoked
+with the current set of live bindings (``currentBindings = Some [...]``),
+the close logic builds a ``represented-SV -> live-binding`` map and drops
+any governance-voter-cast vote whose recorded ``bindingCid`` is no longer
+the live binding for the vote's SV — that is, the SV has rotated its
+governance voter after the vote was cast. Dropped voters are reported in
+``DsoRules_CloseVoteRequestResult.staleBindingVoters`` alongside the
+existing ``offboardedVoters`` channel. ``currentBindings = None`` skips
+the staleness check for back-compat with pre-staleness clients; the
+caller is trusted to pass the complete set of live bindings, just as it
+is trusted to choose which request to close.
+
 The supported submission path is explicit disclosure: a governance voter that
 is not affiliated with the represented SV presents the Scan-discovered proposal
 and request contract IDs together with the necessary disclosed contracts when

@@ -57,6 +57,10 @@ class CloseVoteRequestTrigger(
                 voteRequestCid,
                 java.util.Optional.of(amuletRulesId),
                 Optional.of(controller),
+                // currentBindings: not supplied by this automation slice;
+                // gov-voter staleness is checked by a separate path. Passing
+                // Optional.empty() preserves pre-staleness close behavior.
+                Optional.empty(),
               )
             )
           ),

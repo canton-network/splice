@@ -840,6 +840,7 @@ abstract class ScanStoreTest
                   Optional.empty(),
                   Optional.empty(),
                   Optional.empty(),
+                  Optional.empty(),
                 )
               )
           )
@@ -850,6 +851,7 @@ abstract class ScanStoreTest
                   userParty(i).toProtoPrimitive,
                   true,
                   new Reason("", ""),
+                  Optional.empty(),
                   Optional.empty(),
                   Optional.empty(),
                   Optional.empty(),
@@ -1415,6 +1417,7 @@ abstract class ScanStoreTest
             Optional.empty(),
             Optional.empty(),
             Optional.empty(),
+            Optional.empty(),
           )
         ),
     )
@@ -1426,6 +1429,7 @@ abstract class ScanStoreTest
             userParty(n).toProtoPrimitive,
             true,
             new Reason("", ""),
+            Optional.empty(),
             Optional.empty(),
             Optional.empty(),
             Optional.empty(),
@@ -2180,6 +2184,7 @@ class DbScanStoreTest
               userParty(n).toProtoPrimitive,
               true,
               new Reason("", ""),
+              Optional.empty(),
               Optional.empty(),
               Optional.empty(),
               Optional.empty(),

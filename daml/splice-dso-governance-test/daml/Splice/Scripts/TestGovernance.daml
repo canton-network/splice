@@ -145,6 +145,7 @@ testCastDeadlineExpiry = do
       optCastAt = None
       castBy = Some sv1
       castByRole = Some VCR_GovernanceVoter
+      bindingCid = None
 
   -- Operator cast path: same enforcement on an operational action.
   opRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
@@ -170,6 +171,7 @@ testCastDeadlineExpiry = do
       optCastAt = None
       castBy = Some sv2
       castByRole = Some VCR_Operator
+      bindingCid = None
     bindingCid = None
     castBy = None
   pure ()
@@ -205,6 +207,7 @@ testGovernanceVoterCastPath = do
         optCastAt = None
         castBy = Some signer
         castByRole = Some VCR_GovernanceVoter
+        bindingCid = None
   let offboardSv1Action = ARC_DsoRules with
         dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv1
   let requestOffboardSv = submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
@@ -252,6 +255,7 @@ testGovernanceVoterCastPath = do
       optCastAt = None
       castBy = Some sv1
       castByRole = Some VCR_Operator
+      bindingCid = None
     bindingCid = None
     castBy = None
   Some request <- queryContractId dso castResult.voteRequest
@@ -489,6 +493,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- a day passes and sv2 updates their vote
   passTime (days 1)
@@ -503,6 +508,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- sv3 accepts too
   requestCid <- castVote app sv3 requestCid True
@@ -512,6 +518,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   [(rightCid, right)] <- query @FeaturedAppRight provider
   right === FeaturedAppRight with dso; provider
@@ -565,6 +572,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- the voteRequest trackingCid is set to the initial requestCid
   Some voteRequest <- queryContractId dso requestCid
@@ -579,6 +587,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- sv4 rejects
   requestCid <- castVote app sv4 requestCid False
@@ -591,6 +600,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- sv4 can change its vote past the expiration date
   requestCid <- castVote app sv4 requestCid True
@@ -603,6 +613,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   now <- getTime
   result.completedAt === now
@@ -662,6 +673,7 @@ testVoteRequestRejectionWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -709,6 +721,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -763,6 +776,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- the expiration date has passed
   passTime (days 3)
@@ -777,6 +791,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   now <- getTime
 
@@ -861,6 +876,7 @@ testRacingSvRemoval = do
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -874,6 +890,7 @@ testRacingSvRemoval = do
       requestCid = req2
       amuletRulesCid = None
       sv = Some sv1
+      currentBindings = None
 
   -- sv3 refuses and sv4 accepts request 4 with effectivity 8 days before the expiration.
   req4 <- castVote app sv3 req4 False
@@ -889,6 +906,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   now <- getTime
   result.completedAt === now
@@ -902,6 +920,7 @@ testRacingSvRemoval = do
     requestCid = req3
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === [partyToText sv2]
@@ -933,6 +952,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
+    currentBindings = None
 
   -- after enough time has passed the closing works
   passTime (seconds 1)
@@ -940,6 +960,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
+    currentBindings = None
 
   -- however sv4 is still here, as at least `numSvs / 2 + 1` svs need to accept the offboarding
   result.outcome === VRO_Expired
@@ -963,6 +984,7 @@ testRacingSvRemoval = do
     requestCid = req5
     amuletRulesCid = None
     sv = Some sv3
+    currentBindings = None
 
   result.outcome === VRO_Accepted with effectiveAt = now
 
@@ -1055,6 +1077,7 @@ testDsoRulesConfigChange = do
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -1072,6 +1095,7 @@ testDsoRulesConfigChange = do
     requestCid = req2
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -1120,6 +1144,7 @@ testAmuletRulesTickDurationChange = do
     requestCid = request
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -1235,6 +1260,7 @@ testAmuletRulesConfigChange = do
     requestCid = req1
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -1252,6 +1278,7 @@ testAmuletRulesConfigChange = do
     requestCid = req2
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
+    currentBindings = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -1342,6 +1369,7 @@ testVoteRequestExpireWithoutEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   passTime(days 7)
   now <- getTime
@@ -1351,6 +1379,7 @@ testVoteRequestExpireWithoutEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- only sv1 voted to accept as they created the request
   result.completedAt === now
@@ -1386,6 +1415,7 @@ testVoteRequestExpireWithEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   passTime(days 7)
   now <- getTime
@@ -1395,6 +1425,7 @@ testVoteRequestExpireWithEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    currentBindings = None
 
   -- only sv1 voted to accept as they created the request
   result.completedAt === now
@@ -1508,6 +1539,7 @@ testVoteCastingCooldown  = do
           optCastAt = None
           castBy = Some sv2
           castByRole = Some VCR_GovernanceVoter
+          bindingCid = None
 
   -- And that same holds for SV1, as it voted as part of creating the request.
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
@@ -1521,6 +1553,7 @@ testVoteCastingCooldown  = do
           optCastAt = None
           castBy = Some sv1
           castByRole = Some VCR_GovernanceVoter
+          bindingCid = None
 
   -- let the vote cooldown pass, so they can update their votes
   passTime (minutes 1)
@@ -1529,4 +1562,131 @@ testVoteCastingCooldown  = do
   requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid False "a better rebuttal"
   _ <- castVoteOnRequest app dsoRulesCid sv1 requestCid True "a better reason"
 
+  pure ()
+
+
+-- | Tests the C3 staleness check on close-vote: a vote cast through the
+-- governance-voter path against a binding that is subsequently rotated is
+-- dropped from the tally and reported in `staleBindingVoters` when the
+-- caller supplies `currentBindings` to `DsoRules_CloseVoteRequest`.
+testStaleBindingDropsVote : Script ()
+testStaleBindingDropsVote = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+
+  sv1SelfBinding <- ensureSelfBinding dso sv1
+  sv2Binding <- ensureSelfBinding dso sv2
+  sv3Binding <- ensureSelfBinding dso sv3
+  sv4Binding <- ensureSelfBinding dso sv4
+
+  -- Rotate sv1's binding to a fresh delegate party so a later rotation has
+  -- something different to point at.
+  govVoter1 <- allocateParty "stale-binding-gov-voter-1"
+  sv1BindingV1 <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 sv1SelfBinding govVoter1
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- Open a governance-voter-eligible request via govVoter1 + sv1BindingV1.
+  -- The initial vote is recorded against sv1's slot, attributed to govVoter1
+  -- under the governance-voter role, with bindingCid = Some sv1BindingV1.
+  passTime (minutes 1)
+  let offboardSv4Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv4
+  reqResult <- submit (actAs govVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = govVoter1
+    bindingCid = Some sv1BindingV1
+    action = offboardSv4Action
+    reason = Reason with url = ""; body = "stale binding test"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  let requestCid = reqResult.voteRequest
+
+  -- Other SVs accept via their self-bindings (governance-voter path).
+  passTime (minutes 1)
+  requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid True "ok"
+  requestCid <- castVoteOnRequest app dsoRulesCid sv3 requestCid True "ok"
+  requestCid <- castVoteOnRequest app dsoRulesCid sv4 requestCid True "ok"
+
+  -- Sanity: the recorded vote for sv1 carries sv1BindingV1.
+  Some req <- queryContractId dso requestCid
+  case Map.lookup "sv1" req.votes of
+    None -> fail "sv1's initial vote not recorded"
+    Some v -> v.bindingCid === Some sv1BindingV1
+
+  -- Rotate sv1's binding again: sv1BindingV1 is archived, sv1BindingV2 is
+  -- now the live binding for sv1.
+  govVoter2 <- allocateParty "stale-binding-gov-voter-2"
+  sv1BindingV2 <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 sv1BindingV1 govVoter2
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- Close, passing the complete set of live bindings. sv1's vote is dropped
+  -- (its recorded bindingCid no longer matches the live binding for sv1);
+  -- the remaining 3 accepts still meet the 3-of-4 threshold so the action
+  -- accepts.
+  passTime (minutes 1)
+  closeResult <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+    requestCid
+    amuletRulesCid = None
+    sv = Some sv2
+    currentBindings = Some [sv1BindingV2, sv2Binding, sv3Binding, sv4Binding]
+
+  closeResult.staleBindingVoters === Some [partyToText sv1]
+  closeResult.offboardedVoters === []
+  case closeResult.outcome of
+    VRO_Accepted _ -> pure ()
+    other -> fail $ "expected VRO_Accepted, got " <> show other
+  pure ()
+
+
+-- | Back-compat: when `currentBindings = None` the close-vote choice skips
+-- the staleness check entirely and reports `staleBindingVoters = None`,
+-- preserving the pre-staleness behavior for callers that have not yet been
+-- updated.
+testStalenessCheckOptIn : Script ()
+testStalenessCheckOptIn = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+
+  sv1SelfBinding <- ensureSelfBinding dso sv1
+
+  govVoter1 <- allocateParty "optin-gov-voter-1"
+  sv1BindingV1 <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 sv1SelfBinding govVoter1
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  passTime (minutes 1)
+  let offboardSv4Action = ARC_DsoRules with
+        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv4
+  reqResult <- submit (actAs govVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = govVoter1
+    bindingCid = Some sv1BindingV1
+    action = offboardSv4Action
+    reason = Reason with url = ""; body = "opt-in test"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+  let requestCid = reqResult.voteRequest
+
+  passTime (minutes 1)
+  requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid True "ok"
+  requestCid <- castVoteOnRequest app dsoRulesCid sv3 requestCid True "ok"
+  requestCid <- castVoteOnRequest app dsoRulesCid sv4 requestCid True "ok"
+
+  -- Rotate again to make sv1's recorded binding stale.
+  govVoter2 <- allocateParty "optin-gov-voter-2"
+  _ <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 sv1BindingV1 govVoter2
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- Close without supplying currentBindings: no staleness check runs.
+  passTime (minutes 1)
+  closeResult <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+    requestCid
+    amuletRulesCid = None
+    sv = Some sv2
+    currentBindings = None
+
+  closeResult.staleBindingVoters === None
+  closeResult.offboardedVoters === []
+  case closeResult.outcome of
+    VRO_Accepted _ -> pure ()
+    other -> fail $ "expected VRO_Accepted, got " <> show other
   pure ()

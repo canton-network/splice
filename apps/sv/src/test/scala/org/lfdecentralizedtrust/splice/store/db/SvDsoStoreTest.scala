@@ -1905,6 +1905,7 @@ class DbSvDsoStoreTest
           Optional.empty(),
           Optional.empty(),
           Optional.empty(),
+          Optional.empty(),
         )
       )
     val votesRefuse =
@@ -1913,6 +1914,7 @@ class DbSvDsoStoreTest
           userParty(n).toProtoPrimitive,
           false,
           new Reason("", ""),
+          Optional.empty(),
           Optional.empty(),
           Optional.empty(),
           Optional.empty(),
@@ -2089,6 +2091,7 @@ class DbSvDsoStoreTest
               Optional.empty(),
               Optional.empty(),
               Optional.empty(),
+              Optional.empty(),
             )
           )
       )
@@ -2099,6 +2102,7 @@ class DbSvDsoStoreTest
               userParty(i).toProtoPrimitive,
               true,
               new Reason("", ""),
+              Optional.empty(),
               Optional.empty(),
               Optional.empty(),
               Optional.empty(),
@@ -2342,6 +2346,7 @@ class DbSvDsoStoreTest
           storeSvParty.toProtoPrimitive,
           true,
           new Reason("", ""),
+          Optional.empty(),
           Optional.empty(),
           Optional.empty(),
           Optional.empty(),

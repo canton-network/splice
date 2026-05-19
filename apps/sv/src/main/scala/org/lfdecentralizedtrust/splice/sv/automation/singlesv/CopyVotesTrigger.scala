@@ -121,6 +121,7 @@ class CopyVotesTrigger(
                       Optional.empty(),
                       Optional.empty(), // castBy (attribution metadata; server-set)
                       Optional.empty(), // castByRole (attribution metadata; server-set)
+                      Optional.empty(), // bindingCid (staleness metadata; server-set)
                     ),
                     Optional.empty(), // bindingCid: operator path
                     Optional.empty(), // castBy: operator path

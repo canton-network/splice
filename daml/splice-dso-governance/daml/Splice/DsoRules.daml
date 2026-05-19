@@ -450,6 +450,12 @@ data DsoRules_CloseVoteRequestResult = DsoRules_CloseVoteRequestResult with
     offboardedVoters : [Text] -- ^ SVs that voted but were offboarded before the vote completed.
     abstainingSvs : [Text] -- ^ SVs that did not vote.
     outcome : VoteRequestOutcome  -- ^ The final result of the vote.
+    staleBindingVoters : Optional [Text]
+      -- ^ SVs whose governance-voter-cast votes were dropped because the
+      -- binding they were cast under was no longer authoritative at close
+      -- time. `None` when the caller did not supply `currentBindings` and
+      -- no staleness check was performed; `Some xs` (possibly empty) when
+      -- the check ran.
   deriving (Eq, Show)
 
 data DsoRules_BootstrapExternalPartyConfigStateResult = DsoRules_BootstrapExternalPartyConfigStateResult
@@ -489,6 +495,13 @@ data Vote = Vote with
       -- ^ Attribution metadata: the authority path used to cast the vote.
       -- Set by the server when recording a vote; `None` on contracts that
       -- pre-date this field.
+    bindingCid : Optional (ContractId SvGovernanceVoter)
+      -- ^ The SvGovernanceVoter binding under which this vote was cast on the
+      -- governance-voter path. Set by the server when recording a vote;
+      -- `None` on votes cast via the operator path and on contracts that
+      -- pre-date this field. Used at close-vote time to detect votes cast
+      -- under a binding that has since been rotated, so the vote can be
+      -- dropped from the tally (see `DsoRules_CloseVoteRequest`).
   deriving(Eq, Show)
 
 data Reason = Reason with
@@ -824,6 +837,7 @@ template DsoRules with
                   optCastAt = Some now
                   castBy = Some requester
                   castByRole = Some VCR_Operator
+                  bindingCid = None
             pure (name, v)
           Some cid -> do
             require "Action is not governance-voter eligible; omit `bindingCid` for the operator path"
@@ -839,6 +853,7 @@ template DsoRules with
                   optCastAt = Some now
                   castBy = Some requester
                   castByRole = Some VCR_GovernanceVoter
+                  bindingCid = Some cid
             pure (name, v)
         let voteBefore = case voteRequestTimeout of
               Some value ->
@@ -927,11 +942,15 @@ template DsoRules with
           pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
         archive requestCid
+        -- Bind to a local name to avoid the Vote.bindingCid field and the
+        -- choice-arg `bindingCid` colliding in record-update notation.
+        let castBindingCid = bindingCid
         let recordedVote = vote with
               sv = effectiveVoteSv
               optCastAt = Some now
               castBy = Some castByParty
               castByRole = Some castByRoleVal
+              bindingCid = castBindingCid
         voteRequest <- create request with
           votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
@@ -964,6 +983,17 @@ template DsoRules with
         requestCid : ContractId VoteRequest
         amuletRulesCid : Optional (ContractId AmuletRules)
         sv : Optional Party
+        currentBindings : Optional [ContractId SvGovernanceVoter]
+          -- ^ Optional list of currently-active SvGovernanceVoter bindings.
+          -- When `Some cids`, each is `fetchChecked` (so the caller cannot
+          -- sneak in stale CIDs) and a `binding.sv -> ContractId` map is
+          -- built; any active-SV vote with `vote.bindingCid = Some cid`
+          -- where the live binding for `vote.sv` does not equal `cid` is
+          -- dropped from the tally and reported in `staleBindingVoters`.
+          -- The caller is trusted to pass the complete set of live bindings.
+          -- When `None`, no staleness check is performed and votes cast on
+          -- the governance-voter path are kept regardless of subsequent
+          -- rotation (back-compat fallback for pre-staleness callers).
       controller sv
       do
         _ <- getAndValidateSvParty this sv
@@ -975,10 +1005,34 @@ template DsoRules with
         let activeSvs = Map.keys svs
 
         let activeSvSet = Set.fromList activeSvs
-        let (validVotes, offboardedVoters) = partitionEithers
+        let (activeSvVotes, offboardedVoters) = partitionEithers
               [ if vote.sv `Set.member` activeSvSet then Left vote else Right (partyToText vote.sv)
               | (_, vote) <- Map.toList request.votes
               ]
+        -- Binding-staleness check: when the caller supplies `currentBindings`,
+        -- drop any governance-voter-cast vote whose recorded `bindingCid` is
+        -- no longer the live binding for the vote's SV.
+        (validVotes, staleBindingVoters) <- case currentBindings of
+          None ->
+            pure (activeSvVotes, None)
+          Some bindingCids -> do
+            -- fetchChecked enforces that each passed CID is live and bound
+            -- to the expected DSO party; we then key by binding.sv.
+            liveBindingPairs <- forA bindingCids $ \cid -> do
+              binding <- fetchChecked (ForDso with dso) cid
+              pure (binding.sv, cid)
+            let liveBindingMap : Map.Map Party (ContractId SvGovernanceVoter) =
+                  Map.fromList liveBindingPairs
+            let isStale vote = case vote.bindingCid of
+                  None -> False  -- operator-path or legacy vote; no check
+                  Some cid -> Map.lookup vote.sv liveBindingMap /= Some cid
+            let (kept, stales) = partitionEithers
+                  [ if isStale vote
+                      then Right (partyToText vote.sv)
+                      else Left vote
+                  | vote <- activeSvVotes
+                  ]
+            pure (kept, Some stales)
         let abstainingSvs = [ info.name | (_, info) <- Map.toList svs, not (info.name `Map.member` request.votes) ]
         let (yays, nays) = partition (.accept) validVotes
         let numYays = length yays
@@ -1029,6 +1083,7 @@ template DsoRules with
             offboardedVoters
             abstainingSvs
             outcome
+            staleBindingVoters
 
 
     -- Voting on the amulet price
