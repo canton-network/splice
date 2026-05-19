@@ -4,7 +4,7 @@ import {
   createLedgerApiClient,
   filtersByParty,
 } from "../apis/ledger-api-utils";
-import { TokenStandardTransactionInterfaces } from "../constants";
+import { TokenStandardV1TransactionInterfaces } from "../constants";
 import { CommandOptions } from "../token-standard-cli";
 import { V1TransactionParser } from "../txparse/parserv1";
 import { validateStrict } from "../txparse/strict";
@@ -37,7 +37,7 @@ export async function listHoldingTransactions(
           eventFormat: {
             filtersByParty: filtersByParty(
               partyId,
-              TokenStandardTransactionInterfaces,
+              TokenStandardV1TransactionInterfaces,
               true,
             ),
             verbose: false,

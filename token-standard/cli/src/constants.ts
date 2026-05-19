@@ -43,7 +43,7 @@ export const TransferInstructionInterface = buildInterfaceId(
   "TransferInstruction",
 );
 
-export const TokenStandardTransactionInterfaces = [
+export const TokenStandardV1TransactionInterfaces = [
   HoldingInterface,
   TransferFactoryInterface,
   TransferInstructionInterface,
