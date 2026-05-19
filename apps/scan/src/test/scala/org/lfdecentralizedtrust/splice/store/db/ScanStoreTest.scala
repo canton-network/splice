@@ -833,13 +833,27 @@ abstract class ScanStoreTest
           val goodVotes = (1 to 3).map(n =>
             Seq(n, n + 3)
               .map(i =>
-                new Vote(userParty(i).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+                new Vote(
+                  userParty(i).toProtoPrimitive,
+                  true,
+                  new Reason("", ""),
+                  Optional.empty(),
+                  Optional.empty(),
+                  Optional.empty(),
+                )
               )
           )
           val badVotes = (1 to 3).map(n =>
             Seq(n)
               .map(i =>
-                new Vote(userParty(i).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+                new Vote(
+                  userParty(i).toProtoPrimitive,
+                  true,
+                  new Reason("", ""),
+                  Optional.empty(),
+                  Optional.empty(),
+                  Optional.empty(),
+                )
               )
           )
           val goodVoteRequests =
@@ -1399,6 +1413,8 @@ abstract class ScanStoreTest
             true,
             new Reason("", ""),
             Optional.empty(),
+            Optional.empty(),
+            Optional.empty(),
           )
         ),
     )
@@ -1410,6 +1426,8 @@ abstract class ScanStoreTest
             userParty(n).toProtoPrimitive,
             true,
             new Reason("", ""),
+            Optional.empty(),
+            Optional.empty(),
             Optional.empty(),
           )
         ),
@@ -2162,6 +2180,8 @@ class DbScanStoreTest
               userParty(n).toProtoPrimitive,
               true,
               new Reason("", ""),
+              Optional.empty(),
+              Optional.empty(),
               Optional.empty(),
             )
           ),

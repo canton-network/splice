@@ -964,6 +964,9 @@ object SvApp {
                   reason,
                   java.util.Optional.of(decodedExpiration),
                   effectiveTime,
+                  // bindingCid: governance-voter path is not used from this SV app code path;
+                  // governance-voter-eligible actions are handled by separate machinery.
+                  Optional.empty(),
                 )
                 cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
                 res <- dsoStoreWithIngestion
@@ -1024,7 +1027,11 @@ object SvApp {
                     isAccepted,
                     reason,
                     Optional.empty(), // optCastAt
+                    Optional.empty(), // castBy (attribution metadata; server-set)
+                    Optional.empty(), // castByRole (attribution metadata; server-set)
                   ),
+                  Optional.empty(), // bindingCid: operator path
+                  Optional.empty(), // castBy: operator path
                 )
               )
               res <- dsoStoreWithIngestion
