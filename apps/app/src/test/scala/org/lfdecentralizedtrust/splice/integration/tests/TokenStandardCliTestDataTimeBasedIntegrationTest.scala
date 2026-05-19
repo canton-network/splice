@@ -39,6 +39,7 @@ import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   holdingv1,
+  holdingv2,
   metadatav1,
   transferinstructionv1,
 }
@@ -151,6 +152,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
       transferinstructionv1.TransferFactory.TEMPLATE_ID,
       transferinstructionv1.TransferInstruction.TEMPLATE_ID,
       holdingv1.Holding.TEMPLATE_ID,
+      holdingv2.Holding.TEMPLATE_ID,
     )
 
   val testDataPath = "token-standard/cli/__tests__/mocks/data/"
@@ -634,12 +636,18 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
           "holdings and transactions are returned",
           _ => {
             val activeHoldingsResponse =
-              listContractsOfInterface(alice, holdingv1.Holding.TEMPLATE_ID)
+              listContractsOfInterfaces(
+                alice,
+                Seq(holdingv1.Holding.TEMPLATE_ID, holdingv2.Holding.TEMPLATE_ID),
+              )
 
             activeHoldingsResponse should have size 6 withClue "3 unlocked + 1 locked + 2 sample holdings"
 
             val activeTransferInstructionsResponse =
-              listContractsOfInterface(bob, transferinstructionv1.TransferInstruction.TEMPLATE_ID)
+              listContractsOfInterfaces(
+                bob,
+                Seq(transferinstructionv1.TransferInstruction.TEMPLATE_ID),
+              )
 
             activeTransferInstructionsResponse should have size 2 withClue "TransferInstructions"
 
@@ -906,6 +914,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
                     alice.partyId,
                     Seq(
                       holdingv1.Holding.TEMPLATE_ID,
+                      holdingv2.Holding.TEMPLATE_ID,
                       transferinstructionv1.TransferInstruction.TEMPLATE_ID,
                     ),
                     includeWildcard = true,
@@ -1165,7 +1174,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     }
   }
 
-  private def listContractsOfInterface(party: RichPartyId, interface: Identifier)(implicit
+  private def listContractsOfInterfaces(party: RichPartyId, interfaces: Seq[Identifier])(implicit
       env: SpliceTestConsoleEnvironment
   ): Seq[JsGetActiveContractsResponse] = {
     val getActiveContractsPayload = JsStateServiceCodecs.getActiveContractsRequestRW(
@@ -1174,7 +1183,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
           EventFormat(
             filtersByParty = Map(
               party.partyId.toProtoPrimitive -> Filters(
-                Seq(
+                interfaces.map(interface =>
                   CumulativeFilter.defaultInstance.withInterfaceFilter(
                     InterfaceFilter(
                       Some(

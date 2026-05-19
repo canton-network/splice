@@ -71,8 +71,8 @@ export class V2TransactionParser {
       return null;
     }
     const { interfaceViews } = createdEvent;
-    const holdingView = interfaceViews?.find(
-      (view) => view.interfaceId === Holding.templateIdWithPackageId,
+    const holdingView = interfaceViews?.find((view) =>
+      HoldingInterfaceV2.matches(view.interfaceId),
     );
     if (!holdingView) {
       return null;
@@ -80,7 +80,7 @@ export class V2TransactionParser {
 
     return [
       createdEvent.contractId,
-      Holding.decoder.runWithException(holdingView),
+      Holding.decoder.runWithException(holdingView.viewValue),
     ];
   }
 
@@ -108,6 +108,7 @@ export class V2TransactionParser {
     holdingsChange: EventLog_HoldingsChange,
     cachedHoldings: Map<string, Holding>,
   ): Promise<TokenStandardEvent> {
+    // TODO: exclude holdings that are both in input and output
     const resolvedInputHoldings = (
       await Promise.all(
         holdingsChange.inputHoldingCids.map((cid) =>
@@ -181,7 +182,15 @@ export class V2TransactionParser {
       );
       if (!fromEvent || !fromEvent.created) {
         // User is likely not an observer or events of contract were pruned
-        return null;
+        // TODO: added for debugging
+        return {
+          contractId: cid,
+          amount: "unknown",
+          instrumentId: { id: "unknown", admin: "unknown" },
+          lock: null,
+          meta: {},
+          owner: "unknown",
+        };
       }
 
       const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);

@@ -33,7 +33,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "4786bf810867c4cc56c2a81b7a6ac668bb3fbbea585626b4252993a515cddcda",
+              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
               "interfaceId" : "#package-name:Splice.Api.Token.TransferInstructionV1:TransferInstruction",
               "viewStatus" : {
                 "code" : 0,
@@ -82,7 +82,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "4786bf810867c4cc56c2a81b7a6ac668bb3fbbea585626b4252993a515cddcda",
+          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
           "signatories" : [
             "dso::normalized",
             "alice::normalized"
@@ -96,7 +96,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgIIdxIE3vuz1w==",
+    "streamContinuationToken" : "CgMIpQMSBE8ZKJY=",
     "workflowId" : ""
   },
   {
@@ -133,7 +133,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "4786bf810867c4cc56c2a81b7a6ac668bb3fbbea585626b4252993a515cddcda",
+              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
               "interfaceId" : "#package-name:Splice.Api.Token.TransferInstructionV1:TransferInstruction",
               "viewStatus" : {
                 "code" : 0,
@@ -182,7 +182,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "4786bf810867c4cc56c2a81b7a6ac668bb3fbbea585626b4252993a515cddcda",
+          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
           "signatories" : [
             "dso::normalized",
             "bob::normalized"
@@ -196,7 +196,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMIkgESBN77s9c=",
+    "streamContinuationToken" : "CgMIwAMSBE8ZKJY=",
     "workflowId" : ""
   }
 ]
