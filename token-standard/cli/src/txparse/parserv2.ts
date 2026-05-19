@@ -1,3 +1,5 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 import {
   DefaultApi as LedgerJsonApi,
   JsTransaction,
@@ -154,7 +156,7 @@ export class V2TransactionParser {
       holdingsChange.extraArgs.meta,
     );
     return {
-      type: "V2Placeholder",
+      type: "V2",
       transferLegSides: holdingsChange.transferLegSides,
       reason,
       meta: holdingsChange.extraArgs.meta,

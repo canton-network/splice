@@ -1,3 +1,5 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 import { getMetaKeyValue } from "../apis/ledger-api-utils";
 import { BurnedMetaKey } from "../constants";
 import {
