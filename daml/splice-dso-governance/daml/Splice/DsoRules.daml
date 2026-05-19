@@ -131,8 +131,13 @@ data AnsEntryContext_ActionRequiringConfirmation
 
 -- | Phase 1 governance-voter action taxonomy.
 --
--- This is deliberately an explicit allowlist. New action constructors are not
--- governance-voter eligible unless they are reviewed and added here.
+-- The SRARC_* branch is an explicit allowlist with no wildcard fall-through:
+-- adding a new SRARC_* constructor must be accompanied by an explicit decision
+-- here so that a new SV-side action cannot silently default to a particular
+-- eligibility. The CRARC_* branch retains a wildcard because AmuletRules
+-- actions are owned by a separate codebase area; their default of
+-- non-eligibility is preserved as-is, and any future change in policy for
+-- AmuletRules actions should be driven from that area.
 isGovernanceVoterAction : ActionRequiringConfirmation -> Bool
 isGovernanceVoterAction action = case action of
   ARC_DsoRules with dsoAction -> case dsoAction of
@@ -142,7 +147,12 @@ isGovernanceVoterAction action = case action of
     SRARC_SetConfig _ -> True
     SRARC_UpdateSvRewardWeight _ -> True
     SRARC_CreateUnallocatedUnclaimedActivityRecord _ -> True
-    _ -> False
+    SRARC_AddSv _ -> False
+    SRARC_ConfirmSvOnboarding _ -> False
+    SRARC_CreateExternalPartyAmuletRules _ -> False
+    SRARC_CreateTransferCommandCounter _ -> False
+    SRARC_CreateBootstrapExternalPartyConfigStateInstruction _ -> False
+    SRARC_RotateGovernanceVoter _ -> False
   ARC_AmuletRules with amuletRulesAction -> case amuletRulesAction of
     CRARC_SetConfig _ -> True
     _ -> False
