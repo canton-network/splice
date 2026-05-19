@@ -232,6 +232,8 @@ data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult
 
 data DsoRules_GarbageCollectAmuletPriceVotesResult = DsoRules_GarbageCollectAmuletPriceVotesResult
 
+data DsoRules_GarbageCollectSvGovernanceVotersResult = DsoRules_GarbageCollectSvGovernanceVotersResult
+
 data DsoRules_SetConfigResult = DsoRules_SetConfigResult with
     newDsoRules : ContractId DsoRules
 
@@ -1023,6 +1025,10 @@ template DsoRules with
               pure (binding.sv, cid)
             let liveBindingMap : Map.Map Party (ContractId SvGovernanceVoter) =
                   Map.fromList liveBindingPairs
+            require "Current bindings must include exactly one binding per active SV"
+              (length bindingCids == Map.size svs
+                && Map.size liveBindingMap == Map.size svs
+                && all (\activeSv -> activeSv `Map.member` liveBindingMap) activeSvs)
             let isStale vote = case vote.bindingCid of
                   None -> False  -- operator-path or legacy vote; no check
                   Some cid -> Map.lookup vote.sv liveBindingMap /= Some cid
@@ -1149,6 +1155,45 @@ template DsoRules with
                 require "matching DSO party" (duplicate.dso == dso)
                 require "SV of duplicate matches" (duplicate.sv == vote.sv)
         return DsoRules_GarbageCollectAmuletPriceVotesResult
+
+    nonconsuming choice DsoRules_GarbageCollectSvGovernanceVoters : DsoRules_GarbageCollectSvGovernanceVotersResult
+      -- ^ Garbage-collect SvGovernanceVoter bindings for removed SVs and
+      -- duplicate bindings that may be left behind by dev-net re-onboarding
+      -- or by older package versions that pre-date this cleanup path.
+      -- We expect this to be run as an OnAssignedContractTrigger for the
+      -- DsoRules contract.
+      with
+        nonSvBindingCids : [ContractId SvGovernanceVoter]
+        duplicateBindingCids : [[ContractId SvGovernanceVoter]]
+        sv : Optional Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this sv
+        let forDso = ForDso with dso
+        -- validate and archive bindings whose represented SV is no longer active
+        forA_ nonSvBindingCids $ \bindingCid -> do
+          binding <- fetchAndArchive forDso bindingCid
+          require "Represented SV is no longer an active SV" (not $ binding.sv `Map.member` svs)
+        -- validate and archive duplicates, keeping the first binding in each
+        -- caller-supplied group. The caller groups duplicates by represented
+        -- SV; the checks below make that grouping explicit on-ledger.
+        forA_ duplicateBindingCids $ \bindingCids -> do
+          require "Unique references to duplicate bindings" (unique bindingCids)
+          bindings <- forA bindingCids $ \bindingCid -> do
+            -- archival happens below for all but the first binding
+            binding <- fetchButArchiveLater forDso bindingCid
+            pure (bindingCid, binding)
+          case bindings of
+            [] -> fail "empty list of duplicate governance-voter bindings"
+            [_] -> fail "singleton list of duplicate governance-voter bindings"
+            ((_, binding)::duplicates) -> do
+              require "Represented SV is an active SV" (binding.sv `Map.member` svs)
+              forA_ duplicates $ \(duplicateCid, duplicate) -> do
+                -- safe, as we fetched it before and check the constraints below
+                potentiallyUnsafeArchive duplicateCid
+                require "matching DSO party" (duplicate.dso == dso)
+                require "SV of duplicate binding matches" (duplicate.sv == binding.sv)
+        return DsoRules_GarbageCollectSvGovernanceVotersResult
 
 
     -- DSO rules config management

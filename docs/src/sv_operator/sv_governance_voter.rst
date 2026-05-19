@@ -78,10 +78,15 @@ any governance-voter-cast vote whose recorded ``bindingCid`` is no longer
 the live binding for the vote's SV — that is, the SV has rotated its
 governance voter after the vote was cast. Dropped voters are reported in
 ``DsoRules_CloseVoteRequestResult.staleBindingVoters`` alongside the
-existing ``offboardedVoters`` channel. ``currentBindings = None`` skips
-the staleness check for back-compat with pre-staleness clients; the
-caller is trusted to pass the complete set of live bindings, just as it
-is trusted to choose which request to close.
+existing ``offboardedVoters`` channel. When supplied, ``currentBindings``
+must contain exactly one live binding for each active SV. ``currentBindings
+= None`` skips the staleness check for back-compat with pre-staleness
+clients.
+
+Bindings for removed SVs, and duplicate bindings that may be left behind
+by older package versions or dev-net re-onboarding, are cleaned up by
+``DsoRules_GarbageCollectSvGovernanceVoters`` and its SV automation
+trigger.
 
 The supported submission path is explicit disclosure: a governance voter that
 is not affiliated with the represented SV presents the Scan-discovered proposal

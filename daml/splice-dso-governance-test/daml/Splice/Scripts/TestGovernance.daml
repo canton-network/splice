@@ -1624,6 +1624,11 @@ testStaleBindingDropsVote = do
   -- the remaining 3 accepts still meet the 3-of-4 threshold so the action
   -- accepts.
   passTime (minutes 1)
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+    requestCid
+    amuletRulesCid = None
+    sv = Some sv2
+    currentBindings = Some [sv1BindingV2, sv2Binding, sv3Binding]
   closeResult <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
@@ -1635,6 +1640,35 @@ testStaleBindingDropsVote = do
   case closeResult.outcome of
     VRO_Accepted _ -> pure ()
     other -> fail $ "expected VRO_Accepted, got " <> show other
+  pure ()
+
+
+-- | Tests cleanup for SvGovernanceVoter bindings that no longer correspond
+-- to exactly one active binding per represented SV.
+testGarbageCollectSvGovernanceVoters : Script ()
+testGarbageCollectSvGovernanceVoters = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
+  nonSv <- allocateParty "gc-non-sv-governance-voter"
+
+  duplicateCid <- submit (actAs dso) $ createCmd SvGovernanceVoter with
+    dso
+    sv = sv1
+    governanceVoter = sv1
+  nonSvCid <- submit (actAs dso) $ createCmd SvGovernanceVoter with
+    dso
+    sv = nonSv
+    governanceVoter = nonSv
+
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_GarbageCollectSvGovernanceVoters with
+    nonSvBindingCids = [nonSvCid]
+    duplicateBindingCids = [[sv1Binding, duplicateCid]]
+    sv = Some sv1
+
+  Some _ <- queryContractId dso sv1Binding
+  None <- queryContractId dso duplicateCid
+  None <- queryContractId dso nonSvCid
   pure ()
 
 
