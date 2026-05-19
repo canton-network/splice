@@ -31,10 +31,5 @@ template SvGovernanceVoter
     signatory dso
     observer sv
 
-    ensure
-      sv /= dso
-        && governanceVoter /= dso
-
-
 instance HasCheckedFetch SvGovernanceVoter ForDso where
   contractGroupId SvGovernanceVoter {..} = ForDso with dso
