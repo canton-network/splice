@@ -3,7 +3,7 @@
 import { listHoldingTransactions } from "./commands/listHoldingTransactions";
 import { transfer } from "./commands/transfer";
 import { Command, Option } from "commander";
-import { HoldingInterface, TransferInstructionInterface } from "./constants";
+import { HoldingInterfaceV1, TransferInstructionInterface } from "./constants";
 import { listContractsByInterface } from "./commands/listContractsByInterface";
 import { acceptTransferInstruction } from "./commands/acceptTransferInstruction";
 
@@ -25,7 +25,7 @@ export function createProgram(): Command {
       .description("List the holdings of a party")
       .argument("partyId", "The party for which to list the holdings"),
   ).action((partyId, opts) =>
-    listContractsByInterface(HoldingInterface, partyId, opts),
+    listContractsByInterface(HoldingInterfaceV1, partyId, opts),
   );
 
   addSharedOptions(

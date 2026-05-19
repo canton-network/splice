@@ -1,4 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+
+import { TransferLegSide } from "@daml.js/splice-api-token-transfer-events-v2-1.0.0/lib/Splice/Api/Token/TransferEventsV2";
+
 // SPDX-License-Identifier: Apache-2.0
 export interface Transaction {
   updateId: string;
@@ -77,8 +80,15 @@ export type Label =
   | Mint
   | Unlock
   | ExpireDust
-  | UnknownAction;
+  | UnknownAction
+  | V2Label;
 type UnknownAction = RawArchive | RawCreate;
+export interface V2Label {
+  type: "V2Placeholder";
+  transferLegSides: TransferLegSide[];
+  reason: string | null;
+  meta: any;
+}
 interface BaseLabel {
   type: string;
   meta: any;

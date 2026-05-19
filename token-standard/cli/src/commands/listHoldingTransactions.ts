@@ -14,6 +14,7 @@ import {
   JsGetUpdatesResponse,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
 import fs from "fs";
+import { V2TransactionParser } from "../txparse/parserv2";
 
 export async function listHoldingTransactions(
   partyId: string,
@@ -90,7 +91,8 @@ async function toPrettyTransactions(
             parser = new V1TransactionParser(tx, ledgerClient, partyId);
             break;
           case "V2":
-            throw new Error("Unsupported yet.");
+            parser = new V2TransactionParser(tx, ledgerClient, partyId);
+            break;
         }
 
         return await parser.parseTransaction();

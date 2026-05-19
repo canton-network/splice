@@ -25,9 +25,15 @@ function buildInterfaceId(
     },
   };
 }
-export const HoldingInterface = buildInterfaceId(
+export const HoldingInterfaceV1 = buildInterfaceId(
   "splice-api-token-holding-v1",
   "Splice.Api.Token.HoldingV1",
+  "Holding",
+);
+
+export const HoldingInterfaceV2 = buildInterfaceId(
+  "splice-api-token-holding-v2",
+  "Splice.Api.Token.HoldingV2",
   "Holding",
 );
 
@@ -44,7 +50,7 @@ export const TransferInstructionInterface = buildInterfaceId(
 );
 
 export const TokenStandardV1TransactionInterfaces = [
-  HoldingInterface,
+  HoldingInterfaceV1,
   TransferFactoryInterface,
   TransferInstructionInterface,
 ];
@@ -60,3 +66,9 @@ export const AllKnownMetaKeys = [
   ReasonMetaKey,
   BurnedMetaKey,
 ];
+
+export const EventLogInterface = buildInterfaceId(
+  "#splice-api-token-transfer-events-v2",
+  "Splice.Api.Token.TransferEventsV2",
+  "EventLog",
+);

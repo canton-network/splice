@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   AllKnownMetaKeys,
-  HoldingInterface,
+  HoldingInterfaceV1,
   InterfaceId,
   TransferInstructionInterface,
 } from "../constants";
@@ -21,6 +21,7 @@ import {
   PartySignatures,
   ServerConfiguration,
   TransactionFilter,
+  JsGetEventsByContractIdResponse,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
 import { DisclosedContract } from "@lfdecentralizedtrust/transfer-instruction-openapi";
 import { randomUUID } from "node:crypto";
@@ -108,7 +109,7 @@ export function getKnownInterfaceView(
   const interfaceView = getInterfaceView(createdEvent);
   if (!interfaceView) {
     return null;
-  } else if (HoldingInterface.matches(interfaceView.interfaceId)) {
+  } else if (HoldingInterfaceV1.matches(interfaceView.interfaceId)) {
     return { type: "Holding", viewValue: interfaceView.viewValue };
   } else if (TransferInstructionInterface.matches(interfaceView.interfaceId)) {
     return { type: "TransferInstruction", viewValue: interfaceView.viewValue };
@@ -436,4 +437,45 @@ async function promiseWithTimeout<T>(
       clearTimeout(timeoutPid);
     }
   }
+}
+
+export async function getEventsOfContract(
+  ledgerClient: LedgerJsonApi,
+  contractId: string,
+  forPartyId: string,
+  interfaceNames: InterfaceId[],
+): Promise<null | Required<JsGetEventsByContractIdResponse>> {
+  const events = await ledgerClient
+    .postV2EventsEventsByContractId({
+      contractId: contractId,
+      eventFormat: {
+        filtersByParty: filtersByParty(forPartyId, interfaceNames, true),
+        verbose: false,
+      },
+    })
+    .catch((err) => {
+      // This will happen for holdings with consuming choices
+      // where the party the script is running on is an actor on the choice
+      // but not a stakeholder.
+      if (err.code === 404) {
+        return null;
+      } else {
+        throw err;
+      }
+    });
+  if (!events) {
+    return null;
+  }
+  const created = events.created;
+  const archived = events.archived;
+  if (!created || !archived) {
+    throw new Error(
+      `Archival of ${
+        contractId
+      } does not have a corresponding create/archive event: ${JSON.stringify(
+        events,
+      )}`,
+    );
+  }
+  return { created, archived };
 }

@@ -700,6 +700,10 @@ lazy val `token-standard-cli` =
     )
     .settings(
       Headers.TsHeaderSettings,
+      damlTsCodegenSources :=
+        (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++ (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value,
+      damlTsCodegenDir := baseDirectory.value / "daml.js",
+      damlTsCodegen := BuildCommon.damlTsCodegenTask.value,
       npmInstallOpenApiDeps := Seq(
         (
           (`splice-api-token-transfer-instruction-v1-daml` / Compile / compile).value,
@@ -719,7 +723,7 @@ lazy val `token-standard-cli` =
       ),
       npmInstallDeps := Seq(
         baseDirectory.value / "package.json"
-      ) ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value,
+      ) ++ damlTsCodegen.value ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value,
       npmInstall := BuildCommon.npmInstallTask.value,
       npmRootDir := baseDirectory.value,
       npmTest := {
