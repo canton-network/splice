@@ -12,7 +12,6 @@ export function getSettlement(request: AllocationRequest): SettlementInfo {
   if (isV2AllocationRequest(request)) {
     return request.settlement;
   } else {
-    console.error(`FUCKING REQUEST: ${JSON.stringify(request)}`);
     return {
       executors: [request.settlement.executor],
       id: request.settlement.settlementRef.id,
