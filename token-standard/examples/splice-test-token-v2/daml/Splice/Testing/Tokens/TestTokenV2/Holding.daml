@@ -1,0 +1,27 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Template to represent holdings of TestTokenV2 tokens.
+module Splice.Testing.Tokens.TestTokenV2.Holding
+( Token(..)
+) where
+
+import DA.Optional
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.TokenStandard.Utils
+
+
+template Token with
+     holding : V2.HoldingView
+  where
+    -- We model a token that is jointly maintained by the account parties and the instrument admin
+    -- to test that the authorization rules work our for that as well.
+    signatory accountParties holding.instrumentId.admin holding.account, holding.instrumentId.admin
+
+    ensure
+      holding.amount > 0.0 -- positive amounts
+      && isSome holding.account.owner -- holdings for regular accounts only
+
+    interface instance V2.Holding for Token where
+      view = holding
+

@@ -2425,6 +2425,7 @@ object HttpScanAppClient {
             fromAllocationInstructionV2HttpDisclosedContract
           )
         val args = new allocationinstructionv2.AllocationFactory_Allocate(
+          choiceArgs.settlement,
           choiceArgs.allocation,
           choiceArgs.requestedAt,
           choiceArgs.inputHoldingCids,
@@ -3029,9 +3030,14 @@ object HttpScanAppClient {
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ) extends InternalBaseCommand[http.ListVoteRequestResultsResponse, Seq[
-        DsoRules_CloseVoteRequestResult
-      ]] {
+      pageToken: Option[BigInt] = None,
+  ) extends InternalBaseCommand[
+        http.ListVoteRequestResultsResponse,
+        (
+            Seq[DsoRules_CloseVoteRequestResult],
+            Option[BigInt],
+        ),
+      ] {
 
     override def submitRequest(
         client: ScanClient,
@@ -3045,6 +3051,7 @@ object HttpScanAppClient {
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         ),
         headers = headers,
       )
@@ -3052,18 +3059,17 @@ object HttpScanAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case http.ListVoteRequestResultsResponse.OK(response) =>
-      Right(
-        response.dsoRulesVoteResults
-          .map(e =>
-            decoder.decodeValue(
-              DsoRules_CloseVoteRequestResult.valueDecoder(),
-              DsoRules_CloseVoteRequestResult._packageId,
-              "Splice.DsoRules",
-              "DsoRules_CloseVoteRequestResult",
-            )(e)
-          )
-          .toSeq
-      )
+      val results = response.dsoRulesVoteResults
+        .map(e =>
+          decoder.decodeValue(
+            DsoRules_CloseVoteRequestResult.valueDecoder(),
+            DsoRules_CloseVoteRequestResult._packageId,
+            "Splice.DsoRules",
+            "DsoRules_CloseVoteRequestResult",
+          )(e)
+        )
+        .toSeq
+      Right((results, response.nextPageToken))
     }
   }
 

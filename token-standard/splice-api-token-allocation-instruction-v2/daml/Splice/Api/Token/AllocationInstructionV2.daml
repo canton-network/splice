@@ -23,12 +23,7 @@ data AllocationInstructionAction
       -- for the allocation to be created.
       AIA_Custom with
         id : Text
-          -- ^ Machine-readable identifier of the action, e.g., used for matching in the wallet.
-          -- Namespaced analogously to metadata keys.
-        description : Text
-          -- ^ Brief human-readable description of the action, e.g., used for display in the wallet.
-        meta : Metadata
-          -- ^ Additional metadata specific to the action, used for extensibility.
+          -- ^ Identifier of the action. Namespaced analogously to metadata keys.
     deriving (Show, Eq, Ord)
 
 -- | View for `AllocationInstruction`.
@@ -40,6 +35,8 @@ data AllocationInstructionView = AllocationInstructionView with
       -- This SHOULD be used by wallets to correlate the same allocation instruction across
       -- updates to its state. It should not be used to correlate different allocation
       -- instructions for the same settlement. That can be done using the `allocation.settlement` field.
+    settlement : SettlementInfo
+      -- ^ The settlement for which this allocation is made.
     allocation : AllocationSpecification
       -- ^ The allocation that this instruction should create.
     requestedAt : Time
@@ -50,8 +47,21 @@ data AllocationInstructionView = AllocationInstructionView with
       -- Empty for allocations that do not require funding.
       --
       -- MAY be empty for registries that do not represent their holdings on-ledger.
-    availableActions : Map.Map [Party] [AllocationInstructionAction]
-      -- ^ The actions that the wallet can present to the user to advance the allocation instruction.
+    expiresAt : Optional Time
+      -- ^ The time at which the allocation instruction expires if inactive.
+      --
+      -- Registries MAY expire the allocation instruction after this time.
+      -- Thereby recovering storage resources and protecting themselves from
+      -- denial-of-service attacks.
+      --
+      -- Registries SHOULD avoid unnecessary expiries by
+      --   - making the expiry time as close to the allocation's settlement deadline as possible
+      --   - bumping expiry on every action on the allocation instruction
+    availableActions : Map.Map AllocationInstructionAction [[Party]]
+      -- ^ What actions are available to which groups of parties. The list of lists
+      -- is interpreted as a set of sets and represents a disjunction of
+      -- conjunctions of parties, i.e., each inner list represents a group of
+      -- parties that can act jointly to execute the action.
       --
       -- This field can be used to inform wallet users whether they can take an action or not;
       -- and which other parties they might be waiting on to take their action.
@@ -74,7 +84,7 @@ interface AllocationInstruction where
   viewtype AllocationInstructionView
 
   allocationInstruction_withdrawImpl : ContractId AllocationInstruction -> AllocationInstruction_Withdraw -> Update AllocationInstructionResult
-  allocationInstruction_withdrawExtraObservers : AllocationInstruction_Withdraw -> [Party] 
+  allocationInstruction_withdrawExtraObservers : AllocationInstruction_Withdraw -> [Party]
   allocationInstruction_acceptImpl : ContractId AllocationInstruction -> AllocationInstruction_Accept -> Update AllocationInstructionResult
   allocationInstruction_acceptExtraObservers : AllocationInstruction_Accept -> [Party]
 
@@ -82,8 +92,8 @@ interface AllocationInstruction where
     -- ^ Accept the allocation instruction as someone that needs to authorize it.
     with
       actors : [Party]
-        -- ^ Parties executing the acceptance.
-        -- 
+        -- ^ Set of parties executing the acceptance.
+        --
         -- Registries are free to decide on the required authorization for
         -- acceptance. They MUST however report the parties that can accept
         -- unilaterally via the `AllocationInstructionView.availableActions`
@@ -95,10 +105,10 @@ interface AllocationInstruction where
     do allocationInstruction_acceptImpl this self arg
 
   nonconsuming choice AllocationInstruction_Withdraw : AllocationInstructionResult
-    -- ^ Withdraw the allocation instruction as the sender.
+    -- ^ Withdraw the allocation instruction.
     with
       actors : [Party]
-        -- ^ Parties executing the withdrawal.
+        -- ^ Set of parties executing the withdrawal.
         --
         -- Implementations MUST check these parties to avoid unauthorized withdrawal.
         --
@@ -136,15 +146,18 @@ interface AllocationFactory where
   allocationFactory_publicFetchImpl : ContractId AllocationFactory -> AllocationFactory_PublicFetch -> Update AllocationFactoryView
 
   nonconsuming choice AllocationFactory_Allocate : AllocationInstructionResult
-    -- ^ Request the creation of an allocation for legs of a specific instrument.
+    -- ^ Request the creation of an allocation for a particular settlement.
     --
     -- It depends on the registry whether this results in the allocation being
     -- created directly or in an allocation instruction being created instead.
     with
+      settlement : SettlementInfo
+        -- ^ The settlement for which this allocation is made.
       allocation : AllocationSpecification
-        -- ^ The allocation which should be created. All legs must be for the same instrument.
+        -- ^ The allocation which should be created.
         --
-        -- Implementations MUST validate that the instrument admin of the legs matches the admin of the factory.
+        -- Implementations MUST validate that the allocation's admin party
+        -- matches the admin of the factory.
       requestedAt : Time
         -- ^ The time at which the allocation was requested.
       inputHoldingCids : [ContractId Holding]
@@ -155,7 +168,7 @@ interface AllocationFactory where
       extraArgs : ExtraArgs
         -- ^ Additional choice arguments.
       actors : [Party]
-        -- ^ Actors executing the allocation.
+        -- ^ Set of parties executing the allocation.
         --
         -- Implementations MUST check their concrete values to avoid unauthorized allocation creation.
         --
@@ -171,7 +184,7 @@ interface AllocationFactory where
   nonconsuming choice AllocationFactory_PublicFetch : AllocationFactoryView
     with
       actors : [Party]
-        -- ^ Parties executing the fetch.
+        -- ^ Set of parties executing the fetch.
     controller actors
     do allocationFactory_publicFetchImpl this self arg
 

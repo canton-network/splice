@@ -403,6 +403,7 @@ case class SvAppBackendConfig(
     enableFreeConfirmationResponses: Boolean = true,
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
+    useInternalSequencerApi: Boolean = false,
 ) extends SpliceBackendConfig {
 
   def shouldSkipSynchronizerInitialization: Boolean =

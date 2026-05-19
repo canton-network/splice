@@ -13,6 +13,8 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Util (HasCheckedFetch(..))
 
+import Splice.TokenStandard.Utils (accountPrincipal)
+
 newtype Round = Round with number : Int
   deriving (Eq, Show, Ord)
 
@@ -62,7 +64,7 @@ instance HasCheckedFetch V1.AllocationView ForDso where
 instance HasCheckedFetch V2.HoldingView ForOwner where
   contractGroupId V2.HoldingView {..} = ForOwner with
     dso = instrumentId.admin
-    owner = account.owner
+    owner = accountPrincipal instrumentId.admin account
 
 instance HasCheckedFetch V2.TransferInstructionView ForDso where
   contractGroupId V2.TransferInstructionView {..} = ForDso with

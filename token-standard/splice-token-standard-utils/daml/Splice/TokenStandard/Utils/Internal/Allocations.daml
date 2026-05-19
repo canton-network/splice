@@ -8,7 +8,6 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
   -- * Allocation utilities
   netAllocationCreditAmounts,
-  requestedAllocationToSpecification,
   nonIteratedAllocation,
 
   -- ** Working with transfer legs and their sides
@@ -86,7 +85,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 import DA.Action
 import DA.Fail (failWithStatus, FailureStatus(..), FailureCategory(..))
 import DA.Foldable (forA_)
-import DA.List (dedupSort, unique)
+import DA.List (dedupSort, unique, maximumOn)
 import qualified DA.Map as Map
 import DA.Optional
 import qualified DA.Set as Set
@@ -102,9 +101,11 @@ import Splice.Api.Token.AllocationInstructionV1 qualified as AllocationInstructi
 import Splice.Api.Token.AllocationInstructionV2 qualified as AllocationInstructionV2
 import Splice.Api.Token.AllocationRequestV1 qualified as AllocationRequestV1
 import Splice.Api.Token.AllocationRequestV2 qualified as AllocationRequestV2
+import Splice.Api.Token.AllocationV2 (AllocationResult(AllocationResult))
+
 import Splice.TokenStandard.Utils.Internal.Conversions
 import Splice.TokenStandard.Utils.Internal.Choices
-import Splice.Api.Token.AllocationV2 (AllocationResult(AllocationResult))
+import Splice.TokenStandard.Utils.Internal.Events
 
 
 -- Allocation utilities
@@ -136,23 +137,27 @@ nonIteratedAllocation allocationCid = AllocationV2.FinalizedAllocation with
   extraTransferLegSides = []
   nextIterationFunding = None
 
--- | Convert a requested allocation to a specification.
-requestedAllocationToSpecification
-  : AllocationV2.SettlementInfo -> HoldingV2.Account -> AllocationRequestV2.RequestedAllocation
-  -> AllocationV2.AllocationSpecification
-requestedAllocationToSpecification settlement authorizer (AllocationRequestV2.RequestedAllocation with ..) =
-  AllocationV2.AllocationSpecification with ..
-
 -- | Net amounts of credit from an allocation's transfer leg sides.
-netAllocationCreditAmounts : HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
-netAllocationCreditAmounts authorizer transferLegSides =
+--
+-- Allocations for the sender of a mint do not result in a negative credit amount and
+-- allocations for the receiver of a burn do not result in a positive credit amount.
+-- Thereby allowing the instrument admin to use allocations to authorize mints and burns
+-- as part of settlement.
+netAllocationCreditAmounts : Party -> HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
+netAllocationCreditAmounts admin authorizer transferLegSides =
     TextMap.fromListWithR (+) $ map legAmount transferLegSides
   where
+    isMintAuthorizer = authorizer == mintAccount admin
+    isBurnAuthorizer = authorizer == burnAccount admin
     legAmount leg =
       ( leg.instrumentId
       , case leg.side of
-          AllocationV2.SenderSide -> negate leg.amount
-          AllocationV2.ReceiverSide -> leg.amount
+          AllocationV2.SenderSide
+            | isMintAuthorizer -> 0.0
+            | otherwise -> negate leg.amount
+          AllocationV2.ReceiverSide
+            | isBurnAuthorizer -> 0.0
+            | otherwise -> leg.amount
       )
 
 -- | Check basic invariants of a `V1.SettlementInfo`.
@@ -180,7 +185,6 @@ isValidAllocationSpecificationV2
     -- ^ Validation for the instrument ID.
   -> AllocationV2.AllocationSpecification -> Bool
 isValidAllocationSpecificationV2 validInstrumentId AllocationV2.AllocationSpecification{..} =
-    isValidSettlementInfoV2 settlement &&
     (not (null transferLegSides) || isSome nextIterationFunding) && -- empty transfer legs are only allowed for iterated settlement
     unique (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides) &&
     all isValidLeg transferLegSides &&
@@ -207,8 +211,8 @@ ensureIsReceiptAllocation executors receiver receiptAccount choiceArg = do
   let (AllocationInstructionV2.AllocationFactory_Allocate with
         allocation; requestedAt = _ignore; inputHoldingCids; extraArgs; actors) = choiceArg
   let (ExtraArgs with context = _ignore; meta) = extraArgs
-  let (AllocationV2.AllocationSpecification with settlement; transferLegSides; authorizer) = allocation
-  requireMatchExpected ("allocation.settlement.executor", settlement.executors) executors
+  let (AllocationV2.AllocationSpecification with transferLegSides; authorizer) = allocation
+  requireMatchExpected ("choiceArg.settlement.executor", choiceArg.settlement.executors) executors
   require' ("choiceArg.allocation.authorizer", authorizer) isEqualR ("receiptAccount", receiptAccount)
   -- restrict to single actor choices with the receiver as the actor
   requireMatchExpected ("choiceArg.actors", actors) [receiver]
@@ -242,7 +246,7 @@ mkCannotWithdrawCommittedAllocationFailure (Some settlementDeadline) = FailureSt
 ensureWithdrawIsAllowed : AllocationV2.AllocationSpecification -> Update ()
 ensureWithdrawIsAllowed allocation =
   when allocation.committed $ do
-    case allocation.settlement.settlementDeadline of
+    case allocation.settlementDeadline of
       None -> failWithStatus (mkCannotWithdrawCommittedAllocationFailure None)
       Some deadline -> do
         isPastDeadline <- isLedgerTimeGT deadline
@@ -302,11 +306,11 @@ allocationV2_cancelDefaultImplUsingV1 this self (AllocationV2.Allocation_Cancel{
 
 -- | The default observers for a public asset are all acount parties of the transfer legs being settled.
 settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl
-  : AllocationV2.SettlementFactory_SettleBatch -> [Party]
-settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl arg =
+  : Party -> AllocationV2.SettlementFactory_SettleBatch -> [Party]
+settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin arg =
   -- Make all senders and receiver observers, so we get by with a single
   -- view for batch settlement of Amulet allocations
-  concatMap (\leg -> accountParties leg.sender <> accountParties leg.receiver) arg.transferLegs
+  concatMap (\leg -> accountParties admin leg.sender <> accountParties admin leg.receiver) arg.transferLegs
 
 -- | For a private asset there are no extra observers by default.
 settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl
@@ -344,7 +348,7 @@ settlementFactoryV2_settleBatchDefaultImpl admin self arg = do
   allocationSettleResults <- forA allocations $ \(finalizedAlloc, allocView) -> do
     exercise finalizedAlloc.allocationCid AllocationV2.Allocation_Settle with
       -- Use default controllers as the actors
-      actors = allocView.allocation.admin :: allocView.allocation.settlement.executors
+      actors = allocView.allocation.admin :: allocView.settlement.executors
       extraTransferLegSides = finalizedAlloc.extraTransferLegSides
       nextIterationFunding = finalizedAlloc.nextIterationFunding
       extraArgs
@@ -369,7 +373,7 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
     let allocationView = view allocation0
     let allocation = allocationView.allocation
 
-    requireMatchExpected ("allocation.settlement", allocation.settlement) settlement
+    requireMatchExpected ("allocation.settlement", allocationView.settlement) settlement
     requireMatchExpected ("allocation.admin", allocation.admin) admin
     -- prudent engineering: check that iterated settlement is allowed, when it is used
     unless (isSome (allocation.nextIterationFunding)) $ do
@@ -416,17 +420,11 @@ transferLegSidesWithAuthorizer leg = [(leg.sender, senderSide leg), (leg.receive
 extraExecutorsMetaField : Text
 extraExecutorsMetaField = "extra-executors"
 
-instance ForwardCompatible AllocationV1.Reference AllocationV2.Reference where
-  downcast AllocationV2.Reference{..} = AllocationV1.Reference with ..
-
-instance BackwardCompatible AllocationV1.Reference AllocationV2.Reference where
-  upcast AllocationV1.Reference{..} = AllocationV2.Reference with ..
-
 downcast_v2_v1_TransferLeg : Party -> AllocationV2.TransferLeg -> AllocationV1.TransferLeg
 downcast_v2_v1_TransferLeg admin (AllocationV2.TransferLeg with sender, receiver, amount, instrumentId, meta) =
     AllocationV1.TransferLeg with
-      sender = sender.owner
-      receiver = receiver.owner
+      sender = accountOwnerForV1 sender
+      receiver = accountOwnerForV1 receiver
       amount
       instrumentId = HoldingV1.InstrumentId with admin; id = instrumentId
       meta =
@@ -444,19 +442,24 @@ upcast_v1_v2_TransferLeg transferLegId (AllocationV1.TransferLeg with sender, re
       instrumentId = instrumentId.id
       meta = dropAccountMeta "sender" $ dropAccountMeta "receiver" meta
 
+-- | In V2 the `SettlementInfo` serves as the reference as well.
+instance ForwardCompatible AllocationV1.Reference AllocationV2.SettlementInfo where
+  downcast info = AllocationV1.Reference with id = info.id; cid = info.cid
+
 instance BackwardCompatible AllocationV1.SettlementInfo AllocationV2.SettlementInfo where
   upcast (AllocationV1.SettlementInfo with executor, settlementRef, requestedAt, allocateBefore, settleBefore, meta) =
+
     AllocationV2.SettlementInfo with
       executors = executor :: partiesFromMeta extraExecutorsMetaField meta
-      settlementRef = upcast settlementRef
-      settlementDeadline = if settleBefore == maxTime then None else Some settleBefore
+      id = settlementRef.id
+      cid = settlementRef.cid
       meta = dropMeta extraExecutorsMetaField meta
 
-downcast_v2_v1_SettlementInfo : Time -> Time -> AllocationV2.SettlementInfo -> AllocationV1.SettlementInfo
-downcast_v2_v1_SettlementInfo requestedAt settleAt (AllocationV2.SettlementInfo with executors, settlementRef, settlementDeadline, meta) =
+downcast_v2_v1_SettlementInfo : Time -> Time -> Optional Time -> AllocationV2.SettlementInfo -> AllocationV1.SettlementInfo
+downcast_v2_v1_SettlementInfo requestedAt settleAt settlementDeadline (AllocationV2.SettlementInfo with executors, id, cid, meta) =
     AllocationV1.SettlementInfo with
       executor
-      settlementRef = downcast settlementRef
+      settlementRef = AllocationV1.Reference with id = id; cid = cid
       requestedAt
       allocateBefore = settleAt
       settleBefore = fromOptional maxTime settlementDeadline
@@ -469,49 +472,55 @@ instance BackwardCompatible AllocationV1.AllocationSpecification AllocationV2.Al
     AllocationV2.AllocationSpecification with
       admin = transferLeg.instrumentId.admin
       authorizer = accountFromMeta transferLeg.sender "sender" transferLeg.meta
-      settlement = upcast settlement
+      settlementDeadline = Some settlement.settleBefore
       -- V1 allocations only approve the sending side of the transfer leg; as receipt authorization is implicit in V1
       transferLegSides = [senderSide $ upcast_v1_v2_TransferLeg transferLegId transferLeg]
       nextIterationFunding = None
       committed = False
       meta = emptyMetadata
 
--- | Use this instance only if your allocation does not evolve over time, as it
--- always uses `None` for the `originalAllocationCid`.
+-- | Use this instance only if your allocation:
+--   - does not evolve over time, as the upcast always uses `None` for the `originalAllocationCid`
+--   - does not use a an expiry time shorter than the settlement deadline, as the upcast uses the settlement deadline as the expiry time.
 instance BackwardCompatible AllocationV1.AllocationView AllocationV2.AllocationView where
-  upcast thisView = upcast_v1_v2_Allocation None (allocationV1_availableActionsDefault thisView) thisView
+  upcast thisView =
+    let expiresAt = Some thisView.allocation.settlement.settleBefore in
+    upcast_v1_v2_Allocation None expiresAt (allocationV1_availableActionsDefault thisView) thisView
 
 -- | Generic method that allows to upcast a V1 allocation specification to a V2 one with custom available actions,
 -- and a custom `originalAllocationCid`.
 upcast_v1_v2_Allocation
-  : Optional (ContractId AllocationV2.Allocation) -> Map.Map [Party] [AllocationV2.AllocationAction] -> AllocationV1.AllocationView -> AllocationV2.AllocationView
-upcast_v1_v2_Allocation originalAllocationCid availableActions (AllocationV1.AllocationView with allocation, holdingCids, meta) =
+  : Optional (ContractId AllocationV2.Allocation) -> Optional Time -> Map.Map  AllocationV2.AllocationAction [[Party]] -> AllocationV1.AllocationView -> AllocationV2.AllocationView
+upcast_v1_v2_Allocation originalAllocationCid expiresAt availableActions (AllocationV1.AllocationView with allocation, holdingCids, meta) =
   AllocationV2.AllocationView with
     originalAllocationCid
     allocation = upcast allocation
     holdingCids = map upcast holdingCids
-    expiresAt = Some (allocation.settlement.settleBefore)
+    expiresAt
     availableActions
+    settlement = upcast allocation.settlement
     createdAt = allocation.settlement.requestedAt
     numIterations = 0
     meta
 
 -- | Available actions for a V1 allocation that uses the default controllers for its actions.
-allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map [Party] [AllocationV2.AllocationAction]
+allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV1_availableActionsDefault allocView = Map.fromList
-  [ ([leg.sender], [AllocationV2.AA_Withdraw])
-  , (dedupSort [leg.sender, leg.receiver, allocation.settlement.executor], [AllocationV2.AA_Settle, AllocationV2.AA_Cancel])
+  [ (AllocationV2.AA_Withdraw, [[leg.sender]])
+  , (AllocationV2.AA_Settle, [v1SettleControllers])
+  , (AllocationV2.AA_Cancel, [v1SettleControllers])
   ]
   where
+    v1SettleControllers = dedupSort [leg.sender, leg.receiver, allocation.settlement.executor]
     allocation = allocView.allocation
     leg = allocation.transferLeg
 
 -- | Available actions for a V2 allocation that uses the default controllers for its actions.
-allocationV2_availableActionsDefault : AllocationV2.AllocationSpecification -> Map.Map [Party] [AllocationV2.AllocationAction]
-allocationV2_availableActionsDefault allocation = Map.fromList
-  [ ([allocation.authorizer.owner], [AllocationV2.AA_Withdraw])
-  , (dedupSort allocation.settlement.executors, [AllocationV2.AA_Cancel])
-  , (dedupSort (allocation.admin :: allocation.settlement.executors), [AllocationV2.AA_Settle])
+allocationV2_availableActionsDefault : [Party] -> AllocationV2.AllocationSpecification -> Map.Map AllocationV2.AllocationAction [[Party]]
+allocationV2_availableActionsDefault executors allocation = Map.fromList
+  [ (AllocationV2.AA_Withdraw, [[accountPrincipal allocation.admin allocation.authorizer]])
+  , (AllocationV2.AA_Cancel, [dedupSort executors])
+  , (AllocationV2.AA_Settle, [dedupSort (allocation.admin :: executors)])
   ]
 
 instance BackwardCompatible (ContractId AllocationV1.Allocation) (ContractId AllocationV2.Allocation) where
@@ -682,19 +691,24 @@ allocationRequestV2_withdrawDefaultImplV2Only this self arg = do
 -- V1 wallets will create one V1 allocation per transfer leg with their wallet party as the
 -- sender. Their authorizer will thus be set to the `sender.owner` of each individual transfer leg.
 instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationRequestV2.AllocationRequestView where
-  downcast (AllocationRequestV2.AllocationRequestView with settlement, requestedAt, authorizer, settleAt, allocations, meta) =
+  downcast (AllocationRequestV2.AllocationRequestView with settlement, requestedAt, settleAt, allocations, meta) =
       AllocationRequestV1.AllocationRequestView with
-        settlement = downcast_v2_v1_SettlementInfo requestedAt (fromOptional maxTime settleAt) settlement
+        settlement = downcast_v2_v1_SettlementInfo requestedAt (fromOptional maxTime settleAt) maxSettlementDeadline settlement
         transferLegs = TextMap.fromList $ do
           alloc <- allocations
           leg <- alloc.transferLegSides
           -- Note: self-transfers will be present twice, but building the map
           -- based on the transfer leg id will take care of deduplicating them.
-          let legV2 = transferLegFromSide authorizer leg
+          let legV2 = transferLegFromSide alloc.authorizer leg
           pure (leg.transferLegId, downcast_v2_v1_TransferLeg alloc.admin legV2)
         meta
     where
       executor :: extraExecutors = settlement.executors
+
+      -- We can't do better. We take the maximum to maximize the chance of settlement.
+      maxSettlementDeadline = case mapOptional (.settlementDeadline) allocations of
+        [] -> None
+        deadlines -> Some (maximumOn identity deadlines)
 
 
 -- Allocation factories
@@ -705,16 +719,16 @@ instance ForwardCompatible AllocationRequestV1.AllocationRequestView AllocationR
 -- created allocation.
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl arg =
-  arg.allocation.settlement.executors <> accountParties arg.allocation.authorizer
+  arg.settlement.executors <> accountParties arg.allocation.admin arg.allocation.authorizer
 
 -- | Default for private assets, where the settlement executors are only be
 -- observers of the allocation choice itself if no funding is required.
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
-    accountParties allocation.authorizer <>
-    (if all (>= 0.0) (textMapValues creditAmounts) then arg.allocation.settlement.executors else [])
+    accountParties allocation.admin allocation.authorizer <>
+    (if all (>= 0.0) (textMapValues creditAmounts) then arg.settlement.executors else [])
   where
     allocation = arg.allocation
-    creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
+    creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
 
 

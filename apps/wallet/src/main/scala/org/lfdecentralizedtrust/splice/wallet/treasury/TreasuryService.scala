@@ -56,6 +56,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DisclosedContracts,
   HasHealth,
   SpliceUtil,
+  TokenStandardAccount,
   TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -388,12 +389,15 @@ class TreasuryService(
   }
 
   def enqueueAmuletAllocationOperation(
+      settlement: allocationv2.SettlementInfo,
       specification: allocationv2.AllocationSpecification,
       requestedAt: Instant,
       dedup: Option[AmuletOperationDedupConfig],
   )(implicit tc: TraceContext): Future[allocationinstructionv2.AllocationInstructionResult] = {
     val p = Promise[allocationinstructionv2.AllocationInstructionResult]()
-    enqueue(EnqueuedAmuletAllocationV2Operation(specification, requestedAt, p, tc, dedup))
+    enqueue(
+      EnqueuedAmuletAllocationV2Operation(settlement, specification, requestedAt, p, tc, dedup)
+    )
   }
 
   private def enqueue(
@@ -761,11 +765,14 @@ class TreasuryService(
         _.toInterface(holdingv2.Holding.INTERFACE),
       ) { holdings =>
         val choiceArgs = new allocationinstructionv2.AllocationFactory_Allocate(
+          operation.settlement,
           operation.specification,
           operation.requestedAt,
           holdings,
           emptyExtraArgs,
-          List(operation.specification.authorizer.owner).asJava,
+          List(
+            TokenStandardAccount.tryGetRegularAccountOwner(operation.specification.authorizer)
+          ).asJava,
         )
         scanConnection.getAllocationFactoryV2(choiceArgs).map { allocationFactory =>
           allocationFactory.factoryId.exerciseAllocationFactory_Allocate(
@@ -1471,6 +1478,7 @@ object TreasuryService {
   }
 
   private case class EnqueuedAmuletAllocationV2Operation(
+      settlement: allocationv2.SettlementInfo,
       specification: allocationv2.AllocationSpecification,
       requestedAt: Instant,
       outcomePromise: Promise[allocationinstructionv2.AllocationInstructionResult],
@@ -1482,6 +1490,7 @@ object TreasuryService {
     override def pretty: Pretty[EnqueuedAmuletAllocationV2Operation.this.type] =
       prettyNode(
         "AmuletAllocationOperation",
+        param("settlement", _.settlement),
         param("specification", _.specification),
       )
   }
@@ -1535,5 +1544,9 @@ object TreasuryService {
     basicAccount(party.toProtoPrimitive)
 
   def basicAccount(partyProtoPrimitive: String): holdingv2.Account =
-    new holdingv2.Account(partyProtoPrimitive, java.util.Optional.empty(), "")
+    new holdingv2.Account(
+      java.util.Optional.of(partyProtoPrimitive),
+      java.util.Optional.empty(),
+      "",
+    )
 }

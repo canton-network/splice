@@ -60,6 +60,7 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 /** A store for serving all queries for a specific wallet end-user. */
 trait UserWalletStore extends TxLogAppStore[TxLogEntry] with TransferInputStore with NamedLogging {
@@ -808,7 +809,7 @@ object UserWalletStore {
         },
         mkFilter(amuletallocationv2.AmuletAllocationV2.COMPANION) { co =>
           co.payload.allocation.admin == dso &&
-          co.payload.allocation.authorizer.owner == endUser
+          co.payload.allocation.authorizer.owner.toScala.contains(endUser)
         } { contract =>
           UserWalletAcsStoreRowData(contract)
         },
@@ -844,8 +845,9 @@ object UserWalletStore {
           }
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
         mkFilterInterface(allocationrequestv2.AllocationRequest.INTERFACE)(co =>
-          co.payload.authorizer.owner == endUser &&
-            co.payload.allocations.asScala.exists(_.admin == dso)
+          co.payload.allocations.asScala.exists(alloc =>
+            alloc.admin == dso && alloc.authorizer.owner.toScala.contains(endUser)
+          )
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
       ),
     )

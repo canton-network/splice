@@ -7,15 +7,18 @@ import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/
 
 export function createCachePvc(
   runnersNamespace: k8s.core.v1.Namespace,
-  cachePvcName: string
+  repo: string
 ): k8s.core.v1.PersistentVolumeClaim {
   // A filestore for the cache drives that are mounted directly to the runners
   // filestore minimum capacity to provision an ssd instance is 2.5TB
   const capacityGb = 2560;
-  const filestore = new gcp.filestore.Instance(`gha-filestore`, {
+  // For backward compat of the existing splice cache, we keep the old unsuffixed name for the splice repo, and add repo suffix only for other repos
+  const filestoreInstanceName = repo == 'splice' ? 'gha-filestore' : `gha-filestore-${repo}`;
+  const filestoreName = repo == 'splice' ? 'gha_share' : `gha_share-${repo}`;
+  const filestore = new gcp.filestore.Instance(filestoreInstanceName, {
     tier: 'BASIC_SSD',
     fileShares: {
-      name: 'gha_share',
+      name: filestoreName,
       capacityGb: capacityGb,
     },
     networks: [
@@ -27,9 +30,9 @@ export function createCachePvc(
     location: spliceEnvConfig.requireEnv('DB_CLOUDSDK_COMPUTE_ZONE'),
   });
   const filestoreIpAddress = filestore.networks[0].ipAddresses[0];
-  const persistentVolume = new k8s.core.v1.PersistentVolume('gha-cache-pv', {
+  const persistentVolume = new k8s.core.v1.PersistentVolume(`gha-cache-pv-${repo}`, {
     metadata: {
-      name: 'gha-cache-pv',
+      name: `gha-cache-pv-${repo}`,
       namespace: runnersNamespace.metadata.name,
     },
     spec: {
@@ -49,9 +52,9 @@ export function createCachePvc(
       },
     },
   });
-  const cachePvc = new k8s.core.v1.PersistentVolumeClaim(cachePvcName, {
+  const cachePvc = new k8s.core.v1.PersistentVolumeClaim(`gha-cache-pvc-${repo}`, {
     metadata: {
-      name: cachePvcName,
+      name: `gha-cache-pvc-${repo}`,
       namespace: runnersNamespace.metadata.name,
     },
     spec: {

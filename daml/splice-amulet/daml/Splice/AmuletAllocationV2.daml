@@ -40,6 +40,7 @@ template AmuletAllocationV2
     lockedAmulet : Optional (ContractId LockedAmulet)
       -- ^ Locked amulet that holds the funds for the allocation.
       -- Empty if the net fund movement is positive.
+    settlement : V2.SettlementInfo
     allocation : V2.AllocationSpecification
     dso : Party
     expiresAt : Time
@@ -47,10 +48,11 @@ template AmuletAllocationV2
     createdAt : Time
   where
     signatory dso, allocation.authorizer.owner
-    observer allocation.settlement.executors
+    observer settlement.executors
 
     ensure
       isBasicAccount allocation.authorizer &&
+      isValidSettlementInfoV2 settlement &&
       isValidAllocationSpecificationV2 (== amuletInstrumentIdName) allocation
 
     -- TODO(#4525): add expiry choice for the DSO party and hook it up to AmuletRules, so that AmuletAllocationV2 is also auto-expired
@@ -61,11 +63,12 @@ template AmuletAllocationV2
         createdAt
         numIterations
         expiresAt = Some expiresAt
+        settlement
         allocation
         holdingCids = case lockedAmulet of
           None -> mempty
           Some cid -> [toInterfaceContractId cid]
-        availableActions = allocationV2_availableActionsDefault allocation
+        availableActions = allocationV2_availableActionsDefault settlement.executors allocation
         meta = emptyMetadata
 
       -- No extra observers required, as the choice bodies do not introduce further informees.
@@ -74,10 +77,10 @@ template AmuletAllocationV2
       allocation_cancelExtraObservers _arg = []
 
       -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = allocation.settlement.executors
+      allocation_withdrawExtraObservers _arg = settlement.executors
 
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
-        archiveAndCheckActors self arg.actors [[allocation.authorizer.owner]]
+        archiveAndCheckActors self arg.actors [[accountPrincipal dso allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
         pure V2.AllocationResult with
@@ -86,7 +89,7 @@ template AmuletAllocationV2
             meta = emptyMetadata
 
       allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
-        archiveAndCheckActors self arg.actors [allocation.settlement.executors]
+        archiveAndCheckActors self arg.actors [settlement.executors]
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
         pure V2.AllocationResult with
             output = V2.AllocationResult_Cancelled
@@ -95,8 +98,8 @@ template AmuletAllocationV2
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
-        archiveAndCheckActors self arg.actors [dso :: allocation.settlement.executors]
-        forA_ allocation.settlement.settlementDeadline $ \deadline ->
+        archiveAndCheckActors self arg.actors [dso :: settlement.executors]
+        forA_ allocation.settlementDeadline $ \deadline ->
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
         -- validate the Allocation_Settle choice arguments
@@ -110,7 +113,7 @@ template AmuletAllocationV2
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 
         -- archive the locked tokens
-        let authorizer = allocation.authorizer.owner
+        let authorizer = accountPrincipal dso allocation.authorizer
         (inputFundingAmount, inputTokenCids) <-
           case lockedAmulet of
             None -> pure (0.0, [])
@@ -119,7 +122,7 @@ template AmuletAllocationV2
               pure (lockedAmulet.amulet.amount.initialAmount, [toInterfaceContractId lockedAmuletCid])
 
         -- compute total funds to move
-        let netTransferAmount = netAmuletCreditAmount (basicAccount authorizer) actualTransferLegSides
+        let netTransferAmount = netAmuletCreditAmount dso (basicAccount authorizer) actualTransferLegSides
         let inputAmount = inputFundingAmount + netTransferAmount
         let payoutAmount = inputAmount - outputFundingAmount
         require' ("inputAmount", inputAmount) isGreaterOrEqualR ("minimal outputAmount", outputFundingAmount)
@@ -138,15 +141,14 @@ template AmuletAllocationV2
             pure [toInterfaceContractId amuletCid]
 
         -- create the locked amulet for the next iteration, if needed
-        let settlement = allocation.settlement
-        newExpiresAt <- bumpAllocationExpiry expiresAt settlement
+        newExpiresAt <- bumpAllocationExpiry expiresAt allocation.settlementDeadline
         lockedAmulet <-
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
               lock = TimeLock with
                 holders = [authorizer, dso]
                 expiresAt = newExpiresAt
-                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement.settlementRef)
+                optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement)
               amulet = Amulet with
                 dso
                 owner = authorizer
@@ -158,6 +160,7 @@ template AmuletAllocationV2
           if isNone arg.nextIterationFunding then pure None else do
             nextAllocationCid <- create AmuletAllocationV2 with
               lockedAmulet
+              settlement
               allocation = this.allocation with
                 transferLegSides = []
                 nextIterationFunding = arg.nextIterationFunding
@@ -175,7 +178,7 @@ template AmuletAllocationV2
           outputHoldingCids
 
         -- return the result
-        let v1Reason = "Settle allocation for settlement " <> allocation.settlement.settlementRef.id
+        let v1Reason = "Settle allocation for settlement " <> settlement.id
         pure V2.AllocationResult with
           authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, outputHoldingCids) | not (null outputHoldingCids)]
           output = V2.AllocationResult_Settled with
@@ -195,11 +198,11 @@ unlockAmuletAllocationV2 amuletAllocation extraArgs = do
       holdingCids <- abortTwoStepTransfer lockExpiresAt la extraArgs
       pure $ TextMap.fromList [ (amuletInstrumentIdName, map upcast holdingCids) ]
 
-netAmuletCreditAmount : V2.Account -> [V2.TransferLegSide] -> Decimal
-netAmuletCreditAmount authorizer transferLegs =
+netAmuletCreditAmount : Party -> V2.Account -> [V2.TransferLegSide] -> Decimal
+netAmuletCreditAmount dso authorizer transferLegs =
     fromOptional 0.0 $ TextMap.lookup amuletInstrumentIdName creditAmounts
   where
-    creditAmounts = netAllocationCreditAmounts authorizer transferLegs
+    creditAmounts = netAllocationCreditAmounts dso authorizer transferLegs
 
 validateAmuletNextIterationFunding : Optional (TextMap.TextMap Decimal) -> Update Decimal
 validateAmuletNextIterationFunding None = pure 0.0
@@ -225,18 +228,18 @@ minAmuletAllocationTTL = days 45
 maxAmuletAllocationTTL : RelTime
 maxAmuletAllocationTTL = minAmuletAllocationTTL + minAmuletAllocationTTL
 
-computeAllocationExpiry : Time -> V2.SettlementInfo -> Time
-computeAllocationExpiry now settlement =
-  optional identity min settlement.settlementDeadline $
+computeAllocationExpiry : Time -> Optional Time -> Time
+computeAllocationExpiry now settlementDeadline =
+  optional identity min settlementDeadline $
   now `addRelTime` maxAmuletAllocationTTL
 
 -- | Bump the allocation expiry such that the allocation has an expiry
 -- time between `minAmuletAllocationTTL` and `maxAmuletAllocationTTL` from now.
-bumpAllocationExpiry : Time -> V2.SettlementInfo -> Update Time
-bumpAllocationExpiry currentExpiresAt settlement = do
+bumpAllocationExpiry : Time -> Optional Time -> Update Time
+bumpAllocationExpiry currentExpiresAt settlementDeadline = do
   dontBump <- isLedgerTimeLE (currentExpiresAt `addRelTime` negate minAmuletAllocationTTL)
   pure $ if dontBump then currentExpiresAt else
-    optional identity min settlement.settlementDeadline $
+    optional identity min settlementDeadline $
     addRelTime currentExpiresAt minAmuletAllocationTTL
 
 

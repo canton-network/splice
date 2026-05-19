@@ -26,6 +26,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   DarResourcesUtil,
+  TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2
@@ -183,8 +184,12 @@ class HttpTokenStandardTransferInstructionHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         result <- buildTransferFactory(
-          PartyId.tryFromProtoPrimitive(transferInstr.transfer.sender.owner),
-          PartyId.tryFromProtoPrimitive(transferInstr.transfer.receiver.owner),
+          PartyId.tryFromProtoPrimitive(
+            TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.sender)
+          ),
+          PartyId.tryFromProtoPrimitive(
+            TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.receiver)
+          ),
           body.excludeDebugFields.getOrElse(false),
         )((optTransferPreapproval, optFeaturedAppRight, externalPartyAmuletRules) => {
           val isSelfTransfer = transferInstr.transfer.receiver == transferInstr.transfer.sender

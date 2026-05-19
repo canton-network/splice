@@ -168,4 +168,42 @@ Cleanup and improvements applied so far:
     The allocation must instead be concluded by settlement, cancellation, or registry-specific expiry.
 - Remove the `defaultAllocation_*Controllers` helper functions, as the default controller
   sets have become straightforward enough to inline in implementations.
-
+- Introduce the notion of "special accounts" with `Account.owner = None`, which are under the control
+  of the instrument admin. These are intended to be used by registries to report
+  burns and mints as transfers. Registries can also use them for other purposes like for example
+  allowing allocations to refer to an "anonymous settlement counterparty
+  account" to enable trade settlement without disclosing the identity of the
+  settlement counterparties.
+  - adjust `TokenStandardUtils.netAllocationCreditAmounts` to not compute credits for the burn account as a receiver
+    and neither compute debits for the mint account as the sender
+  - test delivery-vs-burn and delivery-vs-mint scenarios using `TestTokenV2`
+- Add an `expiresAt` field to transfer instruction and allocation instruction, so that registries
+  can report and enforce a TTL for instructions that is shorter than the `executeBefore` or the `settlementDeadline` of the underlying transfer or allocation. Registries are expected to
+  bump that TTL on updates to the instruction, so that only long times of inactivity lead to
+  expiry.
+- Improve the representation of the `availableActions` maps of `Allocation`, `AllocationInstruction`, `AllocationRequest`, and `TransferInstruction`
+  - invert its type from `[Party] -> [Action]` to `Action -> [[Party]]` as that makes it easier to determine who can execute an action
+  - remove the `description` and `meta` fields from the `_Custom` actions, as they bloat the representation and can be delivered
+    out of band (or in the view's overall metadata) by the registry if needed.
+- Polished documentation of Daml and HTTP APIs for the V2 token standard
+  - introduced the `409` reponse code to report in-flight reassignments in the
+  OpenAPI specs of the off-ledger APIs
+- Rename `splice-token-standard-test-v1` to `splice-token-standard-v1-test`,
+  and `splice-token-standard-test-v2` to `splice-token-standard-v2-test` so that the
+  Splice build infrastructure correctly identifies them as test packages.
+- Call out explicit limits on the number of legs, accounts, instruments, and parties that
+  must be supported by registries when creating and settling allocations. The limits are chosen
+  to be generous, while avoiding that the off-ledger APIs have to serve more than a few 100kB
+  of reference data.
+- Split the `TestTokenV2` implementation into separate util, holding, transfer, and allocation modules
+  to improve maintainability and readability of the code.
+- Support different `settlementDeadline`s on different allocations settled in the same batch
+  - motivation: iterated allocations and top-up allocations are unlikely to have the same settlement deadline
+  - implementation: move `settlementDeadline` out of `SettlementInfo` to `AllocationSpecification`, and
+    inline `Reference` into `SettlementInfo` to make it more clear that the `SettlementInfo` is the
+    way to link allocations to a settlement.
+- Remove the `RequestedAllocation` type in favor of directly using `AllocationSpecification`
+  to specify the requested allocations in an allocation requestd.
+  - enables: creating a single allocation request for different `authorizer`s whose account parties
+    are the same
+  - required moving `AllocationSpecification.settlement` up to the `AllocationView` level

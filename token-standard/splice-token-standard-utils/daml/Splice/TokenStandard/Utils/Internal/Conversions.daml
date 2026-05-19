@@ -31,9 +31,17 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   mkMetaTransferFrom,
 
   -- * Account utils
+  accountPrincipal,
+  accountParties,
+  isRegularAccount,
+  regularAccountParties,
+  regularAccountOwner,
+
+  specialAccountOwnerStubV1,
+  accountOwnerForV1,
+
   basicAccount,
   isBasicAccount,
-  accountParties,
   ensureBasicAccount,
 
   -- ** Account metadata conversion
@@ -64,6 +72,7 @@ import Splice.Api.Token.HoldingV2 qualified as HoldingV2
 
 -- Utils
 --------
+
 epoch : Time
 epoch = time (date 1970 Jan 1) 0 0 0
 
@@ -111,21 +120,62 @@ timeFromMeta field meta =
   decodeTime <$> TextMap.lookup (tokenStandardV2Namespace <> field) meta.values
 
 
--- Account metadata utils
---------------------------
+-- Account utils
+----------------
 
+-- | Party to use for as a stub for special accounts when reporting them
+-- through V1 APIs. Minimize the use of this function where possible.
+specialAccountOwnerStubV1 : Party
+specialAccountOwnerStubV1 =
+  fromSomeNote "specialAccountOwnerStubV1: invalid party" $
+  partyFromText "cip-112_no-owner::1220000000000000000000000000000000000000000000000000000000000000abcd"
+
+-- | Owner of an account for V1 APIs that do expect a party to be given.
+-- Uses the `specialAccountOwnerStubV1` for special accounts.
+accountOwnerForV1 : HoldingV2.Account -> Party
+accountOwnerForV1 account = fromOptional specialAccountOwnerStubV1 account.owner
+
+-- | The principal of an account, which is the owner for regular accounts,
+-- and the instrument admin for special accounts.
+accountPrincipal : Party -> HoldingV2.Account -> Party
+accountPrincipal admin account = fromOptional admin account.owner
+
+-- | Construct the basic account for an owner.
 basicAccount : Party -> HoldingV2.Account
-basicAccount p = HoldingV2.Account p None ""
+basicAccount owner = HoldingV2.Account (Some owner) None ""
 
 -- | True if the account is a basic account.
 isBasicAccount : HoldingV2.Account -> Bool
-isBasicAccount account = isNone account.provider && T.isEmpty account.id
+isBasicAccount account =
+  isRegularAccount account && isNone account.provider && T.isEmpty account.id
 
--- | The owner and optional provider of an account.
-accountParties : HoldingV2.Account -> [Party]
-accountParties account = case account.provider of
-  Some provider | provider /= account.owner -> [account.owner, provider]
-  _ -> [account.owner]
+-- | True iff the account is a regular account, i.e., has an owner specified.
+isRegularAccount : HoldingV2.Account -> Bool
+isRegularAccount account = isSome account.owner
+
+-- | The principal of an account and the provider, if set.
+accountParties : Party -> HoldingV2.Account -> [Party]
+accountParties admin account = case account.provider of
+    Some provider | provider /= principal -> [principal, provider]
+    _ -> [principal]
+  where
+    principal = accountPrincipal admin account
+
+-- | Get the account parties of a regular account. Fails if the account is no
+-- regular account.
+--
+-- Prefer to use `accountParties` where possible, as that function works for both regular and special accounts.
+regularAccountParties : HoldingV2.Account -> [Party]
+regularAccountParties account = case account.provider of
+    Some provider | provider /= owner -> [owner, provider]
+    _ -> [owner]
+  where
+    owner = regularAccountOwner account
+
+-- | Get the owner of a regular account. Fails the it is not regular account.
+regularAccountOwner : HoldingV2.Account -> Party
+regularAccountOwner account =
+  fromSomeNote ("Expected a regular account, but got the special account: " <> show account) account.owner
 
 providerKey : Text -> Text
 providerKey field = tokenStandardV2Namespace <> field <> ".provider"
@@ -145,7 +195,7 @@ accountFromMeta owner field meta =
   HoldingV2.Account with
     provider = (TextMap.lookup (providerKey field) meta.values) >>= partyFromText
     id = fromOptional "" $ TextMap.lookup (idKey field) meta.values
-    owner
+    owner = Some owner
 
 dropAccountMeta : Text -> Metadata -> Metadata
 dropAccountMeta fieldName meta =
@@ -267,7 +317,7 @@ instance BackwardCompatible (ContractId HoldingV1.Holding) (ContractId HoldingV2
 
 instance ForwardCompatible HoldingV1.HoldingView HoldingV2.HoldingView where
   downcast v2 = HoldingV1.HoldingView with
-    owner = v2.account.owner
+    owner = accountOwnerForV1 v2.account
     instrumentId = downcast v2.instrumentId
     amount = v2.amount
     lock = downcast <$> v2.lock

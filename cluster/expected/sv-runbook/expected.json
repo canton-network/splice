@@ -240,6 +240,7 @@
         },
         "nginxImage": "nginx:latest",
         "runtimeDetails": {
+          "migrationId": 2,
           "scanUrl": "http://scan-app.sv:5012"
         },
         "tolerations": [
@@ -248,7 +249,8 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ]
+        ],
+        "updaterImage": "registry.gitlab.com/gitlab-ci-utils/curl-jq:latest"
       },
       "version": "0.3.20"
     },

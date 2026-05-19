@@ -7,10 +7,6 @@
 
 .. release-notes:: Upcoming
 
-    - Scan UI
-
-      - Bring back the governance page that was removed in release 0.5.18.
-
     - Token Standard V2 (CIP-112)
 
       - Notable callouts for Amulet changes:
