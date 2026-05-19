@@ -224,9 +224,6 @@ data DsoRules_RequestVoteResult = DsoRules_RequestVoteResult with
 data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
     voteRequest : ContractId VoteRequest
 
-data DsoRules_CastGovernanceVoteResult = DsoRules_CastGovernanceVoteResult with
-    voteRequest : ContractId VoteRequest
-
 data DsoRules_RotateGovernanceVoterResult = DsoRules_RotateGovernanceVoterResult with
     bindingCid : ContractId SvGovernanceVoter
 
@@ -861,89 +858,84 @@ template DsoRules with
         return DsoRules_RequestVoteResult with ..
 
 
-    -- Note that this choice can be used to both cast the initial vote, and update a vote.
+    -- Cast or update a vote on a vote request. The path depends on the
+    -- optional binding:
     --
-    -- Operator path: only for *operational* actions. Governance-voter eligible
-    -- actions are cast exclusively via DsoRules_CastGovernanceVote.
+    -- * Operator path (`bindingCid = None`, `castBy = None`): for
+    --   *operational* actions only. Controller is `vote.sv`; the recorded
+    --   vote is attributed as VCR_Operator with `castBy = vote.sv`.
+    -- * Governance-voter path (`bindingCid = Some _`, `castBy = Some _`):
+    --   for *governance-voter eligible* actions only. Controller is the
+    --   `castBy` party; the binding is checked-fetched via
+    --   `ForOwner with owner = castBy`; the recorded vote's SV is taken
+    --   from the binding (so it cannot drift from `vote.sv`); the vote is
+    --   attributed as VCR_GovernanceVoter with `castBy` set to that party.
+    --
+    -- `bindingCid` and `castBy` are Optional and appended at the end so
+    -- existing on-ledger references remain upgradable. They must be both
+    -- present or both absent.
     nonconsuming choice DsoRules_CastVote : DsoRules_CastVoteResult
       with
         requestCid : ContractId VoteRequest
         vote : Vote
-      controller vote.sv
+        bindingCid : Optional (ContractId SvGovernanceVoter)
+          -- ^ Present iff using the governance-voter path. `castBy` must
+          -- be the governance voter named on the binding, the request's
+          -- action must be governance-voter eligible, and the recorded
+          -- vote's SV is taken from the binding (overriding `vote.sv`).
+        castBy : Optional Party
+          -- ^ The governance-voter party signing the cast on the
+          -- governance-voter path; serves as the controller. Must be
+          -- present iff `bindingCid` is.
+      controller fromOptional vote.sv castBy
       do
-        -- validate vote parameters
         requireWellformedVote config vote
-        voterName <- case Map.lookup vote.sv svs of
+        -- Resolve path: which SV slot is being written, who is recorded as
+        -- the signer of the cast, and under which authority role.
+        (effectiveVoteSv, castByParty, castByRoleVal) <- case (bindingCid, castBy) of
+          (None, None) ->
+            pure (vote.sv, vote.sv, VCR_Operator)
+          (Some cid, Some p) -> do
+            svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = p) cid
+            require "Vote SV must match binding SV" (vote.sv == svGovernanceVoter.sv)
+            pure (svGovernanceVoter.sv, p, VCR_GovernanceVoter)
+          (Some _, None) ->
+            fail "`castBy` must be present when `bindingCid` is set"
+          (None, Some _) ->
+            fail "`bindingCid` must be present when `castBy` is set"
+        voterName <- case Map.lookup effectiveVoteSv svs of
           None -> fail "Voter is not an SV"
           Some info -> pure info.name
-        -- validate and archive request
-        request <- fetchAndArchive (ForDso with dso) requestCid
-        require "Action is governance-voter eligible; use DsoRules_CastGovernanceVote" (not (isGovernanceVoterAction request.action))
+        -- Validate the request before archiving it
+        request <- fetchChecked (ForDso with dso) requestCid
+        case bindingCid of
+          None ->
+            require "Action is governance-voter eligible; pass `bindingCid` to take the governance-voter path"
+              (not (isGovernanceVoterAction request.action))
+          Some _ ->
+            require "Action is not governance-voter eligible; omit `bindingCid` for the operator path"
+              (isGovernanceVoterAction request.action)
         now <- getTime
         let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
         require "Vote request has expired" (now < castDeadline)
-        -- rate limit casting of votes by the same SV to avoid them blocking others from making progress
-        -- Note: we currently ignore the optional self-declared vote casting time
-        -- `vote.optCastAt`. We'll use that in the future when adding support for larger
-        -- prepare-submission delays for external parties.
-        enforceCooldown ("voteCooldownTime for " <> partyToText vote.sv) (getVoteCooldownTime config) $ do
+        -- Rate limit casting of votes by the same represented SV to avoid
+        -- them blocking others from making progress.
+        -- Note: we currently ignore the optional self-declared vote casting
+        -- time `vote.optCastAt`. We'll use that in the future when adding
+        -- support for larger prepare-submission delays for external parties.
+        enforceCooldown ("voteCooldownTime for " <> partyToText effectiveVoteSv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
+        archive requestCid
         let recordedVote = vote with
+              sv = effectiveVoteSv
               optCastAt = Some now
-              castBy = Some vote.sv
-              castByRole = Some VCR_Operator
+              castBy = Some castByParty
+              castByRole = Some castByRoleVal
         voteRequest <- create request with
           votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastVoteResult with ..
-
-    -- Note that this choice can be used to both cast the initial governance-voter
-    -- vote, and update a vote for the represented SV.
-    --
-    -- Governance-voter path. Operators have no override on governance-voter
-    -- eligible actions: DsoRules_CastVote rejects such actions on the operator
-    -- side, so the represented SV's vote slot can only be written through this
-    -- choice.
-    nonconsuming choice DsoRules_CastGovernanceVote : DsoRules_CastGovernanceVoteResult
-      with
-        requestCid : ContractId VoteRequest
-        bindingCid : ContractId SvGovernanceVoter
-        castBy : Party
-          -- ^ The governance-voter party signing the cast. Used as the
-          -- controller (so it must be a non-`Optional` choice argument);
-          -- also recorded as attribution metadata on the resulting Vote.
-        vote : Vote
-      controller castBy
-      do
-        -- validate vote parameters
-        requireWellformedVote config vote
-        svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = castBy) bindingCid
-        require "Vote SV must match binding SV" (vote.sv == svGovernanceVoter.sv)
-        voterName <- case Map.lookup svGovernanceVoter.sv svs of
-          None -> fail "Voter is not an SV"
-          Some info -> pure info.name
-        -- validate request before archiving it
-        request <- fetchChecked (ForDso with dso) requestCid
-        require "Action is not governance-voter eligible; use DsoRules_CastVote" (isGovernanceVoterAction request.action)
-        now <- getTime
-        let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
-        require "Vote request has expired" (now < castDeadline)
-        -- rate limit casting of votes by the same represented SV to avoid blocking progress
-        enforceCooldown ("voteCooldownTime for " <> partyToText svGovernanceVoter.sv) (getVoteCooldownTime config) $ do
-          pastVote <- Map.lookup voterName request.votes
-          pastVote.optCastAt
-        archive requestCid
-        -- store vote in the represented SV's vote slot
-        let recordedVote = vote with
-              sv = svGovernanceVoter.sv
-              optCastAt = Some now
-              castBy = Some castBy
-              castByRole = Some VCR_GovernanceVoter
-        voteRequest <- create request with
-          votes = Map.insert voterName recordedVote request.votes
-          trackingCid = Some (fromOptional requestCid request.trackingCid)
-        return DsoRules_CastGovernanceVoteResult with ..
 
     -- We expect the TxHistory log of the SV app to store the choice argument together
     -- with its result for historical reference.

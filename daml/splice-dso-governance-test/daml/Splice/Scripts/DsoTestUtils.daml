@@ -418,7 +418,10 @@ requestVoteForAction app dsoRulesCid initiator action reason targetEffectiveAt v
   pure result.voteRequest
 
 -- | Cast a vote on a request, dispatching to the operator or governance-voter
--- path based on the request's action.
+-- path based on the request's action: governance-voter eligible actions take
+-- the governance-voter path of DsoRules_CastVote (passing the represented
+-- SV's self-binding and `castBy = Some sv`); everything else uses the
+-- operator path (both Optional fields = None).
 castVoteOnRequest
   : AmuletApp
   -> ContractId DsoRules
@@ -429,32 +432,24 @@ castVoteOnRequest
   -> Script (ContractId VoteRequest)
 castVoteOnRequest app dsoRulesCid sv requestCid accept body = do
   Some request <- queryContractId app.dso requestCid
-  if isGovernanceVoterAction request.action
-    then do
-      bindingCid <- ensureSelfBinding app.dso sv
-      result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
-        requestCid
-        bindingCid
-        castBy = sv
-        vote = Vote with
-          sv
-          accept
-          reason = Reason with url = ""; body
-          optCastAt = None
-          castBy = Some sv
-          castByRole = Some VCR_GovernanceVoter
-      pure result.voteRequest
-    else do
-      result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-        requestCid
-        vote = Vote with
-          sv
-          accept
-          reason = Reason with url = ""; body
-          optCastAt = None
-          castBy = Some sv
-          castByRole = Some VCR_Operator
-      pure result.voteRequest
+  let isGov = isGovernanceVoterAction request.action
+  optBindingCid <- if isGov
+    then Some <$> ensureSelfBinding app.dso sv
+    else pure None
+  let optCastBy = if isGov then Some sv else None
+      castByRole = if isGov then VCR_GovernanceVoter else VCR_Operator
+  result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid
+    vote = Vote with
+      sv
+      accept
+      reason = Reason with url = ""; body
+      optCastAt = None
+      castBy = Some sv
+      castByRole = Some castByRole
+    bindingCid = optBindingCid
+    castBy = optCastBy
+  pure result.voteRequest
 
 initiateAndCastVote : AmuletApp -> [Party] -> Optional Time -> ActionRequiringConfirmation -> Script (ContractId VoteRequest)
 initiateAndCastVote _ [] _ _ = error "initiateVote: require at least one party"

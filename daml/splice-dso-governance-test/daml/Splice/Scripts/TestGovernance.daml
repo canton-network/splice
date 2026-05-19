@@ -134,10 +134,10 @@ testCastDeadlineExpiry = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 1)
   passTime (days 1 + seconds 1)
-  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = govRequest.voteRequest
-    bindingCid = sv1Binding
-    castBy = sv1
+    bindingCid = Some sv1Binding
+    castBy = Some sv1
     vote = Vote with
       sv = sv1
       accept = False
@@ -170,6 +170,8 @@ testCastDeadlineExpiry = do
       optCastAt = None
       castBy = Some sv2
       castByRole = Some VCR_Operator
+    bindingCid = None
+    castBy = None
   pure ()
 
 -- | Tests governance-voter request and cast paths under the strict role
@@ -223,10 +225,10 @@ testGovernanceVoterCastPath = do
     voteRequestTimeout = Some (days 7)
 
   requestResult <- requestOffboardSv
-  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = requestResult.voteRequest
-    bindingCid
-    castBy = governanceVoter1
+    bindingCid = Some bindingCid
+    castBy = Some governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "governance voter update"
   Some request <- queryContractId dso castResult.voteRequest
   Map.size request.votes === 2
@@ -250,6 +252,8 @@ testGovernanceVoterCastPath = do
       optCastAt = None
       castBy = Some sv1
       castByRole = Some VCR_Operator
+    bindingCid = None
+    castBy = None
   Some request <- queryContractId dso castResult.voteRequest
   case Map.lookup "sv1" request.votes of
     None -> fail "governance voter vote missing after rejected operator overwrite"
@@ -273,10 +277,10 @@ testGovernanceVoterCastPath = do
     reason = Reason with url = ""; body = "operational action"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7)
-  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = unsupportedRequest.voteRequest
-    bindingCid
-    castBy = governanceVoter1
+    bindingCid = Some bindingCid
+    castBy = Some governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "operational"
 
   -- And opening an operational action via the governance-voter path also fails.
@@ -295,10 +299,10 @@ testGovernanceVoterCastPath = do
     voteRequestTimeout = Some (days 7)
 
   wrongVoterRequest <- requestOffboardSv
-  submitMustFail (actAs wrongVoter <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs wrongVoter <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = wrongVoterRequest.voteRequest
-    bindingCid
-    castBy = wrongVoter
+    bindingCid = Some bindingCid
+    castBy = Some wrongVoter
     vote = governanceVote sv1 wrongVoter False "wrong voter"
 
   -- Rotating sv1's binding switches the authorized governance voter; the
@@ -306,16 +310,16 @@ testGovernanceVoterCastPath = do
   rotatedBindingCid <- rotateGovernanceVoterByConfirmation
     app [sv1, sv2, sv3] sv1 bindingCid governanceVoter2
   rotatedRequest <- requestOffboardSv
-  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = rotatedRequest.voteRequest
-    bindingCid = rotatedBindingCid
-    castBy = governanceVoter1
+    bindingCid = Some rotatedBindingCid
+    castBy = Some governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "rotated old voter"
   passTime (minutes 1)
-  _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = rotatedRequest.voteRequest
-    bindingCid = rotatedBindingCid
-    castBy = governanceVoter2
+    bindingCid = Some rotatedBindingCid
+    castBy = Some governanceVoter2
     vote = governanceVote sv1 governanceVoter2 False "rotated new voter"
 
   -- Returning control to the operator is rotation back to the represented SV;
@@ -324,16 +328,16 @@ testGovernanceVoterCastPath = do
   returnedBindingCid <- rotateGovernanceVoterByConfirmation
     app [sv1, sv2, sv3] sv1 rotatedBindingCid sv1
   returnedRequest <- requestOffboardSv
-  submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = returnedRequest.voteRequest
-    bindingCid = returnedBindingCid
-    castBy = governanceVoter2
+    bindingCid = Some returnedBindingCid
+    castBy = Some governanceVoter2
     vote = governanceVote sv1 governanceVoter2 False "stale delegate"
   passTime (minutes 1)
-  _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = returnedRequest.voteRequest
-    bindingCid = returnedBindingCid
-    castBy = sv1
+    bindingCid = Some returnedBindingCid
+    castBy = Some sv1
     vote = governanceVote sv1 sv1 False "operator-as-self-voter"
   pure ()
 
@@ -1493,10 +1497,10 @@ testVoteCastingCooldown  = do
   requestCid <- castVoteOnRequest app dsoRulesCid sv2 requestCid False "noooo, let me stay on please!"
 
   -- The second vote SV2 fails though
-  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
-        bindingCid = sv2Binding
-        castBy = sv2
+        bindingCid = Some sv2Binding
+        castBy = Some sv2
         vote = Vote with
           sv = sv2
           accept = False
@@ -1506,10 +1510,10 @@ testVoteCastingCooldown  = do
           castByRole = Some VCR_GovernanceVoter
 
   -- And that same holds for SV1, as it voted as part of creating the request.
-  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
-        bindingCid = sv1Binding
-        castBy = sv1
+        bindingCid = Some sv1Binding
+        castBy = Some sv1
         vote = Vote with
           sv = sv1
           accept = True

@@ -52,15 +52,18 @@ need to vet the ``splice-dso-governance`` DAR for this template.
 
 Operational and governance-voter actions follow a strict role split:
 
+Both opening and casting a vote use a single choice each — ``DsoRules_RequestVote``
+and ``DsoRules_CastVote``. Each choice has an optional ``bindingCid``
+argument that selects the path:
+
 * Operational actions (everything outside the allowlist below) are requested
-  via the operator path of ``DsoRules_RequestVote`` (``bindingCid = None``)
-  and voted on via ``DsoRules_CastVote``. Both reject governance-voter
-  eligible actions.
-* Governance-voter eligible actions are requested via the governance-voter
-  path of ``DsoRules_RequestVote`` (passing the binding contract ID as
-  ``bindingCid = Some _``) and voted on via ``DsoRules_CastGovernanceVote``.
-  The represented SV is recovered from the binding; both choices check that
-  the caller is the binding's authoritative governance voter.
+  and voted on via the operator path: ``bindingCid = None`` on both choices.
+  Each choice rejects governance-voter eligible actions on this path.
+* Governance-voter eligible actions are requested and voted on via the
+  governance-voter path: ``bindingCid = Some _`` (and, on the cast choice,
+  ``castBy = Some <governance-voter party>``). The represented SV is
+  recovered from the binding; the checked-fetch enforces that the caller
+  is the binding's authoritative governance voter.
 
 Operators have no override on the governance-voter side: there is no path by
 which an operator can overwrite a governance voter's vote on an eligible
