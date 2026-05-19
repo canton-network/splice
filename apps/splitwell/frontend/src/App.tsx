@@ -7,6 +7,7 @@ import {
   isDomainConnectionError,
   PackageIdResolver,
   JsonApiError,
+  retryQuery,
 } from '@lfdecentralizedtrust/splice-common-frontend';
 import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { ScanClientProvider } from '@lfdecentralizedtrust/splice-common-frontend/scan-api';
@@ -50,6 +51,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
       queries: {
         refetchInterval,
         structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
       mutations: {
         retry: (failureCount, error) => {
