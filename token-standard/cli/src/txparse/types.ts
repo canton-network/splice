@@ -33,8 +33,8 @@ export interface Holding {
 
 export interface HoldingLock {
   holders: string[];
-  expiresAt?: string;
-  expiresAfter?: string;
+  expiresAt: string | null;
+  expiresAfter: string | null;
   context?: string;
 }
 

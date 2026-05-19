@@ -19,7 +19,7 @@ import {
 import { EventLog_HoldingsChange } from "@daml.js/splice-api-token-transfer-events-v2-1.0.0/lib/Splice/Api/Token/TransferEventsV2/module";
 import { Holding } from "@daml.js/splice-api-token-holding-v2-1.0.0/lib/Splice/Api/Token/HoldingV2";
 import { getEventsOfContract, getMetaKeyValue } from "../apis/ledger-api-utils";
-import { computeSummary } from "./summary";
+import { computeSummary, holdingChangesNonEmpty } from "./summary";
 
 export class V2TransactionParser {
   private readonly ledgerClient: LedgerJsonApi;
@@ -54,7 +54,7 @@ export class V2TransactionParser {
         .map((event) => this.extractHoldingCreate(event.CreatedEvent))
         .filter((item) => item !== null),
     );
-    return Promise.all(
+    const result = await Promise.all(
       events
         .map(this.extractChoiceArgumentEventLog_HoldingsChange)
         .filter((item) => item !== null)
@@ -62,6 +62,8 @@ export class V2TransactionParser {
           this.parseHoldingsChange(holdingsChange, createdHoldingsMap),
         ),
     );
+
+    return result.filter((change) => holdingChangesNonEmpty(change));
   }
 
   extractHoldingCreate(
@@ -136,13 +138,14 @@ export class V2TransactionParser {
     );
     const lockedOutputHoldings = resolvedOutputHoldings.filter((h) => !!h.lock);
 
+    // only this.partyId's holdings should be included in the response
     const unlockedHoldingsChange = {
-      archives: unlockedOutputHoldings,
-      creates: unlockedInputHoldings,
+      creates: unlockedOutputHoldings.filter((h) => h.owner === this.partyId),
+      archives: unlockedInputHoldings.filter((h) => h.owner === this.partyId),
     };
     const lockedHoldingsChange = {
-      archives: lockedOutputHoldings,
-      creates: lockedInputHoldings,
+      creates: lockedOutputHoldings.filter((h) => h.owner === this.partyId),
+      archives: lockedInputHoldings.filter((h) => h.owner === this.partyId),
     };
 
     return {
@@ -186,17 +189,15 @@ export class V2TransactionParser {
         this.partyId,
         [HoldingInterfaceV2],
       );
-      if (!fromEvent || !fromEvent.created) {
-        // User is likely not an observer or events of contract were pruned
-        // TODO: added for debugging
-        return {
-          contractId: cid,
-          amount: "unknown",
-          instrumentId: { id: "unknown", admin: "unknown" },
-          lock: null,
-          meta: {},
-          owner: "unknown",
-        };
+      if (
+        !fromEvent ||
+        !fromEvent.created ||
+        !fromEvent.created.createdEvent.witnessParties
+          .concat(fromEvent.created.createdEvent.signatories)
+          .concat(fromEvent.created.createdEvent.observers || [])
+          .some((party) => this.partyId === party)
+      ) {
+        return null;
       }
 
       const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);
@@ -217,7 +218,7 @@ export class V2TransactionParser {
         ? {
             holders: result.lock.holders,
             context: result.lock.context || undefined,
-            expiresAfter: result.lock.expiresAfter?.microseconds || undefined,
+            expiresAfter: result.lock.expiresAfter?.microseconds || null,
             expiresAt: result.lock.expiresAt || undefined,
           }
         : null,
