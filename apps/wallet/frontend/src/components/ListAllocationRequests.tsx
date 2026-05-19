@@ -407,16 +407,34 @@ function isAllocationForRequest(
   const allocationSettlementCid = isV2
     ? allocationPayload.settlement.cid
     : allocationPayload.allocation.settlement.settlementRef.cid;
-  const sameTransferLegs = (
-    isV2
-      ? allocationPayload.allocation.transferLegSides.map(side => side.transferLegId)
-      : [allocationPayload.allocation.transferLegId]
-  ).every(legId => allocationSpec.transferLegSides.find(side => side.transferLegId === legId));
+  const sameTransferLegs = isV2
+    ? allocationPayload.allocation.transferLegSides.map(allocSide =>
+        allocationSpec.transferLegSides.some(
+          specSide =>
+            allocSide.transferLegId === specSide.transferLegId && allocSide.side === specSide.side
+        )
+      )
+    : allocationSpec.transferLegSides.some(
+        side => side.transferLegId === allocationPayload.allocation.transferLegId
+      );
+  const sameExecutor = isV2
+    ? allocationPayload.settlement.executors.every(
+        executor => requestSettlement.executors.indexOf(executor) !== -1
+      )
+    : requestSettlement.executors.indexOf(allocationPayload.allocation.settlement.executor) !== -1;
+  const allocationMeta = isV2
+    ? allocationPayload.settlement.meta
+    : allocationPayload.allocation.settlement.meta;
+  const sameMeta = Object.entries(allocationMeta.values).every(
+    ([key, value]) => value === requestSettlement.meta.values[key]
+  );
 
   return (
     allocationSettlementId === requestSettlement.id &&
     allocationSettlementCid === requestSettlement.cid &&
-    sameTransferLegs
+    sameTransferLegs &&
+    sameExecutor &&
+    sameMeta
   );
 }
 
