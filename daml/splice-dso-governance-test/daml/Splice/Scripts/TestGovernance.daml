@@ -137,13 +137,14 @@ testCastDeadlineExpiry = do
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = govRequest.voteRequest
     bindingCid = sv1Binding
+    castBy = sv1
     vote = Vote with
       sv = sv1
-      castBy = sv1
-      castByRole = VCR_GovernanceVoter
       accept = False
       reason = Reason with url = ""; body = "after deadline"
       optCastAt = None
+      castBy = Some sv1
+      castByRole = Some VCR_GovernanceVoter
 
   -- Operator cast path: same enforcement on an operational action.
   opRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
@@ -163,57 +164,11 @@ testCastDeadlineExpiry = do
     requestCid = opRequest.voteRequest
     vote = Vote with
       sv = sv2
-      castBy = sv2
-      castByRole = VCR_Operator
       accept = True
       reason = Reason with url = ""; body = "after deadline"
       optCastAt = None
-  pure ()
-
--- | Tests that DsoRules_CastVote rejects votes whose declared castBy or
--- castByRole do not match the operator path's invariants. These checks
--- mirror the binding/role checks on DsoRules_CastGovernanceVote and
--- surface caller bugs that the silent overwrite would otherwise mask.
-testOperatorCastAttributionGuards : Script ()
-testOperatorCastAttributionGuards = do
-  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
-  [(dsoRulesCid, _)] <- query @DsoRules dso
-  [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
-
-  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    requester = sv1
-    action = ARC_DsoRules with
-      dsoAction = SRARC_AddSv DsoRules_AddSv with
-        newSvParty = sv2
-        newSvName = "guards-new-sv"
-        newSvRewardWeight = 1
-        newSvParticipantId = "guards-new-sv-participant"
-        joinedAsOfRound = openRound.round
-    reason = Reason with url = ""; body = "attribution guards"
-    targetEffectiveAt = None
-    voteRequestTimeout = Some (days 7)
-
-  -- castBy must match vote.sv on the operator path.
-  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-    requestCid = requestResult.voteRequest
-    vote = Vote with
-      sv = sv2
-      castBy = sv1
-      castByRole = VCR_Operator
-      accept = True
-      reason = Reason with url = ""; body = "wrong castBy"
-      optCastAt = None
-
-  -- castByRole must be VCR_Operator on the operator path.
-  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-    requestCid = requestResult.voteRequest
-    vote = Vote with
-      sv = sv2
-      castBy = sv2
-      castByRole = VCR_GovernanceVoter
-      accept = True
-      reason = Reason with url = ""; body = "wrong castByRole"
-      optCastAt = None
+      castBy = Some sv2
+      castByRole = Some VCR_Operator
   pure ()
 
 -- | Tests governance-voter request and cast paths under the strict role
@@ -242,11 +197,11 @@ testGovernanceVoterCastPath = do
 
   let governanceVote svParty signer accept body = Vote with
         sv = svParty
-        castBy = signer
-        castByRole = VCR_GovernanceVoter
         accept
         reason = Reason with url = ""; body
         optCastAt = None
+        castBy = Some signer
+        castByRole = Some VCR_GovernanceVoter
   let offboardSv1Action = ARC_DsoRules with
         dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv1
   let requestOffboardSv = submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
@@ -269,15 +224,16 @@ testGovernanceVoterCastPath = do
   castResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = requestResult.voteRequest
     bindingCid
+    castBy = governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "governance voter update"
   Some request <- queryContractId dso castResult.voteRequest
   Map.size request.votes === 2
-  case Map.lookup sv1 request.votes of
+  case Map.lookup "sv1" request.votes of
     None -> fail "represented SV vote missing"
     Some vote -> do
       vote.sv === sv1
-      vote.castBy === governanceVoter1
-      vote.castByRole === VCR_GovernanceVoter
+      vote.castBy === Some governanceVoter1
+      vote.castByRole === Some VCR_GovernanceVoter
       vote.accept === False
 
   -- The operator path is closed on governance-voter eligible requests: sv1
@@ -287,17 +243,17 @@ testGovernanceVoterCastPath = do
     requestCid = castResult.voteRequest
     vote = Vote with
       sv = sv1
-      castBy = sv1
-      castByRole = VCR_Operator
       accept = True
       reason = Reason with url = ""; body = "operator may not override"
       optCastAt = None
+      castBy = Some sv1
+      castByRole = Some VCR_Operator
   Some request <- queryContractId dso castResult.voteRequest
-  case Map.lookup sv1 request.votes of
+  case Map.lookup "sv1" request.votes of
     None -> fail "governance voter vote missing after rejected operator overwrite"
     Some vote -> do
-      vote.castBy === governanceVoter1
-      vote.castByRole === VCR_GovernanceVoter
+      vote.castBy === Some governanceVoter1
+      vote.castByRole === Some VCR_GovernanceVoter
       vote.accept === False
 
   -- Operational actions still flow through the operator path; the governance-
@@ -317,6 +273,7 @@ testGovernanceVoterCastPath = do
   submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = unsupportedRequest.voteRequest
     bindingCid
+    castBy = governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "operational"
 
   -- And opening an operational action via the governance-voter path also fails.
@@ -338,6 +295,7 @@ testGovernanceVoterCastPath = do
   submitMustFail (actAs wrongVoter <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = wrongVoterRequest.voteRequest
     bindingCid
+    castBy = wrongVoter
     vote = governanceVote sv1 wrongVoter False "wrong voter"
 
   -- Rotating sv1's binding switches the authorized governance voter; the
@@ -348,11 +306,13 @@ testGovernanceVoterCastPath = do
   submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = rotatedRequest.voteRequest
     bindingCid = rotatedBindingCid
+    castBy = governanceVoter1
     vote = governanceVote sv1 governanceVoter1 False "rotated old voter"
   passTime (minutes 1)
   _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = rotatedRequest.voteRequest
     bindingCid = rotatedBindingCid
+    castBy = governanceVoter2
     vote = governanceVote sv1 governanceVoter2 False "rotated new voter"
 
   -- Returning control to the operator is rotation back to the represented SV;
@@ -364,11 +324,13 @@ testGovernanceVoterCastPath = do
   submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = returnedRequest.voteRequest
     bindingCid = returnedBindingCid
+    castBy = governanceVoter2
     vote = governanceVote sv1 governanceVoter2 False "stale delegate"
   passTime (minutes 1)
   _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = returnedRequest.voteRequest
     bindingCid = returnedBindingCid
+    castBy = sv1
     vote = governanceVote sv1 sv1 False "operator-as-self-voter"
   pure ()
 
@@ -467,12 +429,12 @@ testVoteUpdateKeepsOneSlotPerSv = do
 
   Some initialRequest <- queryContractId dso initialRequestCid
   Map.size initialRequest.votes === 1
-  case Map.lookup sv1 initialRequest.votes of
+  case Map.lookup "sv1" initialRequest.votes of
     None -> fail "requester vote missing"
     Some vote -> do
       vote.sv === sv1
-      vote.castBy === sv1
-      vote.castByRole === VCR_GovernanceVoter
+      vote.castBy === Some sv1
+      vote.castByRole === Some VCR_GovernanceVoter
 
   passTime (minutes 1)
   updatedCid <- castVoteOnRequest app dsoRulesCid sv1 initialRequestCid False "updated vote"
@@ -480,12 +442,12 @@ testVoteUpdateKeepsOneSlotPerSv = do
   Some updatedRequest <- queryContractId dso updatedCid
   Map.size updatedRequest.votes === 1
   updatedRequest.trackingCid === Some initialRequestCid
-  case Map.lookup sv1 updatedRequest.votes of
+  case Map.lookup "sv1" updatedRequest.votes of
     None -> fail "updated requester vote missing"
     Some vote -> do
       vote.sv === sv1
-      vote.castBy === sv1
-      vote.castByRole === VCR_GovernanceVoter
+      vote.castBy === Some sv1
+      vote.castByRole === Some VCR_GovernanceVoter
       vote.accept === False
 
 -- | Tests vote request machinery on featured app right granting and revoking without effectivity.
@@ -1531,25 +1493,27 @@ testVoteCastingCooldown  = do
   submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
         requestCid
         bindingCid = sv2Binding
+        castBy = sv2
         vote = Vote with
           sv = sv2
-          castBy = sv2
-          castByRole = VCR_GovernanceVoter
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
+          castBy = Some sv2
+          castByRole = Some VCR_GovernanceVoter
 
   -- And that same holds for SV1, as it voted as part of creating the request.
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
         requestCid
         bindingCid = sv1Binding
+        castBy = sv1
         vote = Vote with
           sv = sv1
-          castBy = sv1
-          castByRole = VCR_GovernanceVoter
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None
+          castBy = Some sv1
+          castByRole = Some VCR_GovernanceVoter
 
   -- let the vote cooldown pass, so they can update their votes
   passTime (minutes 1)

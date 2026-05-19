@@ -435,9 +435,12 @@ template VoteRequest
       -- ^ The reason for requesting the execution of the action. Typically a reference to some off-ledger justification.
     voteBefore : Time
       -- ^ The time before which votes are accepted, and SHOULD be submitted.
-    votes : Map.Map Party Vote
-      -- ^ The votes cast by represented SV party. These may be previous SVs in case
-      -- there was an SV change after the vote was requested.
+    votes : Map.Map Text Vote
+      -- ^ The votes cast by current or previous SVs, keyed by the SV's name
+      -- at the time the vote was recorded. The key is `Text` (and not
+      -- `Party`) to preserve backwards compatibility with `VoteRequest`
+      -- contracts created under older versions of this template; the
+      -- represented SV's party is recoverable from `vote.sv`.
     trackingCid : Optional (ContractId VoteRequest)
       -- ^ An optional tracking ContractId to be used for tracking the vote request through its updates.
       -- This is always set to the first ContractId of the original vote request (None on creation).
@@ -477,14 +480,21 @@ data VoteCastRole
 -- | A vote cast for an SV.
 data Vote = Vote with
     sv : Party -- ^ The represented SV whose vote slot is updated.
-    castBy : Party -- ^ The party that signed the vote command.
-    castByRole : VoteCastRole -- ^ The authority path used to cast the vote.
     accept : Bool
       -- ^ Whether the responder accepted the request to execute the action or not.
     reason : Reason
       -- ^ The reason for voting this way.
     optCastAt : Optional Time
       -- ^ The time when the vote was cast. Used to rate-limit the casting of votes.
+    castBy : Optional Party
+      -- ^ Attribution metadata: the party that signed the vote command. Set
+      -- by the server when recording a vote; `None` on contracts that
+      -- pre-date this field. Not used for authorization (see the controllers
+      -- of the cast choices for that).
+    castByRole : Optional VoteCastRole
+      -- ^ Attribution metadata: the authority path used to cast the vote.
+      -- Set by the server when recording a vote; `None` on contracts that
+      -- pre-date this field.
   deriving(Eq, Show)
 
 data Reason = Reason with
@@ -801,18 +811,18 @@ template DsoRules with
         require "There is some time to vote" (now < voteBefore)
         let requesterVote = Vote with
               sv = requester
-              castBy = requester
-              castByRole = VCR_Operator
               accept = True
               reason = Reason with url = ""; body = "I accept, as I requested the vote."
               optCastAt = Some now
+              castBy = Some requester
+              castByRole = Some VCR_Operator
         voteRequest <- create VoteRequest with
           dso
           requester = requesterName
           action
           reason
           voteBefore
-          votes = Map.fromList [(requester, requesterVote)]
+          votes = Map.fromList [(requesterName, requesterVote)]
           trackingCid = None
           targetEffectiveAt
         return DsoRules_RequestVoteResult with ..
@@ -849,18 +859,18 @@ template DsoRules with
         require "There is some time to vote" (now < voteBefore)
         let initialVote = Vote with
               sv = binding.sv
-              castBy = binding.governanceVoter
-              castByRole = VCR_GovernanceVoter
               accept = True
               reason = Reason with url = ""; body = "I accept, as I requested the vote."
               optCastAt = Some now
+              castBy = Some binding.governanceVoter
+              castByRole = Some VCR_GovernanceVoter
         voteRequest <- create VoteRequest with
           dso
           requester = requesterName
           action
           reason
           voteBefore
-          votes = Map.fromList [(binding.sv, initialVote)]
+          votes = Map.fromList [(requesterName, initialVote)]
           trackingCid = None
           targetEffectiveAt
         return DsoRules_RequestGovernanceVoteResult with ..
@@ -878,11 +888,9 @@ template DsoRules with
       do
         -- validate vote parameters
         requireWellformedVote config vote
-        require "Vote castBy must match SV on operator path" (vote.castBy == vote.sv)
-        require "Vote castByRole must be VCR_Operator on operator path" (vote.castByRole == VCR_Operator)
-        case Map.lookup vote.sv svs of
+        voterName <- case Map.lookup vote.sv svs of
           None -> fail "Voter is not an SV"
-          Some _ -> pure ()
+          Some info -> pure info.name
         -- validate and archive request
         request <- fetchAndArchive (ForDso with dso) requestCid
         require "Action is governance-voter eligible; use DsoRules_CastGovernanceVote" (not (isGovernanceVoterAction request.action))
@@ -894,14 +902,14 @@ template DsoRules with
         -- `vote.optCastAt`. We'll use that in the future when adding support for larger
         -- prepare-submission delays for external parties.
         enforceCooldown ("voteCooldownTime for " <> partyToText vote.sv) (getVoteCooldownTime config) $ do
-          pastVote <- Map.lookup vote.sv request.votes
+          pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
         let recordedVote = vote with
-              castBy = vote.sv
-              castByRole = VCR_Operator
               optCastAt = Some now
+              castBy = Some vote.sv
+              castByRole = Some VCR_Operator
         voteRequest <- create request with
-          votes = Map.insert vote.sv recordedVote request.votes
+          votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastVoteResult with ..
 
@@ -916,19 +924,22 @@ template DsoRules with
       with
         requestCid : ContractId VoteRequest
         bindingCid : ContractId SvGovernanceVoter
+        castBy : Party
+          -- ^ The governance-voter party signing the cast. Used as the
+          -- controller (so it must be a non-`Optional` choice argument);
+          -- also recorded as attribution metadata on the resulting Vote.
         vote : Vote
-      controller vote.castBy
+      controller castBy
       do
         -- validate vote parameters
         requireWellformedVote config vote
         binding <- fetch bindingCid
         require "Binding dso must match rules dso" (binding.dso == dso)
         require "Vote SV must match binding SV" (vote.sv == binding.sv)
-        require "Vote signer must match binding governance voter" (vote.castBy == binding.governanceVoter)
-        require "Vote signer role must be governance voter" (vote.castByRole == VCR_GovernanceVoter)
-        case Map.lookup binding.sv svs of
+        require "Vote signer must match binding governance voter" (castBy == binding.governanceVoter)
+        voterName <- case Map.lookup binding.sv svs of
           None -> fail "Voter is not an SV"
-          Some _ -> pure ()
+          Some info -> pure info.name
         -- validate request before archiving it
         request <- fetchChecked (ForDso with dso) requestCid
         require "Action is not governance-voter eligible; use DsoRules_CastVote" (isGovernanceVoterAction request.action)
@@ -937,17 +948,17 @@ template DsoRules with
         require "Vote request has expired" (now < castDeadline)
         -- rate limit casting of votes by the same represented SV to avoid blocking progress
         enforceCooldown ("voteCooldownTime for " <> partyToText binding.sv) (getVoteCooldownTime config) $ do
-          pastVote <- Map.lookup binding.sv request.votes
+          pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
         archive requestCid
         -- store vote in the represented SV's vote slot
         let recordedVote = vote with
               sv = binding.sv
-              castBy = binding.governanceVoter
-              castByRole = VCR_GovernanceVoter
               optCastAt = Some now
+              castBy = Some castBy
+              castByRole = Some VCR_GovernanceVoter
         voteRequest <- create request with
-          votes = Map.insert binding.sv recordedVote request.votes
+          votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastGovernanceVoteResult with ..
 
@@ -990,10 +1001,10 @@ template DsoRules with
 
         let activeSvSet = Set.fromList activeSvs
         let (validVotes, offboardedVoters) = partitionEithers
-              [ if voterParty `Set.member` activeSvSet then Left vote else Right (partyToText voterParty)
-              | (voterParty, vote) <- Map.toList request.votes
+              [ if vote.sv `Set.member` activeSvSet then Left vote else Right (partyToText vote.sv)
+              | (_, vote) <- Map.toList request.votes
               ]
-        let abstainingSvs = [ info.name | (svParty, info) <- Map.toList svs, not (svParty `Map.member` request.votes) ]
+        let abstainingSvs = [ info.name | (_, info) <- Map.toList svs, not (info.name `Map.member` request.votes) ]
         let (yays, nays) = partition (.accept) validVotes
         let numYays = length yays
         let numNays = length nays

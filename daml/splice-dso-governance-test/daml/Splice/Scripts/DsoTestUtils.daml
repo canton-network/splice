@@ -331,9 +331,9 @@ executeAllDefinitiveVotes app = do
   now <- getTime
   requests <- query @VoteRequest app.dso
   forA_ requests $ \(requestCid, request) -> do
-    let activeSvs = Set.fromList $ Map.keys rules.svs
+    let activeSvNames = Set.fromList [info.name | (_, info) <- Map.toList rules.svs]
     let execute = request.voteBefore <= now ||
-          (activeSvs == Set.fromList (Map.keys request.votes))
+          (activeSvNames == Set.fromList (Map.keys request.votes))
     when execute $ do
       void $ submit (actAs s.dsoDelegate <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
         requestCid
@@ -441,24 +441,25 @@ castVoteOnRequest app dsoRulesCid sv requestCid accept body = do
       result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
         requestCid
         bindingCid
+        castBy = sv
         vote = Vote with
           sv
-          castBy = sv
-          castByRole = VCR_GovernanceVoter
           accept
           reason = Reason with url = ""; body
           optCastAt = None
+          castBy = Some sv
+          castByRole = Some VCR_GovernanceVoter
       pure result.voteRequest
     else do
       result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
         vote = Vote with
           sv
-          castBy = sv
-          castByRole = VCR_Operator
           accept
           reason = Reason with url = ""; body
           optCastAt = None
+          castBy = Some sv
+          castByRole = Some VCR_Operator
       pure result.voteRequest
 
 initiateAndCastVote : AmuletApp -> [Party] -> Optional Time -> ActionRequiringConfirmation -> Script (ContractId VoteRequest)
