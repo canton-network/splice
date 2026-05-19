@@ -227,9 +227,6 @@ data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
 data DsoRules_CastGovernanceVoteResult = DsoRules_CastGovernanceVoteResult with
     voteRequest : ContractId VoteRequest
 
-data DsoRules_RequestGovernanceVoteResult = DsoRules_RequestGovernanceVoteResult with
-    voteRequest : ContractId VoteRequest
-
 data DsoRules_RotateGovernanceVoterResult = DsoRules_RotateGovernanceVoterResult with
     bindingCid : ContractId SvGovernanceVoter
 
@@ -784,84 +781,74 @@ template DsoRules with
 
     -- TODO(#9317): rate limit inidiviual SVs wrt requesting votes
     --
-    -- Operator path for *operational* actions. Governance-voter eligible
-    -- actions are routed through DsoRules_RequestGovernanceVote: the
-    -- governance-voter party (which may be the SV itself under a self-binding)
-    -- both creates the request and casts the vote.
+    -- Open a vote request. The path the choice takes depends on the optional
+    -- binding:
+    --
+    -- * Operator path (`bindingCid = None`): for *operational* actions only.
+    --   `requester` must be an SV; the initial vote is recorded against the
+    --   SV's slot with VCR_Operator.
+    -- * Governance-voter path (`bindingCid = Some _`): for *governance-voter
+    --   eligible* actions only. `requester` is the governance-voter party
+    --   authenticated via the binding (the binding's `governanceVoter`); the
+    --   represented SV is taken from the binding and the initial vote is
+    --   recorded against that SV's slot with VCR_GovernanceVoter.
+    --
+    -- `bindingCid` is Optional and appended at the end so existing on-ledger
+    -- references and exercise records remain upgradable.
     nonconsuming choice DsoRules_RequestVote : DsoRules_RequestVoteResult
       with
         requester : Party
+          -- ^ The party opening the request: the represented SV on the
+          -- operator path, or the governance voter authenticated via
+          -- `bindingCid` on the governance-voter path.
         action : ActionRequiringConfirmation
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
+        bindingCid : Optional (ContractId SvGovernanceVoter)
+          -- ^ Present iff using the governance-voter path. `requester` must
+          -- be the governance voter named on the binding, and `action` must
+          -- be governance-voter eligible.
       controller requester
       do
-        require "Action is governance-voter eligible; use DsoRules_RequestGovernanceVote" (not (isGovernanceVoterAction action))
-        requesterName <- case requester `Map.lookup` svs of
-          None -> fail "Requester is not an SV"
-          Some info -> pure (info.name)
         requireWellformedReason config reason
         now <- getTime
+        (requesterName, initialVote) <- case bindingCid of
+          None -> do
+            require "Action is governance-voter eligible; pass `bindingCid` to take the governance-voter path"
+              (not (isGovernanceVoterAction action))
+            name <- case requester `Map.lookup` svs of
+              None -> fail "Requester is not an SV"
+              Some info -> pure info.name
+            let v = Vote with
+                  sv = requester
+                  accept = True
+                  reason = Reason with url = ""; body = "I accept, as I requested the vote."
+                  optCastAt = Some now
+                  castBy = Some requester
+                  castByRole = Some VCR_Operator
+            pure (name, v)
+          Some cid -> do
+            require "Action is not governance-voter eligible; omit `bindingCid` for the operator path"
+              (isGovernanceVoterAction action)
+            svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = requester) cid
+            name <- case svGovernanceVoter.sv `Map.lookup` svs of
+              None -> fail "Represented SV is not an SV"
+              Some info -> pure info.name
+            let v = Vote with
+                  sv = svGovernanceVoter.sv
+                  accept = True
+                  reason = Reason with url = ""; body = "I accept, as I requested the vote."
+                  optCastAt = Some now
+                  castBy = Some requester
+                  castByRole = Some VCR_GovernanceVoter
+            pure (name, v)
         let voteBefore = case voteRequestTimeout of
               Some value ->
                 now `addRelTime` value
               None ->
                 now `addRelTime` config.voteRequestTimeout
         require "There is some time to vote" (now < voteBefore)
-        let requesterVote = Vote with
-              sv = requester
-              accept = True
-              reason = Reason with url = ""; body = "I accept, as I requested the vote."
-              optCastAt = Some now
-              castBy = Some requester
-              castByRole = Some VCR_Operator
-        voteRequest <- create VoteRequest with
-          dso
-          requester = requesterName
-          action
-          reason
-          voteBefore
-          votes = Map.fromList [(requesterName, requesterVote)]
-          trackingCid = None
-          targetEffectiveAt
-        return DsoRules_RequestVoteResult with ..
-
-    -- Governance-voter path for opening a vote request.
-    --
-    -- Controlled by the governance-voter party authenticated via the binding;
-    -- the represented SV is taken from the binding. The initial vote is
-    -- recorded against the represented SV's slot with VCR_GovernanceVoter.
-    nonconsuming choice DsoRules_RequestGovernanceVote : DsoRules_RequestGovernanceVoteResult
-      with
-        governanceVoter : Party
-        bindingCid : ContractId SvGovernanceVoter
-        action : ActionRequiringConfirmation
-        reason : Reason
-        voteRequestTimeout : Optional RelTime
-        targetEffectiveAt : Optional Time
-      controller governanceVoter
-      do
-        require "Action must be governance-voter eligible" (isGovernanceVoterAction action)
-        svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = governanceVoter) bindingCid
-        requesterName <- case svGovernanceVoter.sv `Map.lookup` svs of
-          None -> fail "Represented SV is not an SV"
-          Some info -> pure (info.name)
-        requireWellformedReason config reason
-        now <- getTime
-        let voteBefore = case voteRequestTimeout of
-              Some value ->
-                now `addRelTime` value
-              None ->
-                now `addRelTime` config.voteRequestTimeout
-        require "There is some time to vote" (now < voteBefore)
-        let initialVote = Vote with
-              sv = svGovernanceVoter.sv
-              accept = True
-              reason = Reason with url = ""; body = "I accept, as I requested the vote."
-              optCastAt = Some now
-              castBy = Some svGovernanceVoter.governanceVoter
-              castByRole = Some VCR_GovernanceVoter
         voteRequest <- create VoteRequest with
           dso
           requester = requesterName
@@ -871,7 +858,7 @@ template DsoRules with
           votes = Map.fromList [(requesterName, initialVote)]
           trackingCid = None
           targetEffectiveAt
-        return DsoRules_RequestGovernanceVoteResult with ..
+        return DsoRules_RequestVoteResult with ..
 
 
     -- Note that this choice can be used to both cast the initial vote, and update a vote.

@@ -392,8 +392,9 @@ rotateGovernanceVoterByConfirmation app confirmers sv currentBindingCid newGover
       <> show newGovernanceVoter <> " for " <> show sv
 
 -- | Open a vote request via the path implied by the action: governance-voter
--- eligible actions go through DsoRules_RequestGovernanceVote using the
--- represented SV's self-binding; everything else uses the operator path.
+-- eligible actions go through the governance-voter path of DsoRules_RequestVote
+-- (passing `bindingCid = Some <self-binding>`); everything else uses the
+-- operator path (`bindingCid = None`).
 requestVoteForAction
   : AmuletApp
   -> ContractId DsoRules
@@ -403,25 +404,18 @@ requestVoteForAction
   -> Optional Time
   -> Optional RelTime
   -> Script (ContractId VoteRequest)
-requestVoteForAction app dsoRulesCid initiator action reason targetEffectiveAt voteRequestTimeout
-  | isGovernanceVoterAction action = do
-      bindingCid <- ensureSelfBinding app.dso initiator
-      result <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
-        governanceVoter = initiator
-        bindingCid
-        action
-        reason
-        targetEffectiveAt
-        voteRequestTimeout
-      pure result.voteRequest
-  | otherwise = do
-      result <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-        requester = initiator
-        action
-        reason
-        targetEffectiveAt
-        voteRequestTimeout
-      pure result.voteRequest
+requestVoteForAction app dsoRulesCid initiator action reason targetEffectiveAt voteRequestTimeout = do
+  optBindingCid <- if isGovernanceVoterAction action
+    then Some <$> ensureSelfBinding app.dso initiator
+    else pure None
+  result <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = initiator
+    action
+    reason
+    targetEffectiveAt
+    voteRequestTimeout
+    bindingCid = optBindingCid
+  pure result.voteRequest
 
 -- | Cast a vote on a request, dispatching to the operator or governance-voter
 -- path based on the request's action.
