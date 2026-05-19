@@ -2183,6 +2183,23 @@ class HttpScanHandler(
     }
   }
 
+  override def lookupSvRewardWeightBefore(
+      respond: ScanResource.LookupSvRewardWeightBeforeResponse.type
+  )(
+      body: definitions.LookupSvRewardWeightBeforeRequest
+  )(extracted: TraceContext): Future[ScanResource.LookupSvRewardWeightBeforeResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.lookupSvRewardWeightBefore") { _ => _ =>
+      val svParty = PartyId.tryFromProtoPrimitive(body.svParty)
+      val before = body.before.toInstant
+      for {
+        priorWeight <- store.lookupSvRewardWeightBefore(svParty, before)
+      } yield ScanResource.LookupSvRewardWeightBeforeResponse.OK(
+        definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
+      )
+    }
+  }
+
   override def listVoteRequestsByTrackingCid(
       respond: ScanResource.ListVoteRequestsByTrackingCidResponse.type
   )(body: BatchListVotesByVoteRequestsRequest)(

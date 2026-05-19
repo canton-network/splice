@@ -23,6 +23,7 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
+import { SvAdminClient, SvAdminContext } from '../../contexts/SvAdminServiceContext';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -315,6 +316,64 @@ describe('Proposal Details Content', () => {
     expect(screen.getByTestId('config-change-field-label').textContent).toBe('Weight');
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('999');
     expect(screen.getByTestId('config-change-new-value').textContent).toBe('1000');
+  });
+
+  test('should render completed update sv reward weight proposal with prior weight from lookup', async () => {
+    const svToUpdate = 'sv2';
+    const effectiveAt = '2024-02-02 13:00';
+
+    let capturedSvParty: string | undefined;
+    const mockSvAdminClient = {
+      lookupSvRewardWeightBefore: async (svParty: string, _before: string) => {
+        capturedSvParty = svParty;
+        return 5 as number | null;
+      },
+      lookupFeaturedAppRightByContractId: async () => ({ featured_app_right: undefined }),
+    } as unknown as SvAdminClient;
+
+    const completedUpdateSvRewardWeightDetails = {
+      actionName: 'Update SV Reward Weight',
+      action: 'SRARC_UpdateSvRewardWeight',
+      createdAt: '2024-02-02T13:00:00.000Z',
+      isVoteRequest: false,
+      proposal: {
+        svToUpdate: svToUpdate,
+        currentWeight: '10',
+        weightChange: '10',
+      } as UpdateSvRewardWeightProposal,
+    } as ProposalDetails;
+
+    const completedVotingInformation = {
+      requester: 'sv1',
+      requesterIsYou: true,
+      votingThresholdDeadline: '2024-02-01 13:00',
+      voteTakesEffect: effectiveAt,
+      status: 'Implemented',
+    };
+
+    render(
+      <Wrapper>
+        <SvAdminContext.Provider value={mockSvAdminClient}>
+          <ProposalDetailsContent
+            currentSvPartyId={voteResult.votingInformation.requester}
+            contractId={voteResult.contractId}
+            proposalDetails={completedUpdateSvRewardWeightDetails}
+            votingInformation={completedVotingInformation}
+            votes={voteResult.votes}
+          />
+        </SvAdminContext.Provider>
+      </Wrapper>
+    );
+
+    const section = await screen.findByTestId('proposal-details-update-sv-reward-weight-section');
+    expect(section).toBeInTheDocument();
+
+    expect(await screen.findByTestId('config-change-field-label')).toHaveTextContent('Weight');
+    await waitFor(() => {
+      expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('5');
+    });
+    expect(screen.getByTestId('config-change-new-value')).toHaveTextContent('10');
+    expect(capturedSvParty).toBe(svToUpdate);
   });
 
   test('should render unallocated unclaimed activity record details', () => {

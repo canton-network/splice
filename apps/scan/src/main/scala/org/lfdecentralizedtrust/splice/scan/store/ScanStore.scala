@@ -233,6 +233,11 @@ trait ScanStore
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
+
+  def lookupSvRewardWeightBefore(
+      svParty: PartyId,
+      before: Instant,
+  )(implicit tc: TraceContext): Future[Option[Long]]
 }
 
 object ScanStore {

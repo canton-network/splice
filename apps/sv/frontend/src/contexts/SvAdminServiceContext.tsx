@@ -36,7 +36,7 @@ import {
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
-const SvAdminContext = React.createContext<SvAdminClient | undefined>(undefined);
+export const SvAdminContext = React.createContext<SvAdminClient | undefined>(undefined);
 
 export interface SvAdminProps {
   url: string;
@@ -94,6 +94,7 @@ export interface SvAdminClient {
   lookupFeaturedAppRightByContractId: (
     contractId: string
   ) => Promise<LookupFeaturedAppRightByContractIdResponse>;
+  lookupSvRewardWeightBefore: (svParty: string, before: string) => Promise<number | null>;
 }
 
 class ApiMiddleware
@@ -236,6 +237,16 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
         contractId: string
       ): Promise<LookupFeaturedAppRightByContractIdResponse> => {
         return await svAdminClient.lookupFeaturedAppRightByContractId(contractId);
+      },
+      lookupSvRewardWeightBefore: async (
+        svParty: string,
+        before: string
+      ): Promise<number | null> => {
+        const response = await svAdminClient.lookupSvRewardWeightBefore({
+          sv_party: svParty,
+          before: new Date(before),
+        });
+        return response.prior_weight ?? null;
       },
     };
   }, [url, userAccessToken]);

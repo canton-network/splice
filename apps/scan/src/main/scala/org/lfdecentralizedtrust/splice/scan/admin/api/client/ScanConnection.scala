@@ -55,6 +55,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryReques
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequestV1
 
+import java.time.Instant
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.OptionConverters.*
 
@@ -311,6 +312,14 @@ trait ScanConnection
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
+
+  def lookupSvRewardWeightBefore(
+      svParty: String,
+      before: Instant,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]]
 
   def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,

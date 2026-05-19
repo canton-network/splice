@@ -216,6 +216,16 @@ message VoteRequestTxLogEntry {
   google.protobuf.Struct result = 2 [(scalapb.field).type = "org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CloseVoteRequestResult"];
 }
 
+message SvOnboardingTxLogEntry {
+  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
+  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
+
+  string event_id = 1;
+  string sv_party = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
+  int64 initial_weight = 3;
+  google.protobuf.Timestamp effective_at = 4 [(scalapb.field).type = "java.time.Instant"];
+}
+
 message TransferCommandTxLogEntry {
   option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
   option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";

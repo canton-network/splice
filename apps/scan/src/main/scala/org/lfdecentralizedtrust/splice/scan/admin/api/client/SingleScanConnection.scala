@@ -570,6 +570,18 @@ class SingleScanConnection private[client] (
     ),
   )
 
+  override def lookupSvRewardWeightBefore(
+      svParty: String,
+      before: Instant,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.LookupSvRewardWeightBefore(svParty, before),
+    )
+
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,

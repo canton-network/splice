@@ -74,7 +74,11 @@ export const VoteRequestDetails: React.FC = () => {
 
   const action = amuletOrDsoAction.tag as SupportedActionTag;
   const actionName = actionTagToTitle(amuletName)[action];
-  const createdAt = voteRequest ? dayjs(voteRequest.createdAt).format(dateTimeFormatISO) : '';
+  const createdAt = voteRequest
+    ? dayjs(voteRequest.createdAt).toISOString()
+    : voteResult
+      ? dayjs(voteResult.completedAt).toISOString()
+      : '';
 
   const proposalDetails: ProposalDetails = {
     actionName,

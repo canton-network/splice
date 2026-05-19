@@ -12,8 +12,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
   SRARC_OffboardSv,
   SRARC_SetConfig,
+  SRARC_UpdateSvRewardWeight,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_OffboardSv,
+  DsoRules_UpdateSvRewardWeight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
   DsoRules_SetConfig,
@@ -1517,6 +1521,99 @@ class SvFrontendIntegrationTest
           selectMuiOptionByValue("update-sv-reward-weight-member-dropdown", sv3PartyId)
           fillOutTextField("update-sv-reward-weight-weight", newWeight)
       }
+    }
+
+    "NEW UI: Update SV Reward Weight proposal details show prior weight from historical lookup" in {
+      implicit env =>
+        val sv4PartyId = sv4Backend.getDsoInfo().svParty.toProtoPrimitive
+
+        def runWeightProposal(
+            targetWeight: Long,
+            reason: String,
+        ): VoteRequest.ContractId = {
+          val action: ActionRequiringConfirmation = new ARC_DsoRules(
+            new SRARC_UpdateSvRewardWeight(
+              new DsoRules_UpdateSvRewardWeight(sv4PartyId, java.lang.Long.valueOf(targetWeight))
+            )
+          )
+          val (_, voteRequest) = actAndCheck(
+            s"sv1 creates UpdateSvRewardWeight proposal '$reason'", {
+              sv1Backend.createVoteRequest(
+                sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+                action,
+                "https://example.com",
+                reason,
+                sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+                None,
+              )
+            },
+          )(
+            "the vote request appears in listVoteRequests",
+            _ =>
+              sv1Backend
+                .listVoteRequests()
+                .filter(_.payload.reason.body == reason)
+                .loneElement,
+          )
+          val tracking = getTrackingId(voteRequest)
+          Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(b =>
+            eventuallySucceeds() { b.castVote(tracking, true, "", "") }
+          )
+          eventually() {
+            sv1Backend
+              .listVoteRequests()
+              .find(_.payload.reason.body == reason) shouldBe empty
+          }
+          eventually() {
+            sv1Backend
+              .getDsoInfo()
+              .dsoRules
+              .payload
+              .svs
+              .get(sv4PartyId)
+              .svRewardWeight
+              .longValue shouldBe targetWeight
+          }
+          tracking
+        }
+
+        val priorWeightAtStart = sv1Backend
+          .getDsoInfo()
+          .dsoRules
+          .payload
+          .svs
+          .get(sv4PartyId)
+          .svRewardWeight
+          .longValue
+        val setupWeight = priorWeightAtStart + 1000L
+        val _ = runWeightProposal(setupWeight, "setup: pin sv4 weight for prior-weight test")
+
+        val testTargetWeight = setupWeight + 7777L
+        val testTrackingCid =
+          runWeightProposal(testTargetWeight, "test: change sv4 weight for prior-weight rendering")
+
+        withFrontEnd("sv1") { implicit webDriver =>
+          actAndCheck(
+            "sv1 navigates to the completed proposal details page", {
+              go to s"http://localhost:$sv1UIPort/governance/proposals/${testTrackingCid.contractId}"
+              loginOnCurrentPage(sv1UIPort, sv1Backend.config.ledgerApiUser)
+            },
+          )(
+            "the diff shows setupWeight as before-value, not testTargetWeight",
+            _ => {
+              find(testId("proposal-details-update-sv-reward-weight-section")) should not be empty
+              val beforeValue =
+                find(testId("config-change-current-value")).map(_.text).getOrElse("")
+              val afterValue = find(testId("config-change-new-value")).map(_.text).getOrElse("")
+
+              val beforeNumeric = beforeValue.replaceAll("[^0-9]", "")
+              val afterNumeric = afterValue.replaceAll("[^0-9]", "")
+              beforeNumeric shouldBe setupWeight.toString
+              afterNumeric shouldBe testTargetWeight.toString
+              beforeNumeric should not equal afterNumeric
+            },
+          )
+        }
     }
 
     "Vote history is ordered by completion time and supports pagination" in { implicit env =>
