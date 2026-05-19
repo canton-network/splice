@@ -209,11 +209,11 @@ const V2AllocationRequestActionButton: React.FC<{
   dso,
 }) => {
   const validSpecification =
-    allocationSpecification.admin !== dso ||
+    allocationSpecification.admin === dso &&
     // basicAccount check: authorizer matches basicAccount(userParty)
-    allocationSpecification.authorizer.owner !== userParty ||
-    !!allocationSpecification.authorizer.provider ||
-    allocationSpecification.authorizer.id !== '';
+    allocationSpecification.authorizer.owner === userParty &&
+    !allocationSpecification.authorizer.provider &&
+    allocationSpecification.authorizer.id === '';
 
   const amuletLegSidesForUser = allocationSpecification.transferLegSides.filter(
     side => side.instrumentId === 'Amulet'
