@@ -19,9 +19,9 @@ for dir in "${SPLICE_ROOT}"/cluster/images/*; do
   app=$(basename "$dir");
   if [ ! -f "$dir" ] && [ "$app" != "common" ]; then
     n=0
-    MAX_RETRIES=5
+    MAX_RETRIES=6
     # Exponential backoff (capped at MAX_DELAY).
-    BASE_DELAY=6
+    BASE_DELAY=5
     MAX_DELAY=60
     # Client.Timeout from ghcr are not fun
     until [ $n -ge $MAX_RETRIES ]; do
