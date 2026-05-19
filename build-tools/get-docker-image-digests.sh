@@ -20,9 +20,9 @@ for dir in "${SPLICE_ROOT}"/cluster/images/*; do
   if [ ! -f "$dir" ] && [ "$app" != "common" ]; then
     n=0
     MAX_RETRIES=6
-    # Exponential backoff (capped at MAX_DELAY).
-    BASE_DELAY=5
-    MAX_DELAY=60
+    # Exponential backoff (capped at MAX_DELAY_SEC).
+    BASE_DELAY_SEC=5
+    MAX_DELAY_SEC=60
     # Client.Timeout from ghcr are not fun
     until [ $n -ge $MAX_RETRIES ]; do
       if ! digest=$(get_digest "$app"); then
@@ -37,10 +37,10 @@ for dir in "${SPLICE_ROOT}"/cluster/images/*; do
       if [ $n -ge $MAX_RETRIES ]; then
         break
       fi
-      delay=$(( BASE_DELAY * (2 ** (n - 1)) ))
-      delay=$(( delay < MAX_DELAY ? delay : MAX_DELAY ))
-      echo "Failed to get digest for $app, attempt $n/$MAX_RETRIES. Retrying in ${delay} seconds..." >&2
-      sleep "$delay"
+      delay_sec=$(( BASE_DELAY_SEC * (2 ** (n - 1)) ))
+      delay_sec=$(( delay_sec < MAX_DELAY_SEC ? delay_sec : MAX_DELAY_SEC ))
+      echo "Failed to get digest for $app, attempt $n/$MAX_RETRIES. Retrying in ${delay_sec} seconds..." >&2
+      sleep "$delay_sec"
     done
 
     if [ -z "$digest" ]; then
