@@ -566,9 +566,8 @@ template DsoRules with
         newSvParticipantId : Text
         joinedAsOfRound : Round
       controller dso
-      do
-        do newDsoRules <- dsoRules_addSv this arg
-           return DsoRules_AddSvResult with ..
+      do newDsoRules <- dsoRules_addSv this arg
+         return DsoRules_AddSvResult with ..
 
     choice DsoRules_AddSvNode : DsoRules_AddSvOperatorResult
       with
@@ -2123,6 +2122,17 @@ dsoRules_addSv this0 arg@DsoRules_AddSv{..} = do
   create this with
     svs = Map.insert newSvParty svInfo svs
 
+createPerSvContracts : DsoRules -> DsoRules_AddSv -> Update ()
+createPerSvContracts DsoRules{..} DsoRules_AddSv{..} = do
+  void $ create SvRewardState with
+    dso
+    svName = newSvName
+    state = RewardState with
+      lastRoundCollected = Round (joinedAsOfRound.number - 1)
+      numRoundsMissed = 0
+      numRoundsCollected = 0
+      numCouponsIssued = 0
+
 createPerSvPartyContracts : Party -> Party -> Text -> SynchronizerNodeConfigMap -> Optional Decimal -> RelTime -> Update ()
 createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice voteCooldownTime = do
   -- Note: we currently track the amulet-price vote on a per operator basis.
@@ -2147,17 +2157,6 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
     svName = newSvName
     state = NodeState with
       synchronizerNodes
-
-createPerSvContracts : DsoRules -> DsoRules_AddSv -> Update ()
-createPerSvContracts DsoRules{..} DsoRules_AddSv{..} = do
-  void $ create SvRewardState with
-    dso
-    svName = newSvName
-    state = RewardState with
-      lastRoundCollected = Round (joinedAsOfRound.number - 1)
-      numRoundsMissed = 0
-      numRoundsCollected = 0
-      numCouponsIssued = 0
 
 getAndValidateSvParty : DsoRules -> Optional Party -> Update Party
 getAndValidateSvParty _ None = fail "no SV party provided"
