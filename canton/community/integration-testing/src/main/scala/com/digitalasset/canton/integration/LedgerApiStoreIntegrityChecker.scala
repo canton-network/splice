@@ -26,7 +26,7 @@ class LedgerApiStoreIntegrityChecker(
 
   def verifyParticipantLapiIntegrity(
       env: AnyTestConsoleEnvironment,
-      plugins: Seq[EnvironmentSetupPlugin[? <: SharedCantonConfig[?], ?]],
+      plugins: Seq[BaseEnvironmentSetupPlugin[? <: SharedCantonConfig[?], ?]],
   ): Unit = {
     import env.*
 

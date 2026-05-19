@@ -11,7 +11,6 @@ import com.daml.tls.TlsServerConfig
 import com.digitalasset.canton.auth.AsyncForwardingListener
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.config.{AdminServerConfig, ApiLoggingConfig, CantonConfig}
-import com.digitalasset.canton.environment.CantonEnvironment
 import com.digitalasset.canton.integration.{EnvironmentSetupPlugin, TestConsoleEnvironment}
 import com.digitalasset.canton.lifecycle.LifeCycle.{CloseableServer, toCloseableServer}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -112,7 +111,7 @@ class UseOtlp(
     protected val trustCollectionPath: Option[String] = None,
     protected val tls: Option[TlsServerConfig] = None,
     protected val otlpHeaders: Map[String, String] = Map.empty,
-) extends EnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
+) extends EnvironmentSetupPlugin
     with AutoCloseable {
 
   private var otlpServer: OtlpGrpcServer = _
@@ -172,8 +171,7 @@ class UseOtlp(
     grpcServer = startServer(environment)
 
   override def beforeEnvironmentDestroyed(
-      config: CantonConfig,
-      environment: TestConsoleEnvironment,
+      environment: TestConsoleEnvironment
   ): Unit = {}
 
   override def afterEnvironmentDestroyed(config: CantonConfig): Unit =

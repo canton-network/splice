@@ -45,9 +45,9 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
 
   // plugins are registered during construction from a single thread
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  private var plugins: Seq[EnvironmentSetupPlugin[C, E]] = Seq()
+  private var plugins: Seq[BaseEnvironmentSetupPlugin[C, E]] = Seq()
 
-  protected[integration] def registerPlugin(plugin: EnvironmentSetupPlugin[C, E]): Unit =
+  protected[integration] def registerPlugin(plugin: BaseEnvironmentSetupPlugin[C, E]): Unit =
     plugins = plugins :+ plugin
 
   /** Provide an environment for an individual test either by reusing an existing one or creating a
@@ -88,7 +88,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
   protected def manualCreateEnvironment(
       initialConfig: C = envDef.generateConfig,
       configTransform: C => C = identity,
-      runPlugins: EnvironmentSetupPlugin[C, E] => Boolean = _ => true,
+      runPlugins: BaseEnvironmentSetupPlugin[C, E] => Boolean = _ => true,
       testConfigTransform: TestingConfigInternal => TestingConfigInternal = identity,
       testName: Option[String],
   ): BaseTestConsoleEnvironment[C, E] =
@@ -255,7 +255,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
   protected def manualCreateEnvironmentWithPreviousState(
       oldEnvConfig: C,
       configTransform: C => C = identity,
-      runPlugins: EnvironmentSetupPlugin[C, E] => Boolean = _ => true,
+      runPlugins: BaseEnvironmentSetupPlugin[C, E] => Boolean = _ => true,
       testName: Option[String],
   ): BaseTestConsoleEnvironment[C, E] =
     manualCreateEnvironment(

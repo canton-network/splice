@@ -12,6 +12,7 @@ package object integration {
     E#Console & TestEnvironment[? <: C]
   type AnyTestConsoleEnvironment = BaseTestConsoleEnvironment[? <: SharedCantonConfig[?], ? <: Environment[?]]
   type TestConsoleEnvironment = BaseTestConsoleEnvironment[CantonConfig, CantonEnvironment]
+  type EnvironmentSetupPlugin = BaseEnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
   type ConfigTransform = CantonConfig => CantonConfig
   type StorageConfigTransform =
     (ConfigNodeType, String, StorageConfig) => StorageConfig
