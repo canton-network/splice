@@ -8,7 +8,6 @@ import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
-import TransferLegsDisplay from './TransferLegsDisplay';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -16,10 +15,13 @@ import {
   isV2Allocation,
   useWalletClient,
 } from '../contexts/WalletServiceContext';
-import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
+import {
+  AllocationSpecification,
+  SettlementInfo,
+} from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
 import { ContractId } from '@daml/types';
-import { transferLegSidesToTransferLegs } from '../utils/tokenStandard';
 import { usePrimaryParty } from '../hooks';
+import AllocationSpecificationDisplay from './AllocationSpecificationDisplay';
 
 const ListAllocations: React.FC = () => {
   const primaryPartyId = usePrimaryParty();
@@ -68,8 +70,7 @@ const AllocationDisplay: React.FC<{
   const allocationPayload = allocation.payload;
   const v2 = isV2Allocation(allocationPayload);
   const spec = getAllocationSpec(userParty, allocationPayload);
-  const { settlement, transferLegSides } = spec;
-  const transferLegs = transferLegSidesToTransferLegs(spec.authorizer, transferLegSides);
+  const settlement = getAllocationSettlement(allocationPayload);
   return (
     <Card className="allocation" variant="outlined">
       <CardContent
@@ -85,9 +86,9 @@ const AllocationDisplay: React.FC<{
             <Chip label={v2 ? 'V2' : 'V1'} color={v2 ? 'primary' : 'default'} size="small" />
           </Stack>
           <AllocationSettlementDisplay settlement={settlement} />
-          <TransferLegsDisplay
+          <AllocationSpecificationDisplay
             parentId={allocation.contractId}
-            transferLegs={transferLegs}
+            spec={spec}
             getActionButton={() => (
               <WithdrawAllocationButton
                 withdrawFn={() =>
@@ -118,12 +119,7 @@ function getAllocationSpec(
       ? ['SenderSide', v1.transferLeg.receiver]
       : ['ReceiverSide', v1.transferLeg.sender];
   return {
-    settlement: {
-      executors: [v1.settlement.executor],
-      settlementRef: v1.settlement.settlementRef,
-      settlementDeadline: null,
-      meta: v1.settlement.meta,
-    },
+    settlementDeadline: null,
     transferLegSides: [
       {
         transferLegId: payload.allocation.transferLegId,
@@ -139,6 +135,19 @@ function getAllocationSpec(
     nextIterationFunding: null,
     committed: false,
     admin: payload.allocation.transferLeg.instrumentId.admin,
+  };
+}
+
+function getAllocationSettlement(payload: AmuletAllocation): SettlementInfo {
+  if (isV2Allocation(payload)) {
+    return payload.settlement;
+  }
+
+  return {
+    executors: [payload.allocation.settlement.executor],
+    id: payload.allocation.settlement.settlementRef.id,
+    cid: payload.allocation.settlement.settlementRef.cid,
+    meta: payload.allocation.settlement.meta,
   };
 }
 

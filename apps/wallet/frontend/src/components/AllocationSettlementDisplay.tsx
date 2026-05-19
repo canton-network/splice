@@ -3,7 +3,6 @@
 import React from 'react';
 import { Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
-import { DateWithDurationDisplay } from '@lfdecentralizedtrust/splice-common-frontend';
 import BftAnsEntry from './BftAnsEntry';
 import MetaDisplay from './MetaDisplay';
 import { SettlementInfo } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
@@ -11,22 +10,22 @@ import { SettlementInfo } from '@daml.js/splice-api-token-allocation-v2/lib/Spli
 const AllocationSettlementDisplay: React.FC<{
   settlement: SettlementInfo;
 }> = ({ settlement }) => {
-  const { settlementDeadline, settlementRef, executors, meta: settlementMeta } = settlement;
+  const { id, cid, executors, meta: settlementMeta } = settlement;
 
   return (
     <Stack>
       <Stack>
-        {settlementRef.id ? (
+        {id ? (
           <Stack maxWidth="md">
             <Typography className="settlement-id" variant="body2" noWrap>
-              SettlementRef id: {settlementRef.id}
+              Settlement id: {id}
             </Typography>
           </Stack>
         ) : null}
-        {settlementRef.cid ? (
+        {cid ? (
           <Stack maxWidth="md">
             <Typography className="settlement-cid" variant="body2" noWrap>
-              SettlementRef cid: {settlementRef.cid}
+              Settlement cid: {cid}
             </Typography>
           </Stack>
         ) : null}
@@ -37,14 +36,6 @@ const AllocationSettlementDisplay: React.FC<{
           {executors.map((executor: string, idx: number) => (
             <BftAnsEntry key={idx} partyId={executor} className="settlement-executor" />
           ))}
-        </Stack>
-        <Stack>
-          {settlementDeadline ? (
-            <Typography variant="body2">
-              Settlement deadline:{' '}
-              <DateWithDurationDisplay datetime={settlementDeadline} enableDuration />
-            </Typography>
-          ) : null}
         </Stack>
       </Stack>
       {Object.keys(settlementMeta.values).length > 0 ? (
