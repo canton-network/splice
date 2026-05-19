@@ -115,7 +115,12 @@ done
 for sv in "${other_svs[@]}"; do
   token=$(cncluster get_token "$sv" sv)
   echo "Casting vote on $sv"
-  subdomain=$(get_resolved_config | yq ".svs.$sv.subdomain // \"$sv-eng\"")
+  if [ "$sv" == "sv" ]; then
+    default_subdomain="$sv"
+  else
+    default_subdomain="$sv-eng"
+  fi
+  subdomain=$(get_resolved_config | yq ".svs.$sv.subdomain // \"$default_subdomain\"")
 
   curl -s --fail-with-body --show-error --retry 10 --retry-delay 10 --retry-all-errors \
     -X POST "https://sv.$subdomain.$GCP_CLUSTER_HOSTNAME/api/sv/v0/admin/sv/votes" \
