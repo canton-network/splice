@@ -130,12 +130,14 @@ function configureIstiod(
       // https://istio.io/latest/docs/ops/integrations/prometheus/#option-1-metrics-merging  disable as we don't use annotations
       enablePrometheusMerge: false,
       defaultConfig: {
-        // It is expected that a single load balancer (GCP NLB) is used in front of K8s.
-        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#http-https
-        // Also see:
+        // The GCP NLB with externalTrafficPolicy: Local preserves the client's
+        // source IP without adding X-Forwarded-For hops, so there are no trusted
+        // proxies to account for. This ensures remoteIpBlocks in AuthorizationPolicy
+        // uses the direct connection IP rather than the X-Forwarded-For header.
+        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#network
+        // By contrast, the GKE L7 Gateway path overrides this to 2 via pod annotation,
+        // the minimum value per testing (as that gateway adds more Envoy hops).
         // https://istio.io/latest/docs/ops/configuration/traffic-management/network-topologies/#configuring-x-forwarded-for-headers
-        // This controls the value populated by the ingress gateway in the X-Envoy-External-Address header which can be reliably used
-        // by the upstream services to access client’s original IP address.
         gatewayTopology: {
           numTrustedProxies: 0,
         },
