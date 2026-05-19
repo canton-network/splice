@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.util.AssignedContract
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.*
 
 class CloseVoteRequestTrigger(
     override protected val context: TriggerContext,
@@ -46,6 +47,10 @@ class CloseVoteRequestTrigger(
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
       amuletRulesId = amuletRules.contractId
+      svParties = dsoRules.contract.payload.svs.keySet().asScala.toSet
+      currentBindings <- store
+        .listSvGovernanceVoters()
+        .map(_.filter(binding => svParties.contains(binding.payload.sv)).map(_.contractId))
       result <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.High)
         .submit(
@@ -57,10 +62,7 @@ class CloseVoteRequestTrigger(
                 voteRequestCid,
                 java.util.Optional.of(amuletRulesId),
                 Optional.of(controller),
-                // currentBindings: not supplied by this automation slice;
-                // gov-voter staleness is checked by a separate path. Passing
-                // Optional.empty() preserves pre-staleness close behavior.
-                Optional.empty(),
+                Optional.of(currentBindings.asJava),
               )
             )
           ),
