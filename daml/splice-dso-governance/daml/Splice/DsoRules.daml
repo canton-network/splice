@@ -843,10 +843,8 @@ template DsoRules with
       controller governanceVoter
       do
         require "Action must be governance-voter eligible" (isGovernanceVoterAction action)
-        binding <- fetch bindingCid
-        require "Binding dso must match rules dso" (binding.dso == dso)
-        require "Caller must match binding governance voter" (governanceVoter == binding.governanceVoter)
-        requesterName <- case binding.sv `Map.lookup` svs of
+        svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = governanceVoter) bindingCid
+        requesterName <- case svGovernanceVoter.sv `Map.lookup` svs of
           None -> fail "Represented SV is not an SV"
           Some info -> pure (info.name)
         requireWellformedReason config reason
@@ -858,11 +856,11 @@ template DsoRules with
                 now `addRelTime` config.voteRequestTimeout
         require "There is some time to vote" (now < voteBefore)
         let initialVote = Vote with
-              sv = binding.sv
+              sv = svGovernanceVoter.sv
               accept = True
               reason = Reason with url = ""; body = "I accept, as I requested the vote."
               optCastAt = Some now
-              castBy = Some binding.governanceVoter
+              castBy = Some svGovernanceVoter.governanceVoter
               castByRole = Some VCR_GovernanceVoter
         voteRequest <- create VoteRequest with
           dso
@@ -933,11 +931,9 @@ template DsoRules with
       do
         -- validate vote parameters
         requireWellformedVote config vote
-        binding <- fetch bindingCid
-        require "Binding dso must match rules dso" (binding.dso == dso)
-        require "Vote SV must match binding SV" (vote.sv == binding.sv)
-        require "Vote signer must match binding governance voter" (castBy == binding.governanceVoter)
-        voterName <- case Map.lookup binding.sv svs of
+        svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = castBy) bindingCid
+        require "Vote SV must match binding SV" (vote.sv == svGovernanceVoter.sv)
+        voterName <- case Map.lookup svGovernanceVoter.sv svs of
           None -> fail "Voter is not an SV"
           Some info -> pure info.name
         -- validate request before archiving it
@@ -947,13 +943,13 @@ template DsoRules with
         let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
         require "Vote request has expired" (now < castDeadline)
         -- rate limit casting of votes by the same represented SV to avoid blocking progress
-        enforceCooldown ("voteCooldownTime for " <> partyToText binding.sv) (getVoteCooldownTime config) $ do
+        enforceCooldown ("voteCooldownTime for " <> partyToText svGovernanceVoter.sv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
         archive requestCid
         -- store vote in the represented SV's vote slot
         let recordedVote = vote with
-              sv = binding.sv
+              sv = svGovernanceVoter.sv
               optCastAt = Some now
               castBy = Some castBy
               castByRole = Some VCR_GovernanceVoter

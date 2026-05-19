@@ -33,3 +33,10 @@ template SvGovernanceVoter
 
 instance HasCheckedFetch SvGovernanceVoter ForDso where
   contractGroupId SvGovernanceVoter {..} = ForDso with dso
+
+-- The governance-voter party is treated as the binding's owner: choices
+-- controlled by that party can use ForOwner to validate, in a single step,
+-- both that the binding belongs to the expected DSO party and that the
+-- caller is the authoritative governance voter on the binding.
+instance HasCheckedFetch SvGovernanceVoter ForOwner where
+  contractGroupId SvGovernanceVoter {..} = ForOwner with dso; owner = governanceVoter
