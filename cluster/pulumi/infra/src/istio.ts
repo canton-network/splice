@@ -137,7 +137,7 @@ function configureIstiod(
         // This controls the value populated by the ingress gateway in the X-Envoy-External-Address header which can be reliably used
         // by the upstream services to access client’s original IP address.
         gatewayTopology: {
-          numTrustedProxies: 1,
+          numTrustedProxies: 0,
         },
         // wait for the istio container to start before starting apps to avoid network errors
         holdApplicationUntilProxyStarts: true,
