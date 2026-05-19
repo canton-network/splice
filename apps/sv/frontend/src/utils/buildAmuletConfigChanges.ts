@@ -195,7 +195,7 @@ function buildIssuanceCurveChanges(
   const initialValues = [
     {
       fieldName: 'issuanceCurveInitialValueAmuletToIssuePerYear',
-      label: 'Minting curve: Initial value: Amulet to issue per year',
+      label: 'Minting curve: Initial value: Amulet to Issue per year',
       currentValue: before?.initialValue?.amuletToIssuePerYear || '',
       newValue: after?.initialValue?.amuletToIssuePerYear || '',
     },
@@ -255,7 +255,7 @@ function buildIssuanceCurveChanges(
           },
           {
             fieldName: `issuanceCurveFutureValues${idx}AmuletToIssuePerYear`,
-            label: `Minting curve: Step ${idx}: Amulet to issue per year`,
+            label: `Minting curve: Step ${idx}: Amulet to Issue per year`,
             currentValue: fv._2.amuletToIssuePerYear || '',
             newValue: after?.futureValues[idx]._2.amuletToIssuePerYear || '',
           },
