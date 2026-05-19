@@ -143,12 +143,12 @@ class SingleScanConnection private[client] (
               case Failure(e) =>
                 MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
                   implicit ec2 =>
-                    metrics.failuresPerConnection.mark()(m.merge(ec2))
+                    metrics.callPerConnection.mark()(m.merge(ec2))
                 }
                 timer.stop()(m)
               case Success(_) =>
                 MetricsContext.withMetricLabels(("outcome", "ok")) { implicit ec2 =>
-                  metrics.failuresPerConnection.mark()(m.merge(ec2))
+                  metrics.callPerConnection.mark()(m.merge(ec2))
                 }
                 timer.stop()(m)
             }
