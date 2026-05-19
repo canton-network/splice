@@ -135,38 +135,6 @@ class LsuIntegrationTest
                   ),
                 )
               }
-              .andThen(c =>
-                c.copy(
-                  svApps = c.svApps ++
-                    Seq(
-                      InstanceName.tryCreate("sv1Local") ->
-                        c
-                          .svApps(InstanceName.tryCreate(s"sv1"))
-                          .focus(_.localSynchronizerNodes)
-                          .modify(c =>
-                            c.copy(
-                              additionalLegacy = Seq(c.current),
-                              current = c.successor.getOrElse(
-                                throw new IllegalStateException("successor must be set")
-                              ),
-                              successor = None,
-                            )
-                          ),
-                      InstanceName.tryCreate("sv1NoLegacyLocal") ->
-                        c
-                          .svApps(InstanceName.tryCreate(s"sv1"))
-                          .focus(_.localSynchronizerNodes)
-                          .modify(c =>
-                            c.copy(
-                              current = c.successor.getOrElse(
-                                throw new IllegalStateException("successor must be set")
-                              ),
-                              successor = None,
-                            )
-                          ),
-                    )
-                )
-              )
           )(config)
       })
       .withBftSequencersSuccessor
@@ -176,6 +144,38 @@ class LsuIntegrationTest
       .addConfigTransform((_, config) =>
         ConfigTransforms
           .bumpCantonSyncSuccessorPortsBy(22_000)(config)
+      )
+      .addConfigTransform((_, c) =>
+        c.copy(
+          svApps = c.svApps ++
+            Seq(
+              InstanceName.tryCreate("sv1Local") ->
+                c
+                  .svApps(InstanceName.tryCreate(s"sv1"))
+                  .focus(_.localSynchronizerNodes)
+                  .modify(c =>
+                    c.copy(
+                      additionalLegacy = Seq(c.current),
+                      current = c.successor.getOrElse(
+                        throw new IllegalStateException("successor must be set")
+                      ),
+                      successor = None,
+                    )
+                  ),
+              InstanceName.tryCreate("sv1NoLegacyLocal") ->
+                c
+                  .svApps(InstanceName.tryCreate(s"sv1"))
+                  .focus(_.localSynchronizerNodes)
+                  .modify(c =>
+                    c.copy(
+                      current = c.successor.getOrElse(
+                        throw new IllegalStateException("successor must be set")
+                      ),
+                      successor = None,
+                    )
+                  ),
+            )
+        )
       )
       // use the standalone participant
       .addConfigTransforms((_, config) => {
@@ -764,7 +764,9 @@ class LsuIntegrationTest
           .listDsoSequencers()
           .loneElement
           .sequencers
-          .filter(_.svName == sv1LocalBackend.config.onboarding.value.name)
+          .filter(c =>
+            c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
+          )
           .loneElement
           .serial shouldBe Some(1)
       }
