@@ -69,7 +69,7 @@ test("list transfer instructions", async () => {
   );
 });
 
-test("list txs", async () => {
+test("list txs v1", async () => {
   const logSpy = vi.spyOn(console, "log");
 
   const program = createProgram();
