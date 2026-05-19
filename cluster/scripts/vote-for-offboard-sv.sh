@@ -103,7 +103,7 @@ for ((i=2; i<=DSO_SIZE; i++)); do
 done
 
 # extra SVs from config (e.g. sv-da-1, sv)
-extra_svs=$(get_resolved_config | yq '.svs | keys | .[] | select(test("^(default|sv-[0-9]+|sv)$") | not)')
+extra_svs=$(get_resolved_config | yq '.svs | keys | .[] | select(test("^(default|sv-[0-9]+)$") | not)')
 for sv in $extra_svs; do
   if [ "$sv" == "$SV_NAMESPACE" ]; then
     echo "Skipping vote from $sv (being offboarded)"
