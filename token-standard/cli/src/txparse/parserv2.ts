@@ -108,23 +108,29 @@ export class V2TransactionParser {
     holdingsChange: EventLog_HoldingsChange,
     cachedHoldings: Map<string, Holding>,
   ): Promise<TokenStandardEvent> {
-    // TODO: exclude holdings that are both in input and output
+    // exclude holdings that are both in input and output
+    const inputHoldingCids = holdingsChange.inputHoldingCids.filter(
+      (cid) => holdingsChange.outputHoldingCids.indexOf(cid) === -1,
+    );
+    const outputHoldingCids = holdingsChange.outputHoldingCids.filter(
+      (cid) => holdingsChange.inputHoldingCids.indexOf(cid) === -1,
+    );
+
     const resolvedInputHoldings = (
       await Promise.all(
-        holdingsChange.inputHoldingCids.map((cid) =>
-          this.resolveHolding(cid, cachedHoldings),
-        ),
+        inputHoldingCids.map((cid) => this.resolveHolding(cid, cachedHoldings)),
       )
     ).filter((h) => h !== null);
-    const unlockedInputHoldings = resolvedInputHoldings.filter((h) => !h.lock);
-    const lockedInputHoldings = resolvedInputHoldings.filter((h) => !!h.lock);
     const resolvedOutputHoldings = (
       await Promise.all(
-        holdingsChange.outputHoldingCids.map((cid) =>
+        outputHoldingCids.map((cid) =>
           this.resolveHolding(cid, cachedHoldings),
         ),
       )
     ).filter((h) => h !== null);
+
+    const unlockedInputHoldings = resolvedInputHoldings.filter((h) => !h.lock);
+    const lockedInputHoldings = resolvedInputHoldings.filter((h) => !!h.lock);
     const unlockedOutputHoldings = resolvedOutputHoldings.filter(
       (h) => !h.lock,
     );
