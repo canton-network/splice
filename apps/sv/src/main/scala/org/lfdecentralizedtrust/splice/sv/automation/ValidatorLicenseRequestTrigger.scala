@@ -51,6 +51,10 @@ class ValidatorLicenseRequestTrigger(
     val payload = task.payload
     val svParty = store.key.svParty
 
+    logger.info(
+      s"Running ValidatorLicenseRequestTrigger for ${payload.validator} ValidatorLicenseRequest"
+    )
+
     if (payload.sponsor != svParty.toProtoPrimitive) {
       logger.debug(
         s"Skipping ValidatorLicenseRequest ${task.contractId} as it is sponsored by ${payload.sponsor}, not us ($svParty)"
