@@ -229,7 +229,6 @@ const V2AllocationRequestActionButton: React.FC<{
   const { createAllocationV2, withdrawAllocationV2 } = useWalletClient();
   const createAllocationV2Mutation = useMutation({
     mutationFn: async () => {
-      // TODO: what settlementDeadline to use?
       const req = openApiV2RequestFromAllocationRequest(
         settlement,
         amuletLegSidesForUser,
