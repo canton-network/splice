@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { onAuthExpired } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { User } from 'oidc-client-ts';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { AuthState, useAuth } from 'react-oidc-context';
@@ -96,6 +97,14 @@ export const UserProvider: React.FC<{
       auth.signinRedirect({ prompt: 'login', state });
     }
   };
+
+  const reauthOnExpiry = useCallback(() => {
+    if (auth === undefined) return;
+    const state = { redirectTo: window.location.href.replace(window.location.origin, '') };
+    auth.signinRedirect({ state });
+  }, [auth]);
+
+  useEffect(() => onAuthExpired(reauthOnExpiry), [reauthOnExpiry]);
 
   useEffect(() => {
     async function f(user: User) {
