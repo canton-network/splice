@@ -5,7 +5,7 @@
 module Splice.DsoRules where
 
 import Prelude hiding (all)
-import DA.Action (void, unless)
+import DA.Action (foldlA, void, unless)
 import DA.Assert
 import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
@@ -33,7 +33,6 @@ import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.DSO.SvState
-import Splice.SvWeight
 import Splice.Schedule
 import Splice.Util
 import Splice.CometBft()
@@ -116,12 +115,14 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to create an UnallocatedUnclaimedActivityRecord contract.
   | SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
-  | SRARC_AddSvRewardWeight DsoRules_AddSvRewardWeight
-    -- ^ Voted action to add the weight of an SV.
+  | SRARC_AddHostedSv DsoRules_AddHostedSv
+    -- ^ Voted action to directly add a hosted SV.
   | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2
-    -- ^ Voted action to update the weight of an SV.
-  | SRARC_RemoveSvRewardWeight DsoRules_RemoveSvRewardWeight
-    -- ^ Voted action to remove the weight of an SV.
+    -- ^ Voted action to update the weight of a hosted SV.
+  | SRARC_RemoveHostedSv DsoRules_RemoveHostedSv
+    -- ^ Voted action to remove a hosted SV.
+  | SRARC_AddSvNode DsoRules_AddSvNode
+    -- ^ Voted action to directly add an SV node.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -134,9 +135,18 @@ data AnsEntryContext_ActionRequiringConfirmation
 -- | Information about SVs relevant to DSO governance.
 data SvInfo = SvInfo with
     name : Text -- ^ Human-readable name; must be unique.
-    joinedAsOfRound : Round -- ^ Round in which the SV joined
-    svRewardWeight : Int -- ^ __Deprecated__ in favor of `SvWeight`.
+    joinedAsOfRound : Round -- ^ __Deprecated__ in favor of `HostedSvInfo`.
+    svRewardWeight : Int -- ^ __Deprecated__ in favor of `HostedSvInfo`.
     participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
+  deriving (Eq, Show)
+
+-- | Information about SVs relevant to DSO governance.
+data HostedSvInfo = HostedSvInfo with
+    name : Text -- ^ Human-readable name; must be unique.
+    joinedAsOfRound : Round -- ^ Round in which the SV joined
+    svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
+    participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
+    svOperator : Party -- ^ The SV operator party responsible for creating reward coupons for the SV.
   deriving (Eq, Show)
 
 -- | Information about offboarded svs
@@ -153,6 +163,14 @@ data DsoSummary = DsoSummary with
       -- ^ The number of votes required for considering a confirmation, or a request for a vote
   deriving (Eq, Show)
 
+data SvMigrationData = SvMigrationData with
+    svParty : Party -- ^ The SV party.
+    svName : Text -- ^ Human-readable name; must be unique.
+    svParticipantId : Text -- ^ Participant ID of the SV.
+    svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
+  deriving (Eq, Show)
+
+
 -- | Choice return types
 -------------------------
 -- In order to support upgrades of the Daml models, all choices should return records, which can
@@ -164,6 +182,10 @@ data DsoRules_AddSvResult = DsoRules_AddSvResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_AddSvOperatorResult = DsoRules_AddSvOperatorResult with
+    newDsoRules : ContractId DsoRules
+
+data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
+    svRewardStateCid : ContractId SvRewardState
     newDsoRules : ContractId DsoRules
 
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
@@ -211,15 +233,12 @@ data DsoRules_UpdateSvRewardWeightResult = DsoRules_UpdateSvRewardWeightResult w
     newDsoRules : ContractId DsoRules
 
 data DsoRules_UpdateSvRewardWeight_V2Result = DsoRules_UpdateSvRewardWeight_V2Result with
-    svWeightCid : ContractId SvWeight
+    newDsoRules : ContractId DsoRules
 
-data DsoRules_AddSvRewardWeightResult = DsoRules_AddSvRewardWeightResult with
-    svWeightCid : ContractId SvWeight
+data DsoRules_RemoveHostedSvResult = DsoRules_RemoveHostedSvResult with
+    newDsoRules : ContractId DsoRules
 
-data DsoRules_RemoveSvRewardWeightResult = DsoRules_RemoveSvRewardWeightResult
-
-data DsoRules_MigrateSvWeightsResult = DsoRules_MigrateSvWeightsResult with
-    svWeightCids : [ContractId SvWeight]
+data DsoRules_MigrateHostedSvsResult = DsoRules_MigrateHostedSvsResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_GrantFeaturedAppRightResult = DsoRules_GrantFeaturedAppRightResult with
@@ -285,6 +304,9 @@ data DsoRules_TerminateSubscriptionResult = DsoRules_TerminateSubscriptionResult
 data DsoRules_ReceiveSvRewardCouponResult = DsoRules_ReceiveSvRewardCouponResult with
     svRewardState : ContractId SvRewardState
     svRewardCoupons : [ContractId SvRewardCoupon]
+
+data DsoRules_ReceiveSvRewardCoupon_V2Result = DsoRules_ReceiveSvRewardCoupon_V2Result with
+    svRewardStatesWithSvRewardCoupons : [(ContractId SvRewardState, [ContractId SvRewardCoupon])]
 
 data DsoRules_ClaimExpiredRewardsResult = DsoRules_ClaimExpiredRewardsResult with
     unclaimedReward: Optional (ContractId UnclaimedReward)
@@ -514,13 +536,14 @@ data TrafficState = TrafficState with
 template DsoRules with
     dso : Party
     epoch : Int
-    svs : Map.Map Party SvInfo
+    svs : Map.Map Party SvInfo -- ^ List of SV nodes.
     offboardedSvs : Map.Map Party OffboardedSvInfo
     dsoDelegate : Party
       -- ^ __Deprecated__ in favor of delegateless automation.
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
+    hostedSvs : Optional (Map.Map Party HostedSvInfo) -- ^ List of hosted SVs.
   where
     ensure
       config.numUnclaimedRewardsThreshold > 0
@@ -547,17 +570,13 @@ template DsoRules with
         do newDsoRules <- dsoRules_addSv this arg
            return DsoRules_AddSvResult with ..
 
-    choice DsoRules_AddSvOperator : DsoRules_AddSvOperatorResult
+    choice DsoRules_AddSvNode : DsoRules_AddSvOperatorResult
       with
-        newSvParty : Party
-        -- DRAFT note for the reviewer: In the future, newSvName should not be used, since an SV operator may operate multiple SVs.
-        -- Removing newSvName in this proposal would require modifying the voting flows to accept votes for all SVs (SVs operating a node and hosted SVs),
-        -- which is not a requirement in the current proposal.
-        newSvName : Text
-        newSvParticipantId : Text
-        joinedAsOfRound : Round
+        newSvOperatorParty : Party
+        newSvNodeName : Text
+        newSvNodeParticipantId : Text
       controller dso
-      do newDsoRules <- dsoRules_AddSvOperator this arg
+      do newDsoRules <- dsoRules_AddSvNode this arg
          return DsoRules_AddSvOperatorResult with ..
 
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
@@ -590,8 +609,45 @@ template DsoRules with
               config
               initialTrafficState
               isDevNet
+              hostedSvs
 
             return DsoRules_OffboardSvResult with ..
+
+    choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
+      with
+        newSvParty : Party
+        newSvName : Text
+        newSvRewardWeight : Int
+        newSvParticipantId : Text
+        joinedAsOfRound : Round
+        svOperator : Party
+      controller dso
+      do
+        -- Sanity checks
+        let isSvOperator = flip Map.member svs
+        require "svOperator is an SV operator" $ isSvOperator svOperator
+
+        svRewardStateCid <- create SvRewardState with
+          dso
+          svName = newSvName
+          state = RewardState with
+            lastRoundCollected = Round (joinedAsOfRound.number - 1)
+            numRoundsMissed = 0
+            numRoundsCollected = 0
+            numCouponsIssued = 0
+
+        -- register the new SV in the DsoRules
+        let hostedSvInfo = HostedSvInfo with
+              name = newSvName
+              joinedAsOfRound
+              svRewardWeight = newSvRewardWeight
+              participantId = newSvParticipantId
+              svOperator
+            updatedHostedSvs = Map.insert newSvParty hostedSvInfo (fromOptional Map.empty hostedSvs)
+
+        newDsoRules <- create this with hostedSvs = Some updatedHostedSvs
+
+        pure DsoRules_AddHostedSvResult with newDsoRules; svRewardStateCid
 
     -- Update an SV's Status report
     nonconsuming choice DsoRules_SubmitStatusReport : DsoRules_SubmitStatusReportResult
@@ -613,6 +669,7 @@ template DsoRules with
               status = Some status
         return DsoRules_SubmitStatusReportResult with ..
 
+    -- TODO: Deprecate
     -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
@@ -1003,7 +1060,7 @@ template DsoRules with
     -- SV weight management
     -----------------------
 
-    -- TODO: Deprecate once all SVs have migrated to SvWeight contracts.
+    -- TODO: Deprecate once all SVs have migrated to `hostedSvs`.
     choice DsoRules_UpdateSvRewardWeight : DsoRules_UpdateSvRewardWeightResult
       with
         svParty : Party
@@ -1021,72 +1078,78 @@ template DsoRules with
 
     choice DsoRules_UpdateSvRewardWeight_V2 : DsoRules_UpdateSvRewardWeight_V2Result
       with
-        svWeightCid : ContractId SvWeight
+        svParty : Party
         newRewardWeight : Int
       controller dso
       do
-        svWeight <- fetchAndArchive (ForDso with dso) svWeightCid
-        svWeightCid <- create svWeight with
-          weight = newRewardWeight
-        pure DsoRules_UpdateSvRewardWeight_V2Result with svWeightCid
+        require "New reward weight is positive" (newRewardWeight > 0)
+        let hostedSvsMap = fromOptional Map.empty hostedSvs
+        case Map.lookup svParty hostedSvsMap of
+          None -> fail "SV party is not registered"
+          Some hostedSv -> do
+            let newHostedSv = hostedSv with svRewardWeight = newRewardWeight
+                newHostedSvs = Map.insert svParty newHostedSv hostedSvsMap
+            newDsoRules <- create this with hostedSvs = Some newHostedSvs
+            pure DsoRules_UpdateSvRewardWeight_V2Result with newDsoRules
 
-    nonconsuming choice DsoRules_AddSvRewardWeight : DsoRules_AddSvRewardWeightResult
+    choice DsoRules_RemoveHostedSv : DsoRules_RemoveHostedSvResult
       with
-        svOperator : Party
-        sv : Party
-        rewardWeight : Int
+        svParty : Party
       controller dso
       do
-        -- Sanity checks
-        let isSvOperator = flip Map.member svs
-        require "svOperator is an SV operator" $ isSvOperator svOperator
+        let hostedSvsMap = fromOptional Map.empty hostedSvs
+        case Map.lookup svParty hostedSvsMap of
+          None -> fail "SV party is not registered"
+          Some _ -> do
+            let newHostedSvs = Map.delete svParty hostedSvsMap
+            newDsoRules <- create this with hostedSvs = Some newHostedSvs
+            pure DsoRules_RemoveHostedSvResult with newDsoRules
 
-        svWeightCid <- create SvWeight with dso; sv; svOperator; weight = rewardWeight
-        pure DsoRules_AddSvRewardWeightResult with svWeightCid
-
-    nonconsuming choice DsoRules_RemoveSvRewardWeight : DsoRules_RemoveSvRewardWeightResult
-      with
-        svWeightCid : ContractId SvWeight
-      controller dso
-      do
-        _ <- fetchAndArchive (ForDso with dso) svWeightCid
-        pure DsoRules_RemoveSvRewardWeightResult
-
-    -- TODO: Deprecate once all SVs have migrated to SvWeight contracts.
+    -- TODO: Deprecate once all SVs have migrated to `hostedSvs`.
     -- DRAFT note for the reviewer: Please, check migration procedure in the PR description.
-    choice DsoRules_MigrateSvWeights : DsoRules_MigrateSvWeightsResult
+    choice DsoRules_MigrateHostedSvs : DsoRules_MigrateHostedSvsResult
       with
         -- Complete on-ledger reward weight distribution for the SVs operated by this SV operator.
         -- The sum of these weights must match the SV operator's current legacy reward weight.
-        -- Extra beneficiaries used only for internal reward sharing must not be migrated as SvWeights;
+        -- Extra beneficiaries used only for internal reward sharing must not be migrated as weights on-ledger;
         -- their share should be included in the corresponding SV's weight and configured separately
         -- as beneficiary splits in the SV app.
-        svWeights : [(Party, Int)]
+        svsMigrationData : [SvMigrationData]
+        openRoundCid : ContractId OpenMiningRound
         sv : Party
       controller sv
       do
         case Map.lookup sv svs of
-          None -> fail "Not a sv"
+          None -> fail "SV is not an SV operator"
           Some svInfo -> do
             -- Sanity checks
-            let (svParties, rewardWeights) = unzip svWeights
+            let (svParties, rewardWeights) = unzip $ (\d -> (d.svParty, d.svRewardWeight)) <$> svsMigrationData
             require "Total SV weights match SV operator weight" (sum rewardWeights == svInfo.svRewardWeight)
             require "SVs are unique" (unique svParties)
+
+            -- check round
+            now <- getTime
+            openRound <- fetchReferenceData (ForDso with dso) openRoundCid
+            require "OpenRound is open" (openRound.opensAt <= now)
 
             -- Invalidate the SV operator's legacy reward weight.
             let newSv = svInfo with svRewardWeight = 0
                 newSvs = Map.insert sv newSv svs
-            newDsoRules <- create this with svs = newSvs
+            updatedDsoRulesWithLegacyWeightInvalidated <- create this with svs = newSvs
 
-            -- Create hosted SVs weigths
-            svWeightCids <- forA svWeights $ \(svParty, rewardWeight) ->
-              create SvWeight with
-                dso
-                sv = svParty
-                svOperator = sv
-                weight = rewardWeight
+            -- Add hosted SVs
+            let addHostedSv self' svMigrationData = do
+                  DsoRules_AddHostedSvResult {newDsoRules} <- exercise self' DsoRules_AddHostedSv with
+                    newSvParty = svMigrationData.svParty
+                    newSvName = svMigrationData.svName
+                    newSvRewardWeight = svMigrationData.svRewardWeight
+                    newSvParticipantId = svMigrationData.svParticipantId
+                    joinedAsOfRound = openRound.round
+                    svOperator = sv
+                  pure newDsoRules
+            newDsoRules <- foldlA addHostedSv updatedDsoRulesWithLegacyWeightInvalidated svsMigrationData
 
-            pure DsoRules_MigrateSvWeightsResult with svWeightCids; newDsoRules
+            pure DsoRules_MigrateHostedSvsResult with newDsoRules
 
 
     -- App rights management
@@ -1160,6 +1223,7 @@ template DsoRules with
     -- SV onboarding
     ----------------
 
+    -- TODO: Deprecate
     nonconsuming choice DsoRules_StartSvOnboarding : DsoRules_StartSvOnboardingResult
       with
         candidateName : Text
@@ -1175,6 +1239,7 @@ template DsoRules with
         onboardingRequest <- create SvOnboardingRequest with ..
         return DsoRules_StartSvOnboardingResult with ..
 
+    -- TODO: Deprecate
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
       with
         cid: ContractId SvOnboardingRequest
@@ -1185,6 +1250,7 @@ template DsoRules with
         exercise cid SvOnboardingRequest_Expire
         return DsoRules_ExpireSvOnboardingRequestResult
 
+    -- TODO: Deprecate
     nonconsuming choice DsoRules_ArchiveSvOnboardingRequest : DsoRules_ArchiveSvOnboardingRequestResult
       with
         svOnboardingRequestCid: ContractId SvOnboardingRequest
@@ -1199,6 +1265,7 @@ template DsoRules with
         require "SV name matches" ((fromSome maybeSv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
 
+    -- TODO: Deprecate
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
       with
         newSvParty : Party
@@ -1225,6 +1292,7 @@ template DsoRules with
           expiresAt
         return DsoRules_ConfirmSvOnboardingResult with ..
 
+    -- TODO: Deprecate
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
       with
         cid: ContractId SvOnboardingConfirmed
@@ -1409,7 +1477,7 @@ template DsoRules with
     -- Reward management driven directly by the DSO delegates
     ---------------------------------------------------------
 
-    -- TODO: Deprecate once all SVs have migrated to SvWeight contracts.
+    -- TODO: Deprecate once all SVs have migrated to `hostedSvs`.
     nonconsuming choice DsoRules_ReceiveSvRewardCoupon : DsoRules_ReceiveSvRewardCouponResult
       with
         sv : Party
@@ -1458,66 +1526,71 @@ template DsoRules with
                 svRewardState = newRewardStateCid
                 svRewardCoupons = couponCids
 
-    nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCouponResult
+    nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCoupon_V2Result
       with
         sv : Party
         openRoundCid : ContractId OpenMiningRound
-        rewardStateCid : ContractId SvRewardState
-        -- All SvWeights for SVs operated by this SV operator, each with an optional beneficiary split.
-        -- If the beneficiary list is empty, the SvWeight's SV receives one coupon with the full weight.
-        -- Otherwise, one coupon is issued per listed beneficiary, and the listed weights must sum to the SvWeight weight.
-        svWeights : [(ContractId SvWeight, [(Party, Int)])]
+        -- SvRewardStates to collect rewards for in this call, each with an optional beneficiary split.
+        -- Each SvRewardState must correspond to an SV operated by this SV operator.
+        -- If the beneficiary list is empty, the corresponding SV receives one coupon with the full weight.
+        -- Otherwise, one coupon is issued per listed beneficiary, and the listed weights must sum to the SV's reward weight.
+        rewardStatesWithBeneficiaries : [(ContractId SvRewardState, [(Party, Int)])]
       controller sv
       do
         case Map.lookup sv svs of
-          None -> fail "SV is not an SV"
-          Some info -> do
+          None -> fail "SV is not an SV operator"
+          Some _ -> do
             -- check round
             now <- getTime
             openRound <- fetchReferenceData (ForDso with dso) openRoundCid
             require "OpenRound is open" (openRound.opensAt <= now)
 
-            beneficiariesPerSvWithSv <- forA svWeights $ \(svWeightCid, beneficiaries) -> do
-              svWeight <- fetchChecked (ForOwner with dso; owner = sv) svWeightCid
-              let defaultBeneficiaries = [(svWeight.sv, svWeight.weight)]
-              case beneficiaries of
-                [] -> pure (defaultBeneficiaries, svWeight.sv)
-                _ -> do
-                  require "Total beneficiary weight matches SV weight" $ sum (map snd beneficiaries) == svWeight.weight
-                  require "At most one coupon per beneficiary" (unique $ map fst beneficiaries)
-                  pure (beneficiaries, svWeight.sv)
+            require "rewardStates are unique" (unique $ map fst rewardStatesWithBeneficiaries)
 
-            let
-              (beneficiariesPerSv, svs) = unzip beneficiariesPerSvWithSv
-              allBeneficiaries = concat beneficiariesPerSv
-            require "Each SV weight can be used at most once" (unique svs)
+            svRewardStatesWithSvRewardCoupons <-
+              forA rewardStatesWithBeneficiaries $ \(rewardStateCid, beneficiaries) -> do
+                -- check and update state
+                rewardState <- fetchAndArchive (ForDso with dso) rewardStateCid
+                let state = rewardState.state
+                require
+                  ("Round " <> show openRound.round <> " is greater than the last round a reward has been received for " <> show state.lastRoundCollected)
+                  (state.lastRoundCollected < openRound.round)
 
-            -- check and update state
-            rewardState <- fetchAndArchive (ForSv with dso; svName = info.name) rewardStateCid
-            let state = rewardState.state
-            require
-              ("Round " <> show openRound.round <> " is greater than the last round a reward has been received for " <> show state.lastRoundCollected)
-              (state.lastRoundCollected < openRound.round)
+                case lookupHostedSvInfoByName rewardState.svName this of
+                  None -> fail $ show rewardState.svName <> " is not onboarded"
+                  Some (hostedSv, hostedSvInfo) -> do
+                    -- check SV operator
+                    require
+                      ("Only SV operator " <> show hostedSvInfo.svOperator <> " can create SV rewards for SV " <> show hostedSv)
+                      (hostedSvInfo.svOperator == sv)
 
-            newRewardStateCid <- create rewardState with
-              state = RewardState with
-                lastRoundCollected = openRound.round
-                numRoundsCollected = state.numRoundsCollected + 1
-                numRoundsMissed =
-                  state.numRoundsMissed + (openRound.round.number - state.lastRoundCollected.number - 1)
-                numCouponsIssued = state.numCouponsIssued + length allBeneficiaries
+                    let svRewardWeight = hostedSvInfo.svRewardWeight
+                    beneficiaries' <- case beneficiaries of
+                      [] -> pure [(hostedSv, svRewardWeight)]
+                      _ -> do
+                        require "Total beneficiary weight matches SV weight" $ sum (map snd beneficiaries) == svRewardWeight
+                        require "At most one coupon per beneficiary" (unique $ map fst beneficiaries)
+                        pure beneficiaries
 
-            couponCids <- forA allBeneficiaries $ \(beneficiary, weight) ->
-              create SvRewardCoupon with
-                dso
-                sv
-                beneficiary
-                weight
-                round = openRound.round
+                    newRewardStateCid <- create rewardState with
+                      state = RewardState with
+                        lastRoundCollected = openRound.round
+                        numRoundsCollected = state.numRoundsCollected + 1
+                        numRoundsMissed =
+                          state.numRoundsMissed + (openRound.round.number - state.lastRoundCollected.number - 1)
+                        numCouponsIssued = state.numCouponsIssued + length beneficiaries'
 
-            return DsoRules_ReceiveSvRewardCouponResult with
-                svRewardState = newRewardStateCid
-                svRewardCoupons = couponCids
+                    couponCids <- forA beneficiaries' $ \(beneficiary, weight) ->
+                      create SvRewardCoupon with
+                        dso
+                        sv = hostedSv
+                        beneficiary
+                        weight
+                        round = openRound.round
+
+                    pure (newRewardStateCid, couponCids)
+
+            pure DsoRules_ReceiveSvRewardCoupon_V2Result with svRewardStatesWithSvRewardCoupons
 
 
     -- Batch expiry of unclaimed rewards for a specific claimed round
@@ -1886,9 +1959,10 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_AddSvRewardWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UpdateSvRewardWeight_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_RemoveSvRewardWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RemoveHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -1959,6 +2033,12 @@ lookupSvInfoByName : Text -> DsoRules -> Optional (Party, SvInfo)
 lookupSvInfoByName svName DsoRules{..} =
   find (\info -> info._2.name == svName) $ Map.toList svs
 
+lookupHostedSvInfoByName : Text -> DsoRules -> Optional (Party, HostedSvInfo)
+lookupHostedSvInfoByName svName DsoRules{..} =
+  case hostedSvs of
+    None -> None
+    Some hostedSvsMap -> find (\(_, info) -> info.name == svName) $ Map.toList hostedSvsMap
+
 -- | Returns True if an SV with that name is either currently onboarded
 -- or an SV with that name has been onboarded before and is now in offboardedSvs.
 svHasBeenOnboardedBefore : Text -> DsoRules -> Bool
@@ -1971,15 +2051,15 @@ ensureNeverOperatedNode newSvParty this = do
     not (newSvParty `Map.member` this.svs || newSvParty `Map.member` this.offboardedSvs)
 
 -- factored out from the choice to avoid mistakes from having the fields of DsoRules{..} in scope
-dsoRules_AddSvOperator : DsoRules -> DsoRules_AddSvOperator -> Update (ContractId DsoRules)
-dsoRules_AddSvOperator this0 arg@DsoRules_AddSvOperator{..} = do
-  ensureNeverOperatedNode newSvParty this0
+dsoRules_AddSvNode : DsoRules -> DsoRules_AddSvNode -> Update (ContractId DsoRules)
+dsoRules_AddSvNode this0 DsoRules_AddSvNode{..} = do
+  ensureNeverOperatedNode newSvOperatorParty this0
   -- in DevNet we allow changing the operator of an existing sv, which we implement as a removal and re-addition
   this@DsoRules{..} <-
     if this0.isDevNet
       then
         let DsoRules{..} = this0 in -- bring all DsoRules fields into scope
-        case lookupSvInfoByName newSvName this0 of
+        case lookupSvInfoByName newSvNodeName this0 of
           None -> pure this0
           Some (sv, info) -> do
             let offboardingInfo = OffboardedSvInfo with
@@ -1989,24 +2069,22 @@ dsoRules_AddSvOperator this0 arg@DsoRules_AddSvOperator{..} = do
               svs = Map.delete sv svs
               offboardedSvs = Map.insert sv offboardingInfo offboardedSvs
       else do
-        require "SV is not currently onboarded" (isNone $ lookupSvInfoByName newSvName this0)
+        require "SV is not currently onboarded" (isNone $ lookupSvInfoByName newSvNodeName this0)
         pure this0
 
-  -- create per-sv contracts if they have never been onboarded
-  unless (svHasBeenOnboardedBefore newSvName this) $
-    createPerSvContracts' this arg
-  -- create per SV party contracts
+  -- create per SV operator party contracts
   let initialAmuletPriceVote = None
-  createPerSvPartyContracts dso newSvParty newSvName noSynchronizerNodes initialAmuletPriceVote (getVoteCooldownTime config)
+  createPerSvPartyContracts dso newSvOperatorParty newSvNodeName noSynchronizerNodes initialAmuletPriceVote (getVoteCooldownTime config)
   -- register the new operator in the DsoRules
   let svInfo = SvInfo with
-        name = newSvName
-        joinedAsOfRound
-        -- Set to zero, as the SV weights are represented as `SvWeight` contracts
+        name = newSvNodeName
+        -- Set to zero because it is no longer relevant for SV operators
+        joinedAsOfRound = Round 0
+        -- Set to zero, as the SV weights are maintained in `hostedSvs`
         svRewardWeight = 0
-        participantId = newSvParticipantId
+        participantId = newSvNodeParticipantId
   create this with
-    svs = Map.insert newSvParty svInfo svs
+    svs = Map.insert newSvOperatorParty svInfo svs
 
 -- factored out from the choice to avoid mistakes from having the fields of DsoRules{..} in scope
 dsoRules_addSv : DsoRules -> DsoRules_AddSv -> Update (ContractId DsoRules)
@@ -2044,17 +2122,6 @@ dsoRules_addSv this0 arg@DsoRules_AddSv{..} = do
         participantId = newSvParticipantId
   create this with
     svs = Map.insert newSvParty svInfo svs
-
-createPerSvContracts' : DsoRules -> DsoRules_AddSvOperator -> Update ()
-createPerSvContracts' DsoRules{..} DsoRules_AddSvOperator{..} = do
-  void $ create SvRewardState with
-    dso
-    svName = newSvName
-    state = RewardState with
-      lastRoundCollected = Round (joinedAsOfRound.number - 1)
-      numRoundsMissed = 0
-      numRoundsCollected = 0
-      numCouponsIssued = 0
 
 createPerSvPartyContracts : Party -> Party -> Text -> SynchronizerNodeConfigMap -> Optional Decimal -> RelTime -> Update ()
 createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice voteCooldownTime = do

@@ -116,6 +116,9 @@ template SvStatusReport with
 instance HasCheckedFetch SvRewardState ForSv where
   contractGroupId SvRewardState {..} = ForSv with dso; svName
 
+instance HasCheckedFetch SvRewardState ForDso where
+  contractGroupId SvRewardState {..} = ForDso with dso
+
 instance HasCheckedFetch SvNodeState ForSvNode where
   contractGroupId SvNodeState {..} = ForSvNode with dso; sv; svName
 
