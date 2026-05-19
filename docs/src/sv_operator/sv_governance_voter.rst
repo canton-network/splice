@@ -22,43 +22,33 @@ Vote slots are keyed by represented SV party, not by SV display name. This keeps
 cooldown and overwrite behavior tied to the stable party identifier while
 existing review-facing outputs can still render SV names.
 
-The prototype binding is declared by the represented SV and has no contract key.
-The intended Phase 1 workflow has one active governance-voter party per
-represented SV, shaped by the consuming ``RotateGovernanceVoter`` choice and
-the self-binding onboarding default. Multi-user organizations are expected to
-assign several users to the single governance-voter party at the dApp/UI
-layer rather than by creating additional bindings. All casts write into the
-represented SV's single vote slot under a per-SV cooldown, so the
-one-vote-per-SV tally is robust regardless of how the off-ledger workflow is
-arranged.
+The binding is DSO-signed and managed exclusively through ``DsoRules``. SV
+onboarding (``DsoRules_AddSv``) atomically installs the represented SV's
+self-binding (``governanceVoter == sv``), so every onboarded SV has exactly
+one active binding from creation. Subsequent changes flow through the
+``SRARC_RotateGovernanceVoter`` action, which is dispatched by
+``DsoRules_RotateGovernanceVoter`` to fetch-and-archive the current binding
+and create a new one — preserving the single-active-binding-per-SV property
+on the ledger. The action is operational (not in ``isGovernanceVoterAction``)
+and runs through the standard confirmation-quorum flow, so a single SV
+operator cannot unilaterally swap their governance voter. Returning control
+to the operator is expressed as rotation back to ``governanceVoter == sv``;
+the DSO party is rejected as a rotation target. There is intentionally no
+``Clear`` choice — leaving the SV without a binding would leave nobody
+authorized to cast its vote on governance-voter actions.
 
-The template does not contract-level prevent the represented SV from
-bare-creating additional bindings for itself: ``sv`` is the sole signatory,
-and the consuming rotation is intent rather than enforcement. If a represented
-SV does end up with two active bindings, both delegates can cast against the
-same represented-SV slot under last-writer-wins; the tally still records one
-vote per represented SV, but the cast log becomes ambiguous. This boundary is
-pinned by ``testGovernanceVoterDuplicateBindingsAmbiguity`` so that any future
-tightening — contract key, DSO-owned registry, or explicit duplicate-create
-guard — has a concrete baseline to compare against. Whether to promote the
-workflow shape to a contract-level invariant is left as an open question for
-Splice maintainers.
+Because the DSO is the sole signatory, bare-create by the represented SV is
+not authorized, and the implicit per-signatory ``Archive`` choice is only
+available to the DSO. Multi-user organizations are expected to assign several
+users to the single governance-voter party at the dApp/UI layer rather than
+by maintaining multiple bindings. All casts write into the represented SV's
+single vote slot under a per-SV cooldown, so the one-vote-per-SV tally is
+robust by construction.
 
-The binding is SV-declared by design: the represented SV can create or rotate
-its governance-voter binding without a Propose-Accept step. The onboarding
-default is self-voting (``governanceVoter == sv``); returning control to the
-operator is expressed as ``RotateGovernanceVoter`` back to the represented SV
-itself. There is intentionally no Clear choice — leaving the SV without a
-binding would leave nobody authorized to cast its vote on governance-voter
-actions. The DSO party cannot be used as a governance voter.
-
-The implicit per-signatory ``Archive`` choice still lets the represented SV
-unilaterally archive a binding, since the SV is the sole signatory. This is
-self-harm only — the SV temporarily loses the ability to cast on
-governance-voter actions and recovers by creating a new self-binding — and the
-Phase 1 expectation is that the SV workflow uses ``RotateGovernanceVoter``
-rather than direct archive. Hard enforcement of the "every SV has at least one
-active binding" invariant is left for a later phase if maintainers want it.
+The represented SV is the only non-DSO observer. The governance-voter party
+discovers the binding through Scan or explicit disclosure rather than as a
+ledger observer, so a participant hosting the governance-voter party does not
+need to vet the ``splice-dso-governance`` DAR for this template.
 
 Operational and governance-voter actions follow a strict role split:
 
@@ -86,13 +76,13 @@ The dApp standard (CIP-0103) defines the client-side API between a dApp and a
 Wallet rather than any on-ledger contract pattern, so it does not prescribe the
 shape of these templates. The contract surface in this slice is intentionally
 compatible with a CIP-0103 external-party submission flow: the cast choice is
-controlled by the governance-voter party, takes ``requestCid`` and
-``bindingCid`` as plain contract IDs, and the binding is observable by the
-governance voter so it can be supplied as a disclosed contract. A
-CIP-0103-conforming Wallet can therefore submit the cast via ``prepareExecute``
-with the relevant disclosed contracts, and the remaining alignment work — the
-governance-voter dApp client, Scan-based discovery, and Wallet/signing-provider
-choice — lives downstream of this PR.
+controlled by the governance-voter party and takes ``requestCid`` and
+``bindingCid`` as plain contract IDs, with the binding sourced via Scan and
+supplied as a disclosed contract on the cast submission. A CIP-0103-conforming
+Wallet can therefore submit the cast via ``prepareExecute`` with the relevant
+disclosed contracts, and the remaining alignment work — the governance-voter
+dApp client, Scan-based discovery, and Wallet/signing-provider choice — lives
+downstream of this PR.
 
 The first contract slice uses a hardcoded Daml allowlist for governance-voter
 eligible actions. New ``ActionRequiringConfirmation`` constructors are rejected

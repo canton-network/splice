@@ -35,147 +35,80 @@ import Splice.Testing.Utils
 -- Vote Requests
 ----------------
 
--- | Tests the governance-voter binding lifecycle and authorization.
+-- | Tests the governance-voter binding lifecycle and authorization. The
+-- DSO party is the sole signatory: onboarding installs the initial self-
+-- binding, and subsequent rotation must run through
+-- SRARC_RotateGovernanceVoter under a confirmation quorum. Bare-create and
+-- on-template Rotate are not available.
 testSvGovernanceVoterBindingLifecycle : Script ()
 testSvGovernanceVoterBindingLifecycle = do
-  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  (app, dso, (sv1, sv2, sv3, _sv4)) <- initMainNet
   governanceVoter <- allocateParty "governance-voter"
   otherParty <- allocateParty "wrong-governance-voter"
 
   let activeSv1Bindings = queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
 
-  -- Onboarding default is self-voting: the represented SV is its own
-  -- governance voter until it rotates the binding to a delegate.
-  selfBindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
-    dso
-    sv = sv1
-    governanceVoter = sv1
+  -- Onboarding installs the self-binding (governanceVoter == sv) atomically;
+  -- tests inherit the production invariant of exactly one active binding per
+  -- represented SV from the start.
+  selfBindingCid <- ensureSelfBinding dso sv1
   Some selfBinding <- queryContractId dso selfBindingCid
   selfBinding.governanceVoter === sv1
-  -- Phase 1 invariant: exactly one active binding per represented SV.
-  -- Rotation is consuming, so the lifecycle preserves this by construction.
   activeSv1Bindings >>= \bs -> length bs === 1
 
-  -- The DSO party is never a valid governance voter.
+  -- Bare-create is not authorized: the represented SV is no longer the
+  -- signatory, so they cannot unilaterally install or duplicate a binding.
   submitMustFail sv1 $ createCmd SvGovernanceVoter with
     dso
     sv = sv1
-    governanceVoter = dso
-
-  -- Only the represented SV can declare the binding.
+    governanceVoter
   submitMustFail governanceVoter $ createCmd SvGovernanceVoter with
     dso
     sv = sv1
     governanceVoter
 
-  -- Rotate the binding to an external governance-voter party.
-  rotateResult <- submit sv1 $ exerciseCmd selfBindingCid RotateGovernanceVoter with
-    newGovernanceVoter = governanceVoter
+  -- Rotate the binding to an external governance-voter party via a
+  -- confirmation quorum. The DsoRules choice fetch-and-archives the current
+  -- binding and creates the new one, so a single binding remains active.
+  rotatedBindingCid <-
+    rotateGovernanceVoterByConfirmation app [sv1, sv2, sv3] sv1 selfBindingCid governanceVoter
   None <- queryContractId dso selfBindingCid
-  Some rotatedBinding <- queryContractId dso rotateResult.bindingCid
+  Some rotatedBinding <- queryContractId dso rotatedBindingCid
   rotatedBinding.governanceVoter === governanceVoter
   activeSv1Bindings >>= \bs -> length bs === 1
 
-  -- No-op rotation is rejected.
-  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = governanceVoter
-
-  -- Rotation to the DSO party is rejected.
-  submitMustFail sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = dso
-
-  -- Non-SV parties cannot rotate the binding.
-  submitMustFail otherParty $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = otherParty
-
-  -- Returning control to the operator is rotation back to the represented SV;
-  -- there is intentionally no Clear choice. The represented SV always has a
-  -- binding so that there is always a path to cast its vote.
-  returnResult <- submit sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = sv1
-  None <- queryContractId dso rotateResult.bindingCid
-  Some returnedBinding <- queryContractId dso returnResult.bindingCid
-  returnedBinding.governanceVoter === sv1
-  activeSv1Bindings >>= \bs -> length bs === 1
-  pure ()
-
--- | Documents the Phase 1 boundary of the single-active-binding invariant:
--- the SvGovernanceVoter template does not gate against the represented SV
--- bare-creating multiple bindings in parallel. The invariant is workflow-
--- only (onboarding default plus consuming RotateGovernanceVoter), not a
--- contract-level guard. If a represented SV does end up with two active
--- bindings, both governance voters can cast against the same represented-
--- SV slot under last-writer-wins; no double-counting and no extra vote
--- weight, but the cast log becomes ambiguous. This test captures that
--- failure mode so future work (contract key, single-binding registry, or
--- onboarding-side enforcement) has a concrete behaviour to point at.
-testGovernanceVoterDuplicateBindingsAmbiguity : Script ()
-testGovernanceVoterDuplicateBindingsAmbiguity = do
-  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
-  governanceVoter1 <- allocateParty "duplicate-governance-voter-1"
-  governanceVoter2 <- allocateParty "duplicate-governance-voter-2"
+  -- Building the confirmation set for an invalid rotation lets us probe the
+  -- DsoRules choice without dragging the full confirmation flow through each
+  -- check. The choice is controlled by the DSO party, so submitting as it
+  -- surfaces the choice-body requires directly.
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
-  -- sv1 bare-creates two SvGovernanceVoter contracts in parallel, each
-  -- delegating to a distinct governance-voter party. The template itself
-  -- accepts this; one active binding per represented SV relies on the
-  -- onboarding default and the consuming Rotate choice, not on the
-  -- contract.
-  binding1Cid <- submit sv1 $ createCmd SvGovernanceVoter with
-    dso
+  -- Rotation to the DSO party is rejected.
+  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_RotateGovernanceVoter with
     sv = sv1
-    governanceVoter = governanceVoter1
-  binding2Cid <- submit sv1 $ createCmd SvGovernanceVoter with
-    dso
+    currentBindingCid = rotatedBindingCid
+    newGovernanceVoter = dso
+
+  -- No-op rotation is rejected.
+  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_RotateGovernanceVoter with
     sv = sv1
-    governanceVoter = governanceVoter2
+    currentBindingCid = rotatedBindingCid
+    newGovernanceVoter = governanceVoter
 
-  activeBindings <- queryFilter @SvGovernanceVoter dso (\b -> b.sv == sv1)
-  length activeBindings === 2
+  -- Mismatched sv / bindingCid is rejected.
+  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_RotateGovernanceVoter with
+    sv = sv2
+    currentBindingCid = rotatedBindingCid
+    newGovernanceVoter = otherParty
 
-  let offboardSv2Action = ARC_DsoRules with
-        dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with sv = sv2
-  requestResult <- submit (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestGovernanceVote with
-    governanceVoter = governanceVoter1
-    bindingCid = binding1Cid
-    action = offboardSv2Action
-    reason = Reason with url = ""; body = "duplicate-binding ambiguity"
-    targetEffectiveAt = None
-    voteRequestTimeout = Some (days 7)
-
-  Some initialRequest <- queryContractId dso requestResult.voteRequest
-  case Map.lookup sv1 initialRequest.votes of
-    None -> fail "initial governance-voter vote missing"
-    Some vote -> do
-      vote.castBy === governanceVoter1
-      vote.castByRole === VCR_GovernanceVoter
-
-  -- The second binding is structurally valid (same DSO party, same
-  -- represented SV, its own governance voter), so DsoRules_CastGovernanceVote
-  -- accepts a cast from governanceVoter2 against the same represented-SV slot.
-  passTime (minutes 1)
-  castResult <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
-    requestCid = requestResult.voteRequest
-    bindingCid = binding2Cid
-    vote = Vote with
-      sv = sv1
-      castBy = governanceVoter2
-      castByRole = VCR_GovernanceVoter
-      accept = False
-      reason = Reason with url = ""; body = "second binding wins"
-      optCastAt = None
-
-  -- One vote per represented SV is preserved: governanceVoter2's cast
-  -- overwrites governanceVoter1's auto-accept in the sv1 slot. The
-  -- ambiguity is in the cast log, not in the tally.
-  Some finalRequest <- queryContractId dso castResult.voteRequest
-  Map.size finalRequest.votes === 1
-  case Map.lookup sv1 finalRequest.votes of
-    None -> fail "represented SV vote slot missing after second cast"
-    Some vote -> do
-      vote.castBy === governanceVoter2
-      vote.castByRole === VCR_GovernanceVoter
-      vote.accept === False
+  -- Returning control to the operator is rotation back to the represented SV
+  -- itself; the represented SV always has exactly one active binding.
+  returnedBindingCid <-
+    rotateGovernanceVoterByConfirmation app [sv1, sv2, sv3] sv1 rotatedBindingCid sv1
+  None <- queryContractId dso rotatedBindingCid
+  Some returnedBinding <- queryContractId dso returnedBindingCid
+  returnedBinding.governanceVoter === sv1
+  activeSv1Bindings >>= \bs -> length bs === 1
   pure ()
 
 -- | Tests that both cast paths refuse votes after the cast deadline. For
@@ -213,7 +146,6 @@ testCastDeadlineExpiry = do
       optCastAt = None
 
   -- Operator cast path: same enforcement on an operational action.
-  now <- getTime
   opRequest <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
@@ -289,7 +221,7 @@ testOperatorCastAttributionGuards = do
 -- the governance voter; the operator path is closed for them.
 testGovernanceVoterCastPath : Script ()
 testGovernanceVoterCastPath = do
-  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  (app, dso, (sv1, sv2, sv3, _sv4)) <- initMainNet
   governanceVoter1 <- allocateParty "cast-governance-voter-1"
   governanceVoter2 <- allocateParty "cast-governance-voter-2"
   wrongVoter <- allocateParty "wrong-cast-governance-voter"
@@ -298,18 +230,15 @@ testGovernanceVoterCastPath = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   [(_, openRound), _, _] <- sortOn (._2.round) <$> query @OpenMiningRound dso
 
-  -- sv2 starts with self-voting (the onboarding default), and so is its own
+  -- sv2 keeps the onboarding default of self-voting, so it is its own
   -- governance voter for opening governance-voter eligible vote requests.
-  sv2BindingCid <- submit sv2 $ createCmd SvGovernanceVoter with
-    dso
-    sv = sv2
-    governanceVoter = sv2
+  sv2BindingCid <- ensureSelfBinding dso sv2
 
-  -- sv1 delegates its vote to a separate governance-voter party.
-  bindingCid <- submit sv1 $ createCmd SvGovernanceVoter with
-    dso
-    sv = sv1
-    governanceVoter = governanceVoter1
+  -- sv1 delegates its vote to a separate governance-voter party via the
+  -- confirmation-quorum rotation flow.
+  sv1SelfBindingCid <- ensureSelfBinding dso sv1
+  bindingCid <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 sv1SelfBindingCid governanceVoter1
 
   let governanceVote svParty signer accept body = Vote with
         sv = svParty
@@ -413,33 +342,33 @@ testGovernanceVoterCastPath = do
 
   -- Rotating sv1's binding switches the authorized governance voter; the
   -- previous one can no longer cast.
-  rotateResult <- submit sv1 $ exerciseCmd bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = governanceVoter2
+  rotatedBindingCid <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 bindingCid governanceVoter2
   rotatedRequest <- requestOffboardSv
   submitMustFail (actAs governanceVoter1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = rotatedRequest.voteRequest
-    bindingCid = rotateResult.bindingCid
+    bindingCid = rotatedBindingCid
     vote = governanceVote sv1 governanceVoter1 False "rotated old voter"
   passTime (minutes 1)
   _ <- submit (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = rotatedRequest.voteRequest
-    bindingCid = rotateResult.bindingCid
+    bindingCid = rotatedBindingCid
     vote = governanceVote sv1 governanceVoter2 False "rotated new voter"
 
   -- Returning control to the operator is rotation back to the represented SV;
   -- after that, sv1 itself is the governance voter and may cast through the
   -- governance-voter path.
-  returnedResult <- submit sv1 $ exerciseCmd rotateResult.bindingCid RotateGovernanceVoter with
-    newGovernanceVoter = sv1
+  returnedBindingCid <- rotateGovernanceVoterByConfirmation
+    app [sv1, sv2, sv3] sv1 rotatedBindingCid sv1
   returnedRequest <- requestOffboardSv
   submitMustFail (actAs governanceVoter2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = returnedRequest.voteRequest
-    bindingCid = returnedResult.bindingCid
+    bindingCid = returnedBindingCid
     vote = governanceVote sv1 governanceVoter2 False "stale delegate"
   passTime (minutes 1)
   _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastGovernanceVote with
     requestCid = returnedRequest.voteRequest
-    bindingCid = returnedResult.bindingCid
+    bindingCid = returnedBindingCid
     vote = governanceVote sv1 sv1 False "operator-as-self-voter"
   pure ()
 
@@ -457,6 +386,7 @@ testGovernanceVoterActionTaxonomy = do
   rightCid <- submit dso $ createCmd FeaturedAppRight with
     dso
     provider
+  sv1Binding <- ensureSelfBinding dso sv1
 
   forA_
     [ ARC_DsoRules with
@@ -508,6 +438,11 @@ testGovernanceVoterActionTaxonomy = do
           sender = provider
     , ARC_DsoRules with
         dsoAction = SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
+    , ARC_DsoRules with
+        dsoAction = SRARC_RotateGovernanceVoter DsoRules_RotateGovernanceVoter with
+          sv = sv1
+          currentBindingCid = sv1Binding
+          newGovernanceVoter = sv1
     , ExtActionRequiringConformation with dummyUnitField = ()
     ]
     (\action -> isGovernanceVoterAction action === False)

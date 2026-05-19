@@ -3,45 +3,38 @@
 
 module Splice.DSO.GovernanceVoter where
 
+import Splice.Types
 import Splice.Util
-
-data RotateGovernanceVoterResult = RotateGovernanceVoterResult with
-    bindingCid : ContractId SvGovernanceVoter
-  deriving (Eq, Show)
 
 -- | A binding from a represented SV to the party that may cast its vote on
 -- governance-voter eligible actions. The represented SV is always covered by a
--- binding: onboarding establishes a self-binding (governanceVoter == sv) and
--- "returning control to the operator" is expressed as rotating back to self.
--- There is intentionally no Clear choice; without a binding nobody could cast
--- on governance-voter actions for the represented SV.
+-- binding: onboarding establishes a self-binding (governanceVoter == sv)
+-- atomically via DsoRules_AddSv, and "returning control to the operator" is
+-- expressed as rotating back to self.
 --
--- The represented SV is the sole signatory, so the implicit per-signatory
--- Archive choice still lets the SV unilaterally archive any of its bindings.
--- This is self-harm only (the SV temporarily loses the ability to cast on
--- governance-voter actions) and is trivially recoverable by creating a new
--- self-binding. Hard enforcement of the "every SV has at least one active
--- binding" invariant is deferred; the Phase 1 expectation is that the SV
--- workflow uses RotateGovernanceVoter rather than direct archive.
+-- The DSO party is the sole signatory. The binding is therefore managed
+-- exclusively through DsoRules: it is created at SV onboarding and rotated by
+-- the SRARC_RotateGovernanceVoter action, which goes through the standard
+-- confirmation-quorum flow. Bare-create by the represented SV is not
+-- authorized, and there is no on-template Rotate choice.
+--
+-- The represented SV is the only observer besides the DSO party. The
+-- governance-voter party discovers the binding via Scan or explicit
+-- disclosure rather than as a ledger observer, so a participant hosting the
+-- governance-voter party does not need to vet this DAR.
 template SvGovernanceVoter
   with
     dso : Party
     sv : Party
     governanceVoter : Party
   where
-    signatory sv
-    observer dso, governanceVoter
+    signatory dso
+    observer sv
 
     ensure
       sv /= dso
         && governanceVoter /= dso
 
-    choice RotateGovernanceVoter : RotateGovernanceVoterResult
-      with
-        newGovernanceVoter : Party
-      controller sv
-      do
-        require "New governance voter must differ" (newGovernanceVoter /= governanceVoter)
-        require "Governance voter must not be dso" (newGovernanceVoter /= dso)
-        bindingCid <- create this with governanceVoter = newGovernanceVoter
-        pure RotateGovernanceVoterResult with ..
+
+instance HasCheckedFetch SvGovernanceVoter ForDso where
+  contractGroupId SvGovernanceVoter {..} = ForDso with dso

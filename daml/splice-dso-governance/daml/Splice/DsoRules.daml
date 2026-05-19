@@ -116,6 +116,10 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to create an UnallocatedUnclaimedActivityRecord contract.
   | SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
+  | SRARC_RotateGovernanceVoter DsoRules_RotateGovernanceVoter
+    -- ^ Replace an SV's governance-voter binding with a new one. Operational
+    -- action; runs through the confirmation-quorum flow rather than the
+    -- governance-voter vote path.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -215,6 +219,9 @@ data DsoRules_CastGovernanceVoteResult = DsoRules_CastGovernanceVoteResult with
 
 data DsoRules_RequestGovernanceVoteResult = DsoRules_RequestGovernanceVoteResult with
     voteRequest : ContractId VoteRequest
+
+data DsoRules_RotateGovernanceVoterResult = DsoRules_RotateGovernanceVoterResult with
+    bindingCid : ContractId SvGovernanceVoter
 
 data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult with
     amuletPriceVote : ContractId AmuletPriceVote
@@ -1150,6 +1157,37 @@ template DsoRules with
         return DsoRules_RevokeFeaturedAppRightResult
 
 
+    -- Governance-voter binding management
+    --------------------------------------
+
+    -- Replace an SV's governance-voter binding with a new one. The current
+    -- binding is archived (so there is exactly one fresh binding per
+    -- represented SV after a successful rotation), and the new binding is
+    -- created with the DSO party as signatory. This choice is the only path
+    -- that mutates SvGovernanceVoter post-onboarding; invoking it requires
+    -- running the standard SRARC_RotateGovernanceVoter action through a
+    -- confirmation quorum, so a single SV operator cannot unilaterally rotate
+    -- their own binding.
+    nonconsuming choice DsoRules_RotateGovernanceVoter : DsoRules_RotateGovernanceVoterResult
+      with
+        sv : Party
+        currentBindingCid : ContractId SvGovernanceVoter
+        newGovernanceVoter : Party
+      controller dso
+      do
+        require "Rotation target is not the DSO party" (newGovernanceVoter /= dso)
+        require "Represented SV is an SV" (sv `Map.member` svs)
+        currentBinding <- fetchAndArchive (ForDso with dso) currentBindingCid
+        require "Binding represents the named SV" (currentBinding.sv == sv)
+        require "Rotation must change the governance voter"
+          (newGovernanceVoter /= currentBinding.governanceVoter)
+        bindingCid <- create SvGovernanceVoter with
+          dso
+          sv
+          governanceVoter = newGovernanceVoter
+        return DsoRules_RotateGovernanceVoterResult with ..
+
+
     -- Validator onboarding
     -----------------------
 
@@ -1861,6 +1899,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RotateGovernanceVoter choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -2014,6 +2053,13 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
     svName = newSvName
     state = NodeState with
       synchronizerNodes
+  -- Onboarding default: the newly added SV is its own governance voter. Any
+  -- subsequent change must run through SRARC_RotateGovernanceVoter so the
+  -- single-binding-per-SV property is preserved.
+  void $ create SvGovernanceVoter with
+    dso
+    sv = newSvParty
+    governanceVoter = newSvParty
 
 getAndValidateSvParty : DsoRules -> Optional Party -> Update Party
 getAndValidateSvParty _ None = fail "no SV party provided"

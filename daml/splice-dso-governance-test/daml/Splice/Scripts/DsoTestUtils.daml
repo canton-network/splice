@@ -340,19 +340,56 @@ executeAllDefinitiveVotes app = do
         amuletRulesCid = Some amuletRulesCid
         sv = Some s.dsoDelegate
 
--- | Find an existing self-binding for the SV, creating one if needed. Tests
--- rely on this to simulate the onboarding default of self-voting without
--- modifying the bootstrap flow.
+-- | Look up the represented SV's self-binding. SV onboarding installs a
+-- self-binding atomically, so this returns the binding established by
+-- DsoRules_AddSv; if no self-binding is found the test setup is broken.
 ensureSelfBinding : Party -> Party -> Script (ContractId SvGovernanceVoter)
 ensureSelfBinding dso sv = do
   bindings <- queryFilter @SvGovernanceVoter dso $ \b ->
     b.sv == sv && b.governanceVoter == sv
   case bindings of
     ((cid, _) :: _) -> pure cid
-    [] -> submit sv $ createCmd SvGovernanceVoter with
-      dso
-      sv
-      governanceVoter = sv
+    [] -> fail $ "ensureSelfBinding: no self-binding found for " <> show sv
+
+-- | Rotate an SV's governance-voter binding by running
+-- SRARC_RotateGovernanceVoter through the confirmation-quorum flow. Each
+-- confirming SV submits a Confirmation; one of them then executes the
+-- collected confirmations, which exercises DsoRules_RotateGovernanceVoter.
+-- Returns the new binding's cid (extracted from the active-contract set,
+-- since DsoRules_ExecuteConfirmedAction does not surface choice results).
+rotateGovernanceVoterByConfirmation
+  : AmuletApp
+  -> [Party]
+  -> Party
+  -> ContractId SvGovernanceVoter
+  -> Party
+  -> Script (ContractId SvGovernanceVoter)
+rotateGovernanceVoterByConfirmation app confirmers sv currentBindingCid newGovernanceVoter = do
+  [(dsoRulesCid, _)] <- query @DsoRules app.dso
+  let action = ARC_DsoRules with
+        dsoAction = SRARC_RotateGovernanceVoter DsoRules_RotateGovernanceVoter with
+          sv
+          currentBindingCid
+          newGovernanceVoter
+  confirmationCids <- forA confirmers $ \confirmer -> do
+    result <- submit (actAs confirmer <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer
+      action
+    pure result.confirmation
+  let executor = case confirmers of
+        (c :: _) -> c
+        [] -> error "rotateGovernanceVoterByConfirmation: require at least one confirmer"
+  submit (actAs executor <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_ExecuteConfirmedAction with
+    action
+    amuletRulesCid = None
+    confirmationCids
+    sv = Some executor
+  newBindings <- queryFilter @SvGovernanceVoter app.dso $ \b ->
+    b.sv == sv && b.governanceVoter == newGovernanceVoter
+  case newBindings of
+    ((cid, _) :: _) -> pure cid
+    [] -> fail $ "rotateGovernanceVoterByConfirmation: expected a binding to "
+      <> show newGovernanceVoter <> " for " <> show sv
 
 -- | Open a vote request via the path implied by the action: governance-voter
 -- eligible actions go through DsoRules_RequestGovernanceVote using the
