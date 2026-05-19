@@ -57,7 +57,7 @@ export const svWeightSchema = z
 export const rewardAmountSchema = z
   .string()
   .min(1, { message: 'Amount is required' })
-  .regex(/^\d+$/, { message: 'Amount must be a valid number' });
+  .regex(/^\d+(\.\d+)?$/, { message: 'Amount must be a valid number' });
 
 export const validateWeight = (value: string): string | false => {
   const result = svWeightSchema.safeParse(value);
