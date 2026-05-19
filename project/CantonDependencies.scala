@@ -306,7 +306,7 @@ object CantonDependencies {
     "com.google.protobuf" % "protobuf-java-util" % protobuf_version
 
   // AWS SDK for Java API to encrypt/decrypt keys using AWS KMS
-  lazy val aws_version = "2.29.5"
+  lazy val aws_version = "2.44.7"
   lazy val aws_kms = "software.amazon.awssdk" % "kms" % aws_version
   lazy val aws_sts = "software.amazon.awssdk" % "sts" % aws_version
 
