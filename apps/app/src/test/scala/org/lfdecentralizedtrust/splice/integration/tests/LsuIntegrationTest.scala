@@ -768,7 +768,7 @@ class LsuIntegrationTest
             c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
           )
           .loneElement
-          .serial shouldBe Some(1)
+          .serial shouldBe Some(2)
       }
 
       clue("stop apps manually to prevent errors from the synchronizer being force stopped") {
