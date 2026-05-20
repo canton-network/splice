@@ -707,7 +707,7 @@ class DbSvDsoStore(
             acsStoreId,
             domainMigrationId,
             splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
-            orderLimit = sql"""order by reward_round limit ${sqlLimit(limit)}""",
+            orderLimit = sql"""order by mining_round limit ${sqlLimit(limit)}""",
           ),
           "listCalculateRewardsV2",
         )
@@ -732,7 +732,7 @@ class DbSvDsoStore(
             acsStoreId,
             domainMigrationId,
             splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
-            orderLimit = sql"""order by reward_round limit ${sqlLimit(limit)}""",
+            orderLimit = sql"""order by mining_round limit ${sqlLimit(limit)}""",
           ),
           "listProcessRewardsV2",
         )
@@ -783,7 +783,7 @@ class DbSvDsoStore(
     if (rounds.isEmpty)
       Future.successful((Seq.empty, Seq.empty))
     else {
-      val roundsClause = inClause("reward_round", rounds)
+      val roundsClause = inClause("mining_round", rounds)
       val calculateRewardsF = storage
         .query(
           selectFromAcsTableWithState(

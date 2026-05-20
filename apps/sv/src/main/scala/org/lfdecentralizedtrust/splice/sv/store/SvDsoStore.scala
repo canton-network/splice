@@ -1318,7 +1318,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
-          rewardRound = Some(contract.payload.round.number),
+          miningRound = Some(contract.payload.round.number),
         )
       },
       mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
@@ -1326,7 +1326,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
-          rewardRound = Some(contract.payload.round.number),
+          miningRound = Some(contract.payload.round.number),
         )
       },
       mkFilter(splice.round.OpenMiningRound.COMPANION)(co => co.payload.dso == dso) { contract =>
