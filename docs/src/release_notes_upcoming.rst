@@ -28,4 +28,3 @@
 
         If you need to access data for any of the parties on your node
         use the ledger API.
->>>>>>> eff7ea946 (Remove update history from validator app)
