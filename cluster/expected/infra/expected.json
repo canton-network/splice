@@ -2335,11 +2335,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-1-global-domain-8-sequencer-high-perf-grpc-rule",
+        "name": "sv-1-global-domain-7-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-8-sequencer.sv-1.svc.cluster.local",
+        "host": "global-domain-7-sequencer.sv-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2358,7 +2358,7 @@
         }
       }
     },
-    "name": "sv-1-global-domain-8-sequencer-high-perf-grpc-rule",
+    "name": "sv-1-global-domain-7-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2507,11 +2507,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-da-1-global-domain-8-sequencer-high-perf-grpc-rule",
+        "name": "sv-da-1-global-domain-7-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-8-sequencer.sv-da-1.svc.cluster.local",
+        "host": "global-domain-7-sequencer.sv-da-1.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2530,7 +2530,7 @@
         }
       }
     },
-    "name": "sv-da-1-global-domain-8-sequencer-high-perf-grpc-rule",
+    "name": "sv-da-1-global-domain-7-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2643,11 +2643,11 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
-        "name": "sv-global-domain-8-sequencer-high-perf-grpc-rule",
+        "name": "sv-global-domain-7-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
       "spec": {
-        "host": "global-domain-8-sequencer.sv.svc.cluster.local",
+        "host": "global-domain-7-sequencer.sv.svc.cluster.local",
         "trafficPolicy": {
           "connectionPool": {
             "http": {
@@ -2666,7 +2666,7 @@
         }
       }
     },
-    "name": "sv-global-domain-8-sequencer-high-perf-grpc-rule",
+    "name": "sv-global-domain-7-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },

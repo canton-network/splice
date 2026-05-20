@@ -311,7 +311,7 @@
         "additionalLegacy": [
           {
             "enableLogicalSynchronizerDeploymentMode": false,
-            "id": 8,
+            "id": 7,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
@@ -2488,7 +2488,7 @@
             "migrationIds": [
               "9",
               "8",
-              "8",
+              "7",
               "10"
             ]
           }
@@ -3150,17 +3150,17 @@
             "additionalLegacy": [
               {
                 "cometBFT": {
-                  "connectionUri": "http://global-domain-8-cometbft-cometbft-rpc:26657",
+                  "connectionUri": "http://global-domain-7-cometbft-cometbft-rpc:26657",
                   "enabled": true
                 },
-                "mediatorAddress": "global-domain-8-mediator",
-                "sequencerAddress": "global-domain-8-sequencer",
+                "mediatorAddress": "global-domain-7-mediator",
+                "sequencerAddress": "global-domain-7-sequencer",
                 "sequencerPruningConfig": {
                   "enabled": true,
                   "pruningInterval": "1 hour",
                   "retentionPeriod": "30 days"
                 },
-                "sequencerPublicUrl": "https://sequencer-8.sv-2.mock.global.canton.network.digitalasset.com"
+                "sequencerPublicUrl": "https://sequencer-7.sv-2.mock.global.canton.network.digitalasset.com"
               }
             ],
             "current": {
@@ -3733,7 +3733,7 @@
             "migrationIds": [
               "9",
               "8",
-              "8",
+              "7",
               "10"
             ]
           }
@@ -4219,18 +4219,18 @@
             "additionalLegacy": [
               {
                 "cometBFT": {
-                  "connectionUri": "http://global-domain-8-cometbft-cometbft-rpc:26657",
+                  "connectionUri": "http://global-domain-7-cometbft-cometbft-rpc:26657",
                   "enabled": true,
                   "externalGovernanceKey": true
                 },
-                "mediatorAddress": "global-domain-8-mediator",
-                "sequencerAddress": "global-domain-8-sequencer",
+                "mediatorAddress": "global-domain-7-mediator",
+                "sequencerAddress": "global-domain-7-sequencer",
                 "sequencerPruningConfig": {
                   "enabled": true,
                   "pruningInterval": "1 hour",
                   "retentionPeriod": "30 days"
                 },
-                "sequencerPublicUrl": "https://sequencer-8.sv-1.mock.global.canton.network.digitalasset.com"
+                "sequencerPublicUrl": "https://sequencer-7.sv-1.mock.global.canton.network.digitalasset.com"
               }
             ],
             "current": {

@@ -1306,7 +1306,7 @@
         "labels": {
           "notifications": "false"
         },
-        "name": "splice-node-migration-8-base",
+        "name": "splice-node-migration-7-base",
         "namespace": "operator"
       },
       "spec": {
@@ -1322,7 +1322,60 @@
         "url": "https://github.com/canton-network/splice"
       }
     },
-    "name": "splice-node-migration-8-base",
+    "name": "splice-node-migration-7-base",
+    "provider": "",
+    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "labels": {
+          "notifications": "true"
+        },
+        "name": "splice-node-migration-7",
+        "namespace": "operator"
+      },
+      "spec": {
+        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
+        "include": [
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-7.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-7.mock.yaml"
+          },
+          {
+            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-7.mock.yaml",
+            "repository": {
+              "name": "splice-node-migration-7-base"
+            },
+            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-7.mock.yaml"
+          }
+        ],
+        "interval": "5m",
+        "recurseSubmodules": true,
+        "ref": {
+          "name": "refs/heads/release-line-0.3.20"
+        },
+        "secretRef": {
+          "name": "github"
+        },
+        "url": "https://github.com/canton-network/splice"
+      }
+    },
+    "name": "splice-node-migration-7",
     "provider": "",
     "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
   },
@@ -1353,59 +1406,6 @@
       }
     },
     "name": "splice-node-migration-8-base",
-    "provider": "",
-    "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "source.toolkit.fluxcd.io/v1",
-      "kind": "GitRepository",
-      "metadata": {
-        "labels": {
-          "notifications": "true"
-        },
-        "name": "splice-node-migration-8",
-        "namespace": "operator"
-      },
-      "spec": {
-        "ignore": "**/splice/canton\n!**/splice/canton/community/app/src/pack/examples/13-observability/grafana/dashboards\n**/daml/dars\n!**/daml/dars/splitwell*\n**/token-standard",
-        "include": [
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-1-migration-8.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-8-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-1-migration-8.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-da-1-migration-8.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-8-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-da-1-migration-8.mock.yaml"
-          },
-          {
-            "fromPath": "cluster/stacks/prod/sv-canton/Pulumi.sv-canton.sv-migration-8.mock.yaml",
-            "repository": {
-              "name": "splice-node-migration-8-base"
-            },
-            "toPath": "splice/cluster/pulumi/sv-canton/Pulumi.sv-canton.sv-migration-8.mock.yaml"
-          }
-        ],
-        "interval": "5m",
-        "recurseSubmodules": true,
-        "ref": {
-          "name": "refs/heads/release-line-0.3.20"
-        },
-        "secretRef": {
-          "name": "github"
-        },
-        "url": "https://github.com/canton-network/splice"
-      }
-    },
-    "name": "splice-node-migration-8",
     "provider": "",
     "type": "kubernetes:source.toolkit.fluxcd.io/v1:GitRepository"
   },
@@ -2724,26 +2724,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-8-sa",
+        "name": "sv-canton.sv-1-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-1-migration-8-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-1-migration-8-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-1-migration-8-sa",
+    "name": "sv-canton.sv-1-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -2761,35 +2746,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-8-sa",
+          "name": "sv-canton.sv-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-8:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-8:cluster-admin",
+    "name": "sv-canton.sv-1-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2807,35 +2769,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-8-sa",
+          "name": "sv-canton.sv-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-1-migration-8:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-1-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-1-migration-8:system:auth-delegator",
+    "name": "sv-canton.sv-1-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -2846,7 +2785,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-1-migration-8",
+        "name": "sv-canton.sv-1-migration-7",
         "namespace": "operator"
       },
       "spec": {
@@ -2935,7 +2874,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "8"
+              "value": "7"
             },
             "type": "Literal"
           },
@@ -2957,13 +2896,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-8"
+            "name": "splice-node-migration-7"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-1-migration-8-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-1-migration-8.mock",
+        "serviceAccountName": "sv-canton.sv-1-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-1-migration-7.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -2973,7 +2912,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-1-migration-8",
+            "name": "sv-canton-sv-1-migration-7",
             "namespace": "operator"
           },
           "spec": {
@@ -3076,9 +3015,70 @@
         }
       }
     },
-    "name": "sv-canton.sv-1-migration-8",
+    "name": "sv-canton.sv-1-migration-7",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-1-migration-8-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-1-migration-8-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-1-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-1-migration-8:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-1-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-1-migration-8:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
   {
     "custom": true,
@@ -4512,26 +4512,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-8-sa",
+        "name": "sv-canton.sv-da-1-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-da-1-migration-8-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-da-1-migration-8-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-da-1-migration-8-sa",
+    "name": "sv-canton.sv-da-1-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -4549,35 +4534,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-8-sa",
+          "name": "sv-canton.sv-da-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-8:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-da-1-migration-8:cluster-admin",
+    "name": "sv-canton.sv-da-1-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4595,35 +4557,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-8-sa",
+          "name": "sv-canton.sv-da-1-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-da-1-migration-8:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-da-1-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-da-1-migration-8:system:auth-delegator",
+    "name": "sv-canton.sv-da-1-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -4634,7 +4573,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-da-1-migration-8",
+        "name": "sv-canton.sv-da-1-migration-7",
         "namespace": "operator"
       },
       "spec": {
@@ -4723,7 +4662,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "8"
+              "value": "7"
             },
             "type": "Literal"
           },
@@ -4745,13 +4684,13 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-8"
+            "name": "splice-node-migration-7"
           }
         },
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-da-1-migration-8-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-8.mock",
+        "serviceAccountName": "sv-canton.sv-da-1-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-da-1-migration-7.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -4761,7 +4700,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-da-1-migration-8",
+            "name": "sv-canton-sv-da-1-migration-7",
             "namespace": "operator"
           },
           "spec": {
@@ -4864,9 +4803,70 @@
         }
       }
     },
-    "name": "sv-canton.sv-da-1-migration-8",
+    "name": "sv-canton.sv-da-1-migration-7",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-da-1-migration-8-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-da-1-migration-8-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-da-1-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-da-1-migration-8:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-da-1-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-da-1-migration-8:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
   {
     "custom": true,
@@ -6306,26 +6306,11 @@
       "apiVersion": "v1",
       "kind": "ServiceAccount",
       "metadata": {
-        "name": "sv-canton.sv-migration-8-sa",
+        "name": "sv-canton.sv-migration-7-sa",
         "namespace": "operator"
       }
     },
-    "name": "sv-canton.sv-migration-8-sa",
-    "provider": "",
-    "type": "kubernetes:core/v1:ServiceAccount"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "v1",
-      "kind": "ServiceAccount",
-      "metadata": {
-        "name": "sv-canton.sv-migration-8-sa",
-        "namespace": "operator"
-      }
-    },
-    "name": "sv-canton.sv-migration-8-sa",
+    "name": "sv-canton.sv-migration-7-sa",
     "provider": "",
     "type": "kubernetes:core/v1:ServiceAccount"
   },
@@ -6343,35 +6328,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-8-sa",
+          "name": "sv-canton.sv-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-8:cluster-admin",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "cluster-admin"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-migration-8:cluster-admin",
+    "name": "sv-canton.sv-migration-7:cluster-admin",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -6389,35 +6351,12 @@
       "subjects": [
         {
           "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-8-sa",
+          "name": "sv-canton.sv-migration-7-sa",
           "namespace": "operator"
         }
       ]
     },
-    "name": "sv-canton.sv-migration-8:system:auth-delegator",
-    "provider": "",
-    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "apiVersion": "rbac.authorization.k8s.io/v1",
-      "kind": "ClusterRoleBinding",
-      "roleRef": {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "ClusterRole",
-        "name": "system:auth-delegator"
-      },
-      "subjects": [
-        {
-          "kind": "ServiceAccount",
-          "name": "sv-canton.sv-migration-8-sa",
-          "namespace": "operator"
-        }
-      ]
-    },
-    "name": "sv-canton.sv-migration-8:system:auth-delegator",
+    "name": "sv-canton.sv-migration-7:system:auth-delegator",
     "provider": "",
     "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
@@ -6428,7 +6367,7 @@
       "apiVersion": "pulumi.com/v1",
       "kind": "Stack",
       "metadata": {
-        "name": "sv-canton.sv-migration-8",
+        "name": "sv-canton.sv-migration-7",
         "namespace": "operator"
       },
       "spec": {
@@ -6517,7 +6456,7 @@
           },
           "SPLICE_MIGRATION_ID": {
             "literal": {
-              "value": "8"
+              "value": "7"
             },
             "type": "Literal"
           },
@@ -6539,15 +6478,15 @@
           "sourceRef": {
             "apiVersion": "source.toolkit.fluxcd.io/v1",
             "kind": "GitRepository",
-            "name": "splice-node-migration-8"
+            "name": "splice-node-migration-7"
           }
         },
         "refresh": true,
         "resyncFrequencySeconds": 300,
         "retryMaxBackoffDurationSeconds": 600,
         "retryOnUpdateConflict": true,
-        "serviceAccountName": "sv-canton.sv-migration-8-sa",
-        "stack": "organization/sv-canton/sv-canton.sv-migration-8.mock",
+        "serviceAccountName": "sv-canton.sv-migration-7-sa",
+        "stack": "organization/sv-canton/sv-canton.sv-migration-7.mock",
         "updateTemplate": {
           "spec": {
             "parallel": 64
@@ -6557,7 +6496,7 @@
         "workspaceTemplate": {
           "metadata": {
             "deletionGracePeriodSeconds": 1800,
-            "name": "sv-canton-sv-migration-8",
+            "name": "sv-canton-sv-migration-7",
             "namespace": "operator"
           },
           "spec": {
@@ -6660,9 +6599,70 @@
         }
       }
     },
-    "name": "sv-canton.sv-migration-8",
+    "name": "sv-canton.sv-migration-7",
     "provider": "",
     "type": "kubernetes:pulumi.com/v1:Stack"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "sv-canton.sv-migration-8-sa",
+        "namespace": "operator"
+      }
+    },
+    "name": "sv-canton.sv-migration-8-sa",
+    "provider": "",
+    "type": "kubernetes:core/v1:ServiceAccount"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-8:cluster-admin",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "system:auth-delegator"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "sv-canton.sv-migration-8-sa",
+          "namespace": "operator"
+        }
+      ]
+    },
+    "name": "sv-canton.sv-migration-8:system:auth-delegator",
+    "provider": "",
+    "type": "kubernetes:rbac.authorization.k8s.io/v1:ClusterRoleBinding"
   },
   {
     "custom": true,
