@@ -18,7 +18,11 @@ import {
 } from "../constants";
 import { EventLog_HoldingsChange } from "@daml.js/splice-api-token-transfer-events-v2-1.0.0/lib/Splice/Api/Token/TransferEventsV2/module";
 import { Holding } from "@daml.js/splice-api-token-holding-v2-1.0.0/lib/Splice/Api/Token/HoldingV2";
-import { getEventsOfContract, getMetaKeyValue } from "../apis/ledger-api-utils";
+import {
+  getEventsOfContract,
+  getMetaKeyValue,
+  getNodeIdAndEvent,
+} from "../apis/ledger-api-utils";
 import { computeSummary, holdingChangesNonEmpty } from "./summary";
 
 export class V2TransactionParser {
@@ -49,33 +53,64 @@ export class V2TransactionParser {
   }
 
   async parseEvents(events: LedgerApiEvent[]): Promise<TokenStandardEvent[]> {
-    const creates = events
-      .map((event) => this.extractHoldingCreate(event.CreatedEvent))
-      .filter((item) => item !== null);
-    const cachedHoldings = new Map(
-      creates.map((holding) => [holding.holding.contractId, holding.holding]),
-    );
-    const archives = (
-      await Promise.all(
-        events.map((event) =>
-          this.extractHoldingsArchive(
-            event.ExercisedEvent || event.ArchivedEvent,
-            cachedHoldings,
-          ),
-        ),
-      )
-    ).filter((item) => item !== null);
+    let callStack: Array<{ parentChoiceName: string; untilNodeId: number }> =
+      [];
+    const cachedHoldings: Map<string, HoldingResult> = new Map();
+    const holdingChanges: TokenStandardEventWithNodeId[] = [];
+    const allCreates: ExtractedHolding[] = [];
+    const allArchives: ExtractedHolding[] = [];
 
-    const holdingChanges = await Promise.all(
-      events
-        .map(this.extractChoiceArgumentEventLog_HoldingsChange)
-        .filter((item) => item !== null)
-        .map((holdingsChange) =>
-          this.parseHoldingsChange(holdingsChange, cachedHoldings),
-        ),
-    );
+    // Loosely based on the v1 implementation.
+    // We only keep the call stack to be able to determine the parentChoice,
+    // which is only necessary when we have a root create that is not explained by an EventLog_HoldingsChange.
+    for (const event of events) {
+      const { nodeId, createdEvent, archivedEvent, exercisedEvent } =
+        getNodeIdAndEvent(event);
+      callStack = callStack.filter((s) => s.untilNodeId <= nodeId);
+      const parentChoice =
+        (callStack[callStack.length - 1] &&
+          callStack[callStack.length - 1].parentChoiceName) ||
+        "none (root node)";
+
+      if (createdEvent) {
+        const parsedCreate = this.extractHoldingCreate(
+          createdEvent,
+          parentChoice,
+        );
+        if (parsedCreate) {
+          cachedHoldings.set(
+            parsedCreate.holding.contractId,
+            parsedCreate.holding,
+          );
+          allCreates.push(parsedCreate);
+        }
+      } else if (archivedEvent) {
+        const parsedArchive = await this.extractHoldingArchive(
+          archivedEvent,
+          parentChoice,
+          cachedHoldings,
+        );
+        if (parsedArchive) {
+          allArchives.push(parsedArchive);
+        }
+      } else if (exercisedEvent) {
+        const holdingsChange =
+          this.extractChoiceArgumentEventLog_HoldingsChange(exercisedEvent);
+        if (holdingsChange) {
+          const parsed = await this.parseHoldingsChange(
+            holdingsChange,
+            cachedHoldings,
+          );
+          holdingChanges.push({ event: parsed, nodeId: nodeId });
+        }
+      } else {
+        throw new Error(`Impossible event: ${JSON.stringify(event)}`);
+      }
+    }
+
     const accountedForHoldings = new Set(
       holdingChanges
+        .map((withNodeId) => withNodeId.event)
         .flatMap((holdingsChange) =>
           holdingsChange.lockedHoldingsChange.archives
             .concat(holdingsChange.lockedHoldingsChange.creates)
@@ -85,31 +120,40 @@ export class V2TransactionParser {
         .map((holding) => holding.contractId),
     );
 
-    const unaccountedCreates: TokenStandardEvent[] = creates
+    const unaccountedCreates: TokenStandardEventWithNodeId[] = allCreates
       .filter(
         (rawCreate) =>
           rawCreate.holding.owner === this.partyId &&
           !accountedForHoldings.has(rawCreate.holding.contractId),
       )
-      .map((rawCreate) => this.buildRawCreate(rawCreate.holding));
-    const unaccountedArchives = archives
+      .map((rawCreate) => ({
+        nodeId: rawCreate.nodeId,
+        event: this.buildRawCreate(rawCreate),
+      }));
+    const unaccountedArchives: TokenStandardEventWithNodeId[] = allArchives
       .filter(
         (rawArchive) =>
           rawArchive.holding.owner === this.partyId &&
           !accountedForHoldings.has(rawArchive.holding.contractId),
       )
-      .map((rawCreate) => this.buildRawArchive(rawCreate.holding));
+      .map((rawArchive) => ({
+        nodeId: rawArchive.nodeId,
+        event: this.buildRawArchive(rawArchive),
+      }));
 
     const result = holdingChanges
-      .filter((change) => holdingChangesNonEmpty(change))
+      .filter((change) => holdingChangesNonEmpty(change.event))
       .concat(unaccountedArchives)
-      .concat(unaccountedCreates);
+      .concat(unaccountedCreates)
+      .sort((a, b) => a.nodeId - b.nodeId)
+      .map((withNodeId) => withNodeId.event);
 
     return result;
   }
 
   extractHoldingCreate(
     createdEvent: LedgerApiEvent["CreatedEvent"],
+    parentChoice: string,
   ): ExtractedHolding | null {
     if (!createdEvent || !this.createdEventInvolvesUser(createdEvent)) {
       return null;
@@ -127,14 +171,23 @@ export class V2TransactionParser {
       Holding.decoder.runWithException(holdingView.viewValue),
     );
 
-    return { holding: result, nodeId: createdEvent.nodeId };
+    return {
+      holding: result,
+      nodeId: createdEvent.nodeId,
+      offset: createdEvent.offset,
+      packageName: createdEvent.packageName,
+      parentChoice,
+      templateId: createdEvent.templateId,
+      actingParties: [],
+    };
   }
 
-  async extractHoldingsArchive(
+  async extractHoldingArchive(
     archiveEvent:
       | LedgerApiEvent["ExercisedEvent"]
       | LedgerApiEvent["ArchivedEvent"]
       | undefined,
+    parentChoice: string,
     cachedHoldings: Map<string, HoldingResult>,
   ): Promise<ExtractedHolding | null> {
     if (
@@ -147,18 +200,27 @@ export class V2TransactionParser {
     }
     const result = await this.resolveHolding(
       archiveEvent.contractId,
+      parentChoice,
       cachedHoldings,
     );
-    return result && { holding: result, nodeId: archiveEvent.nodeId };
+    return (
+      result && {
+        holding: result,
+        nodeId: archiveEvent.nodeId,
+        offset: archiveEvent.offset,
+        packageName: archiveEvent.packageName,
+        parentChoice,
+        templateId: archiveEvent.templateId,
+        actingParties:
+          (archiveEvent as LedgerApiEvent["ExercisedEvent"]).actingParties ||
+          [],
+      }
+    );
   }
 
   extractChoiceArgumentEventLog_HoldingsChange(
-    event: LedgerApiEvent,
+    exercisedEvent: LedgerApiEvent["ExercisedEvent"],
   ): EventLog_HoldingsChange | null {
-    const exercisedEvent = event.ExercisedEvent;
-    if (!exercisedEvent) {
-      return null;
-    }
     const { interfaceId, choice, choiceArgument } = exercisedEvent;
 
     if (
@@ -186,13 +248,15 @@ export class V2TransactionParser {
 
     const resolvedInputHoldings = (
       await Promise.all(
-        inputHoldingCids.map((cid) => this.resolveHolding(cid, cachedHoldings)),
+        inputHoldingCids.map((cid) =>
+          this.resolveHolding(cid, "EventLog_HoldingsChange", cachedHoldings),
+        ),
       )
     ).filter((h) => h !== null);
     const resolvedOutputHoldings = (
       await Promise.all(
         outputHoldingCids.map((cid) =>
-          this.resolveHolding(cid, cachedHoldings),
+          this.resolveHolding(cid, "EventLog_HoldingsChange", cachedHoldings),
         ),
       )
     ).filter((h) => h !== null);
@@ -245,6 +309,7 @@ export class V2TransactionParser {
 
   async resolveHolding(
     cid: string,
+    parentChoiceName: string,
     cachedHoldings: Map<string, HoldingResult>,
   ): Promise<HoldingResult | null> {
     const cached = cachedHoldings.get(cid);
@@ -266,7 +331,10 @@ export class V2TransactionParser {
       return null;
     }
 
-    const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);
+    const holding = this.extractHoldingCreate(
+      fromEvent.created.createdEvent,
+      parentChoiceName,
+    );
     if (!holding) {
       throw new Error(
         `Contract ${cid} should be a Holding but it's not: ${JSON.stringify(fromEvent)}`,
@@ -285,25 +353,25 @@ export class V2TransactionParser {
       .some((party) => this.partyId === party);
   }
 
-  buildRawCreate(holding: HoldingResult): TokenStandardEvent {
+  buildRawCreate(holding: ExtractedHolding): TokenStandardEvent {
     const lockedHoldingsChange = {
       archives: [],
-      creates: holding.lock ? [holding] : [],
+      creates: holding.holding.lock ? [holding.holding] : [],
     };
     const unlockedHoldingsChange = {
       archives: [],
-      creates: !holding.lock ? [holding] : [],
+      creates: !holding.holding.lock ? [holding.holding] : [],
     };
     return {
       label: {
         type: "Create",
-        contractId: holding.contractId,
-        meta: holding.meta,
+        contractId: holding.holding.contractId,
+        meta: holding.holding.meta,
         payload: holding,
-        templateId: "TODO",
-        packageName: "TODO",
-        offset: 123,
-        parentChoice: "TODO",
+        templateId: holding.templateId,
+        packageName: holding.packageName,
+        offset: holding.offset,
+        parentChoice: holding.parentChoice,
       },
       lockedHoldingsChange,
       unlockedHoldingsChange,
@@ -319,27 +387,26 @@ export class V2TransactionParser {
     };
   }
 
-  buildRawArchive(holding: HoldingResult): TokenStandardEvent {
+  buildRawArchive(holding: ExtractedHolding): TokenStandardEvent {
     const lockedHoldingsChange = {
       creates: [],
-      archives: holding.lock ? [holding] : [],
+      archives: holding.holding.lock ? [holding.holding] : [],
     };
     const unlockedHoldingsChange = {
       creates: [],
-      archives: !holding.lock ? [holding] : [],
+      archives: !holding.holding.lock ? [holding.holding] : [],
     };
     return {
       label: {
         type: "Archive",
-        contractId: holding.contractId,
-        meta: holding.meta,
+        contractId: holding.holding.contractId,
+        meta: holding.holding.meta,
         payload: holding,
-        // TODO: needs original & parents
-        actingParties: [],
-        templateId: "TODO",
-        packageName: "TODO",
-        offset: 123,
-        parentChoice: "TODO",
+        actingParties: holding.actingParties,
+        templateId: holding.templateId,
+        packageName: holding.packageName,
+        offset: holding.offset,
+        parentChoice: holding.parentChoice,
       },
       lockedHoldingsChange,
       unlockedHoldingsChange,
@@ -358,6 +425,11 @@ export class V2TransactionParser {
 
 interface ExtractedHolding {
   holding: HoldingResult;
+  offset: number;
+  parentChoice: string;
+  actingParties: string[];
+  templateId: string;
+  packageName: string;
   nodeId: number;
 }
 
@@ -377,4 +449,9 @@ function holdingViewToResult(cid: string, holding: Holding): HoldingResult {
       : null,
     meta: holding.meta,
   };
+}
+
+interface TokenStandardEventWithNodeId {
+  nodeId: number;
+  event: TokenStandardEvent;
 }

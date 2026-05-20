@@ -6,6 +6,7 @@ import {
   getInterfaceView,
   getKnownInterfaceView,
   getMetaKeyValue,
+  getNodeIdAndEvent,
   hasInterface,
   mergeMetas,
   removeParsedMetaKeys,
@@ -700,40 +701,4 @@ interface ParsedKnownExercisedEvent {
   label: Label;
   children: HoldingsChange;
   transferInstruction: TransferInstructionView | null;
-}
-
-// a naive implementation like event.X?.nodeId || event.Y?.nodeId || event.Z?.nodeId fails when nodeId=0
-interface NodeIdAndEvent {
-  nodeId: number;
-  exercisedEvent?: LedgerApiExercisedEvent;
-  archivedEvent?: LedgerApiArchivedEvent | LedgerApiExercisedEvent;
-  createdEvent?: LedgerApiCreatedEvent;
-}
-function getNodeIdAndEvent(event: LedgerApiEvent): NodeIdAndEvent {
-  if (event.ExercisedEvent) {
-    // ledger API's TRANSACTION_SHAPE_LEDGER_EFFECTS does not include ArchivedEvent, instead has the choice as Archive
-    if (event.ExercisedEvent.choice === "Archive") {
-      return {
-        nodeId: event.ExercisedEvent.nodeId,
-        archivedEvent: event.ExercisedEvent,
-      };
-    } else {
-      return {
-        nodeId: event.ExercisedEvent.nodeId,
-        exercisedEvent: event.ExercisedEvent,
-      };
-    }
-  } else if (event.CreatedEvent) {
-    return {
-      nodeId: event.CreatedEvent.nodeId,
-      createdEvent: event.CreatedEvent,
-    };
-  } else if (event.ArchivedEvent) {
-    return {
-      nodeId: event.ArchivedEvent.nodeId,
-      archivedEvent: event.ArchivedEvent,
-    };
-  } else {
-    throw new Error(`Impossible event type: ${event}`);
-  }
 }
