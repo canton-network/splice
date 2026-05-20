@@ -104,8 +104,7 @@ export const UserProvider: React.FC<{
     if (reauthInFlight.current) return;
     if (auth === undefined) return;
     reauthInFlight.current = true;
-    const state = { redirectTo: window.location.href.replace(window.location.origin, '') };
-    auth.signinRedirect({ state });
+    auth.signoutRedirect();
   }, [auth]);
 
   useEffect(() => onAuthExpired(reauthOnExpiry), [reauthOnExpiry]);
@@ -155,7 +154,7 @@ export const UserProvider: React.FC<{
           setUserAccessToken(undefined);
 
           if (auth && authMethod === 'oidc') {
-            auth.removeUser();
+            auth.signoutRedirect();
           }
           if (authMethod === 'sst' || testAuthConf) {
             window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
