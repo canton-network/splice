@@ -95,7 +95,6 @@ under the bundle root:
   everything in the validator set plus SV-specific dashboards.
 
 Import the folder matching your role into your Grafana instance.
-The dashboards can be found under the `grafana-dashboards` folder in the release bundle.
 
 .. note::
 
