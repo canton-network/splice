@@ -61,18 +61,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     with ExternallySignedPartyTestUtil
     with TokenStandardTest {
 
-  // We run this test in multiple modes to confirm that various triggers work
-  // correctly based on the rewardConfig. Although this is somewhat redundant,
-  // it allows us to re-use the same test, and because it is expected that in long
-  // term only MintingTrafficBased would be necessary.
-  //
-  // The NoConfig is a special case; as it is simply testing that no regression
-  // happen until the rewardConfig is set to 'Some' value. Once we set the
-  // rewardConfig via vote, it will likely never get toggled back to None, and hence
-  // this mode could be removed altogether.
-  //
-  // Similarly OnlyRewardConfig and DryRun could be removed once traffic-based
-  // rewards is the default.
   protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
 
   private def dryRunEnabled: Boolean =
@@ -80,8 +68,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   private def mintingTrafficBased: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
-
-  private def producesV2Contracts: Boolean = dryRunEnabled || mintingTrafficBased
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -97,25 +83,19 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }
       })
       .addConfigTransform((_, config) =>
-        rewardConfigMode match {
-          case TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig => config
-          case TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun |
-              TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.OnlyRewardConfig |
-              TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased =>
-            ConfigTransforms.withRewardConfig(
-              InitialRewardConfig(
-                mintingVersion =
-                  if (mintingTrafficBased)
-                    TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
-                  else TrafficBasedRewardsTimeBasedIntegrationTestBase.featuredAppMarkers,
-                dryRunVersion = Option.when(dryRunEnabled)(
-                  TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
-                ),
-                appRewardCouponThreshold =
-                  TrafficBasedRewardsTimeBasedIntegrationTestBase.appRewardCouponThreshold,
-              )
-            )(config)
-        }
+        ConfigTransforms.withRewardConfig(
+          InitialRewardConfig(
+            mintingVersion =
+              if (mintingTrafficBased)
+                TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
+              else TrafficBasedRewardsTimeBasedIntegrationTestBase.featuredAppMarkers,
+            dryRunVersion = Option.when(dryRunEnabled)(
+              TrafficBasedRewardsTimeBasedIntegrationTestBase.trafficBasedAppRewards
+            ),
+            appRewardCouponThreshold =
+              TrafficBasedRewardsTimeBasedIntegrationTestBase.appRewardCouponThreshold,
+          )
+        )(config)
       )
       // Pause background wallet/validator automation so that we can test round with no activity,
       // and even do calcs comparison for known transactions in a round
@@ -277,62 +257,60 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           val id7 = settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
-          if (producesV2Contracts) {
-            clue(
-              "CalculateRewardsV2 contracts should exist for each round"
-            ) {
+          clue(
+            "CalculateRewardsV2 contracts should exist for each round"
+          ) {
+            eventually() {
+              val calculateRewardsRounds =
+                sv1Backend.appState.dsoStore
+                  .listCalculateRewardsV2()
+                  .futureValue
+                  .map(_.payload.round.number)
+                  .toSet
+              (0L to 10L).foreach { round =>
+                calculateRewardsRounds should contain(round) withClue
+                  s"CalculateRewardsV2 should exist for round $round"
+              }
+            }
+            // For rounds 0..5 scan will not be able calculate activity totals
+            // and root hashes, so archiving them here keep the
+            // CalculateRewardsTrigger's logs clean, as they expect each round
+            // with CalculateRewardsV2 to have a root hash.
+            if (dryRunEnabled) {
+              clue("Archive dry-run CalculateRewardsV2 for rounds 0..5 via sv admin API") {
+                sv1Backend.archiveDryRunRewardAccountingContracts((0L to 5L).toSeq)
+              }
+            } else {
+              // Bootstrapping a network with mintingVersion set to trafficBasedAppRewards
+              // is in principle not supported, as the round 0 will never have
+              // activity totals/root-hash calculated, and its CalculateRewardsV2 cannot be processed.
+              // So the only way to handle this in test is via direct archive.
+              clue("Archive CalculateRewardsV2 for rounds 0..5 directly as dso") {
+                val cids = sv1Backend.appState.dsoStore
+                  .listCalculateRewardsV2()
+                  .futureValue
+                  .filter(c => c.payload.round.number >= 0L && c.payload.round.number <= 5L)
+                  .map(_.contractId)
+                if (cids.nonEmpty) {
+                  sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+                    .submitJava(
+                      userId = sv1Backend.config.ledgerApiUser,
+                      actAs = Seq(dsoParty),
+                      commands = cids.flatMap(_.exerciseArchive().commands.asScala.toSeq),
+                    )
+                }
+              }
+            }
+            clue("CalculateRewardsV2 contracts for rounds 0..5 are gone") {
               eventually() {
-                val calculateRewardsRounds =
-                  sv1Backend.appState.dsoStore
-                    .listCalculateRewardsV2()
-                    .futureValue
-                    .map(_.payload.round.number)
-                    .toSet
-                (0L to 10L).foreach { round =>
-                  calculateRewardsRounds should contain(round) withClue
-                    s"CalculateRewardsV2 should exist for round $round"
-                }
-              }
-              // For rounds 0..5 scan will not be able calculate activity totals
-              // and root hashes, so archiving them here keep the
-              // CalculateRewardsTrigger's logs clean, as they expect each round
-              // with CalculateRewardsV2 to have a root hash.
-              if (dryRunEnabled) {
-                clue("Archive dry-run CalculateRewardsV2 for rounds 0..5 via sv admin API") {
-                  sv1Backend.archiveDryRunRewardAccountingContracts((0L to 5L).toSeq)
-                }
-              } else {
-                // Bootstrapping a network with mintingVersion set to trafficBasedAppRewards
-                // is in principle not supported, as the round 0 will never have
-                // activity totals/root-hash calculated, and its CalculateRewardsV2 cannot be processed.
-                // So the only way to handle this in test is via direct archive.
-                clue("Archive CalculateRewardsV2 for rounds 0..5 directly as dso") {
-                  val cids = sv1Backend.appState.dsoStore
-                    .listCalculateRewardsV2()
-                    .futureValue
-                    .filter(c => c.payload.round.number >= 0L && c.payload.round.number <= 5L)
-                    .map(_.contractId)
-                  if (cids.nonEmpty) {
-                    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-                      .submitJava(
-                        userId = sv1Backend.config.ledgerApiUser,
-                        actAs = Seq(dsoParty),
-                        commands = cids.flatMap(_.exerciseArchive().commands.asScala.toSeq),
-                      )
-                  }
-                }
-              }
-              clue("CalculateRewardsV2 contracts for rounds 0..5 are gone") {
-                eventually() {
-                  val remaining = sv1Backend.appState.dsoStore
-                    .listCalculateRewardsV2()
-                    .futureValue
-                    .map(_.payload.round.number)
-                    .toSet
-                  (0L to 5L).foreach { round =>
-                    remaining should not contain round withClue
-                      s"CalculateRewardsV2 for round $round should be archived"
-                  }
+                val remaining = sv1Backend.appState.dsoStore
+                  .listCalculateRewardsV2()
+                  .futureValue
+                  .map(_.payload.round.number)
+                  .toSet
+                (0L to 5L).foreach { round =>
+                  remaining should not contain round withClue
+                    s"CalculateRewardsV2 for round $round should be archived"
                 }
               }
             }
@@ -415,15 +393,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertAppActivity(event, "updateId7", Set(aliceParty), expectedRound = 11)
     }
 
-    if (
-      rewardConfigMode != TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig
-    ) {
-      assertRewardCalcs(aliceParty, venueParty)
-    } else {
-      clue("No CalculateRewardsV2 contracts are produced when rewardConfig is unset") {
-        sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue shouldBe empty
-      }
-    }
+    assertRewardCalcs(aliceParty, venueParty)
 
     // Other misc API tests
     clue("404 for non-existent batch data") {
@@ -503,31 +473,25 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     }
 
     // The remaining assertions cover the handling of V2 contracts created on ledger.
-    if (producesV2Contracts) {
-      def listProcessRewardsV2Rounds(): Seq[Long] =
-        sv1Backend.appState.dsoStore
-          .listProcessRewardsV2()
-          .futureValue
-          .map(_.payload.round.number)
+    def listProcessRewardsV2Rounds(): Seq[Long] =
+      sv1Backend.appState.dsoStore
+        .listProcessRewardsV2()
+        .futureValue
+        .map(_.payload.round.number)
 
-      clue("CalculateRewards and ProcessRewards triggers consume middle-round (6..10) contracts") {
-        // V2 contracts for rounds 6..10 should be processed by SVs
-        eventually() {
-          val remainingCalculate = sv1Backend.appState.dsoStore
-            .listCalculateRewardsV2()
-            .futureValue
-            .filter(c => c.payload.round.number >= 6L && c.payload.round.number <= 10L)
-          remainingCalculate shouldBe empty withClue
-            "Middle-round CalculateRewardsV2 contracts (6..10) should be consumed"
-          val remainingProcess = listProcessRewardsV2Rounds()
-            .filter(r => r >= 6L && r <= 10L)
-          remainingProcess shouldBe empty withClue
-            "Middle-round ProcessRewardsV2 contracts (6..10) should be consumed"
-        }
-      }
-    } else {
-      clue("No CalculateRewardsV2 contracts when V2 minting/dry-run is unset") {
-        sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue shouldBe empty
+    clue("CalculateRewards and ProcessRewards triggers consume middle-round (6..10) contracts") {
+      // V2 contracts for rounds 6..10 should be processed by SVs
+      eventually() {
+        val remainingCalculate = sv1Backend.appState.dsoStore
+          .listCalculateRewardsV2()
+          .futureValue
+          .filter(c => c.payload.round.number >= 6L && c.payload.round.number <= 10L)
+        remainingCalculate shouldBe empty withClue
+          "Middle-round CalculateRewardsV2 contracts (6..10) should be consumed"
+        val remainingProcess = listProcessRewardsV2Rounds()
+          .filter(r => r >= 6L && r <= 10L)
+        remainingProcess shouldBe empty withClue
+          "Middle-round ProcessRewardsV2 contracts (6..10) should be consumed"
       }
     }
   }
@@ -822,10 +786,6 @@ object TrafficBasedRewardsTimeBasedIntegrationTestBase {
 
   sealed trait RewardConfigMode
   object RewardConfigMode {
-    // (AmuletConfig.rewardConfig = None).
-    case object NoConfig extends RewardConfigMode
-    // RewardConfig with dryRunVersion = None and mintingVersion = FeaturedAppMarkers
-    case object OnlyRewardConfig extends RewardConfigMode
     // dryRunVersion = TrafficBased
     case object DryRun extends RewardConfigMode
     // mintingVersion = TrafficBased, dryRunVersion = None
@@ -857,18 +817,4 @@ class TrafficBasedRewardsDryRunTimeBasedIntegrationTest
   override protected val rewardConfigMode
       : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
     TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
-}
-
-class TrafficBasedRewardsOnlyRewardConfigTimeBasedIntegrationTest
-    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
-  override protected val rewardConfigMode
-      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
-    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.OnlyRewardConfig
-}
-
-class TrafficBasedRewardsNoRewardConfigTimeBasedIntegrationTest
-    extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
-  override protected val rewardConfigMode
-      : TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode =
-    TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.NoConfig
 }
