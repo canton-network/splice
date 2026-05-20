@@ -610,21 +610,6 @@ class DbScanAppRewardsStore(
 
   // -- Aggregation ------------------------------------------------------------
 
-  /** Returns the latest round for which reward computation has completed
-    * (i.e. a root hash exists). None if no rounds have been computed.
-    */
-  def lookupLatestRoundWithRewardComputation()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]] = {
-
-    runQuerySingle(
-      sql"""select max(round_number) from #${Tables.appRewardRootHashes}
-            where history_id = $historyId
-      """.as[Option[Long]].headOption.map(_.flatten),
-      "appRewards.lookupLatestRoundWithRewardComputation",
-    )
-  }
-
   override def roundsWithComputedRewards(rounds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Set[Long]] = {
