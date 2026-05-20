@@ -444,7 +444,7 @@ export async function getEventsOfContract(
   contractId: string,
   forPartyId: string,
   interfaceNames: InterfaceId[],
-): Promise<null | Required<JsGetEventsByContractIdResponse>> {
+): Promise<null | JsGetEventsByContractIdResponse> {
   const events = await ledgerClient
     .postV2EventsEventsByContractId({
       contractId: contractId,
@@ -468,14 +468,5 @@ export async function getEventsOfContract(
   }
   const created = events.created;
   const archived = events.archived;
-  if (!created || !archived) {
-    throw new Error(
-      `Archival of ${
-        contractId
-      } does not have a corresponding create/archive event: ${JSON.stringify(
-        events,
-      )}`,
-    );
-  }
   return { created, archived };
 }

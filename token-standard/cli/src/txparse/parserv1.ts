@@ -652,12 +652,28 @@ export class V1TransactionParser {
     if (!(archivedEvent.witnessParties || []).includes(this.partyId)) {
       return null;
     }
-    return getEventsOfContract(
+    const events = await getEventsOfContract(
       this.ledgerClient,
       archivedEvent.contractId,
       this.partyId,
       [HoldingInterfaceV1, TransferInstructionInterface],
     );
+    if (!events) {
+      return null;
+    }
+    if (!events.created || !events.archived) {
+      throw new Error(
+        `Archival of ${
+          archivedEvent.contractId
+        } does not have a corresponding create/archive event: ${JSON.stringify(
+          events,
+        )}`,
+      );
+    }
+    return {
+      created: events.created,
+      archived: events.archived,
+    };
   }
 }
 
