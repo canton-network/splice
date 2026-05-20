@@ -67,70 +67,101 @@ class ValidatorLicenseRequestTrigger(
       val synchronizerId = task.domain
 
       for {
-        partyToParticipantResults <- participantAdminConnection.listPartyToParticipant(
-          store = Some(TopologyStoreId.Synchronizer(synchronizerId)),
-          filterParty = validatorParty.filterString,
-        )
+        existingLicense <- dsoStore.lookupValidatorLicenseWithOffset(validatorParty)
 
-        participantIds = partyToParticipantResults.flatMap(_.mapping.participantIds).distinct
-
-        _ <-
-          if (participantIds.isEmpty) {
-            Future.failed(
-              Status.NOT_FOUND
-                .withDescription(s"No participant IDs found registered to party $validatorParty")
-                .asRuntimeException()
+        outcome <- existingLicense.value match {
+          case Some(_) =>
+            logger.info(
+              s"ValidatorLicense already exists for $validatorParty. Rejecting redundant ValidatorLicenseRequest."
             )
-          } else Future.unit
-
-        permissionResults <- Future
-          .sequence(
-            participantIds.map(pid =>
-              participantAdminConnection.listParticipantSynchronizerPermission(
-                synchronizerId = synchronizerId,
-                filterUid = pid.filterString,
+            connection
+              .submit(
+                actAs = Seq(svParty),
+                readAs = Seq.empty,
+                update = Seq(
+                  task.contractId.exerciseValidatorLicenseRequest_Reject(
+                    "ValidatorLicense already exists"
+                  )
+                ),
               )
-            )
-          )
-          .map(_.flatten)
+              .withSynchronizerId(synchronizerId)
+              .noDedup
+              .yieldUnit()
+              .map(_ =>
+                TaskSuccess(s"Rejected duplicate ValidatorLicenseRequest for ${payload.validator}")
+              )
 
-        _ <-
-          if (permissionResults.nonEmpty) {
-            Future.unit
-          } else {
-            Future.failed(
-              Status.NOT_FOUND
-                .withDescription(
-                  s"ParticipantSynchronizerPermission not yet found for any participant of $validatorParty. Checked participants: ${participantIds
-                      .mkString(", ")}"
+          case None =>
+            for {
+              partyToParticipantResults <- participantAdminConnection.listPartyToParticipant(
+                store = Some(TopologyStoreId.Synchronizer(synchronizerId)),
+                filterParty = validatorParty.filterString,
+              )
+
+              participantIds = partyToParticipantResults.flatMap(_.mapping.participantIds).distinct
+
+              _ <-
+                if (participantIds.isEmpty) {
+                  Future.failed(
+                    Status.NOT_FOUND
+                      .withDescription(
+                        s"No participant IDs found registered to party $validatorParty"
+                      )
+                      .asRuntimeException()
+                  )
+                } else Future.unit
+
+              permissionResults <- Future
+                .sequence(
+                  participantIds.map(pid =>
+                    participantAdminConnection.listParticipantSynchronizerPermission(
+                      synchronizerId = synchronizerId,
+                      filterUid = pid.filterString,
+                    )
+                  )
                 )
-                .asRuntimeException()
+                .map(_.flatten)
+
+              _ <-
+                if (permissionResults.nonEmpty) {
+                  Future.unit
+                } else {
+                  Future.failed(
+                    Status.NOT_FOUND
+                      .withDescription(
+                        s"ParticipantSynchronizerPermission not yet found for any participant of $validatorParty. Checked participants: ${participantIds
+                            .mkString(", ")}"
+                      )
+                      .asRuntimeException()
+                  )
+                }
+
+              dsoRules <- dsoStore.getDsoRules()
+
+              cmd1 = task.contractId.exerciseValidatorLicenseRequest_Accept()
+              cmd2 = dsoRules.contractId.exerciseDsoRules_OnboardValidator(
+                svParty.toProtoPrimitive,
+                payload.validator,
+                java.util.Optional.of(payload.version),
+                java.util.Optional.of(payload.contactPoint),
+              )
+
+              _ <- connection
+                .submit(
+                  actAs = Seq(svParty),
+                  readAs = Seq(dsoStore.key.dsoParty),
+                  update = Seq(cmd1, cmd2),
+                )
+                .withSynchronizerId(synchronizerId)
+                .noDedup
+                .yieldUnit()
+
+            } yield TaskSuccess(
+              s"Accepted ValidatorLicenseRequest for validator ${payload.validator} and created ValidatorLicense"
             )
-          }
-
-        dsoRules <- dsoStore.getDsoRules()
-
-        cmd1 = task.contractId.exerciseValidatorLicenseRequest_Accept()
-        cmd2 = dsoRules.contractId.exerciseDsoRules_OnboardValidator(
-          svParty.toProtoPrimitive,
-          payload.validator,
-          java.util.Optional.of(payload.version),
-          java.util.Optional.of(payload.contactPoint),
-        )
-
-        _ <- connection
-          .submit(
-            actAs = Seq(svParty),
-            readAs = Seq(dsoStore.key.dsoParty),
-            update = Seq(cmd1, cmd2),
-          )
-          .withSynchronizerId(synchronizerId)
-          .noDedup
-          .yieldUnit()
-
-      } yield TaskSuccess(
-        s"Accepted ValidatorLicenseRequest for validator ${payload.validator} and created ValidatorLicense"
-      )
+        }
+      } yield outcome
     }
+
   }
 }
