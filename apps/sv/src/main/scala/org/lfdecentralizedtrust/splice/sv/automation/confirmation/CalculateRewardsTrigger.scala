@@ -132,6 +132,7 @@ abstract class CalculateRewardsTriggerBase(
       .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewards.contractId)
       .map(_.isEmpty)
 
+  // TODO (#5623) replace with non-ephemeral connection
   private def withScanConnection[T](f: ScanConnection => Future[T])(implicit
       tc: TraceContext
   ): Future[T] =
@@ -154,6 +155,7 @@ abstract class CalculateRewardsTriggerBase(
         case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
           None
         case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
+          // TODO (#5623) replace with BFT read
           throw new RuntimeException(
             s"Scan cannot provide root hash for round $round"
           )

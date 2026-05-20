@@ -141,12 +141,14 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       conn.getRewardAccountingBatch(round, batchHash).map {
         case Some(response) => response
         case None =>
+          // TODO (#5623) replace with BFT read
           throw new RuntimeException(
             s"Batch not found from scan for round $round with hash $batchHash"
           )
       }
     }
 
+  // TODO (#5623) replace with non-ephemeral connection
   private def withScanConnection[T](f: ScanConnection => Future[T])(implicit
       tc: TraceContext
   ): Future[T] =
