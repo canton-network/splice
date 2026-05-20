@@ -31,6 +31,9 @@ const SvCometbftConfigSchema = z
         ttlSeconds: z.number().optional(),
       })
       .optional(),
+    // Ad-hoc Helm values to be merged (nested) into the values passed to the splice-cometbft chart.
+    // Values provided here override values computed by pulumi for the same nested key.
+    additionalHelmValues: z.record(z.string(), z.any()).optional(),
   })
   .strict();
 const EnvVarConfigSchema = z.object({

@@ -3661,6 +3661,7 @@
           "keysSecret": "",
           "privateKey": "svda1-mock-cometbft-keys-node-private-key",
           "retainBlocks": 5040000,
+          "snapshotHeightDelta": 200,
           "validator": {
             "keyAddress": "2D21D8AB2306770E9F93E8BD0E0F07B3E86817D7",
             "privateKey": "svda1-mock-cometbft-keys-validator-private-key",
