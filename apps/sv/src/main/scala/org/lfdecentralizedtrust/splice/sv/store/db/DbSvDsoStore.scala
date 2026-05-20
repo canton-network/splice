@@ -94,7 +94,7 @@ class DbSvDsoStore(
       // Any change in the store descriptor will lead to previously deployed applications
       // forgetting all persisted data once they upgrade to the new version.
       acsStoreDescriptor = StoreDescriptor(
-        version = 2,
+        version = 3,
         name = "DbSvDsoStore",
         party = key.dsoParty,
         participant = participantId,
