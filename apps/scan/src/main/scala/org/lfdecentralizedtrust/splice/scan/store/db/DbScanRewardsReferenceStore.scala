@@ -220,7 +220,9 @@ class DbScanRewardsReferenceStore(
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
-    multiDomainAcsStore
-      .listContracts(CalculateRewardsV2.COMPANION, limit)
-      .map(_.map(_.contract).sortBy(_.payload.round.number))
+    waitUntilInitialized.flatMap { _ =>
+      multiDomainAcsStore
+        .listContracts(CalculateRewardsV2.COMPANION, limit)
+        .map(_.map(_.contract).sortBy(_.payload.round.number))
+    }
 }
