@@ -14,6 +14,7 @@ import {
   CreatedEvent as LedgerApiCreatedEvent,
   DeduplicationPeriod2,
   DefaultApi as LedgerJsonApi,
+  Event as LedgerApiEvent,
   ExerciseCommand,
   ExercisedEvent as LedgerApiExercisedEvent,
   HttpAuthAuthentication,
