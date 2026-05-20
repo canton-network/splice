@@ -49,26 +49,65 @@ export class V2TransactionParser {
   }
 
   async parseEvents(events: LedgerApiEvent[]): Promise<TokenStandardEvent[]> {
-    const createdHoldingsMap = new Map(
-      events
-        .map((event) => this.extractHoldingCreate(event.CreatedEvent))
-        .filter((item) => item !== null),
+    const creates = events
+      .map((event) => this.extractHoldingCreate(event.CreatedEvent))
+      .filter((item) => item !== null);
+    const cachedHoldings = new Map(
+      creates.map((holding) => [holding.holding.contractId, holding.holding]),
     );
-    const result = await Promise.all(
+    const archives = (
+      await Promise.all(
+        events.map((event) =>
+          this.extractHoldingsArchive(
+            event.ExercisedEvent || event.ArchivedEvent,
+            cachedHoldings,
+          ),
+        ),
+      )
+    ).filter((item) => item !== null);
+
+    const holdingChanges = await Promise.all(
       events
         .map(this.extractChoiceArgumentEventLog_HoldingsChange)
         .filter((item) => item !== null)
         .map((holdingsChange) =>
-          this.parseHoldingsChange(holdingsChange, createdHoldingsMap),
+          this.parseHoldingsChange(holdingsChange, cachedHoldings),
         ),
     );
+    const accountedForHoldings = new Set(
+      holdingChanges
+        .flatMap((holdingsChange) =>
+          holdingsChange.lockedHoldingsChange.archives
+            .concat(holdingsChange.lockedHoldingsChange.creates)
+            .concat(holdingsChange.unlockedHoldingsChange.archives)
+            .concat(holdingsChange.unlockedHoldingsChange.creates),
+        )
+        .map((holding) => holding.contractId),
+    );
 
-    return result.filter((change) => holdingChangesNonEmpty(change));
+    const unaccountedCreates: TokenStandardEvent[] = creates
+      .filter(
+        (rawCreate) => !accountedForHoldings.has(rawCreate.holding.contractId),
+      )
+      .map((rawCreate) => this.buildRawCreate(rawCreate.holding));
+    const unaccountedArchives = archives
+      .filter(
+        (rawArchive) =>
+          !accountedForHoldings.has(rawArchive.holding.contractId),
+      )
+      .map((rawCreate) => this.buildRawArchive(rawCreate.holding));
+
+    const result = holdingChanges
+      .filter((change) => holdingChangesNonEmpty(change))
+      .concat(unaccountedArchives)
+      .concat(unaccountedCreates);
+
+    return result;
   }
 
   extractHoldingCreate(
     createdEvent: LedgerApiEvent["CreatedEvent"],
-  ): [string, Holding] | null {
+  ): ExtractedHolding | null {
     if (!createdEvent) {
       return null;
     }
@@ -80,10 +119,25 @@ export class V2TransactionParser {
       return null;
     }
 
-    return [
+    const result = holdingViewToResult(
       createdEvent.contractId,
       Holding.decoder.runWithException(holdingView.viewValue),
-    ];
+    );
+
+    return { holding: result, nodeId: createdEvent.nodeId };
+  }
+
+  async extractHoldingsArchive(
+    archiveEvent:
+      | LedgerApiEvent["ExercisedEvent"]
+      | LedgerApiEvent["ArchivedEvent"],
+    cachedHoldings: Map<string, HoldingResult>,
+  ): Promise<ExtractedHolding | null> {
+    const result = await this.resolveHolding(
+      archiveEvent.contractId,
+      cachedHoldings,
+    );
+    return result && { holding: result, nodeId: archiveEvent.nodeId };
   }
 
   extractChoiceArgumentEventLog_HoldingsChange(
@@ -108,7 +162,7 @@ export class V2TransactionParser {
 
   async parseHoldingsChange(
     holdingsChange: EventLog_HoldingsChange,
-    cachedHoldings: Map<string, Holding>,
+    cachedHoldings: Map<string, HoldingResult>,
   ): Promise<TokenStandardEvent> {
     // exclude holdings that are both in input and output
     const inputHoldingCids = holdingsChange.inputHoldingCids.filter(
@@ -179,50 +233,130 @@ export class V2TransactionParser {
 
   async resolveHolding(
     cid: string,
-    cachedHoldings: Map<string, Holding>,
+    cachedHoldings: Map<string, HoldingResult>,
   ): Promise<HoldingResult | null> {
-    let result = cachedHoldings.get(cid);
-    if (!result) {
-      const fromEvent = await getEventsOfContract(
-        this.ledgerClient,
-        cid,
-        this.partyId,
-        [HoldingInterfaceV2],
-      );
-      if (
-        !fromEvent ||
-        !fromEvent.created ||
-        !fromEvent.created.createdEvent.witnessParties
-          .concat(fromEvent.created.createdEvent.signatories)
-          .concat(fromEvent.created.createdEvent.observers || [])
-          .some((party) => this.partyId === party)
-      ) {
-        return null;
-      }
-
-      const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);
-      if (!holding) {
-        throw new Error(
-          `Contract ${cid} should be a Holding but it's not: ${JSON.stringify(fromEvent)}`,
-        );
-      }
-      cachedHoldings.set(cid, holding[1]);
-      result = holding[1];
+    const cached = cachedHoldings.get(cid);
+    if (cached) {
+      return cached;
     }
+
+    const fromEvent = await getEventsOfContract(
+      this.ledgerClient,
+      cid,
+      this.partyId,
+      [HoldingInterfaceV2],
+    );
+    if (
+      !fromEvent ||
+      !fromEvent.created ||
+      !fromEvent.created.createdEvent.witnessParties
+        .concat(fromEvent.created.createdEvent.signatories)
+        .concat(fromEvent.created.createdEvent.observers || [])
+        .some((party) => this.partyId === party)
+    ) {
+      return null;
+    }
+
+    const holding = this.extractHoldingCreate(fromEvent.created.createdEvent);
+    if (!holding) {
+      throw new Error(
+        `Contract ${cid} should be a Holding but it's not: ${JSON.stringify(fromEvent)}`,
+      );
+    }
+    cachedHoldings.set(cid, holding.holding);
+    return holding.holding;
+  }
+
+  buildRawCreate(holding: HoldingResult): TokenStandardEvent {
+    const lockedHoldingsChange = {
+      archives: [],
+      creates: holding.lock ? [holding] : [],
+    };
+    const unlockedHoldingsChange = {
+      archives: [],
+      creates: !holding.lock ? [holding] : [],
+    };
     return {
-      contractId: cid,
-      amount: result.amount,
-      owner: result.account.owner ?? "<missing>",
-      instrumentId: result.instrumentId,
-      lock: result.lock
-        ? {
-            holders: result.lock.holders,
-            context: result.lock.context || null,
-            expiresAfter: result.lock.expiresAfter?.microseconds || null,
-            expiresAt: result.lock.expiresAt || null,
-          }
-        : null,
-      meta: result.meta,
+      label: {
+        type: "Create",
+        contractId: holding.contractId,
+        meta: holding.meta,
+        payload: holding,
+        templateId: "TODO",
+        packageName: "TODO",
+        offset: 123,
+        parentChoice: "TODO",
+      },
+      lockedHoldingsChange,
+      unlockedHoldingsChange,
+      lockedHoldingsChangeSummary: computeSummary(
+        lockedHoldingsChange,
+        this.partyId,
+      ),
+      unlockedHoldingsChangeSummary: computeSummary(
+        unlockedHoldingsChange,
+        this.partyId,
+      ),
+      transferInstruction: null,
     };
   }
+
+  buildRawArchive(holding: HoldingResult): TokenStandardEvent {
+    const lockedHoldingsChange = {
+      creates: [],
+      archives: holding.lock ? [holding] : [],
+    };
+    const unlockedHoldingsChange = {
+      creates: [],
+      archives: !holding.lock ? [holding] : [],
+    };
+    return {
+      label: {
+        type: "Archive",
+        contractId: holding.contractId,
+        meta: holding.meta,
+        payload: holding,
+        // TODO: needs original & parents
+        actingParties: [],
+        templateId: "TODO",
+        packageName: "TODO",
+        offset: 123,
+        parentChoice: "TODO",
+      },
+      lockedHoldingsChange,
+      unlockedHoldingsChange,
+      lockedHoldingsChangeSummary: computeSummary(
+        lockedHoldingsChange,
+        this.partyId,
+      ),
+      unlockedHoldingsChangeSummary: computeSummary(
+        unlockedHoldingsChange,
+        this.partyId,
+      ),
+      transferInstruction: null,
+    };
+  }
+}
+
+interface ExtractedHolding {
+  holding: HoldingResult;
+  nodeId: number;
+}
+
+function holdingViewToResult(cid: string, holding: Holding): HoldingResult {
+  return {
+    contractId: cid,
+    amount: holding.amount,
+    owner: holding.account.owner ?? "<missing>",
+    instrumentId: holding.instrumentId,
+    lock: holding.lock
+      ? {
+          holders: holding.lock.holders,
+          context: holding.lock.context || null,
+          expiresAfter: holding.lock.expiresAfter?.microseconds || null,
+          expiresAt: holding.lock.expiresAt || null,
+        }
+      : null,
+    meta: holding.meta,
+  };
 }
