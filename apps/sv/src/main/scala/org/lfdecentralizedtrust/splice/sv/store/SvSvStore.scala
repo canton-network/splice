@@ -22,6 +22,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicenserequest.ValidatorLicenseRequest
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
 
@@ -130,6 +131,9 @@ object SvSvStore {
     MultiDomainAcsStore.SimpleContractFilter(
       key.svParty,
       Map(
+        mkFilter(ValidatorLicenseRequest.COMPANION)(co => co.payload.sponsor == sv) { contract =>
+          SvAcsStoreRowData(contract)
+        },
         mkFilter(vo.ValidatorOnboarding.COMPANION)(co => co.payload.sv == sv) { contract =>
           SvAcsStoreRowData(
             contract,

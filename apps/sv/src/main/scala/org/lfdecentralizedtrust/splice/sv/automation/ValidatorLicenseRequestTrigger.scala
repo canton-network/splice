@@ -20,14 +20,15 @@ import org.lfdecentralizedtrust.splice.environment.{
   ParticipantAdminConnection,
   SpliceLedgerConnection,
 }
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
+import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class ValidatorLicenseRequestTrigger(
     override protected val context: TriggerContext,
-    store: SvDsoStore,
+    svStore: SvSvStore,
+    dsoStore: SvDsoStore,
     connection: SpliceLedgerConnection,
     participantAdminConnection: ParticipantAdminConnection,
 )(implicit
@@ -38,7 +39,7 @@ class ValidatorLicenseRequestTrigger(
       ValidatorLicenseRequest.ContractId,
       ValidatorLicenseRequest,
     ](
-      store,
+      svStore,
       ValidatorLicenseRequest.COMPANION,
     ) {
 
@@ -49,7 +50,7 @@ class ValidatorLicenseRequestTrigger(
       ]
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val payload = task.payload
-    val svParty = store.key.svParty
+    val svParty = svStore.key.svParty
 
     logger.info(
       s"Running ValidatorLicenseRequestTrigger for ${payload.validator} ValidatorLicenseRequest"
@@ -118,7 +119,7 @@ class ValidatorLicenseRequestTrigger(
             )
         }
 
-        dsoRules <- store.getDsoRules()
+        dsoRules <- dsoStore.getDsoRules()
 
         cmd1 = task.contractId.exerciseValidatorLicenseRequest_Accept()
         cmd2 = dsoRules.contractId.exerciseDsoRules_OnboardValidator(
@@ -131,7 +132,7 @@ class ValidatorLicenseRequestTrigger(
         _ <- connection
           .submit(
             actAs = Seq(svParty),
-            readAs = Seq(store.key.dsoParty),
+            readAs = Seq(dsoStore.key.dsoParty),
             update = Seq(cmd1, cmd2),
           )
           .withSynchronizerId(synchronizerId)
