@@ -256,7 +256,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     webDriver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0))
     registerWebDriver(name, webDriver)
 
-    biDi.addListener[LogEntry](
+    biDi.addListener(
       Log.entryAdded(),
       (logEntry: LogEntry) => {
         logEntry.getConsoleLogEntry.toScala.foreach { consoleLogEntry =>
@@ -272,7 +272,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       },
     )
     val JSON = new Json()
-    biDi.addListener[NavigationInfo](
+    biDi.addListener(
       new Event[NavigationInfo](
         "browsingContext.domContentLoaded",
         params => {
@@ -534,8 +534,6 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       Try {
         webDriver.executeScript("""
           console.debug(`localStorage = [${Object.keys(localStorage).join(", ")}]`);
-        """)
-        webDriver.executeScript("""
           console.debug(`sessionStorage = [${Object.keys(sessionStorage).join(", ")}]`);
         """)
       }.fold(e => logger.debug(s"Failed to log storage: $e"), _ => ())
