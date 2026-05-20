@@ -350,6 +350,12 @@ export class V1TransactionParser {
         return await this.buildBasic(exercisedEvent, "Unlock", null);
       case "expire-dust":
         return await this.buildBasic(exercisedEvent, "ExpireDust", null);
+      case "settle-V2-allocation":
+        return await this.buildBasic(
+          exercisedEvent,
+          "SettleV2Allocation",
+          null,
+        );
       default:
         throw new Error(
           `Unknown tx-kind '${txKind}' in ${JSON.stringify(exercisedEvent)}`,
@@ -529,7 +535,7 @@ export class V1TransactionParser {
 
   private async buildBasic(
     exercisedEvent: LedgerApiExercisedEvent,
-    type: "Unlock" | "ExpireDust",
+    type: "Unlock" | "ExpireDust" | "SettleV2Allocation",
     tokenStandardChoice: TokenStandardChoice | null,
   ): Promise<ParsedKnownExercisedEvent> {
     const children = await this.getChildren(exercisedEvent);

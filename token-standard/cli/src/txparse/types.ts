@@ -82,6 +82,7 @@ export type Label =
   | Unlock
   | ExpireDust
   | UnknownAction
+  | SettleV2Allocation
   | V2Label;
 type UnknownAction = RawArchive | RawCreate;
 export interface V2Label {
@@ -136,6 +137,10 @@ interface Unlock extends KnownLabel {
 
 interface ExpireDust extends KnownLabel {
   type: "ExpireDust";
+}
+
+interface SettleV2Allocation extends KnownLabel {
+  type: "SettleV2Allocation";
 }
 
 interface RawArchive extends BaseLabel {
