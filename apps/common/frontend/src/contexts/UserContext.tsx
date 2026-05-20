@@ -98,16 +98,22 @@ export const UserProvider: React.FC<{
     }
   };
 
-  const reauthInFlight = useRef(false);
+  const signoutInFlight = useRef(false);
 
-  const reauthOnExpiry = useCallback(() => {
-    if (reauthInFlight.current) return;
+  const signoutFromIdp = useCallback(() => {
     if (auth === undefined) return;
-    reauthInFlight.current = true;
-    auth.signoutRedirect();
+    auth.removeUser().finally(() => {
+      window.location.href = window.location.origin;
+    });
   }, [auth]);
 
-  useEffect(() => onAuthExpired(reauthOnExpiry), [reauthOnExpiry]);
+  const signoutOnExpiry = useCallback(() => {
+    if (signoutInFlight.current) return;
+    signoutInFlight.current = true;
+    signoutFromIdp();
+  }, [signoutFromIdp]);
+
+  useEffect(() => onAuthExpired(signoutOnExpiry), [signoutOnExpiry]);
 
   useEffect(() => {
     async function f(user: User) {
@@ -153,8 +159,8 @@ export const UserProvider: React.FC<{
           setUserId(undefined);
           setUserAccessToken(undefined);
 
-          if (auth && authMethod === 'oidc') {
-            auth.signoutRedirect();
+          if (authMethod === 'oidc') {
+            signoutFromIdp();
           }
           if (authMethod === 'sst' || testAuthConf) {
             window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
