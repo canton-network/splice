@@ -7,6 +7,7 @@ include:
   - canton/sequencer-client.json
   - canton/sequencer-connection-pool.json
   - canton-network/automations.json
+  - canton-network/sequencer-submissions-amplifications.json
   - canton-network/synchronizer-fees-validator.json
   - canton-network/validator-scan-connections.json
   - database/postgres_exporter.json

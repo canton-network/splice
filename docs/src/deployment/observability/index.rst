@@ -8,6 +8,7 @@ Monitoring and Observability
 
 .. toctree::
 
-   validator_health.rst
+   grafana_dashboards.rst
    metrics.rst
    metrics_reference.rst
+   validator_health.rst
