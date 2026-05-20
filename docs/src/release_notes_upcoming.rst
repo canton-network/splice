@@ -16,3 +16,7 @@
         - The ``app_activity_record_store`` table has been modified to improve DB performance.
           The corresponding DB migration truncates the existing data in this table which has been ingested since the ``0.5.18`` release, which is OK as we are still in the preview phase of CIP-104.
           The downstream reward-accounting tables are also cleared as part of this change.
+
+    - SV app
+
+        - Support a list of ``additionalLegacy`` synchronizers for the case where more than one legacy synchronizer must be kept alive at a given point.
