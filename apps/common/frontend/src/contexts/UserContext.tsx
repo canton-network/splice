@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { onAuthExpired } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { User } from 'oidc-client-ts';
-import React, { useCallback, useContext, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthState, useAuth } from 'react-oidc-context';
 
 import {
@@ -98,8 +98,12 @@ export const UserProvider: React.FC<{
     }
   };
 
+  const reauthInFlight = useRef(false);
+
   const reauthOnExpiry = useCallback(() => {
+    if (reauthInFlight.current) return;
     if (auth === undefined) return;
+    reauthInFlight.current = true;
     const state = { redirectTo: window.location.href.replace(window.location.origin, '') };
     auth.signinRedirect({ state });
   }, [auth]);
