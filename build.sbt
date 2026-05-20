@@ -1773,13 +1773,19 @@ lazy val bundleTask = {
     val testResources = Seq("-r", "apps/app/src/test/resources", "testResources")
     val transformConfig =
       Seq("-r", "scripts/transform-config.sc", "testResources/transform-config.sc")
+    runCommand(Seq("scripts/observability/stage-grafana-dashboards.sh"), log)
+    val dashboardsStaging =
+      (file("target") / "bundle-staging" / "grafana-dashboards").getAbsoluteFile
     val dashboards = Seq(
       "-r",
-      "cluster/pulumi/observability/grafana-dashboards",
-      "grafana-dashboards",
+      (dashboardsStaging / "sv-grafana-dashboards").getPath,
+      "sv-grafana-dashboards",
+      "-r",
+      (dashboardsStaging / "validator-grafana-dashboards").getPath,
+      "validator-grafana-dashboards",
       "-r",
       "network-health",
-      "grafana-dashboards/docs",
+      "sv-grafana-dashboards/docs",
     )
     val dockerCompose = Seq("-r", "cluster/compose", "docker-compose")
     val webUis =

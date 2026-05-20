@@ -7,6 +7,10 @@
 
 .. release-notes:: Upcoming
 
+    - Observability
+
+       - The release bundle now ships a separate Grafana dashboard folder ``validator-grafana-dashboards/`` for Validator operators.
+
     - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting has been added to control the activity record ingestion version for the purpose of recovering from unexpected operational issues.
       Incrementing this value causes the Scan app to record a new app activity record completeness lower bound. Reward accounting excludes rounds before this boundary, even though their activity records are retained. Thus bumping the user version has the same effect as reinitializing the app activity record computation from the time of the bump onwards.
       See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.

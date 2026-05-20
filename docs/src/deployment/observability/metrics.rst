@@ -86,8 +86,15 @@ to enable the trigger with a polling interval of 5 minutes.
 Grafana Dashboards
 ++++++++++++++++++
 
-The release bundle (|bundle_download_link|) contains a set of Grafana dashboards that are built based on the metrics above.
-These dashboards can be imported into a Grafana instance. The dashboards are built assuming a K8s deployment, and may need to be modified for other deployment types.
+The release bundle (|bundle_download_link|) contains two sets of Grafana dashboards
+under the bundle root:
+
+- ``validator-grafana-dashboards/``: for operators running a validator
+  (validator app + participant). Includes common dashboards (JVM, K8s, participant) plus validator-specific dashboards.
+- ``sv-grafana-dashboards/``: for operators running a Super Validator. Contains
+  everything in the validator set plus SV-specific dashboards.
+
+Import the folder matching your role into your Grafana instance.
 The dashboards can be found under the `grafana-dashboards` folder in the release bundle.
 
 .. note::
