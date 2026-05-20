@@ -80,7 +80,7 @@ class SvSvAutomationService(
       svStore,
       dsoStore,
       connection(
-        SpliceLedgerConnectionPriority.High
+        SpliceLedgerConnectionPriority.Medium
       ),
       participantAdminConnection,
     )

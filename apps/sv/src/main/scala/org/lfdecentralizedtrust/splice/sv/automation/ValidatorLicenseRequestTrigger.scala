@@ -56,7 +56,7 @@ class ValidatorLicenseRequestTrigger(
       s"Running ValidatorLicenseRequestTrigger for ${payload.validator} ValidatorLicenseRequest"
     )
 
-    if (payload.sponsor != svParty.toProtoPrimitive) {
+    if (payload.sponsor != svParty.toProtoPrimitive) { // this condition is already checked in the ingestion, hence it is redundant
       logger.debug(
         s"Skipping ValidatorLicenseRequest ${task.contractId} as it is sponsored by ${payload.sponsor}, not us ($svParty)"
       )
@@ -122,14 +122,18 @@ class ValidatorLicenseRequestTrigger(
                 )
                 .map(_.flatten)
 
+              permissionedPids = permissionResults.map(_.mapping.participantId).toSet
+
+              unpermissionedPids = participantIds.filterNot(permissionedPids.contains)
+
               _ <-
-                if (permissionResults.nonEmpty) {
+                if (unpermissionedPids.isEmpty) {
                   Future.unit
                 } else {
                   Future.failed(
                     Status.NOT_FOUND
                       .withDescription(
-                        s"ParticipantSynchronizerPermission not yet found for any participant of $validatorParty. Checked participants: ${participantIds
+                        s"ParticipantSynchronizerPermission not yet found for all participants of $validatorParty. Still waiting on: ${unpermissionedPids
                             .mkString(", ")}"
                       )
                       .asRuntimeException()
