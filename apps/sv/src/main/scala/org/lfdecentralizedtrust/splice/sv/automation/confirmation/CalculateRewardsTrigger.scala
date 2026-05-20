@@ -34,7 +34,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
 
 abstract class CalculateRewardsTriggerBase(
     override protected val context: TriggerContext,
@@ -144,14 +143,7 @@ abstract class CalculateRewardsTriggerBase(
         loggerFactory,
         retryConnectionOnInitialFailure = false,
       )
-      .transformWith {
-        case Failure(ex) =>
-          Future.failed(
-            new RuntimeException("Failed to connect to scan for root hash lookup", ex)
-          )
-        case Success(conn) =>
-          f(conn)
-      }
+      .flatMap(f)
 
   private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Option[Hash]] =
     withScanConnection { conn =>

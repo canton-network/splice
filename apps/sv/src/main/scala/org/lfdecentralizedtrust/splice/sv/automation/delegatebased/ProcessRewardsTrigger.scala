@@ -42,7 +42,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.{Set as DamlSet
 import java.math.BigDecimal
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
-import scala.util.{Failure, Success}
 
 import ProcessRewardsTriggerBase.*
 
@@ -162,14 +161,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         loggerFactory,
         retryConnectionOnInitialFailure = false,
       )
-      .transformWith {
-        case Failure(ex) =>
-          Future.failed(
-            new RuntimeException("Failed to connect to scan for batch lookup", ex)
-          )
-        case Success(conn) =>
-          f(conn)
-      }
+      .flatMap(f)
 }
 
 class ProcessRewardsTrigger(
