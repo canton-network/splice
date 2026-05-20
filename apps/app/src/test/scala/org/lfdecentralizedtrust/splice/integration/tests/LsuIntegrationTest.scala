@@ -759,16 +759,20 @@ class LsuIntegrationTest
 
       clue("Restart with no legacy") {
         sv1LocalBackend.stop()
-        sv1NoLegacyLocalBackend.startSync()
-        sv1ScanBackend
-          .listDsoSequencers()
-          .loneElement
-          .sequencers
-          .filter(c =>
-            c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
-          )
-          .loneElement
-          .serial shouldBe Some(2)
+        actAndCheck("restart with no legacy config", sv1NoLegacyLocalBackend.startSync())
+        (
+          "scan only lists sequencer for serial 2",
+          () =>
+            sv1ScanBackend
+              .listDsoSequencers()
+              .loneElement
+              .sequencers
+              .filter(c =>
+                c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
+              )
+              .loneElement
+              .serial shouldBe Some(2),
+        )
       }
 
       clue("stop apps manually to prevent errors from the synchronizer being force stopped") {
