@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -66,11 +67,11 @@ abstract class CalculateRewardsTriggerBase(
     val round = task.calculateRewards.payload.round.number
     getRootHash(round).flatMap {
       case None =>
-        Future.successful(
-          TaskSuccess(
+        throw Status.FAILED_PRECONDITION
+          .withDescription(
             s"waiting for scan to compute root hash for CalculateRewardsV2 round $round, will retry"
           )
-        )
+          .asRuntimeException()
       case Some(rootHash) =>
         val action = startProcessingRewardsAction(
           task.calculateRewards.contractId,
