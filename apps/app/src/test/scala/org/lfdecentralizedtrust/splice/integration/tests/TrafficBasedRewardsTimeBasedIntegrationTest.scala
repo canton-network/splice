@@ -281,6 +281,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
                 sv1Backend.archiveDryRunRewardAccountingContracts((0L to 5L).toSeq)
               }
             } else {
+              // TODO (#5624): add support for bootstrapping
               // Bootstrapping a network with mintingVersion set to trafficBasedAppRewards
               // is in principle not supported, as the round 0 will never have
               // activity totals/root-hash calculated, and its CalculateRewardsV2 cannot be processed.
