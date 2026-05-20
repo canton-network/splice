@@ -58,6 +58,18 @@ synchronizerMigration:
         pulumiBaseDir: "splice/cluster/pulumi"
         deploymentDir: "cluster/deployment"
         spliceRoot: "splice"
+  additionalLegacy:
+    - id: 8
+      version: 0.3.20
+      releaseReference:
+        gitReference: "refs/heads/release-line-0.3.20"
+        repoUrl: https://github.com/canton-network/splice
+        pulumiStacksDir: "cluster/stacks/prod"
+        pulumiBaseDir: "splice/cluster/pulumi"
+        deploymentDir: "cluster/deployment"
+        spliceRoot: "splice"
+        privateConfigsDir: "cluster/configs/configs-private"
+        publicConfigsDir: "cluster/configs/configs"
   legacy:
     id: 8
     version: 0.3.20

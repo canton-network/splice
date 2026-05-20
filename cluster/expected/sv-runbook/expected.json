@@ -85,6 +85,7 @@
             "migrationIds": [
               "9",
               "8",
+              "8",
               "10"
             ]
           }
@@ -1359,6 +1360,22 @@
           "networkName": "Splice"
         },
         "synchronizers": {
+          "additionalLegacy": [
+            {
+              "cometBFT": {
+                "connectionUri": "http://global-domain-8-cometbft-cometbft-rpc:26657",
+                "enabled": true
+              },
+              "mediatorAddress": "global-domain-8-mediator",
+              "sequencerAddress": "global-domain-8-sequencer",
+              "sequencerPruningConfig": {
+                "enabled": true,
+                "pruningInterval": "1 hour",
+                "retentionPeriod": "30 days"
+              },
+              "sequencerPublicUrl": "https://sequencer-8.sv.mock.global.canton.network.digitalasset.com"
+            }
+          ],
           "current": {
             "cometBFT": {
               "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
