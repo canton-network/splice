@@ -642,7 +642,7 @@ trait EnvironmentFactory[C <: SharedCantonConfig[C], E <: Environment[C]] {
   ): E
 }
 
-final class CantonEnvironment(
+class CantonEnvironment(
     override val config: CantonConfig,
     override val testingConfig: TestingConfigInternal,
     participantNodeFactory: ParticipantNodeBootstrapFactory,
