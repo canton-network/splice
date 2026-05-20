@@ -427,6 +427,7 @@ function installSvApp(
     synchronizerNodes.active,
     synchronizerNodes.legacy,
     synchronizerNodes.upgrade,
+    ...synchronizerNodes.additionalLegacy,
   ]
     .filter((n): n is NonNullable<typeof n> => n !== undefined)
     .flatMap(n => n.dependencies);

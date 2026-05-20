@@ -288,7 +288,7 @@ describe('Proposal Details Content', () => {
   test('should render update sv reward weight proposal details', () => {
     const svToUpdate = 'sv2';
     const updateSvRewardWeightDetails = {
-      actionName: 'Update SV Reward Weight',
+      actionName: 'Update Super Validator Reward Weight',
       action: 'SRARC_UpdateSvRewardWeight',
       proposal: {
         svToUpdate: svToUpdate,
@@ -310,7 +310,7 @@ describe('Proposal Details Content', () => {
     );
 
     const action = screen.getByTestId('proposal-details-action-value');
-    expect(action.textContent).toMatch(/Update SV Reward Weight/);
+    expect(action.textContent).toMatch(/Update Super Validator Reward Weight/);
 
     expect(screen.getByTestId('config-change-field-label').textContent).toBe('Weight');
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('999');

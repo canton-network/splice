@@ -140,6 +140,39 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(submitButton.getAttribute('disabled')).toBeNull();
   });
 
+  test('amount accepts decimals but rejects more than 10 decimal places', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <CreateUnallocatedUnclaimedActivityRecordForm />
+      </Wrapper>
+    );
+
+    const amountInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-amount');
+    const amountError = screen.getByTestId(
+      'create-unallocated-unclaimed-activity-record-amount-error'
+    );
+
+    await user.type(amountInput, '100.1234567891');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('');
+    });
+
+    await user.clear(amountInput);
+    await user.type(amountInput, '100.12345678912');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('Amount can have at most 10 decimal places');
+    });
+
+    // an invalid number (e.g. trailing dot) triggers the generic error, not the decimal-places one
+    await user.clear(amountInput);
+    await user.type(amountInput, '100.');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('Amount must be a valid number');
+    });
+  });
+
   test('expiry date must be in the future', async () => {
     render(
       <Wrapper>

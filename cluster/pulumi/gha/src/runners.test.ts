@@ -84,7 +84,7 @@ test('GHA runner k8s resources are in the gha-runners-<repo> namespace', async (
   } as unknown as k8s.helm.v3.Release;
 
   const [, resources] = await collectResources(() => {
-    installRunnerScaleSets(mockController, 'test-repo');
+    installRunnerScaleSets(mockController, 'gha-runners-test-repo', 'test-repo');
   });
 
   // check that each k8s resource is in the gha-runners namespace

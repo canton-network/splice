@@ -17,6 +17,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
+import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.NotUsed
@@ -45,6 +46,25 @@ import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
   * Streams verdicts from the current mediator and, if the mediator returns a LSU complete on the stream, continues from the successor.
   * It also checks the last ingestion compared to the LSU upgrade time to determine whether to start streaming from the current or successor mediator.
   */
+object ScanVerdictIngestionService {
+
+  /** Returns record times of verdicts that are missing traffic summaries.
+    * Only considers verdicts at or after the ingestion start time.
+    */
+  def findMissingTrafficSummaries(
+      verdictRecordTimes: Seq[CantonTimestamp],
+      summaryTimes: Set[CantonTimestamp],
+      startedIngestingAtMicros: Option[Long],
+  ): Seq[CantonTimestamp] = startedIngestingAtMicros match {
+    case None => Seq.empty
+    case Some(startMicros) =>
+      val start = CantonTimestamp.ofEpochMicro(startMicros)
+      verdictRecordTimes
+        .filter(_ >= start)
+        .filterNot(summaryTimes.contains)
+  }
+}
+
 class ScanVerdictIngestionService(
     config: ScanAppBackendConfig,
     synchronizerNodes: LocalSynchronizerNodes[ScanSynchronizerNode],
@@ -215,17 +235,11 @@ class ScanVerdictIngestionService(
           DbScanVerdictStore.fromProto(v, migrationId, synchronizerId, summaryByTime)
         )
 
-      // TODO(#4060): log an error and fail ingestion if a trafficSummary is missing for a verdict
-      //
-      // Once #4060 is confirmed, this should simplify, as 'items' will fail
-      // construction if any verdicts did not have a trafficSummary
       val summariesWithVerdicts = verdicts.flatMap { v =>
         val recordTime = CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)
         summaryByTime.get(recordTime).map(_ -> v)
       }
-      // Insert verdicts, traffic summaries, and app activity records in a single transaction
       for {
-
         // Compute app activity records (before DB transaction).
         // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
         // the store resolves actual row_ids during insertion.
@@ -239,6 +253,7 @@ class ScanVerdictIngestionService(
           case None => Future.successful(Seq.empty)
         }
 
+        _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
         _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
       } yield {
         val lastRecordTime = verdicts.lastOption
@@ -268,9 +283,10 @@ class ScanVerdictIngestionService(
         DbScanVerdictStore
           .fromProtoWithCorrelation(proto, viewHashToViewIdByTime, logger)
       })
-      // TODO(#4060): handle missing traffic summaries more robustly. In particular,
-      // note that the whole call will fail if ANY of the requested traffic summaries are missing.
-      // This workaround may therefore drop existing traffic summaries.
+      // Recover from NO_EVENT_AT_TIMESTAMPS by returning an empty result.
+      // See ensureVerdictsHaveTrafficSummaries for when missing summaries are
+      // tolerated vs treated as errors.
+      // TODO(#5460): Add a metric recording missed timestamps for alerting.
       .recoverWith { case ex @ GrpcException(status, trailers) =>
         val statusProto = StatusProto.fromStatusAndTrailers(status, trailers)
         val errorDetails = ErrorDetails.from(statusProto)
@@ -313,6 +329,31 @@ class ScanVerdictIngestionService(
     }
     (pairs.map(_._1), pairs.toMap)
   }
+
+  /** After activity ingestion has started, every verdict at or after the
+    * ingestion start time must have a traffic summary.
+    */
+  private def ensureVerdictsHaveTrafficSummaries(
+      verdicts: Seq[v30.Verdict],
+      summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
+  )(implicit tc: TraceContext): Future[Unit] =
+    (store.appActivityRecordStoreO match {
+      case None => Future.successful(None)
+      case Some(s) => s.startedIngestingAt
+    }).map { startO =>
+      val missingTimes = ScanVerdictIngestionService.findMissingTrafficSummaries(
+        verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)),
+        summaryByTime.keySet,
+        startO,
+      )
+      if (missingTimes.nonEmpty)
+        throw Status.INTERNAL
+          .withDescription(
+            s"${missingTimes.size} verdicts missing traffic summaries " +
+              s"after ingestion start: $missingTimes"
+          )
+          .asRuntimeException()
+    }
 
   private def processWhenUnpaused(
       input: (Seq[v30.Verdict], Seq[DbScanVerdictStore.TrafficSummaryT])

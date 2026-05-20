@@ -165,6 +165,9 @@ export function installCometBftNode(
     serviceAccountName: imagePullServiceAccountName,
     resources: svConfiguration.cometbft?.resources,
   });
+  if (svConfiguration.cometbft?.additionalHelmValues) {
+    _.merge(cometbftChartValues, svConfiguration.cometbft.additionalHelmValues);
+  }
   const protectCometBft = svsConfig?.cometbft?.protected ?? false;
   const release = installSpliceHelmChart(
     xns,

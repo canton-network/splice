@@ -21,7 +21,7 @@ function buildSynchronizerMap(
       return [
         {
           fieldName: `decentralizedSynchronizer${idx}`,
-          label: `Decentralized synchronizer ${idx}: Synchronizer ID`,
+          label: `Decentralized synchronizer ${idx}: Synchronizer identifier`,
           currentValue: baseSynchronizer[0] || '',
           newValue: currentSynchronizer?.[0] || '',
           isId: true,
@@ -36,14 +36,14 @@ function buildSynchronizerMap(
         },
         {
           fieldName: `decentralizedSynchronizerCometBftGenesisJson${idx}`,
-          label: `Decentralized synchronizer ${idx}: CometBFT genesis (Json)`,
+          label: `Decentralized synchronizer ${idx}: CometBFT genesis (JSON)`,
           currentValue: baseSynchronizer[1].cometBftGenesisJson || '',
           newValue: currentSynchronizer?.[1].cometBftGenesisJson || '',
           disabled: true,
         },
         {
           fieldName: `decentralizedSynchronizerAcsCommitmentReconciliationInterval${idx}`,
-          label: `Decentralized synchronizer ${idx}: ACS commitment reconciliation interval`,
+          label: `Decentralized synchronizer ${idx}: Active Contract Set commitment reconciliation interval`,
           currentValue: baseSynchronizer[1].acsCommitmentReconciliationInterval || '',
           newValue: currentSynchronizer?.[1].acsCommitmentReconciliationInterval || '',
         },
@@ -81,19 +81,20 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'actionConfirmationTimeout',
-      label: 'TTL for contracts representing a confirmation of an action',
+      label: 'Time-To-Live for contracts representing a confirmation of an action',
       currentValue: before?.actionConfirmationTimeout.microseconds || '',
       newValue: after?.actionConfirmationTimeout.microseconds || '',
     },
     {
       fieldName: 'svOnboardingRequestTimeout',
-      label: 'TTL for contracts representing an incomplete SV onboarding',
+      label: 'Time-To-Live for contracts representing an incomplete Super Validator onboarding',
       currentValue: before?.svOnboardingRequestTimeout.microseconds || '',
       newValue: after?.svOnboardingRequestTimeout.microseconds || '',
     },
     {
       fieldName: 'svOnboardingConfirmedTimeout',
-      label: 'TTL for contracts representing confirmation for an SV to onboard',
+      label:
+        'Time-To-Live for contracts representing confirmation for a Super Validator to onboard',
       currentValue: before?.svOnboardingConfirmedTimeout.microseconds || '',
       newValue: after?.svOnboardingConfirmedTimeout.microseconds || '',
     },
@@ -105,43 +106,43 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'voteRequestTimeout',
-      label: 'TTL for contracts representing vote requests and votes',
+      label: 'Time-To-Live for contracts representing vote requests and votes',
       currentValue: before?.voteRequestTimeout.microseconds || '',
       newValue: after?.voteRequestTimeout.microseconds || '',
     },
     {
       fieldName: 'dsoDelegateInactiveTimeout',
-      label: '(Deprecated) DSO delegate inactivity timeout',
+      label: '(Deprecated) Decentralized Synchronizer Operations (DSO) delegate inactivity timeout',
       currentValue: before?.dsoDelegateInactiveTimeout.microseconds || '',
       newValue: after?.dsoDelegateInactiveTimeout.microseconds || '',
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxNumCometBftNodes',
-      label: 'SV node limits: CometBFT: Maximum number of CometBft nodes',
+      label: 'Super Validator node limits: CometBFT: Maximum number of CometBFT nodes',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxNumCometBftNodes || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxNumCometBftNodes || '',
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxNumGovernanceKeys',
-      label: 'SV node limits: CometBFT: Maximum number of governance keys',
+      label: 'Super Validator node limits: CometBFT: Maximum number of governance keys',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxNumGovernanceKeys || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxNumGovernanceKeys || '',
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxNumSequencingKeys',
-      label: 'SV node limits: CometBFT: Maximum number of sequencing keys',
+      label: 'Super Validator node limits: CometBFT: Maximum number of sequencing keys',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxNumSequencingKeys || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxNumSequencingKeys || '',
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxNodeIdLength',
-      label: 'SV node limits: CometBFT: Maximum node ID length',
+      label: 'Super Validator node limits: CometBFT: Maximum node identifier length',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxNodeIdLength || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxNodeIdLength || '',
     },
     {
       fieldName: 'synchronizerNodeConfigLimitsCometBftMaxPubKeyLength',
-      label: 'SV node limits: CometBFT: Maximum public key length',
+      label: 'Super Validator node limits: CometBFT: Maximum public key length',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxPubKeyLength || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxPubKeyLength || '',
     },
@@ -150,7 +151,7 @@ export function buildDsoConfigChanges(
 
     {
       fieldName: 'decentralizedSynchronizerLastSynchronizerId',
-      label: 'Decentralized synchronizer: Last synchronizer ID',
+      label: 'Decentralized synchronizer: Last synchronizer identifier',
       currentValue: before?.decentralizedSynchronizer.lastSynchronizerId || '',
       newValue: after?.decentralizedSynchronizer.lastSynchronizerId || '',
       isId: true,
@@ -158,7 +159,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'decentralizedSynchronizerActiveSynchronizerId',
-      label: 'Decentralized synchronizer: Active synchronizer ID',
+      label: 'Decentralized synchronizer: Active synchronizer identifier',
       currentValue: before?.decentralizedSynchronizer.activeSynchronizerId || '',
       newValue: after?.decentralizedSynchronizer.activeSynchronizerId || '',
       isId: true,
@@ -172,7 +173,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'nextScheduledSynchronizerUpgradeMigrationId',
-      label: 'Next scheduled synchronizer upgrade migration ID',
+      label: 'Next scheduled synchronizer upgrade migration identifier',
       currentValue: before?.nextScheduledSynchronizerUpgrade?.migrationId || '',
       newValue: after?.nextScheduledSynchronizerUpgrade?.migrationId || '',
     },
@@ -208,7 +209,7 @@ export function buildDsoConfigChanges(
     },
     {
       fieldName: 'voteCooldownTime',
-      label: 'The minimum time between two votes (or vote changes) by the same SV',
+      label: 'The minimum time between two votes (or vote changes) by the same Super Validator',
       currentValue: before?.voteCooldownTime?.microseconds || '',
       newValue: after?.voteCooldownTime?.microseconds || '',
     },

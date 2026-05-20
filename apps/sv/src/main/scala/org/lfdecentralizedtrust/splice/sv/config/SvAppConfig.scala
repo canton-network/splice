@@ -546,7 +546,10 @@ final case class SvSynchronizerNodeConfig(
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,
     successor: Option[SvSynchronizerNodeConfig],
+    // We keep the main legacy separate as it plays a special role in things like roll-forward LSU.
     legacy: Option[SvSynchronizerNodeConfig] = None,
+    // additionalLegacy just acts as a a way to keep old synchronizers in the Daml state and therefore expose them in scan.
+    additionalLegacy: Seq[SvSynchronizerNodeConfig] = Seq.empty,
 )
 
 final case class SvCantonIdentifierConfig(

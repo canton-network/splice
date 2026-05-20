@@ -36,8 +36,8 @@ describe('SV user can', () => {
   });
 });
 
-describe('Update SV Reward Weight Form', () => {
-  test('should render all Update SV Reward Weight Form components', () => {
+describe('Update Super Validator Reward Weight Form', () => {
+  test('should render all Update Super Validator Reward Weight Form components', () => {
     render(
       <Wrapper>
         <UpdateSvRewardWeightForm />
@@ -49,7 +49,7 @@ describe('Update SV Reward Weight Form', () => {
 
     const actionInput = screen.getByTestId('update-sv-reward-weight-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Update SV Reward Weight');
+    expect(actionInput.getAttribute('value')).toBe('Update Super Validator Reward Weight');
 
     const summaryInput = screen.getByTestId('update-sv-reward-weight-summary');
     expect(summaryInput).toBeInTheDocument();

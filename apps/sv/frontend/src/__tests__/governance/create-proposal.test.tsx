@@ -105,9 +105,11 @@ describe('Create Proposal', () => {
       expect(screen.getByText('Offboard Member')).toBeInTheDocument();
       expect(screen.getByText('Feature Application')).toBeInTheDocument();
       expect(screen.getByText('Unfeature Application')).toBeInTheDocument();
-      expect(screen.getByText('Set Dso Rules Configuration')).toBeInTheDocument();
+      expect(
+        screen.getByText('Set Decentralized Synchronizer Operations (DSO) Rules Configuration')
+      ).toBeInTheDocument();
       expect(screen.getByText('Set Amulet Rules Configuration')).toBeInTheDocument();
-      expect(screen.getByText('Update SV Reward Weight')).toBeInTheDocument();
+      expect(screen.getByText('Update Super Validator Reward Weight')).toBeInTheDocument();
       expect(screen.getByText('Create Unclaimed Activity Record')).toBeInTheDocument();
     });
   });
@@ -132,9 +134,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Set Dso Rules Configuration Form is rendered after action selection', async () => {
+  test('Set Decentralized Synchronizer Operations (DSO) Rules Configuration Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Set Dso Rules Configuration',
+      'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
       'SRARC_SetConfig',
       'set-dso-config-rules-action'
     );
@@ -148,9 +150,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Update SV Reward Weight Form is rendered after action selection', async () => {
+  test('Update Super Validator Reward Weight Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Update SV Reward Weight',
+      'Update Super Validator Reward Weight',
       'SRARC_UpdateSvRewardWeight',
       'update-sv-reward-weight-action'
     );
