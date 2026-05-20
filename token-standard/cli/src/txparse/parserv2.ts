@@ -217,9 +217,9 @@ export class V2TransactionParser {
       lock: result.lock
         ? {
             holders: result.lock.holders,
-            context: result.lock.context || undefined,
+            context: result.lock.context || null,
             expiresAfter: result.lock.expiresAfter?.microseconds || null,
-            expiresAt: result.lock.expiresAt || undefined,
+            expiresAt: result.lock.expiresAt || null,
           }
         : null,
       meta: result.meta,

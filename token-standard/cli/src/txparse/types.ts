@@ -35,7 +35,7 @@ export interface HoldingLock {
   holders: string[];
   expiresAt: string | null;
   expiresAfter: string | null;
-  context?: string;
+  context: string | null;
 }
 
 export interface HoldingsChange {
