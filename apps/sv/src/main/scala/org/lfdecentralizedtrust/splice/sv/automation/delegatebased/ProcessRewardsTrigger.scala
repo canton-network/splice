@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.automation.{
   OnAssignedContractTrigger,
   TaskOutcome,
@@ -68,54 +70,51 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private val store = svTaskContext.dsoStore
   private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
 
+  override protected def source(implicit
+      traceContext: TraceContext
+  ): Source[ProcessRewardsV2Contract, NotUsed] =
+    super.source.filter(_.payload.dryRun == isDryRun)
+
   override def completeTaskAsDsoDelegate(
       task: ProcessRewardsV2Contract,
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    if (task.payload.dryRun != isDryRun) {
-      Future.successful(
-        TaskSuccess(
-          s"Skipping ProcessRewardsV2 for round ${task.payload.round.number} with dryRun=${task.payload.dryRun}"
+    val round = task.payload.round.number
+    val batchHash = task.payload.batchHash.value
+    val batchF = fetchBatch(round, batchHash)
+    val dsoRulesF = store.getDsoRules()
+    for {
+      batch <- batchF
+      dsoRules <- dsoRulesF
+      damlBatch = convertBatch(batch)
+      choiceArg = new ProcessRewardsV2_ProcessBatch(
+        damlBatch,
+        new DamlSet(java.util.Collections.emptyMap()),
+      )
+      cmd = dsoRules.exercise(
+        _.exerciseDsoRules_ProcessRewardsV2_ProcessBatch(
+          task.contractId,
+          choiceArg,
+          controller,
         )
       )
-    } else {
-      val round = task.payload.round.number
-      val batchHash = task.payload.batchHash.value
-      val batchF = fetchBatch(round, batchHash)
-      val dsoRulesF = store.getDsoRules()
-      for {
-        batch <- batchF
-        dsoRules <- dsoRulesF
-        damlBatch = convertBatch(batch)
-        choiceArg = new ProcessRewardsV2_ProcessBatch(
-          damlBatch,
-          new DamlSet(java.util.Collections.emptyMap()),
+      _ <- svTaskContext
+        .connection(SpliceLedgerConnectionPriority.Low)
+        .submit(
+          Seq(store.key.svParty),
+          Seq(store.key.dsoParty),
+          cmd,
         )
-        cmd = dsoRules.exercise(
-          _.exerciseDsoRules_ProcessRewardsV2_ProcessBatch(
-            task.contractId,
-            choiceArg,
-            controller,
-          )
-        )
-        _ <- svTaskContext
-          .connection(SpliceLedgerConnectionPriority.Low)
-          .submit(
-            Seq(store.key.svParty),
-            Seq(store.key.dsoParty),
-            cmd,
-          )
-          .noDedup
-          .yieldUnit()
-        delay = java.time.Duration
-          .between(task.payload.roundClosedAt, context.clock.now.toInstant)
-        _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(
-          MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-        )
-      } yield TaskSuccess(
-        s"Processed batch for ProcessRewardsV2 round $round, batchHash=$batchHash, dryRun=$isDryRun, processingDelay=$delay"
+        .noDedup
+        .yieldUnit()
+      delay = java.time.Duration
+        .between(task.payload.roundClosedAt, context.clock.now.toInstant)
+      _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(
+        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
       )
-    }
+    } yield TaskSuccess(
+      s"Processed batch for ProcessRewardsV2 round $round, batchHash=$batchHash, dryRun=$isDryRun, processingDelay=$delay"
+    )
   }
 
   private def convertBatch(
