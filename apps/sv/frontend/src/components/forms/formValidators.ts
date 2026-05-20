@@ -57,7 +57,14 @@ export const svWeightSchema = z
 export const rewardAmountSchema = z
   .string()
   .min(1, { message: 'Amount is required' })
-  .regex(/^\d+$/, { message: 'Amount must be a valid number' });
+  .regex(/^\d+(\.\d+)?$/, { message: 'Amount must be a valid number' })
+  .refine(
+    v => {
+      const dotIndex = v.indexOf('.');
+      return dotIndex === -1 || v.length - dotIndex - 1 <= 10;
+    },
+    { message: 'Amount can have at most 10 decimal places' }
+  );
 
 export const validateWeight = (value: string): string | false => {
   const result = svWeightSchema.safeParse(value);

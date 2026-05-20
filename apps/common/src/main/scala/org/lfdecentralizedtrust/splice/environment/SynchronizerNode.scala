@@ -13,5 +13,6 @@ object SynchronizerNode {
       current: T,
       successor: Option[T],
       legacy: Option[T],
+      additionalLegacy: Seq[T],
   )
 }

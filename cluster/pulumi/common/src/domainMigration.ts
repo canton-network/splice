@@ -12,6 +12,9 @@ export class DecentralizedSynchronizerMigrationConfig {
   active: MigrationInfo;
   // if set then the canton components associated with this migration id are kept running, does not impact the CN apps
   legacy?: MigrationInfo;
+  // additional legacy synchronizers that are kept around alongside `legacy`, e.g. when more than
+  // one legacy synchronizer must be kept alive at a given point during an LSU.
+  additionalLegacy: MigrationInfo[];
   // the next migration id that we are preparing
   // this is used to prepare the canton components for the upgrade
   upgrade?: MigrationInfo;
@@ -27,6 +30,7 @@ export class DecentralizedSynchronizerMigrationConfig {
     const synchronizerMigration = config.synchronizerMigration;
     this.active = synchronizerMigration.active;
     this.legacy = synchronizerMigration.legacy;
+    this.additionalLegacy = synchronizerMigration.additionalLegacy || [];
     this.upgrade = synchronizerMigration.upgrade;
     this.migratingFromActiveId = synchronizerMigration.active.migratingFrom;
     this.activeDatabaseId = synchronizerMigration.activeDatabaseId;
@@ -38,6 +42,7 @@ export class DecentralizedSynchronizerMigrationConfig {
     }
     if (
       (this.legacy?.sequencer.enableBftSequencer ||
+        this.additionalLegacy.some(l => l.sequencer.enableBftSequencer) ||
         this.active.sequencer.enableBftSequencer ||
         this.upgrade?.sequencer.enableBftSequencer) &&
       !this.lsuEnabled
@@ -49,6 +54,7 @@ export class DecentralizedSynchronizerMigrationConfig {
   runningMigrations(): MigrationInfo[] {
     return [this.active]
       .concat(this.legacy ? [this.legacy] : [])
+      .concat(this.additionalLegacy)
       .concat(this.upgrade ? [this.upgrade] : []);
   }
 

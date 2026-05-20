@@ -264,6 +264,7 @@ class ScanApp(
         ),
         successor = config.synchronizerNodes.successor.map(synchronizerNode(_)),
         legacy = config.synchronizerNodes.legacy.map(synchronizerNode(_)),
+        additionalLegacy = Seq.empty,
       )
       syncService = new SynchronizerNodeService(
         syncNodes,

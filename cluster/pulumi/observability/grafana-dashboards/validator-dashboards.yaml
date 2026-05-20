@@ -1,0 +1,19 @@
+# Dashboards included in the validator-grafana-dashboards bundle.
+# Patterns are globs relative to cluster/pulumi/observability/grafana-dashboards.
+include:
+  - canton/node-health.json
+  - canton/participant.json
+  - canton/participant-pruning.json
+  - canton/sequencer-client.json
+  - canton/sequencer-connection-pool.json
+  - canton-network/automations.json
+  - canton-network/sequencer-submissions-amplifications.json
+  - canton-network/synchronizer-fees-validator.json
+  - canton-network/validator-scan-connections.json
+  - database/postgres_exporter.json
+  - jvm/jvm.json
+  - k8s/**
+  - platform/caches.json
+  - platform/grpc.json
+  - platform/http.json
+  - platform/http_client.json

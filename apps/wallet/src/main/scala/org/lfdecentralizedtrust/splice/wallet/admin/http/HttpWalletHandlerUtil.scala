@@ -72,7 +72,6 @@ trait HttpWalletHandlerUtil extends Spanning with NamedLogging {
     val userStore = userWallet.store
     val userParty = userStore.key.endUserParty
     for {
-      // TODO (#998) pick install based on disclosed contracts' domain IDs
       install <- userStore.getInstall()
       unadornedUpdate <- getUpdate(install.contractId, userStore)
       update = install.exercise(_ => unadornedUpdate)
