@@ -16,11 +16,7 @@ const CatchupTestThresholdsSchema = z
         participantDelaySeconds: z.number().nonnegative().default(30),
         mediatorDelaySeconds: z.number().nonnegative().default(30),
       })
-      .default({
-        sequencerBlockDelaySeconds: 5,
-        participantDelaySeconds: 30,
-        mediatorDelaySeconds: 30,
-      }),
+      .prefault({}),
   })
   .strict();
 
@@ -29,6 +25,6 @@ export const CatchupTestSchema = z
     enabled: z.boolean().default(false),
     // cron expression in CronJob format; default = every Wednesday 18:00 UTC
     schedule: z.string().default('0 18 * * 3'),
-    thresholds: CatchupTestThresholdsSchema,
+    thresholds: CatchupTestThresholdsSchema.prefault({}),
   })
   .strict();
