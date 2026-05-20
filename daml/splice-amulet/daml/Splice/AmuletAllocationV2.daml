@@ -178,15 +178,11 @@ template AmuletAllocationV2
           outputHoldingCids
 
         -- return the result
-        let v1Reason = "Settle allocation for settlement " <> settlement.id
         pure V2.AllocationResult with
           authorizerHoldingCids = TextMap.fromList [(amuletInstrumentIdName, outputHoldingCids) | not (null outputHoldingCids)]
           output = V2.AllocationResult_Settled with
             nextIterationAllocationCid
-          meta = simpleHoldingTxMeta TxKind_Transfer (Some v1Reason) None
-          -- Note: we approximate the metadata for V1 history parsing by declaring it as a transfer, even though there
-          -- might be multiple transfers happening at once. It's the best we can do given the limited expressivity
-          -- of V1 tx history metadata.
+          meta = allocationSettlementTxHistoryV1ToMeta allocation emptyMetadata
 
 
 unlockAmuletAllocationV2 : AmuletAllocationV2 -> ExtraArgs -> Update (TextMap.TextMap [ContractId V2.Holding])

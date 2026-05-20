@@ -7,7 +7,7 @@
 --
 -- Uses Amulet as the test token, but can be extened to use multiple tokens from
 -- different registries as well.
-module Splice.Tests.TestAmuletTokenDvP_V1V2Mixed where
+module Splice.Tests.TestSettlement_V1V2Mixed where
 
 import Daml.Script
 
@@ -18,6 +18,7 @@ import DA.List (dedupSort)
 import DA.Optional
 import DA.Set qualified as Set
 import DA.Text qualified as T
+import DA.TextMap qualified as TextMap
 import DA.Time
 
 import Splice.Api.Token.MetadataV1
@@ -153,6 +154,13 @@ singleTransferTest_receiverV1 = runTest $ \env@TestEnvironment{..} ->
     expectedNumAllocationsV2 = 1
     partiesWithSettlementAgreements = [bob]
 
+singleTransferTest_allV1 = runTest $ \env@TestEnvironment{..} ->
+  (singleTransferTest env) with
+    partiesWithV1Wallet = [alice, bob]
+    expectedNumAllocationsV1 = 0
+    expectedNumAllocationsV2 = 1
+    partiesWithSettlementAgreements = [bob]
+
 singleTransferTest_allV2_cancel = runTest $ \env@TestEnvironment{..} ->
   (singleTransferTest env) with
     testWorkflow = WithdrawAndCancel with
@@ -215,14 +223,12 @@ bilateralDvPWithFeeTest TestEnvironment{..} =
 bilateralDvPWithFeeTest_onlyV2 = runTest $ \env ->
   bilateralDvPWithFeeTest env
 
-
-{- TODO(#4818): once TestTokenV2 has V1 API support also build the tests below
-
 bilateralDvPWithFeeTest_aliceV1 = runTest $ \env@TestEnvironment{..} ->
   (bilateralDvPWithFeeTest env) with
     partiesWithV1Wallet = [alice]
+    partiesWithSettlementAgreements = [alice]
     expectedNumAllocationsV1 = 0
-    expectedNumAllocationsV2 = 4
+    expectedNumAllocationsV2 = 3
 
 bilateralDvPWithFeeTest_bobV1 = runTest $ \env@TestEnvironment{..} ->
   (bilateralDvPWithFeeTest env) with
@@ -230,9 +236,35 @@ bilateralDvPWithFeeTest_bobV1 = runTest $ \env@TestEnvironment{..} ->
     expectedNumAllocationsV1 = 0
     expectedNumAllocationsV2 = 4
     partiesWithSettlementAgreements = [bob]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0  -- Bob allocate Amulet, as V1 allocation flows don't do netting
+      , mkH X2 bob 10.0, mkLH X2 bob 40.0
+      ]
+    expectedFinalHoldings =
+      [ mkH AM alice 80.0
+      , mkH X2 alice 40.0
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 10.0
+      , mkH AM venue 1.0
+      ]
 
-bilateralDvPWithFeeTest_onlyV1  = error "implement"
--}
+bilateralDvPWithFeeTest_allV1 = runTest $ \env@TestEnvironment{..} ->
+  (bilateralDvPWithFeeTest env) with
+    partiesWithV1Wallet = [alice, bob]
+    expectedNumAllocationsV1 = 0
+    expectedNumAllocationsV2 = 3
+    partiesWithSettlementAgreements = [alice, bob]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0  -- Bob allocate Amulet, as V1 allocation flows don't do netting
+      , mkH X2 bob 10.0, mkLH X2 bob 40.0
+      ]
+    expectedFinalHoldings =
+      [ mkH AM alice 80.0
+      , mkH X2 alice 40.0
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 10.0
+      , mkH AM venue 1.0
+      ]
 
 bilateralDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
   (bilateralDvPWithFeeTest env) with
@@ -319,18 +351,6 @@ multiDvPWithFeeTest_alice_v1 = runTest $ \env@TestEnvironment{..} ->
     expectedNumAllocationsV1 = 1  -- allocation for bobToAliceX1
     expectedNumAllocationsV2 = 3  -- alice's V1 wallet does not create a receipt allocation
 
-{- TODO(#4818): once TestTokenV2 has V1 API support also build the two tests below
-
-multiDvPWithFeeTest_bob_v1 = runTest $ \env@TestEnvironment{..} ->
-  (multiDvPWithFeeTest env) with
-    partiesWithAutoReceipt = [venue, bob]
-    expectedNumAllocationsV1 = 1
-    expectedNumAllocationsV2 = 4
-
-multiDvPWithFeeTest_onlyV1 = error "implement"
-
--}
-
 multiDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
   (multiDvPWithFeeTest env) with
     testWorkflow = WithdrawAndCancel with
@@ -393,13 +413,14 @@ runTest mkTest = do
   let tradeLegs = do
         (i, TestLeg{..}) <- zip [1..length test.transferLegs] test.transferLegs
         let iid = mkInstrumentId env instrumentId
+        let reason = T.intercalate "-" ["trade-leg", show i, partyToText sender, partyToText receiver]
         let leg = V2.TransferLeg with
               transferLegId = "leg" <> show i
               sender = basicAccount sender
               receiver = basicAccount receiver
               amount
               instrumentId = iid.id
-              meta = emptyMetadata
+              meta = reasonToMeta reason emptyMetadata
         pure TradingAppV2.TradeLeg with
           leg
           admin = iid.admin
@@ -450,7 +471,20 @@ runTest mkTest = do
   checkEqual "number of allocations v2" test.expectedNumAllocationsV2 (length allocationsV2)
 
   case test.testWorkflow of
-    SettleTrade -> void $ TradingAppV2.settleWithTradeAgreements trade
+    SettleTrade -> do
+      (result, _changes) <- TradingAppV2.settleWithTradeAgreements trade
+      -- Basic checks on V1 tx history being present on the Allocation_Settle choice results
+      forA_ (Map.toList result.resultsByAdminV2) $ \(admin, settleBatchResult) -> do
+        forA_ settleBatchResult.allocationSettleResults $ \settleResult -> do
+          let hasReason = reasonMetaKey `TextMap.member` settleResult.meta.values
+          let hasExpectedTxKind = case TextMap.lookup txKindMetaKey settleResult.meta.values of
+                None -> False
+                Some txKind -> txKind `elem` ["mint", "burn", "transfer", "settle-V2-allocation"]
+          unless (hasReason && hasExpectedTxKind) $ fail $ T.unlines $
+            [ "Missing expected metadata keys in settle result for admin " <> show admin
+            , "Settle result metadata: " <> show settleResult.meta
+            ]
+
     WithdrawAndCancel {..} -> do
       -- expire locks on holdings specified holdings
       forA_ locksToExpireBeforeWithdrawal $ \TestHolding{..} -> do
@@ -526,7 +560,7 @@ setupTestEnvironment = do
   let registries = Map.fromList
         [ (registryV2.dso, MultiRegistry.mkRegistryApisV1V2 registryV1 registryV2)
         , (tty1Registry.admin, MultiRegistry.mkRegistryApisV1 tty1Registry)
-        , (tty2Registry.admin, MultiRegistry.mkRegistryApisV2 tty2Registry )
+        , (tty2Registry.admin, MultiRegistry.mkRegistryApisV1V2 tty2Registry tty2Registry )
         ]
   pure TestEnvironment with ..
 

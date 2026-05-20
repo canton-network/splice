@@ -640,6 +640,7 @@ lazy val `splice-token-standard-v2-test-daml` =
           (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value ++
           (`splice-token-standard-v1-test-daml` / Compile / damlBuild).value ++
+          (`splice-token-test-trading-app-daml` / Compile / damlBuild).value ++
           (`splice-token-test-trading-app-v2-daml` / Compile / damlBuild).value ++
           (`splice-test-token-v1-daml` / Compile / damlBuild).value ++
           (`splice-test-token-v2-daml` / Compile / damlBuild).value ++

@@ -158,8 +158,8 @@ template OTCTrade with
           assertWithinDeadline "settlementDeadline" deadline
 
         -- compute reference data
+        let settlementV1 = mkOtcTradeSettlementInfoV1 self this
         let settlementV2 = mkOtcTradeSettlementInfoV2 self this
-        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementDeadline settlementV2
             transferLegsByAdmin = splitLegsBy (.admin) tradeLegs
 
         -- Archive requests known to be active at this point, so that trader
@@ -241,7 +241,7 @@ template OTCTrade with
       controller venue
       do
         let settlementV2 = mkOtcTradeSettlementInfoV2 self this
-        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementDeadline settlementV2
+        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt (Some settleAt) settlementDeadline settlementV2
         forA_ allocationRequestCids $ \reqCid -> do
             req <- fetch reqCid
             archive reqCid
@@ -288,7 +288,7 @@ mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade = V2.SettlementInfo with
 
 mkOtcTradeSettlementInfoV1 : ContractId OTCTrade -> OTCTrade -> V1.SettlementInfo
 mkOtcTradeSettlementInfoV1 otcTradeCid otcTrade =
-  downcast_v2_v1_SettlementInfo otcTrade.createdAt otcTrade.settleAt otcTrade.settlementDeadline $
+  downcast_v2_v1_SettlementInfo otcTrade.createdAt (Some otcTrade.settleAt) otcTrade.settlementDeadline $
   mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade
 
 -- | The expected allocations for a trade that involves an asset implementing
