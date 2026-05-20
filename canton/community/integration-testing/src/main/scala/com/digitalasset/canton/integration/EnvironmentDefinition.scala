@@ -30,7 +30,6 @@ import com.digitalasset.canton.console.{
 import com.digitalasset.canton.environment.{
   CantonEnvironment,
   CantonNode,
-  CommunityEnvironmentFactory,
 }
 import com.digitalasset.canton.integration.bootstrap.{
   InitializedSynchronizer,
@@ -238,9 +237,6 @@ final case class EnvironmentDefinition(
       environment,
       new TestConsoleOutput(loggerFactory),
     ) with TestEnvironment[CantonConfig]
-
-  override lazy val environmentFactory =
-    CommunityEnvironmentFactory
 }
 
 /** Default testing environments for integration tests

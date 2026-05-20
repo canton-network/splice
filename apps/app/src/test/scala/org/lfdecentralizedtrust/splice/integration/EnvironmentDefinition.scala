@@ -10,7 +10,6 @@ import com.digitalasset.canton.config.{
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.console.TestConsoleOutput
-import com.digitalasset.canton.environment.EnvironmentFactory
 import com.digitalasset.canton.integration.{BaseEnvironmentDefinition, TestEnvironment}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, SuppressingLogger}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
@@ -29,7 +28,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResources,
   SpliceConsoleEnvironment,
   SpliceEnvironment,
-  SpliceEnvironmentFactory,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.{
@@ -558,9 +556,6 @@ case class EnvironmentDefinition(
           )(conf)
       )
       .withSequencerConnectionsFromScanDisabled(10_000)
-
-  override lazy val environmentFactory: EnvironmentFactory[SpliceConfig, SpliceEnvironment] =
-    SpliceEnvironmentFactory
 
   override def createTestConsole(
       environment: SpliceEnvironment,

@@ -130,7 +130,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
       val scopedMetricsFactory = new ScopedInMemoryMetricsFactory
       val environmentFixture: E =
         step("Creating fixture") {
-          envDef.environmentFactory.create(
+          environmentFactory.create(
             finalConfig,
             loggerFactory,
             testConfigTransform(
