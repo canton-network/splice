@@ -131,9 +131,14 @@ class RewardComputationTrigger(
   override protected def isStaleTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] =
-    rewardsReferenceStore.multiDomainAcsStore
-      .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
-      .map(_.isEmpty)
+    for {
+      contractGone <- rewardsReferenceStore.multiDomainAcsStore
+        .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
+        .map(_.isEmpty)
+      alreadyComputed <- appRewardsStore
+        .roundsWithComputedRewards(Seq(task.roundNumber))
+        .map(_.nonEmpty)
+    } yield contractGone || alreadyComputed
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+
