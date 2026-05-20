@@ -432,7 +432,7 @@ function installK8sRunnerScaleSet(
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
       values: {
-        githubConfigUrl: `${ghaConfig.githubOrg}/${repo}`,
+        githubConfigUrl: `${ghaConfig.githubOrg.startsWith('https://github.com/') ? ghaConfig.githubOrg : `https://github.com/${ghaConfig.githubOrg}`}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,
         runnerScaleSetName: name,
         listenerTemplate: {
