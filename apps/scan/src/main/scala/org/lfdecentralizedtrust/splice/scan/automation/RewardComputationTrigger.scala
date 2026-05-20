@@ -78,37 +78,15 @@ class RewardComputationTrigger(
           case _ => Seq.empty[Long]
         }
 
-        // For each eligible round until the configured parallelism limit, look
-        // up OpenMiningRound and extract inputs. The trigger will handle the
-        // remainder in subsequent polls.
-        tasks <- Future.traverse(eligible.take(context.config.parallelism)) { roundNumber =>
-          rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
-            case None =>
-              logger.debug(
-                s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
-              )
-              None
-            case Some(contract) =>
-              val (inputs, batchSize) =
-                RewardComputationInputs.fromOpenMiningRound(contract.payload).getOrElse {
-                  throw Status.INTERNAL
-                    .withDescription(
-                      s"Round $roundNumber has a CalculateRewardsV2 contract but its " +
-                        s"OpenMiningRound is missing rewardConfig or trafficPrice."
-                    )
-                    .asRuntimeException()
-                }
-              Some(
-                RewardComputationTrigger.Task(
-                  roundNumber,
-                  batchSize,
-                  inputs,
-                  roundToContract(roundNumber),
-                )
-              )
-          }
-        }
-      } yield tasks.flatten
+        // Look up OpenMiningRound for eligible rounds and extract inputs,
+        // collecting up to the parallelism limit. Rounds whose OpenMiningRound
+        // is not yet ingested are skipped without counting toward the limit.
+        tasks <- RewardComputationTrigger.takeFirstN(
+          eligible,
+          context.config.parallelism,
+          (r: Long) => buildTask(r, roundToContract(r)),
+        )
+      } yield tasks
   }
 
   override protected def completeTask(
@@ -127,6 +105,29 @@ class RewardComputationTrigger(
         )
       }
 
+  private def buildTask(
+      roundNumber: Long,
+      contractId: CalculateRewardsV2.ContractId,
+  )(implicit tc: TraceContext): Future[Option[RewardComputationTrigger.Task]] =
+    rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
+      case None =>
+        logger.debug(
+          s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
+        )
+        None
+      case Some(contract) =>
+        val (inputs, batchSize) =
+          RewardComputationInputs.fromOpenMiningRound(contract.payload).getOrElse {
+            throw Status.INTERNAL
+              .withDescription(
+                s"Round $roundNumber has a CalculateRewardsV2 contract but its " +
+                  s"OpenMiningRound is missing rewardConfig or trafficPrice."
+              )
+              .asRuntimeException()
+          }
+        Some(RewardComputationTrigger.Task(roundNumber, batchSize, inputs, contractId))
+    }
+
   override protected def isStaleTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] =
@@ -140,6 +141,26 @@ class RewardComputationTrigger(
 }
 
 object RewardComputationTrigger {
+
+  /** Collect up to `n` successful results by applying `f` to each element
+    * of `candidates` in order, skipping `None` results without counting
+    * them toward the limit.
+    */
+  private[automation] def takeFirstN[A, B](
+      candidates: Seq[A],
+      n: Int,
+      f: A => Future[Option[B]],
+      acc: Seq[B] = Seq.empty,
+  )(implicit ec: ExecutionContext): Future[Seq[B]] =
+    candidates match {
+      case _ if n <= 0 => Future.successful(acc)
+      case candidate +: rest =>
+        f(candidate).flatMap {
+          case Some(result) => takeFirstN(rest, n - 1, f, acc :+ result)
+          case None => takeFirstN(rest, n, f, acc)
+        }
+      case _ => Future.successful(acc)
+    }
 
   final case class Task(
       roundNumber: Long,
