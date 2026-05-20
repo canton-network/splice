@@ -25,7 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, StoreTestBase, TcsStore}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, StoreTestBase, TcsStore}
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
 import slick.jdbc.JdbcProfile
 
@@ -305,7 +305,7 @@ class DbScanRewardsReferenceStoreTest
         _ = all.map(_.payload.round.number) shouldBe Seq(3L, 5L, 7L)
 
         // Limit respected
-        limited <- store.listActiveCalculateRewardsV2(HardLimit.tryCreate(2))
+        limited <- store.listActiveCalculateRewardsV2(PageLimit.tryCreate(2))
         _ = limited.map(_.payload.round.number) shouldBe Seq(3L, 5L)
 
         // Archive round 3 — no longer returned
