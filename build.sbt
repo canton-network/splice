@@ -2055,8 +2055,10 @@ lazy val `apps-app`: Project =
       `apps-common-frontend`,
     )
     .settings(
+      // scalatestplus-selenium is lagging behind, it depends on selenium 4.12,
+      // but that's fine as it's compatible with selenium 4.44 that we end up using
       libraryDependencies += "org.scalatestplus" %% "selenium-4-12" % "3.2.17.0" % "test",
-      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.12.1" % "test",
+      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,
       libraryDependencies += kubernetes_client,
