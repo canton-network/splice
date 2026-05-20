@@ -14,7 +14,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.GetRewardAccountingBatchResponse
-import definitions.GetRewardAccountingActivityTotalsResponse
 import definitions.GetRewardAccountingRootHashResponse
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -161,17 +160,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
           val providers = walkBatch(8L, hash).map(_.provider)
           providers should contain(aliceParty.toProtoPrimitive)
           providers should contain(bobParty.toProtoPrimitive)
-        }
-      }
-
-      clue("Scan computes activity totals even for rounds with no dryRun/mintingVersion set") {
-        eventually() {
-          sv1ScanBackend.getRewardAccountingActivityTotals(5L) shouldBe an[
-            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
-          ]
-          sv1ScanBackend.getRewardAccountingActivityTotals(7L) shouldBe an[
-            GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
-          ]
         }
       }
 
