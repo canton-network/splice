@@ -21,6 +21,13 @@ trait ScanAppRewardsStore {
       tc: TraceContext
   ): Future[Option[Long]]
 
+  /** Returns the subset of the given round numbers for which reward
+    * computation has already completed (i.e. a root hash exists).
+    */
+  def roundsWithComputedRewards(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[Set[Long]]
+
   /** Runs the full reward computation pipeline for a single round:
     * aggregation, CC conversion, and Merkle tree hashing.
     * MUST only be called on rounds for which all app activity records have

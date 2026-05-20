@@ -625,6 +625,21 @@ class DbScanAppRewardsStore(
     )
   }
 
+  override def roundsWithComputedRewards(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[Set[Long]] = {
+    if (rounds.isEmpty) Future.successful(Set.empty)
+    else {
+      runQuery(
+        (sql"""select round_number from #${Tables.appRewardRootHashes}
+               where history_id = $historyId
+                 and """ ++ inClause("round_number", rounds)).toActionBuilder
+          .as[Long],
+        "appRewards.roundsWithComputedRewards",
+      ).map(_.toSet)
+    }
+  }
+
   /** Runs the full reward computation pipeline for a single round in a single
     * transaction: aggregation, CC conversion, and Merkle tree hashing.
     *

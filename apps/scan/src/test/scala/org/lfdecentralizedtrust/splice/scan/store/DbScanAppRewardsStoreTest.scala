@@ -500,6 +500,47 @@ class DbScanAppRewardsStoreTest
       }
     }
 
+    // -- roundsWithComputedRewards ------
+
+    "roundsWithComputedRewards returns empty set for empty input" in {
+      for {
+        (store, _) <- newStore()
+        result <- store.roundsWithComputedRewards(Seq.empty)
+      } yield {
+        result shouldBe Set.empty
+      }
+    }
+
+    "roundsWithComputedRewards returns correct subset" in {
+      for {
+        (store, historyId) <- newStore()
+        _ <- store.insertAppRewardRootHashes(
+          Seq(
+            AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4))),
+            AppRewardRootHashT(historyId, 20L, RewardHash(Array[Byte](5, 6, 7, 8))),
+            AppRewardRootHashT(historyId, 30L, RewardHash(Array[Byte](9, 10, 11, 12))),
+          )
+        )
+        result <- store.roundsWithComputedRewards(Seq(10L, 15L, 20L, 25L))
+      } yield {
+        result shouldBe Set(10L, 20L)
+      }
+    }
+
+    "roundsWithComputedRewards returns empty set when no matches" in {
+      for {
+        (store, historyId) <- newStore()
+        _ <- store.insertAppRewardRootHashes(
+          Seq(
+            AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4)))
+          )
+        )
+        result <- store.roundsWithComputedRewards(Seq(20L, 30L))
+      } yield {
+        result shouldBe Set.empty
+      }
+    }
+
     // -- computeAndStoreRewards summary tests ----------------------------------
 
     "computeAndStoreRewards — returns correct summary counts" in {
