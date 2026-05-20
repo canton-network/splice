@@ -7,8 +7,11 @@ module Splice.Tests.TestTokenV2.TestTransfer_V1V2Mixed where
 import Daml.Script
 
 import DA.Assert
+import DA.Foldable (forA_)
+import DA.Foldable qualified as Foldable
 import DA.Time
 import DA.TextMap qualified as TextMap
+import DA.Traversable qualified as Traversable
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
@@ -22,15 +25,45 @@ import Splice.Testing.Utils
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.WalletClient qualified as WalletClientV1
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 
-test_transfer_v1_sender_or_receiver : Script ()
-test_transfer_v1_sender_or_receiver = do
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-  let registry = env.testTokenV2
-  let xId = V2.InstrumentId with admin = registry.admin; id = "X"
+test_mixedV1V2_transfer_basicAccount : Script ()
+test_mixedV1V2_transfer_basicAccount = testTransferWithV1Counterparty mkBasicAccountTestCase
 
+test_mixedV1V2_transfer_joinControl : Script ()
+test_mixedV1V2_transfer_joinControl = testTransferWithV1Counterparty mkJointControlTestCase
+
+data TestCase = TestCase with
+    alice : Party
+    bob : Party
+    bobProvider : Optional Party
+    aliceAccount : V2.Account
+    bobAccount : V2.Account
+    bobAccountConfig : Optional TestTokenV2.AccountConfig
+    aliceToBobMeta : Metadata
+  deriving (Eq, Show)
+
+mkBasicAccountTestCase : Party -> Script TestCase
+mkBasicAccountTestCase _admin = do
+  let mkParty name = do
+        party <- allocatePartyExact name
+        WalletClientV2.createBatchingUtility party
+        pure party
+  alice <- mkParty "alice"
+  bob <- mkParty "bob"
+  pure TestCase with
+    alice
+    bob
+    bobProvider = None
+    aliceAccount = TSU.basicAccount alice
+    bobAccount = TSU.basicAccount bob
+    bobAccountConfig = None
+    aliceToBobMeta = emptyMetadata
+
+mkJointControlTestCase : Party -> Script TestCase
+mkJointControlTestCase admin = do
   let mkParty name = do
         party <- allocatePartyExact name
         WalletClientV2.createBatchingUtility party
@@ -38,21 +71,48 @@ test_transfer_v1_sender_or_receiver = do
   alice <- mkParty "alice"
   bob <- mkParty "bob"
   bobProvider <- mkParty "bob-provider"
-
-  let aliceAccount = V2.Account with owner = Some alice; provider = None; id = "alice-account-1"
   let bobAccount = V2.Account with owner = Some bob; provider = Some bobProvider; id = "bob-account-joint-control"
-  let bobAccountConfig = TestTokenV2.AccountConfig with
-        admin = registry.admin
-        account = bobAccount
-        ownerConfig = TestTokenV2.PartyConfig with
-          canInitiate = True
-          mustApprove = True
-        providerConfig  = TestTokenV2.PartyConfig with
-          canInitiate = False
-          mustApprove = True
+  pure TestCase with
+    alice
+    bob
+    bobProvider = Some bobProvider
+    aliceAccount = V2.Account with owner = Some alice; provider = None; id = "alice-account-1"
+    bobAccount
+    bobAccountConfig = Some $ TestTokenV2.AccountConfig with
+      admin
+      account = bobAccount
+      ownerConfig = TestTokenV2.PartyConfig with
+        canInitiate = True
+        mustApprove = True
+      providerConfig  = TestTokenV2.PartyConfig with
+        canInitiate = False
+        mustApprove = True
+    aliceToBobMeta = Metadata with
+      values = TextMap.fromList
+        [ ("cip-112/sender.id", "alice-account-1")
+        , ("cip-112/receiver.id", "bob-account-joint-control")
+        , ("cip-112/receiver.provider", partyToText bobProvider)
+        ]
 
-  TestTokenV2_RegistryV2.makeAccountIfMissing bobAccountConfig
+
+-- Shared test infra
+--------------------
+
+testTransferWithV1Counterparty : (Party -> Script TestCase) -> Script ()
+testTransferWithV1Counterparty mkTestCase = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registry = env.testTokenV2
+  let xId = V2.InstrumentId with admin = registry.admin; id = "X"
+
+  TestCase {..} <- mkTestCase registry.admin
+
+  forA_ bobAccountConfig TestTokenV2_RegistryV2.makeAccountIfMissing
   TestTokenV2_RegistryV2.mint registry aliceAccount "X" 1000.0
+  -- NOTE: for convenience, we are using the methods of WalletClientV2 for
+  -- calling the V1 interfaces with the right choice context, as WalletClientV2
+  -- has a much better developed API surface. This does not introduce a testing
+  -- gap, as its V1 methods call the V1 interfaces that would be called by a V1
+  -- wallet in the same way.
   WalletClientV2.checkAccountBalance alice aliceAccount xId 1000.0
 
 
@@ -61,7 +121,8 @@ test_transfer_v1_sender_or_receiver = do
 
   now <- getTime
   let executeBefore = now `addRelTime` days 1
-  inputHoldingCids <- WalletClientV2.listHoldingCids alice xId
+  -- We use WalletClientV1 once here to check that the holdings implement the V1 interface.
+  inputHoldingCids <- WalletClientV1.listHoldingCids alice (TSU.downcast xId)
   WalletClientV2.transferV1 env.registries alice V1.TransferFactory_Transfer with
     expectedAdmin = registry.admin
     transfer = V1.Transfer with
@@ -69,28 +130,27 @@ test_transfer_v1_sender_or_receiver = do
       receiver = bob
       instrumentId = TSU.downcast xId
       amount = 100.0
-      inputHoldingCids = map TSU.downcast inputHoldingCids
+      inputHoldingCids
       requestedAt = now
       executeBefore
-      meta = Metadata with
-        values = TextMap.fromList
-          [ ("cip-112/sender.id", "alice-account-1")
-          , ("cip-112/receiver.id", "bob-account-joint-control")
-          , ("cip-112/receiver.provider", partyToText bobProvider)
-          ]
+      meta = aliceToBobMeta
     extraArgs = ExtraArgs with
       meta = emptyMetadata
       context = emptyChoiceContext
 
   -- bob accepts using their v2 wallet
-  [bobOffer] <- WalletClientV2.listTransferOffersV2 bob xId
-  WalletClientV2.acceptTransferOffer env.registries bob (fst bobOffer)
+  [(bobOffer, _)] <- WalletClientV2.listTransferOffersV2 bob xId
+  batch <- WalletClientV2.mkTransferInstruction_AcceptV2 env.registries bob bobOffer
+  (BatchingUtilityV2.TSAR_TransferInstructionResultV2 bobResult) <-
+    WalletClientV2.executeSingletonTSABatch env.registries bob batch
 
   -- bob provider also needs to accept
-  [(bobOffer, _)] <- WalletClientV2.listTransferOffersV2 bobProvider xId
-  batch <- WalletClientV2.mkTransferInstruction_AcceptV2 env.registries bobProvider bobOffer
-  (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) <-
-    WalletClientV2.executeSingletonTSABatch env.registries bobProvider batch
+  bobProviderResult <- Traversable.forA bobProvider $ \bobProvider -> do
+    [(bobOffer, _)] <- WalletClientV2.listTransferOffersV2 bobProvider xId
+    batch <- WalletClientV2.mkTransferInstruction_AcceptV2 env.registries bobProvider bobOffer
+    (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) <-
+      WalletClientV2.executeSingletonTSABatch env.registries bobProvider batch
+    pure result
 
   -- check V1 tx history metadata is present even when accepting using V2
   --
@@ -105,13 +165,14 @@ test_transfer_v1_sender_or_receiver = do
   -- for registry apps that do support preapprovals only. Given that TestTokenV2
   -- does not (yet) support preapprovals, `V2.TransferInstruction_Accept` is the
   -- only case to test.
+  let actualMeta = optional (bobResult.meta) (.meta) bobProviderResult
   let expectedMeta = Metadata with
         values = TextMap.fromList
           [ ("splice.lfdecentralizedtrust.org/receiver","bob")
           , ("splice.lfdecentralizedtrust.org/sender","alice")
           , ("splice.lfdecentralizedtrust.org/tx-kind","transfer")
           ]
-  result.meta === expectedMeta
+  actualMeta === expectedMeta
 
   -- no more transfer instructions are there
   [] <- queryInterface @V1.TransferInstruction registry.admin
@@ -144,8 +205,9 @@ test_transfer_v1_sender_or_receiver = do
       context = emptyChoiceContext
 
   -- bob provider also needs to accept, they do so using their V2 wallet
-  [bobOffer] <- WalletClientV2.listTransferOffersV2 bobProvider xId
-  WalletClientV2.acceptTransferOffer env.registries bobProvider (fst bobOffer)
+  Foldable.forA_ bobProvider $ \bobProvider -> do
+    [bobOffer] <- WalletClientV2.listTransferOffersV2 bobProvider xId
+    WalletClientV2.acceptTransferOffer env.registries bobProvider (fst bobOffer)
 
   -- alice accepts using their V1 wallet
   [aliceOffer] <- WalletClientV2.listTransferOffersV2 alice xId
