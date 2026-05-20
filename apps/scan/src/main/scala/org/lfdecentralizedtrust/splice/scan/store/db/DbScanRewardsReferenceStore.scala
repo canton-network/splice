@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
+import org.lfdecentralizedtrust.splice.store.{Limit, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsArchiveConfig,
   AcsQueries,
@@ -77,8 +77,7 @@ class DbScanRewardsReferenceStore(
     )
     with ScanRewardsReferenceStore
     with AcsTables
-    with AcsQueries
-    with LimitHelpers {
+    with AcsQueries {
 
   override def waitUntilInitialized: Future[Unit] = multiDomainAcsStore.waitUntilAcsIngested()
 
@@ -221,19 +220,7 @@ class DbScanRewardsReferenceStore(
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
-    for {
-      result <- futureUnlessShutdownToFuture(
-        storage.query(
-          selectFromAcsTable(
-            ScanRewardsReferenceTables.acsTableName,
-            multiDomainAcsStore.acsStoreId,
-            multiDomainAcsStore.domainMigrationId,
-            CalculateRewardsV2.COMPANION,
-            orderLimit = sql"""order by acs.round asc limit ${sqlLimit(limit)}""",
-          ),
-          "listActiveCalculateRewardsV2",
-        )
-      )
-      limited = applyLimit("listActiveCalculateRewardsV2", limit, result)
-    } yield limited.map(contractFromRow(CalculateRewardsV2.COMPANION)(_))
+    multiDomainAcsStore
+      .listContracts(CalculateRewardsV2.COMPANION, limit)
+      .map(_.map(_.contract).sortBy(_.payload.round.number))
 }
