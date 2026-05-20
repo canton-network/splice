@@ -5,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Secret } from '@pulumi/kubernetes/core/v1';
 
-type Credentials = {
+export type Credentials = {
   username: string;
   password: string;
 };
