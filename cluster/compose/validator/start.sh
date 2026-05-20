@@ -162,6 +162,12 @@ if [ "${local_compose_sv}" -eq 1 ]; then
   fi
 fi
 
+if [ $trust_single -eq 1 ] && [ $bft_custom -eq 1 ]; then
+  _error_msg "Cannot use -b (trust-single) and -B (bft-custom) together. Please choose one."
+  usage
+  exit 1
+fi
+
 if [ $bft_custom -eq 1 ]; then
   if [ -z "${bft_custom_urls}" ] || [ -z "${bft_custom_svs}" ] || [ -z "${bft_custom_threshold}" ]; then
     _error_msg "When using -B (bft-custom), you must provide -u (urls), -S (sv names), and -T (threshold)"
