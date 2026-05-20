@@ -431,7 +431,7 @@ class DbScanAppRewardsStoreTest
         result <- store.aggregateActivityTotals(roundNumber).failed
       } yield {
         result.getMessage should include("Incomplete app activity")
-        result.getMessage should include(s"round ${roundNumber - 1} exists=false")
+        result.getMessage should include("prior round exists=false")
       }
     }
 
@@ -444,7 +444,7 @@ class DbScanAppRewardsStoreTest
         result <- store.aggregateActivityTotals(roundNumber).failed
       } yield {
         result.getMessage should include("Incomplete app activity")
-        result.getMessage should include(s"round ${roundNumber + 1} exists=false")
+        result.getMessage should include("later round exists=false")
       }
     }
 
