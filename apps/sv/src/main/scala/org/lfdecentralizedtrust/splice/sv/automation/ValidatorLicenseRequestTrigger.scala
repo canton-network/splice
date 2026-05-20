@@ -72,52 +72,41 @@ class ValidatorLicenseRequestTrigger(
           filterParty = validatorParty.filterString,
         )
 
-        participantId <- partyToParticipantResults
-          .flatMap(_.mapping.participantIds)
-          .headOption match {
-          case Some(pid) => Future.successful(pid)
-          case None =>
+        participantIds = partyToParticipantResults.flatMap(_.mapping.participantIds).distinct
+
+        _ <-
+          if (participantIds.isEmpty) {
             Future.failed(
               Status.NOT_FOUND
-                .withDescription(s"No participant ID found registered to party $validatorParty")
+                .withDescription(s"No participant IDs found registered to party $validatorParty")
                 .asRuntimeException()
             )
-        }
+          } else Future.unit
 
-        permissionResults <- participantAdminConnection.listParticipantSynchronizerPermission(
-          synchronizerId,
-          participantId.filterString,
-        )
+        permissionResults <- Future
+          .sequence(
+            participantIds.map(pid =>
+              participantAdminConnection.listParticipantSynchronizerPermission(
+                synchronizerId = synchronizerId,
+                filterUid = pid.filterString,
+              )
+            )
+          )
+          .map(_.flatten)
 
-        _ <- permissionResults.headOption.map(_.mapping) match {
-          case Some(mapping) =>
-            val now = context.clock.now
-
-            mapping.loginAfter
-              .map { loginAfter =>
-                if (now >= loginAfter) {
-                  Future.unit
-                } else {
-                  Future.failed(
-                    Status.NOT_FOUND
-                      .withDescription(
-                        s"ParticipantSynchronizerPermission exists for $validatorParty, but waiting for loginAfter barrier: $loginAfter (current time: $now)"
-                      )
-                      .asRuntimeException()
-                  )
-                }
-              }
-              .getOrElse(Future.unit)
-
-          case None =>
+        _ <-
+          if (permissionResults.nonEmpty) {
+            Future.unit
+          } else {
             Future.failed(
               Status.NOT_FOUND
                 .withDescription(
-                  s"ParticipantSynchronizerPermission for $participantId not yet found"
+                  s"ParticipantSynchronizerPermission not yet found for any participant of $validatorParty. Checked participants: ${participantIds
+                      .mkString(", ")}"
                 )
                 .asRuntimeException()
             )
-        }
+          }
 
         dsoRules <- dsoStore.getDsoRules()
 
