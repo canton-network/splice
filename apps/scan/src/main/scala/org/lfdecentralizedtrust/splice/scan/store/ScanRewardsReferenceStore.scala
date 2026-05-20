@@ -11,6 +11,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
@@ -77,6 +78,12 @@ trait ScanRewardsReferenceStore extends AppStore {
   )(implicit
       tc: TraceContext
   ): Future[Option[Contract[OpenMiningRound.ContractId, OpenMiningRound]]]
+
+  /** List active CalculateRewardsV2 contracts, sorted by round number ascending.
+    */
+  def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]]
 
   override lazy val acsContractFilter: MultiDomainAcsStore.ContractFilter[
     ScanRewardsReferenceStoreRowData,
@@ -155,6 +162,14 @@ object ScanRewardsReferenceStore {
         },
         mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanRewardsReferenceStoreRowData(contract = contract)
+        },
+        mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
+          co.payload.dso == dso
+        ) { contract =>
+          ScanRewardsReferenceStoreRowData(
+            contract = contract,
+            round = Some(contract.payload.round.number),
+          )
         },
       ),
       interfaceFilters = Map.empty,
