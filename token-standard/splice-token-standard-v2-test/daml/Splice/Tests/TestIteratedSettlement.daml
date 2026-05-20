@@ -23,28 +23,88 @@ import Splice.TokenStandard.Utils
 
 import Splice.Testing.Utils
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 
--- TODO(#5464): generalize the tests to also test TestTokenV2
+-- Amulet and TestTokenV2 tests
+-------------------------------
+
+amulet_test_locked_funds : Script ()
+amulet_test_locked_funds = mkAmuletTestCase >>= test_locked_funds
+
+amulet_test_refresh_and_withdrawal : Script ()
+amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
+
+
+testTokenV2_test_locked_funds : Script ()
+testTokenV2_test_locked_funds = mkTestTokenV2TestCase >>= test_locked_funds
+
+testTokenV2_test_refresh_and_withdrawal : Script ()
+testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
+
+
+mkAmuletTestCase : Script TestCase
+mkAmuletTestCase = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  let instrId = env.amuletV2.instrumentId
+  let admin = instrId.admin
+  AmuletRegistryV2.tapFaucet env.amuletV2 alice 1000.0
+  registry <- MultiRegistry.getRegistryApiV2 env.registries admin
+  pure TestCase with
+    admins = Map.keys env.registries
+    provider
+    alice
+    instrId
+    registry
+    admin
+    env
+
+mkTestTokenV2TestCase : Script TestCase
+mkTestTokenV2TestCase = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  let admin = env.testTokenV2.admin
+  let instrId = V2.InstrumentId with
+        id = "X"
+        admin
+  TestTokenV2_RegistryV2.mint env.testTokenV2 (basicAccount alice) "X" 1000.0
+  registry <- MultiRegistry.getRegistryApiV2 env.registries admin
+  pure TestCase with
+    admins = Map.keys env.registries
+    provider
+    alice
+    instrId
+    registry
+    admin
+    env
+
+
+-- Generic test infra
+---------------------
+
+data TestCase = TestCase with
+  admins : [Party]
+  provider : Party
+  admin : Party
+  alice : Party
+  instrId : V2.InstrumentId
+  registry : V2.GenericRegistry
+  env : TestRegistries.Env
+
+
+
 
 -- | Test that an iterated allocation can be used to control locked funds.
 -- The test uses a simplified billing workflow as an example.
-test_locked_funds : Script ()
-test_locked_funds = do
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-
-  provider <- allocateParty "provider"
-  alice <- allocateParty "alice"
-
-  -- create some holdings for alice
-  let instrId = env.amuletV2.instrumentId
-  let registry = env.amuletV2
-  let admins = Map.keys env.registries
-  AmuletRegistryV2.tapFaucet registry alice 1000.0
-
+test_locked_funds : TestCase -> Script ()
+test_locked_funds TestCase {..} = do
    -- create prefunded allocation
   let settlement = V2.SettlementInfo with
         executors = [provider]
@@ -192,19 +252,8 @@ test_locked_funds = do
 
 
 -- | Test that refresh on settlement and withdrawal of iterated allocations works as expected.
-test_refresh_and_withdrawal : Script ()
-test_refresh_and_withdrawal = do
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-
-  provider <- allocateParty "provider"
-  alice <- allocateParty "alice"
-
-  -- fund alice
-  let instrId = env.amuletV2.instrumentId
-  let registry = env.amuletV2
-  let dso = registry.dso
-  let admins = Map.keys env.registries
-
+test_refresh_and_withdrawal : TestCase -> Script ()
+test_refresh_and_withdrawal TestCase {..} = do
   -- create an allocation for iterated settlement with a settlement deadline in one year
   now <- getTime
   let aliceSettlementDeadline = addRelTime now (days 365)
@@ -233,7 +282,7 @@ test_refresh_and_withdrawal = do
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let V2.AllocationInstructionResult_Completed aliceAllocationCid0 = result.output
   Some aliceAllocView0 <- queryInterfaceContractId alice aliceAllocationCid0
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- withdrawing Alice's allocation must fail, as it is committed until its settlement deadline
   context <- V2.getAllocation_WithdrawContext registry aliceAllocationCid0 emptyMetadata
@@ -270,7 +319,7 @@ test_refresh_and_withdrawal = do
   -- immediate refresh should work and not bump expiry
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid0
   aliceAllocView0.expiresAt === aliceAllocView1.expiresAt
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- refresh after 45 days still does not bump expiry
   passTime (days 45)
@@ -281,7 +330,7 @@ test_refresh_and_withdrawal = do
   passTime (microseconds 1)
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid1
   (fmap (`addRelTime` days 45) aliceAllocView0.expiresAt) === aliceAllocView1.expiresAt
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- withdrawing Alice's allocation after the settlement deadline must succeed
   setTime (aliceSettlementDeadline `addRelTime` microseconds 1)
