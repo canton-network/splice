@@ -238,6 +238,9 @@ data DsoRules_UpdateSvRewardWeight_V2Result = DsoRules_UpdateSvRewardWeight_V2Re
 data DsoRules_RemoveHostedSvResult = DsoRules_RemoveHostedSvResult with
     newDsoRules : ContractId DsoRules
 
+data DsoRules_SetSvRewardBeneficiariesResult = DsoRules_SetSvRewardBeneficiariesResult with
+    svRewardBeneficiariesCid : Optional (ContractId SvRewardBeneficiaries)
+
 data DsoRules_MigrateHostedSvsResult = DsoRules_MigrateHostedSvsResult with
     newDsoRules : ContractId DsoRules
 
@@ -532,6 +535,59 @@ data LogicalSynchronizerUpgradeSchedule = LogicalSynchronizerUpgradeSchedule
 data TrafficState = TrafficState with
     consumedTraffic: Int -- ^ Bytes of extra traffic consumed before the decentralized synchronizer was bootstrapped.
   deriving (Eq, Show)
+
+
+-- | Optional on-ledger representation of the SV reward beneficiary distribution for an SV.
+--
+-- When this contract exists for an SV, part of the SV reward coupons for that
+-- SV may be distributed across the configured beneficiaries according to their
+-- weights. The total beneficiary weight must be less than or equal to the SV
+-- weight assigned in 'DsoRules'.
+--
+-- The SV itself must not be listed as a beneficiary in this contract. Any
+-- remaining SV reward weight not assigned to beneficiaries is created for the
+-- SV itself.
+--
+-- When this contract does not exist, all SV reward coupons for the SV are
+-- created for the SV itself.
+template SvRewardBeneficiaries
+  with
+    dso : Party
+    sv : Party
+      -- ^ The SV party whose reward coupons may be partially distributed to beneficiaries.
+    svOperator : Party
+      -- ^ The SV operator party responsible for creating reward coupons for 'sv'.
+    beneficiaries : [(Party, Int)]
+      -- ^ Beneficiary parties, excluding 'sv', and their corresponding positive
+      -- reward weights. Each beneficiary party must be unique.
+  where
+    ensure
+      not (null beneficiaries)
+        && unique (map fst beneficiaries)
+        && all (> 0) (map snd beneficiaries)
+        && notElem sv (map fst beneficiaries)
+
+    signatory dso, sv
+    observer svOperator
+
+-- | Action to apply to the SV reward beneficiary distribution.
+data SetSvRewardBeneficiariesAction
+  = SetBeneficiaries with
+      optCid : Optional (ContractId SvRewardBeneficiaries)
+        -- ^ The existing beneficiary distribution contract, if one exists.
+        -- 'None' creates a new distribution. 'Some' archives and replaces the
+        -- existing distribution.
+      beneficiaries : [(Party, Int)]
+        -- ^ The full beneficiary distribution to set. The total beneficiary
+        -- weight must be less than or equal to the SV weight in 'DsoRules'.
+        -- Any unassigned SV weight is created for the SV itself.
+  | ClearBeneficiaries with
+      cid : ContractId SvRewardBeneficiaries
+        -- ^ The existing beneficiary distribution contract to archive.
+        -- After clearing, all SV reward coupons for the SV are created for
+        -- the SV itself.
+  deriving (Eq, Show)
+
 
 template DsoRules with
     dso : Party
@@ -1104,18 +1160,69 @@ template DsoRules with
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
             pure DsoRules_RemoveHostedSvResult with newDsoRules
 
+
+    -- | Sets or clears the SV reward beneficiary distribution for an SV.
+    --
+    -- This choice is optional for SVs that want to share their SV rewards with
+    -- beneficiaries. It creates, updates, or removes the corresponding
+    -- 'SvRewardBeneficiaries' contract. If no such contract exists, all SV reward
+    -- coupons for the SV are created for the SV itself.
+    nonconsuming choice DsoRules_SetSvRewardBeneficiaries : DsoRules_SetSvRewardBeneficiariesResult
+      with
+        action : SetSvRewardBeneficiariesAction
+          -- ^ The requested operation to apply.
+        svParty : Party
+          -- ^ The SV party whose beneficiary distribution is being managed.
+      controller svParty
+      do
+        svRewardBeneficiariesCid <-
+          case Map.lookup svParty (fromOptional Map.empty hostedSvs) of
+            None -> fail "SV party is not registered"
+            Some hostedSvInfo -> do
+              let svWeight = hostedSvInfo.svRewardWeight
+                  assertWeights weights =
+                    require ("Sum of weights is less than SV's weight " <> show svWeight) (sum weights <= svWeight)
+              case action of
+                ClearBeneficiaries cid -> do
+                  _ <- fetchAndArchive (ForOwner with dso; owner = svParty) cid
+                  pure None
+
+                SetBeneficiaries {optCid = Some cid; beneficiaries} -> do
+                  svRewardBeneficiaries <- fetchAndArchive (ForOwner with dso; owner = svParty) cid
+                  assertWeights (map snd beneficiaries)
+                  Some <$> create svRewardBeneficiaries with beneficiaries
+
+                SetBeneficiaries {optCid = None; beneficiaries} -> do
+                  assertWeights (map snd beneficiaries)
+                  Some <$> create SvRewardBeneficiaries with
+                            dso
+                            sv = svParty
+                            svOperator = hostedSvInfo.svOperator
+                            beneficiaries
+
+        pure DsoRules_SetSvRewardBeneficiariesResult with svRewardBeneficiariesCid
+
     -- TODO: Deprecate once all SVs have migrated to `hostedSvs`.
-    -- DRAFT note for the reviewer: Please, check migration procedure in the PR description.
+    -- DRAFT note for the reviewer: Please check the migration procedure in the PR description.
     choice DsoRules_MigrateHostedSvs : DsoRules_MigrateHostedSvsResult
       with
-        -- Complete on-ledger reward weight distribution for the SVs operated by this SV operator.
-        -- The sum of these weights must match the SV operator's current legacy reward weight.
-        -- Extra beneficiaries used only for internal reward sharing must not be migrated as weights on-ledger;
-        -- their share should be included in the corresponding SV's weight and configured separately
-        -- as beneficiary splits in the SV app.
+        -- Complete on-ledger SV reward weight distribution for the SVs operated by
+        -- this SV operator.
+        --
+        -- The sum of all migrated SV weights must match the SV operator's current
+        -- legacy reward weight.
+        --
+        -- This migration only moves SV reward weights on-ledger. It does not create
+        -- 'SvRewardBeneficiaries' contracts. Any optional beneficiary distribution
+        -- must be configured separately by the corresponding SV after migration.
+        --
+        -- Extra beneficiaries previously used only for internal reward sharing must
+        -- not be migrated as independent SV weights. Their share should instead
+        -- remain part of the corresponding SV's migrated weight and, if needed, be
+        -- configured later through 'SvRewardBeneficiaries'.
         svsMigrationData : [SvMigrationData]
         openRoundCid : ContractId OpenMiningRound
-        sv : Party
+        sv : Party -- ^ The SV operator performing the migration.
       controller sv
       do
         case Map.lookup sv svs of
@@ -1529,11 +1636,16 @@ template DsoRules with
       with
         sv : Party
         openRoundCid : ContractId OpenMiningRound
-        -- SvRewardStates to collect rewards for in this call, each with an optional beneficiary split.
+        -- SvRewardStates to collect rewards for in this call, each with an optional
+        -- beneficiary distribution.
+        --
         -- Each SvRewardState must correspond to an SV operated by this SV operator.
-        -- If the beneficiary list is empty, the corresponding SV receives one coupon with the full weight.
-        -- Otherwise, one coupon is issued per listed beneficiary, and the listed weights must sum to the SV's reward weight.
-        rewardStatesWithBeneficiaries : [(ContractId SvRewardState, [(Party, Int)])]
+        -- If no SvRewardBeneficiaries contract is provided, the corresponding SV
+        -- receives one coupon with the full SV weight.
+        -- If a SvRewardBeneficiaries contract is provided, one coupon is issued per
+        -- configured beneficiary. The total beneficiary weight must be less than or
+        -- equal to the SV weight. Any remaining weight is issued to the SV itself.
+        rewardStatesWithBeneficiaries : [(ContractId SvRewardState, Optional (ContractId SvRewardBeneficiaries))]
       controller sv
       do
         case Map.lookup sv svs of
@@ -1544,10 +1656,10 @@ template DsoRules with
             openRound <- fetchReferenceData (ForDso with dso) openRoundCid
             require "OpenRound is open" (openRound.opensAt <= now)
 
-            require "rewardStates are unique" (unique $ map fst rewardStatesWithBeneficiaries)
+            require "RewardState contract ids are unique" (unique $ map fst rewardStatesWithBeneficiaries)
 
             svRewardStatesWithSvRewardCoupons <-
-              forA rewardStatesWithBeneficiaries $ \(rewardStateCid, beneficiaries) -> do
+              forA rewardStatesWithBeneficiaries $ \(rewardStateCid, optSvRewardBeneficiariesCid) -> do
                 -- check and update state
                 rewardState <- fetchAndArchive (ForDso with dso) rewardStateCid
                 let state = rewardState.state
@@ -1556,20 +1668,34 @@ template DsoRules with
                   (state.lastRoundCollected < openRound.round)
 
                 case lookupHostedSvInfoByName rewardState.svName this of
-                  None -> fail $ show rewardState.svName <> " is not onboarded"
+                  None -> fail $ "SV " <> show rewardState.svName <> " is not registered"
                   Some (hostedSv, hostedSvInfo) -> do
-                    -- check SV operator
                     require
                       ("Only SV operator " <> show hostedSvInfo.svOperator <> " can create SV rewards for SV " <> show hostedSv)
                       (hostedSvInfo.svOperator == sv)
 
                     let svRewardWeight = hostedSvInfo.svRewardWeight
-                    beneficiaries' <- case beneficiaries of
-                      [] -> pure [(hostedSv, svRewardWeight)]
-                      _ -> do
-                        require "Total beneficiary weight matches SV weight" $ sum (map snd beneficiaries) == svRewardWeight
-                        require "At most one coupon per beneficiary" (unique $ map fst beneficiaries)
-                        pure beneficiaries
+                    beneficiaries <- case optSvRewardBeneficiariesCid of
+                      None -> pure [(hostedSv, svRewardWeight)]
+                      Some svRewardBeneficiariesCid -> do
+                        svRewardBeneficiaries <- fetchChecked (ForDso with dso) svRewardBeneficiariesCid
+                        let beneficiaries = svRewardBeneficiaries.beneficiaries
+                        require
+                          "SvRewardBeneficiaries contract belongs to the SV operator creating the rewards"
+                          (svRewardBeneficiaries.svOperator == sv)
+                        require
+                          "SvRewardBeneficiaries contract belongs to the corresponding SV"
+                          (svRewardBeneficiaries.sv == hostedSv)
+
+                        let assignedWeight = sum (map snd beneficiaries)
+                            remainingWeight = svRewardWeight - assignedWeight
+                        require
+                          ("Sum of beneficiary weights " <> show assignedWeight <> " must be less than or equal to the SV weight " <> show svRewardWeight)
+                          (assignedWeight <= svRewardWeight)
+                        pure $
+                          if remainingWeight > 0
+                            then beneficiaries <> [(hostedSv, remainingWeight)]
+                            else beneficiaries
 
                     newRewardStateCid <- create rewardState with
                       state = RewardState with
@@ -1577,9 +1703,9 @@ template DsoRules with
                         numRoundsCollected = state.numRoundsCollected + 1
                         numRoundsMissed =
                           state.numRoundsMissed + (openRound.round.number - state.lastRoundCollected.number - 1)
-                        numCouponsIssued = state.numCouponsIssued + length beneficiaries'
+                        numCouponsIssued = state.numCouponsIssued + length beneficiaries
 
-                    couponCids <- forA beneficiaries' $ \(beneficiary, weight) ->
+                    couponCids <- forA beneficiaries $ \(beneficiary, weight) ->
                       create SvRewardCoupon with
                         dso
                         sv = hostedSv
@@ -1590,6 +1716,72 @@ template DsoRules with
                     pure (newRewardStateCid, couponCids)
 
             pure DsoRules_ReceiveSvRewardCoupon_V2Result with svRewardStatesWithSvRewardCoupons
+
+    -- nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCoupon_V2Result
+    --   with
+    --     sv : Party
+    --     openRoundCid : ContractId OpenMiningRound
+    --     -- SvRewardStates to collect rewards for in this call, each with an optional beneficiary split.
+    --     -- Each SvRewardState must correspond to an SV operated by this SV operator.
+    --     -- If the beneficiary list is empty, the corresponding SV receives one coupon with the full weight.
+    --     -- Otherwise, one coupon is issued per listed beneficiary, and the listed weights must sum to the SV's reward weight.
+    --     rewardStatesWithBeneficiaries : [(ContractId SvRewardState, [(Party, Int)])]
+    --   controller sv
+    --   do
+    --     case Map.lookup sv svs of
+    --       None -> fail "SV is not an SV operator"
+    --       Some _ -> do
+    --         -- check round
+    --         now <- getTime
+    --         openRound <- fetchReferenceData (ForDso with dso) openRoundCid
+    --         require "OpenRound is open" (openRound.opensAt <= now)
+
+    --         require "rewardStates are unique" (unique $ map fst rewardStatesWithBeneficiaries)
+
+    --         svRewardStatesWithSvRewardCoupons <-
+    --           forA rewardStatesWithBeneficiaries $ \(rewardStateCid, beneficiaries) -> do
+    --             -- check and update state
+    --             rewardState <- fetchAndArchive (ForDso with dso) rewardStateCid
+    --             let state = rewardState.state
+    --             require
+    --               ("Round " <> show openRound.round <> " is greater than the last round a reward has been received for " <> show state.lastRoundCollected)
+    --               (state.lastRoundCollected < openRound.round)
+
+    --             case lookupHostedSvInfoByName rewardState.svName this of
+    --               None -> fail $ show rewardState.svName <> " is not onboarded"
+    --               Some (hostedSv, hostedSvInfo) -> do
+    --                 -- check SV operator
+    --                 require
+    --                   ("Only SV operator " <> show hostedSvInfo.svOperator <> " can create SV rewards for SV " <> show hostedSv)
+    --                   (hostedSvInfo.svOperator == sv)
+
+    --                 let svRewardWeight = hostedSvInfo.svRewardWeight
+    --                 beneficiaries' <- case beneficiaries of
+    --                   [] -> pure [(hostedSv, svRewardWeight)]
+    --                   _ -> do
+    --                     require "Total beneficiary weight matches SV weight" $ sum (map snd beneficiaries) == svRewardWeight
+    --                     require "At most one coupon per beneficiary" (unique $ map fst beneficiaries)
+    --                     pure beneficiaries
+
+    --                 newRewardStateCid <- create rewardState with
+    --                   state = RewardState with
+    --                     lastRoundCollected = openRound.round
+    --                     numRoundsCollected = state.numRoundsCollected + 1
+    --                     numRoundsMissed =
+    --                       state.numRoundsMissed + (openRound.round.number - state.lastRoundCollected.number - 1)
+    --                     numCouponsIssued = state.numCouponsIssued + length beneficiaries'
+
+    --                 couponCids <- forA beneficiaries' $ \(beneficiary, weight) ->
+    --                   create SvRewardCoupon with
+    --                     dso
+    --                     sv = hostedSv
+    --                     beneficiary
+    --                     weight
+    --                     round = openRound.round
+
+    --                 pure (newRewardStateCid, couponCids)
+
+    --         pure DsoRules_ReceiveSvRewardCoupon_V2Result with svRewardStatesWithSvRewardCoupons
 
 
     -- Batch expiry of unclaimed rewards for a specific claimed round
@@ -2225,6 +2417,12 @@ instance HasCheckedFetch UnallocatedUnclaimedActivityRecord ForDso where
 
 instance HasCheckedFetch Confirmation ForDso where
   contractGroupId Confirmation {..} = ForDso with dso
+
+instance HasCheckedFetch SvRewardBeneficiaries ForOwner where
+  contractGroupId SvRewardBeneficiaries {..} = ForOwner with dso; owner = sv
+
+instance HasCheckedFetch SvRewardBeneficiaries ForDso where
+  contractGroupId SvRewardBeneficiaries {..} = ForDso with dso
 
 instance Patchable DsoRulesConfig where
   patch new base current = DsoRulesConfig with
