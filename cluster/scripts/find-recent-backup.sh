@@ -137,7 +137,7 @@ function main() {
       | yq ".svs.${namespace}.testing.catchup.thresholds.minBackupAgeHours // 0")
     if [ "$min_backup_age_hours" -gt 0 ]; then
       before_timestamp=$(( $(date +%s) - min_backup_age_hours * 3600 ))
-      _info "Using minBackupAgeHours=${min_backup_age_hours} → before_timestamp=${before_timestamp}"
+      _info "Using minBackupAgeHours=${min_backup_age_hours} → before_timestamp=${before_timestamp}" >&2
     else
       before_timestamp=$(date +%s)
     fi
