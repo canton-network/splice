@@ -87,12 +87,15 @@ export class V2TransactionParser {
 
     const unaccountedCreates: TokenStandardEvent[] = creates
       .filter(
-        (rawCreate) => !accountedForHoldings.has(rawCreate.holding.contractId),
+        (rawCreate) =>
+          rawCreate.holding.owner === this.partyId &&
+          !accountedForHoldings.has(rawCreate.holding.contractId),
       )
       .map((rawCreate) => this.buildRawCreate(rawCreate.holding));
     const unaccountedArchives = archives
       .filter(
         (rawArchive) =>
+          rawArchive.holding.owner === this.partyId &&
           !accountedForHoldings.has(rawArchive.holding.contractId),
       )
       .map((rawCreate) => this.buildRawArchive(rawCreate.holding));
@@ -108,7 +111,7 @@ export class V2TransactionParser {
   extractHoldingCreate(
     createdEvent: LedgerApiEvent["CreatedEvent"],
   ): ExtractedHolding | null {
-    if (!createdEvent) {
+    if (!createdEvent || !this.createdEventInvolvesUser(createdEvent)) {
       return null;
     }
     const { interfaceViews } = createdEvent;
@@ -130,9 +133,18 @@ export class V2TransactionParser {
   async extractHoldingsArchive(
     archiveEvent:
       | LedgerApiEvent["ExercisedEvent"]
-      | LedgerApiEvent["ArchivedEvent"],
+      | LedgerApiEvent["ArchivedEvent"]
+      | undefined,
     cachedHoldings: Map<string, HoldingResult>,
   ): Promise<ExtractedHolding | null> {
+    if (
+      !archiveEvent ||
+      !archiveEvent.implementedInterfaces?.some((interfaceId) =>
+        HoldingInterfaceV2.matches(interfaceId),
+      )
+    ) {
+      return null;
+    }
     const result = await this.resolveHolding(
       archiveEvent.contractId,
       cachedHoldings,
@@ -249,10 +261,7 @@ export class V2TransactionParser {
     if (
       !fromEvent ||
       !fromEvent.created ||
-      !fromEvent.created.createdEvent.witnessParties
-        .concat(fromEvent.created.createdEvent.signatories)
-        .concat(fromEvent.created.createdEvent.observers || [])
-        .some((party) => this.partyId === party)
+      !this.createdEventInvolvesUser(fromEvent.created.createdEvent)
     ) {
       return null;
     }
@@ -265,6 +274,15 @@ export class V2TransactionParser {
     }
     cachedHoldings.set(cid, holding.holding);
     return holding.holding;
+  }
+
+  createdEventInvolvesUser(
+    createdEvent: LedgerApiEvent["CreatedEvent"],
+  ): boolean {
+    return createdEvent.witnessParties
+      .concat(createdEvent.signatories)
+      .concat(createdEvent.observers || [])
+      .some((party) => this.partyId === party);
   }
 
   buildRawCreate(holding: HoldingResult): TokenStandardEvent {
