@@ -14,13 +14,6 @@ import scala.concurrent.Future
   */
 trait ScanAppRewardsStore {
 
-  /** Returns the latest round for which reward computation has completed
-    * (i.e. a root hash exists). None if no rounds have been computed.
-    */
-  def lookupLatestRoundWithRewardComputation()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]]
-
   /** Returns the subset of the given round numbers for which reward
     * computation has already completed (i.e. a root hash exists).
     */

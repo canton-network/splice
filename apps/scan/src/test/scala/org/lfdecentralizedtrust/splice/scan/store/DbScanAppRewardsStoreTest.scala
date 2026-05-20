@@ -448,58 +448,6 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    // -- lookupLatestRoundWithRewardComputation ------
-
-    "lookupLatestRoundWithRewardComputation returns None when no root hashes" in {
-      for {
-        (store, historyId) <- newStore()
-        result <- store.lookupLatestRoundWithRewardComputation()
-      } yield {
-        result shouldBe None
-      }
-    }
-
-    "lookupLatestRoundWithRewardComputation returns latest round with root hash" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- store.insertAppRewardRootHashes(
-          Seq(
-            AppRewardRootHashT(
-              historyId = historyId,
-              roundNumber = 10L,
-              rootHash = RewardHash(Array[Byte](1, 2, 3, 4)),
-            ),
-            AppRewardRootHashT(
-              historyId = historyId,
-              roundNumber = 20L,
-              rootHash = RewardHash(Array[Byte](5, 6, 7, 8)),
-            ),
-          )
-        )
-        result <- store.lookupLatestRoundWithRewardComputation()
-      } yield {
-        result.value shouldBe 20L
-      }
-    }
-
-    "lookupLatestRoundWithRewardComputation returns single round" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- store.insertAppRewardRootHashes(
-          Seq(
-            AppRewardRootHashT(
-              historyId = historyId,
-              roundNumber = 5L,
-              rootHash = RewardHash(Array[Byte](1, 2, 3, 4)),
-            )
-          )
-        )
-        result <- store.lookupLatestRoundWithRewardComputation()
-      } yield {
-        result.value shouldBe 5L
-      }
-    }
-
     // -- roundsWithComputedRewards ------
 
     "roundsWithComputedRewards returns empty set for empty input" in {
@@ -852,9 +800,9 @@ class DbScanAppRewardsStoreTest
     "computeRewardHashes — root hash exists after multi-level aggregation" in {
       for {
         (store, _, _) <- setupAndComputeHashes(partyCount = 5, batchSize = 2)
-        latestRound <- store.lookupLatestRoundWithRewardComputation()
+        computed <- store.roundsWithComputedRewards(Seq(roundNumber))
       } yield {
-        latestRound.value shouldBe roundNumber
+        computed shouldBe Set(roundNumber)
       }
     }
 
