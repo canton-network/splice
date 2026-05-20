@@ -11,6 +11,7 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.scan.metrics.RewardComputationMetrics
 import org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputs
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -22,6 +23,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -59,47 +61,54 @@ class RewardComputationTrigger(
       Future.successful(Seq.empty)
     } else
       for {
+        // List active CalculateRewardsV2 contracts, ascending by round
+        // and filter out
+        // - rounds where the rewards are already computed
+        // - rounds with incomplete activity
+        candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2()
+        roundToContract = candidates.map(c => c.payload.round.number.toLong -> c.contractId).toMap
+        candidateRounds = roundToContract.keys.toSeq.sorted
+        computedRounds <- appRewardsStore.roundsWithComputedRewards(candidateRounds)
+        afterComputedFilter = candidateRounds.filterNot(computedRounds.contains)
         earliestCompleteO <- appActivityStore.earliestRoundWithCompleteAppActivity()
         latestCompleteO <- appActivityStore.latestRoundWithCompleteAppActivity()
-        latestComputedO <- appRewardsStore.lookupLatestRoundWithRewardComputation()
-        // While no rewards have been computed yet, skip pre-CIP-104 rounds
-        // by finding the earliest round with rewardConfig set.
-        earliestComputableO <- latestComputedO match {
-          case Some(_) => Future.successful(earliestCompleteO)
-          case None => earliestRoundWithRewardConfig(earliestCompleteO, latestCompleteO)
+        eligible = (earliestCompleteO, latestCompleteO) match {
+          case (Some(earliest), Some(latest)) =>
+            afterComputedFilter.filter(r => r >= earliest && r <= latest)
+          case _ => Seq.empty[Long]
         }
-        candidateRoundO = RewardComputationTrigger.nextRound(
-          earliestComputableO,
-          latestCompleteO,
-          latestComputedO,
-        )
-        // Returns Seq.empty (no task created) when data is unavailable.
-        // This skips the round for this poll cycle — the trigger will poll
-        // again on its next interval. Unlike a failing task, this does not
-        // consume one of the trigger's limited task retries (which, once
-        // exhausted, cause the task to be abandoned with a log warning).
-        task <- candidateRoundO match {
-          case None => Future.successful(Seq.empty)
-          case Some(roundNumber) =>
-            rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
-              case None =>
-                logger.debug(
-                  s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
-                )
-                Seq.empty
-              case Some(contract) =>
-                RewardComputationInputs.fromOpenMiningRound(contract.payload) match {
-                  case None =>
-                    logger.debug(
-                      s"Round $roundNumber missing rewardConfig or trafficPrice, skipping."
+
+        // For each eligible round until the configured parallelism limit, look
+        // up OpenMiningRound and extract inputs. The trigger will handle the
+        // remainder in subsequent polls.
+        tasks <- Future.traverse(eligible.take(context.config.parallelism)) { roundNumber =>
+          rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
+            case None =>
+              logger.debug(
+                s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
+              )
+              None
+            case Some(contract) =>
+              val (inputs, batchSize) =
+                RewardComputationInputs.fromOpenMiningRound(contract.payload).getOrElse {
+                  throw Status.INTERNAL
+                    .withDescription(
+                      s"Round $roundNumber has a CalculateRewardsV2 contract but its " +
+                        s"OpenMiningRound is missing rewardConfig or trafficPrice."
                     )
-                    Seq.empty
-                  case Some((inputs, batchSize)) =>
-                    Seq(RewardComputationTrigger.Task(roundNumber, batchSize, inputs))
+                    .asRuntimeException()
                 }
-            }
+              Some(
+                RewardComputationTrigger.Task(
+                  roundNumber,
+                  batchSize,
+                  inputs,
+                  roundToContract(roundNumber),
+                )
+              )
+          }
         }
-      } yield task
+      } yield tasks.flatten
   }
 
   override protected def completeTask(
@@ -121,52 +130,9 @@ class RewardComputationTrigger(
   override protected def isStaleTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] =
-    appRewardsStore
-      .lookupLatestRoundWithRewardComputation()
-      .map(_.exists(_ >= task.roundNumber))
-
-  /** Gate + linear search for the earliest round with rewardConfig.
-    * First checks that the latest complete round has rewardConfig (i.e. CIP-104
-    * is active). If not, returns None to skip entirely. If yes, searches backward
-    * from latestComplete to find the earliest contiguous round with rewardConfig.
-    *
-    * Called each poll cycle until a reward is successfully computed.
-    * Before CIP-104 activates, only the gate check runs (one indexed lookup
-    * on the latest complete round), so repeated polling is cheap.
-    */
-  private def earliestRoundWithRewardConfig(
-      earliestCompleteO: Option[Long],
-      latestCompleteO: Option[Long],
-  )(implicit tc: TraceContext): Future[Option[Long]] =
-    (earliestCompleteO, latestCompleteO) match {
-      case (Some(from), Some(to)) =>
-        rewardsReferenceStore.lookupOpenMiningRoundByNumber(to).flatMap {
-          case Some(c) if c.payload.rewardConfig.isPresent =>
-            searchBackward(from, to).map { result =>
-              logger.debug(s"Earliest round with rewardConfig: $result")
-              Some(result)
-            }
-          case _ =>
-            logger.debug(
-              "CIP-104 not yet active (latest complete round has no rewardConfig), skipping."
-            )
-            Future.successful(None)
-        }
-      case _ => Future.successful(None)
-    }
-
-  private def searchBackward(
-      from: Long,
-      candidate: Long,
-  )(implicit tc: TraceContext): Future[Long] =
-    if (candidate <= from) Future.successful(candidate)
-    else
-      rewardsReferenceStore.lookupOpenMiningRoundByNumber(candidate - 1).flatMap {
-        case Some(c) if c.payload.rewardConfig.isPresent =>
-          searchBackward(from, candidate - 1)
-        case _ =>
-          Future.successful(candidate)
-      }
+    rewardsReferenceStore.multiDomainAcsStore
+      .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
+      .map(_.isEmpty)
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+
@@ -179,27 +145,13 @@ object RewardComputationTrigger {
       roundNumber: Long,
       batchSize: Int,
       inputs: RewardComputationInputs,
+      calculateRewardsId: CalculateRewardsV2.ContractId,
   ) extends PrettyPrinting {
+    import com.digitalasset.canton.participant.pretty.Implicits.prettyContractId
     override def pretty: Pretty[this.type] =
-      prettyOfClass(param("roundNumber", _.roundNumber))
+      prettyOfClass(
+        param("roundNumber", _.roundNumber),
+        param("calculateRewardsId", _.calculateRewardsId),
+      )
   }
-
-  /** Compute the next round to process, given the bounds of complete activity data
-    * and the latest round for which rewards have already been computed.
-    *
-    * TODO(#4570): Support parallel execution
-    */
-  def nextRound(
-      earliestCompleteO: Option[Long],
-      latestCompleteO: Option[Long],
-      latestComputedO: Option[Long],
-  ): Option[Long] =
-    (earliestCompleteO, latestCompleteO) match {
-      case (Some(earliestComplete), Some(latestComplete)) if earliestComplete <= latestComplete =>
-        val start = math.max(earliestComplete, latestComputedO.fold(0L)(_ + 1))
-        if (start <= latestComplete) Some(start)
-        else None
-      case _ => None
-    }
-
 }
