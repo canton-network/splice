@@ -35,11 +35,11 @@ function usage() {
   echo "  -i <identities_dump>: restore identities from a dump file. Requires a new participant identifier to be provided."
   echo "  -w: Wait for the validator to be fully up and running before returning."
   echo "  -l: Connect participant and validator also to docker network compose-sv_splice-sv-public, to use an SV deployed locally on docker compose"
+  echo "      Also implies -s, -c and -C to be the defaults for such a deployment."
   echo "  -B: Enable bft-custom mode for scan and sequencer connections."
   echo "  -u <comma_separated_urls>: Comma-separated list of Scan URLs for bft-custom mode (no spaces)."
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
-  echo "      Also implies -s, -c and -C to be the defaults for such a deployment."
 
   echo ""
   echo "Testing flags:"
