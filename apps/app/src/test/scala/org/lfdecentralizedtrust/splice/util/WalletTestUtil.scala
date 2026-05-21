@@ -1242,8 +1242,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
     val received = walletClient.listValidatorLivenessActivityRecords()
     (received.map(_.payload.round.number) should contain(round))
       .withClue(
-        s"Wallet: ${walletClient.name} did not receive a ValidatorLivenessActivityRecord for round $round. " +
-          s"Records present for rounds: ${received.map(_.payload.round.number).sorted.distinct}."
+        s"Wallet: ${walletClient.name} did not receive a ValidatorLivenessActivityRecord for round $round. "
       )
   }
 
