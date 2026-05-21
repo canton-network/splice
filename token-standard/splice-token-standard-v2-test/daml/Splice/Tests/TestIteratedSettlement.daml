@@ -46,6 +46,7 @@ testTokenV2_test_locked_funds = mkTestTokenV2TestCase >>= test_locked_funds
 testTokenV2_test_refresh_and_withdrawal : Script ()
 testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
 
+-- FIXME: check funding two instruments
 
 mkAmuletTestCase : Script TestCase
 mkAmuletTestCase = do

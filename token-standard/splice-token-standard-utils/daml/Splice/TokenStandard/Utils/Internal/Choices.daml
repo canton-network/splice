@@ -35,6 +35,7 @@ module Splice.TokenStandard.Utils.Internal.Choices (
 
   -- * Missing TextMap utilities
   textMapUnionWith,
+  textMapMergeWithDefault,
   textMapSingleton,
   textMapValues,
   textMapKeys,
@@ -204,6 +205,11 @@ textMapUnionWith f =
     (\_ v1 -> Some v1)
     (\_ v2 -> Some v2)
     (\_ v1 v2 -> Some (f v1 v2))
+
+-- | Merge two text maps, adding the default values for missing entries on either side.
+textMapMergeWithDefault : (a, b) -> TextMap.TextMap a -> TextMap.TextMap b -> TextMap.TextMap (a, b)
+textMapMergeWithDefault (a, b) =
+  TextMap.merge (\_ x -> Some (x, b)) (\_ y -> Some (a, y)) (\_ x y -> Some (x, y))
 
 -- | Zip two text maps together, keeping all keys from both maps.
 textMapZip : TextMap.TextMap a -> TextMap.TextMap b -> TextMap.TextMap (Optional a, Optional b)

@@ -69,6 +69,7 @@ module Splice.TokenStandard.Utils (
 
   -- TODO(#4865): upstream these to the Daml stdlib
   textMapUnionWith,
+  textMapMergeWithDefault,
   textMapSingleton,
   textMapValues,
   textMapKeys,
@@ -134,6 +135,7 @@ module Splice.TokenStandard.Utils (
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImplUsingV1,
 
+  validateNextIterationArgs,
   ensureWithdrawIsAllowed,
   mkCannotWithdrawCommittedAllocationFailure,
 
