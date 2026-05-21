@@ -101,7 +101,7 @@ export const UserProvider: React.FC<{
   const signoutInFlight = useRef(false);
 
   const signoutFromIdp = useCallback(() => {
-    if (auth === undefined) return;
+    if (auth === undefined || !auth.isAuthenticated) return;
     auth.removeUser().finally(() => {
       window.location.href = window.location.origin;
     });
