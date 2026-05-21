@@ -79,7 +79,6 @@ class RewardComputationTrigger(
         }
 
         // Look up OpenMiningRound for each eligible round and extract inputs.
-        // PollingParallelTaskExecutionTrigger handles parallelism of task execution.
         tasks <- Future.traverse(eligible)(r => buildTask(r, roundToContract(r)))
       } yield tasks
   }
@@ -128,14 +127,15 @@ class RewardComputationTrigger(
   override protected def isStaleTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] =
-    for {
-      contractGone <- rewardsReferenceStore.multiDomainAcsStore
-        .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
-        .map(_.isEmpty)
-      alreadyComputed <- appRewardsStore
-        .roundsWithComputedRewards(Seq(task.roundNumber))
-        .map(_.nonEmpty)
-    } yield contractGone || alreadyComputed
+    rewardsReferenceStore.multiDomainAcsStore
+      .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
+      .flatMap {
+        case None => Future.successful(true)
+        case Some(_) =>
+          appRewardsStore
+            .roundsWithComputedRewards(Seq(task.roundNumber))
+            .map(_.nonEmpty)
+      }
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+
