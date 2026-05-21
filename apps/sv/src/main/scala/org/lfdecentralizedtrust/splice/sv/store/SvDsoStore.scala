@@ -240,6 +240,13 @@ trait SvDsoStore
       tc: TraceContext
   ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
 
+  def listConfirmationsByConfirmer(
+      confirmer: PartyId,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
+
   def listAppRewardCouponsOnDomain(
       round: Long,
       synchronizerId: SynchronizerId,
