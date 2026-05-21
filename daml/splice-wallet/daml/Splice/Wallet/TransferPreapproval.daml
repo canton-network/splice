@@ -3,6 +3,7 @@
 
 module Splice.Wallet.TransferPreapproval where
 
+import DA.Assert
 import Splice.AmuletRules
 
 template TransferPreapprovalProposal
@@ -24,6 +25,7 @@ template TransferPreapprovalProposal
       controller provider
       do
         now <- getTime
+        assertWithinDeadline "expiresAt is not in the past" expiresAt
         AmuletRules_CreateTransferPreapprovalResult{..} <- exercise context.amuletRules AmuletRules_CreateTransferPreapproval
           with
             context
