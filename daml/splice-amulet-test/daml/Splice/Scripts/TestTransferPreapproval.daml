@@ -85,7 +85,7 @@ testTransferPreapprovalRenewal = script do
       inputs = [InputAmulet providerAmuletCid]
       newExpiresAt = now
 
-  -- Provider can renew the pre-approval without inputs for a short duration (before expiry)
+  -- Provider can renew the pre-approval without inputs for a short duration so no inputs required (before expiry)
   let newExpiresAt = now `addRelTime` (days 2)
   result <- submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
     exerciseCmd transferPreapprovalCid TransferPreapproval_Renew with
