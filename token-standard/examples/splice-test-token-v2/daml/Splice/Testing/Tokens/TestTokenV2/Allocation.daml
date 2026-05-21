@@ -90,7 +90,7 @@ applyAllocationInstructionTransitions
   -> V2.AllocationInstructionAction
   -> ExtraArgs
   -> Update V2.AllocationInstructionResult
-applyAllocationInstructionTransitions callSource allocationKind this@TokenAllocationInstructionV2{..} oSelf actors action extraArgs = do
+applyAllocationInstructionTransitions callSource allocationKind this oSelf actors action extraArgs = do
   archiveIfCalledFromV2 callSource oSelf
 
   accountMap <- extractAccountConfigMap
@@ -124,28 +124,12 @@ applyAllocationInstructionTransitions callSource allocationKind this@TokenAlloca
       (AIS_Init, AIS_Withdrawn) ->
         pure V2.AllocationInstructionResult with
             output = V2.AllocationInstructionResult_Failed
-            authorizerChangeCids = inputHoldingCids
+            authorizerChangeCids = this.inputHoldingCids
             meta = emptyMetadata
 
       (AIS_Init, AIS_Accepted) -> do
-          let allocationSpec = allocationStateMachineSpec allocation.authorizer this.settlement.executors allocation.admin
-          let lockContext = Some $ "allocation for settlement of " <> settlement.id
           eventLogCid <- getEventLogFromContext extraArgs.context
-          (lockedTokens, authorizerChangeCids) <- allocateTokenAllocationV2 eventLogCid
-            allocation.admin allocation.authorizer allocation.transferLegSides allocation.nextIterationFunding
-            inputHoldingCids lockContext allocation.settlementDeadline
-          let v2Alloc = TokenAllocationV2 with
-                originalAllocationCid = None
-                availableActions = mkAvailableActions admin allocationSpec Map.empty accountMap
-                actionAuthorizers = Map.empty
-                createdAt = requestedAt
-                numIterations = 0
-                ..
-          allocationCid <- createTokenAllocation allocationKind v2Alloc
-          pure V2.AllocationInstructionResult with
-            output = V2.AllocationInstructionResult_Completed allocationCid
-            authorizerChangeCids
-            meta = emptyMetadata
+          allocateTokenAllocation eventLogCid accountMap this allocationKind
 
       x -> abort $ "Unsupported state transition: " <> show x
 
@@ -373,42 +357,56 @@ applyAllocationTransitions callSource allocationKind this oSelf actors action oS
     transition mkPending tryUseAuthority extraArgs
 
 -- | Create a locked input for an allocation.
-allocateTokenAllocationV2
+allocateTokenAllocation
   :  ContractId TransferEventsV2.EventLog
-  -> Party
-  -> V2.Account
-  -> [V2.TransferLegSide]
-  -> Optional (TextMap.TextMap Decimal)
-  -> TextMap.TextMap [ContractId V2.Holding]
-  -> Optional Text
-  -> Optional Time
-  -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
-allocateTokenAllocationV2 eventLogCid admin authorizer transferLegSides nextIterationFunding inputTokenCids lockContext settlementDeadline = do
-
-  {- FIXME reactivate
-      -- prudent engineering to be extra sure, as the check happens also as part of the template's ensure clause
-      require' ("nextIterationFunding.amount for " <> instrumentId, nextIterationFundingAmount)
-        isGreaterOrEqualR ("zero", 0.0)
-  -}
-
-  let transferOutAmounts = (\amount -> max 0.0 (negate amount)) <$> netAllocationCreditAmounts admin authorizer transferLegSides
-  let requiredFundingAmount = textMapUnionWith (+) transferOutAmounts $ fromOptional TextMap.empty nextIterationFunding
-  (lockedCids, authorizerChangeCids) <- lockAllocationFunds
-    settlementDeadline admin authorizer requiredFundingAmount inputTokenCids lockContext
-
+  -> AccountConfigMap
+  -> TokenAllocationInstructionV2
+  -> AllocationKind
+  -> Update V2.AllocationInstructionResult
+allocateTokenAllocation eventLogCid accountMap this allocationKind = do
+  let settlement = this.settlement
+  let allocation = this.allocation
+  let admin = allocation.admin
+  let lockContext = Some $ "allocation for settlement of " <> settlement.id
+  let ignoreTransferIn amount = if amount >= 0.0 then 0.0 else negate amount
+  let transferOutAmounts =
+        ignoreTransferIn <$> netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
+  let requiredFundingAmount =
+        textMapUnionWith (+) transferOutAmounts $ fromOptional TextMap.empty allocation.nextIterationFunding
+  (lockedTokens, authorizerChangeCids) <- lockAllocationFunds
+    allocation.settlementDeadline
+    allocation.admin allocation.authorizer requiredFundingAmount
+    this.inputHoldingCids lockContext
   -- log the tx history v2 event
   logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-    admin
-    account = authorizer
-    inputHoldingCids = concat (textMapValues inputTokenCids)
+    admin = allocation.admin
+    account = allocation.authorizer
+    inputHoldingCids = concat (textMapValues this.inputHoldingCids)
     transferLegSides = []
-    outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
-    observers = accountParties admin authorizer
+    outputHoldingCids = concat (textMapValues lockedTokens) <> concat (textMapValues authorizerChangeCids)
+    observers = accountParties allocation.admin allocation.authorizer
     extraArgs = ExtraArgs with
       context = emptyChoiceContext
       meta = reasonToMeta ("lock holdings for allocation") emptyMetadata
+  -- create the actual allocation
+  let allocationMachineSpec = allocationStateMachineSpec allocation.authorizer this.settlement.executors admin
+  let v2Alloc = TokenAllocationV2 with
+        originalAllocationCid = None
+        availableActions =
+          mkAvailableActions admin allocationMachineSpec Map.empty accountMap
+        actionAuthorizers = Map.empty
+        createdAt = this.requestedAt
+        numIterations = 0
+        lockedTokens
+        settlement
+        allocation
+        allocateBefore = this.allocateBefore
+  allocationCid <- createTokenAllocation allocationKind v2Alloc
+  pure V2.AllocationInstructionResult with
+    output = V2.AllocationInstructionResult_Completed allocationCid
+    authorizerChangeCids
+    meta = emptyMetadata
 
-  pure (lockedCids, authorizerChangeCids)
 
 -- | Create the locked tokens that back an allocation, and return any change to the authorizer.
 lockAllocationFunds
@@ -476,11 +474,8 @@ lockAllocationFunds settlementDeadline admin authorizer requiredFundingAmount in
           pure [(instrumentId, [toInterfaceContractId cid])]
       pure (lockedTokens, changeTokens)
 
-  let
-    lockedCids = TextMap.fromListWithR (++) $ concatMap fst locksAndChange
-    authorizerChangeCids = TextMap.fromListWithR (++) $ concatMap snd locksAndChange
-
-
+  let lockedCids = TextMap.fromListWithR (++) $ concatMap fst locksAndChange
+  let authorizerChangeCids = TextMap.fromListWithR (++) $ concatMap snd locksAndChange
   return (lockedCids, authorizerChangeCids)
 
 
