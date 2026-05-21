@@ -328,96 +328,78 @@ Parsing the history (V2)
 
 Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv2.ts>`_.
 
-As of Token Standard V2, the new ``EventLog`` interface simplifies a lot the implementation of a parser.
-It has the choice ``EventLog_HoldingsChange`` that contains all input and output holdings as arguments,
-and all necessary metadata to be able to construct a transaction history.
+As of Token Standard V2, the new ``EventLog`` interface significantly simplifies the implementation of a tx parser.
+It has the choice ``EventLog_HoldingsChange`` whose arguments contain all input and output holdings,
+all transfers that happened, together with metadata about the change.
 For example, one exercise of this choice could look like:
 
 .. code-block:: json
 
     {
-      "ExercisedEvent" : {
-        "acsDelta" : false,
-        "actingParties" : [
+      "ExercisedEvent": {
+        "acsDelta": false,
+        "actingParties": [
           "dso::normalized"
         ],
-        "choice" : "EventLog_HoldingsChange",
-        "choiceArgument" : {
-          "account" : {
-            "id" : "",
-            "owner" : "aliceValidator::normalized",
-            "provider" : null
+        "choice": "EventLog_HoldingsChange",
+        "choiceArgument": {
+          "account": {
+            "id": "",
+            "owner": "aliceValidator::normalized",
+            "provider": null
           },
-          "admin" : "dso::normalized",
-          "extraArgs" : {
-            "context" : {
-              "values" : {
-
+          "admin": "dso::normalized",
+          "extraArgs": {
+            "context": {
+              "values": {
               }
             },
-            "meta" : {
-              "values" : {
-
+            "meta": {
+              "values": {
               }
             }
           },
-          "inputHoldingCids" : [
-            "11"
+          "inputHoldingCids": [
+            "17"
           ],
-          "observers" : [
+          "observers": [
             "aliceValidator::normalized"
           ],
-          "outputHoldingCids" : [
-            "14",
-            "13"
+          "outputHoldingCids": [
+            "19"
           ],
-          "transferLegSides" : [
+          "transferLegSides": [
             {
-              "amount" : "49.3200000000",
-              "instrumentId" : "Amulet",
-              "meta" : {
-                "values" : {
-                  "splice.lfdecentralizedtrust.org/reason" : "split for create TransferPreapproval"
+              "amount": "200.0000000000",
+              "instrumentId": "Amulet",
+              "meta": {
+                "values": {
+                  "splice.lfdecentralizedtrust.org/reason": "token-standard-transfer-description"
                 }
               },
-              "otherside" : {
-                "id" : "",
-                "owner" : "aliceValidator::normalized",
-                "provider" : null
+              "otherside": {
+                "id": "",
+                "owner": "alice::normalized",
+                "provider": null
               },
-              "side" : "SenderSide",
-              "transferLegId" : "leg0"
-            },
-            {
-              "amount" : "49.3200000000",
-              "instrumentId" : "Amulet",
-              "meta" : {
-                "values" : {
-                  "splice.lfdecentralizedtrust.org/reason" : "split for create TransferPreapproval"
-                }
-              },
-              "otherside" : {
-                "id" : "",
-                "owner" : "aliceValidator::normalized",
-                "provider" : null
-              },
-              "side" : "ReceiverSide",
-              "transferLegId" : "leg0"
+              "side": "SenderSide",
+              "transferLegId": "leg0"
             }
           ]
         },
-        "consuming" : false,
-        "contractId" : "0",
-        "exerciseResult" : {},
-        "implementedInterfaces" : [
+        "consuming": false,
+        "contractId": "16",
+        "exerciseResult": {
+        },
+        "implementedInterfaces": [
         ],
-        "interfaceId" : "#package-name:Splice.Api.Token.TransferEventsV2:EventLog",
-        "lastDescendantNodeId" : 9,
-        "nodeId" : 9,
-        "offset" : 3,
-        "packageName" : "splice-amulet",
-        "templateId" : "#package-name:Splice.AmuletRules:AmuletRules",
-        "witnessParties" : [
+        "interfaceId": "#package-name:Splice.Api.Token.TransferEventsV2:EventLog",
+        "lastDescendantNodeId": 10,
+        "nodeId": 10,
+        "offset": 4,
+        "packageName": "splice-amulet",
+        "templateId": "#package-name:Splice.ExternalPartyConfigState:ExternalPartyConfigState",
+        "witnessParties": [
           "alice::normalized"
         ]
       }
