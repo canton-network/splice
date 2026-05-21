@@ -111,10 +111,12 @@ class RewardComputationTrigger(
   )(implicit tc: TraceContext): Future[Option[RewardComputationTrigger.Task]] =
     rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
       case None =>
-        logger.debug(
-          s"OpenMiningRound for round $roundNumber not yet ingested, waiting."
-        )
-        None
+        throw Status.INTERNAL
+          .withDescription(
+            s"Round $roundNumber has a CalculateRewardsV2 contract and complete activity " +
+              s"but its OpenMiningRound is not in the rewards reference store."
+          )
+          .asRuntimeException()
       case Some(contract) =>
         val (inputs, batchSize) =
           RewardComputationInputs.fromOpenMiningRound(contract.payload).getOrElse {
