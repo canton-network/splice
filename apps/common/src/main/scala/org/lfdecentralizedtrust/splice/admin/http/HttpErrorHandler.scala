@@ -24,7 +24,7 @@ import org.apache.pekko.http.scaladsl.server.Directives.{
 import org.apache.pekko.util.ByteString
 import com.digitalasset.canton.ledger.error.groups.CommandExecutionErrors.Interpreter
 import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
-import com.digitalasset.canton.error.ErrorCodeUtils
+import com.digitalasset.canton.error.{ErrorCodeUtils, TransactionRoutingError}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.Printer
@@ -113,6 +113,7 @@ final class HttpErrorHandler(
           Interpreter.UnhandledException,
           Interpreter.InterpretationUserError,
           Interpreter.TemplatePreconditionViolated,
+          TransactionRoutingError.TopologyErrors.UnknownContractSynchronizers,
         )
         if (conflictErrorCodes.exists(ErrorCodeUtils.isError(grpcDesc, _)))
           StatusCodes.Conflict

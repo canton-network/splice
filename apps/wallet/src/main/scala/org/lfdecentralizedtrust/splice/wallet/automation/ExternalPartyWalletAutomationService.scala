@@ -15,7 +15,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -27,7 +26,6 @@ import scala.concurrent.ExecutionContext
 
 class ExternalPartyWalletAutomationService(
     store: ExternalPartyWalletStore,
-    updateHistory: UpdateHistory,
     ledgerClient: SpliceLedgerClient,
     automationConfig: AutomationConfig,
     clock: Clock,
@@ -54,8 +52,6 @@ class ExternalPartyWalletAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService.type =
     ExternalPartyWalletAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   registerTrigger(
     new MintingDelegationCollectRewardsTrigger(

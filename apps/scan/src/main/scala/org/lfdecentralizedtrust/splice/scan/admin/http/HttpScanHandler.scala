@@ -69,6 +69,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryRequest,
   HoldingsStateRequest,
   HoldingsSummaryRequest,
+  HoldingsSummaryRequestV1,
   ListBulkUpdateHistoryObjectsRequest,
   ListVoteResultsRequest,
   MaybeCachedContractWithState,
@@ -2020,6 +2021,66 @@ class HttpScanHandler(
     }
   }
 
+  override def getHoldingsSummaryAtV1(
+      respond: ScanResource.GetHoldingsSummaryAtV1Response.type
+  )(
+      body: HoldingsSummaryRequestV1
+  )(extracted: TraceContext): Future[ScanResource.GetHoldingsSummaryAtV1Response] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getHoldingsSummaryAtV1") { _ => _ =>
+      val HoldingsSummaryRequestV1(
+        migrationId,
+        recordTime,
+        recordTimeMatch,
+        partyIds,
+      ) = body
+
+      // The asOfRound parameter is only consumed by SpliceUtil.holdingFee, which feeds the
+      // accumulated*HoldingFees* and totalAvailableCoin fields on HoldingsSummary. The v1
+      // response only exposes totalUnlockedCoin, totalLockedCoin, and totalCoinHoldings, all
+      // of which are sums of amulet.amount.initialAmount and do not depend on the round.
+      // Any value for asOfRound therefore yields the same v1 result; we pass 0 as a sentinel.
+      def exactQuery(recordTimeTs: CantonTimestamp) =
+        snapshotStore
+          .getHoldingsSummary(
+            migrationId,
+            recordTimeTs,
+            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            0L,
+          )
+
+      def toResponse(result: AcsSnapshotStore.HoldingsSummaryResult) =
+        ScanResource.GetHoldingsSummaryAtV1Response.OK(
+          definitions.HoldingsSummaryResponseV1(
+            Codec.encode(result.recordTime),
+            result.migrationId,
+            result.summaries.map { case (partyId, holdings) =>
+              definitions.HoldingsSummaryV1(
+                partyId = Codec.encode(partyId),
+                totalUnlockedCoin = Codec.encode(holdings.totalUnlockedCoin),
+                totalLockedCoin = Codec.encode(holdings.totalLockedCoin),
+                totalCoinHoldings = Codec.encode(holdings.totalCoinHoldings),
+              )
+            }.toVector,
+          )
+        )
+
+      queryWithOptionalAtOrBefore(
+        migrationId,
+        recordTime,
+        recordTimeMatch.contains(HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
+        exactQuery,
+        toResponse,
+      ).map {
+        case Right(response) => response
+        case Left(errorMessage) =>
+          ScanResource.GetHoldingsSummaryAtV1ResponseNotFound(
+            ErrorResponse(errorMessage)
+          )
+      }
+    }
+  }
+
   private def nonEmptyOrFail[A](fieldName: String, vec: Vector[A]): NonEmptyVector[A] = {
     NonEmptyVector
       .fromVector(vec)
@@ -2351,19 +2412,22 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[ScanResource.ListVoteRequestResultsResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.listDsoRulesVoteResults") { _ => _ =>
+      val limit = PageLimit.tryCreate(body.limit.intValue)
+      val after = body.pageToken.map(_.longValue)
       for {
-        voteResults <- votesStore.listVoteRequestResults(
+        page <- votesStore.listVoteRequestResults(
           body.actionName,
           body.accepted,
           body.requester,
           body.effectiveFrom,
           body.effectiveTo,
-          PageLimit.tryCreate(body.limit.intValue),
+          limit,
+          after,
         )
       } yield {
         ScanResource.ListVoteRequestResultsResponse.OK(
           definitions.ListDsoRulesVoteResultsResponse(
-            voteResults
+            page.resultsInPage
               .map(voteResult => {
                 io.circe.parser
                   .parse(
@@ -2375,7 +2439,8 @@ class HttpScanHandler(
                     ErrorUtil.invalidState(s"Failed to convert from spray to circe: $err")
                   )
               })
-              .toVector
+              .toVector,
+            page.nextPageToken.map(BigInt(_)),
           )
         )
       }
@@ -2933,31 +2998,53 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingActivityTotals") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
+            case Some(roundTotal) =>
+              Future.successful(
+                ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                  definitions.GetRewardAccountingActivityTotalsResponse(
+                    definitions.RewardAccountingActivityTotalsOk(
+                      status = "Ok",
+                      roundNumber = roundTotal.roundNumber,
+                      totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
+                      activePartiesCount = roundTotal.activeAppProviderPartiesCount,
+                      activityRecordsCount = roundTotal.activityRecordsCount,
+                    )
+                  )
+                )
+              )
+            case None =>
+              appActivityStore.earliestRoundWithCompleteAppActivity().map {
+                case Some(earliest) if roundNumber < earliest =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsCannotProvide(
+                        status = "CannotProvide"
+                      )
+                    )
+                  )
+                case _ =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsUndetermined(
+                        status = "Undetermined"
+                      )
+                    )
+                  )
+              }
+          }
+        case _ =>
           Future.successful(
-            ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
+            ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+              definitions.GetRewardAccountingActivityTotalsResponse(
+                definitions.RewardAccountingActivityTotalsCannotProvide(
+                  status = "CannotProvide"
+                )
+              )
             )
           )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).map {
-            case None =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-                ErrorResponse(
-                  s"Activity totals not (yet) computed for round $roundNumber"
-                )
-              )
-            case Some(roundTotal) =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                definitions.GetRewardAccountingActivityTotalsResponse(
-                  roundNumber = roundTotal.roundNumber,
-                  totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
-                  activePartiesCount = roundTotal.activeAppProviderPartiesCount,
-                  activityRecordsCount = roundTotal.activityRecordsCount,
-                )
-              )
-          }
       }
     }
   }
@@ -2969,29 +3056,51 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingRootHash") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppRewardRootHashByRound(roundNumber).flatMap {
+            case Some(rootHash) =>
+              Future.successful(
+                ScanResource.GetRewardAccountingRootHashResponse.OK(
+                  definitions.GetRewardAccountingRootHashResponse(
+                    definitions.RewardAccountingRootHashOk(
+                      status = "Ok",
+                      roundNumber = rootHash.roundNumber,
+                      rootHash = rootHash.rootHash.toHex,
+                    )
+                  )
+                )
+              )
+            case None =>
+              appActivityStore.earliestRoundWithCompleteAppActivity().map {
+                case Some(earliest) if roundNumber < earliest =>
+                  ScanResource.GetRewardAccountingRootHashResponse.OK(
+                    definitions.GetRewardAccountingRootHashResponse(
+                      definitions.RewardAccountingRootHashCannotProvide(
+                        status = "CannotProvide"
+                      )
+                    )
+                  )
+                case _ =>
+                  ScanResource.GetRewardAccountingRootHashResponse.OK(
+                    definitions.GetRewardAccountingRootHashResponse(
+                      definitions.RewardAccountingRootHashUndetermined(
+                        status = "Undetermined"
+                      )
+                    )
+                  )
+              }
+          }
+        case _ =>
           Future.successful(
-            ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
+            ScanResource.GetRewardAccountingRootHashResponse.OK(
+              definitions.GetRewardAccountingRootHashResponse(
+                definitions.RewardAccountingRootHashCannotProvide(
+                  status = "CannotProvide"
+                )
+              )
             )
           )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppRewardRootHashByRound(roundNumber).map {
-            case None =>
-              ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-                ErrorResponse(
-                  s"Root hash not (yet) computed for round $roundNumber"
-                )
-              )
-            case Some(rootHash) =>
-              ScanResource.GetRewardAccountingRootHashResponse.OK(
-                definitions.GetRewardAccountingRootHashResponse(
-                  roundNumber = rootHash.roundNumber,
-                  rootHash = rootHash.rootHash.toHex,
-                )
-              )
-          }
       }
     }
   }

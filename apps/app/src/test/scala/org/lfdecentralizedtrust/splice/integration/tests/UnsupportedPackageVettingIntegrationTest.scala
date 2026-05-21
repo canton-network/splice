@@ -61,11 +61,13 @@ class UnsupportedPackageVettingIntegrationTest
         DarResources.amuletNameService_0_1_0,
         DarResources.amulet_0_1_0,
       )
-      // TODO(DACH-NY/cn-test-failures#8034) Consider vetting DSO governance again once the Canton issue is fixed
       val unsupportedDarsToVetValidator = Seq(
         DarResources.walletPayments_0_1_0,
         DarResources.amuletNameService_0_1_0,
         DarResources.amulet_0_1_0,
+        // Vet some non-sense dar to catch potential issues from that
+        // see e.g. https://github.com/DACH-NY/cn-test-failures/issues/8034.
+        DarResources.dsoGovernance_0_1_0,
       )
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId

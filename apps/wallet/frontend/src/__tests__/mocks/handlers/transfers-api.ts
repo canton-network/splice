@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { rest, RestHandler } from 'msw';
+import { http, HttpHandler, HttpResponse } from 'msw';
 import { Mock, vi } from 'vitest';
 
 export const requestMocks: {
@@ -20,24 +20,24 @@ export const requestMocks: {
 };
 
 // We need to separate the api endpoints that use vitest to avoid compatibility errors with msw.
-export const buildTransferOfferMock = (walletUrl: string): RestHandler[] => [
-  rest.post(`${walletUrl}/v0/wallet/transfer-offers`, async (req, res, ctx) => {
-    await requestMocks.createTransferOffer(await req.json());
-    return res(ctx.json({}));
+export const buildTransferOfferMock = (walletUrl: string): HttpHandler[] => [
+  http.post(`${walletUrl}/v0/wallet/transfer-offers`, async ({ request }) => {
+    await requestMocks.createTransferOffer(await request.json());
+    return HttpResponse.json({});
   }),
 
-  rest.post(`${walletUrl}/v0/wallet/token-standard/transfers`, async (req, res, ctx) => {
-    await requestMocks.createTransferViaTokenStandard(await req.json());
-    return res(ctx.json({}));
+  http.post(`${walletUrl}/v0/wallet/token-standard/transfers`, async ({ request }) => {
+    await requestMocks.createTransferViaTokenStandard(await request.json());
+    return HttpResponse.json({});
   }),
 
-  rest.post(`${walletUrl}/v0/wallet/transfer-preapproval`, async (_, res, ctx) => {
+  http.post(`${walletUrl}/v0/wallet/transfer-preapproval`, async () => {
     await requestMocks.createTransferPreapproval();
-    return res(ctx.json({}));
+    return HttpResponse.json({});
   }),
 
-  rest.post(`${walletUrl}/v0/wallet/transfer-preapproval/send`, async (req, res, ctx) => {
-    await requestMocks.transferPreapprovalSend(await req.json());
-    return res(ctx.json({}));
+  http.post(`${walletUrl}/v0/wallet/transfer-preapproval/send`, async ({ request }) => {
+    await requestMocks.transferPreapprovalSend(await request.json());
+    return HttpResponse.json({});
   }),
 ];

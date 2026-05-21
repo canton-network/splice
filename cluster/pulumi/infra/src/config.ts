@@ -55,6 +55,10 @@ export const InfraConfigSchema = z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
       istiodValues: z.object({}).catchall(z.any()).default({}),
+      sequencerFlowControl: z.object({
+        initialStreamWindowSize: z.int(),
+        initialConnectionWindowSize: z.int(),
+      }),
     }),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
   }),

@@ -12,6 +12,7 @@ import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } 
 import { CssBaseline } from '@mui/material';
 import { ThemeProvider } from '@mui/material';
 
+import ScanListVoteRequests from './components/votes/ScanListVoteRequests';
 import { ScanAppVotesHooksProvider } from './contexts/ScanAppVotesHooksProvider';
 import AmuletPriceVotes from './routes/amuletPriceVotes';
 import DsoWithContexts from './routes/dso';
@@ -51,6 +52,7 @@ const router = createBrowserRouter(
       <Route path="/" element={<Root />} />
       <Route path="/amulet-price-votes" element={<AmuletPriceVotes />} />
       <Route path="/dso" element={<DsoWithContexts />} />
+      <Route path="/governance" element={<ScanListVoteRequests />} />
     </Route>
   )
 );

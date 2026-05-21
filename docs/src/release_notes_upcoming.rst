@@ -7,39 +7,35 @@
 
 .. release-notes:: Upcoming
 
+    - Observability
+
+       - The release bundle now ships a separate Grafana dashboard folder ``validator-grafana-dashboards/`` for Validator operators.
+
+    - ``canton.scan-apps.scan-app.activity-ingestion-user-version`` configuration setting has been added to control the activity record ingestion version for the purpose of recovering from unexpected operational issues.
+      Incrementing this value causes the Scan app to record a new app activity record completeness lower bound. Reward accounting excludes rounds before this boundary, even though their activity records are retained. Thus bumping the user version has the same effect as reinitializing the app activity record computation from the time of the bump onwards.
+      See the :ref:`SV Operations docs <sv-reingest-scan-stores>` for more details.
+
     - Scan app
+        - The ``app_activity_record_store`` table has been modified to improve DB performance.
+          The corresponding DB migration truncates the existing data in this table which has been ingested since the ``0.5.18`` release, which is OK as we are still in the preview phase of CIP-104.
+          The downstream reward-accounting tables are also cleared as part of this change.
 
-        - The ``app_activity_record_store`` table has been modified to avoid unexpected DB performance issues.
-          This required clearing the existing data in this table which has been ingested since the ``0.5.18`` release.
-          This impacts the data being served via the experimental field ``app_activity_records`` on the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints.
-          Specifically the ``app_activity_records`` field will not contain the
-          data which has been provided for the events which happened between the ``0.5.18`` and this release.
-          Note that the ``app_activity_records`` data already provided for events during this period is correct
-          and the network explorers who have ingested this data should keep a copy of it.
+    - SV app
 
-     - SV app
+        - Support a list of ``additionalLegacy`` synchronizers for the case where more than one legacy synchronizer must be kept alive at a given point.
 
-       - Bump the minimum DAR versions to the ones from splice 0.5.7 which introduced the development fund manager as
-         downgrades to earlier versions already fail. SV app automation will unvet those on the SV nodes.
+    - Validator app
 
-         The concrete versions are:
+      - Added support for ``bft-custom`` scan and sequencer configurations in Docker Compose based validator deployment.
 
-         ================== =======
-         name               version
-         ================== =======
-         amulet             0.1.15
-         amuletNameService  0.1.16
-         dsoGovernance      0.1.21
-         validatorLifecycle 0.1.6
-         wallet             0.1.15
-         walletPayments     0.1.15
-         ================== =======
+      - Stop recording update history. This data was never exposed
+        beyond undocumented SQL tables so there should be no effect
+        other than the database growing at a slower rate.
 
-       - Fix an issue where onboarding a new SV could fail when importing the ACS snapshot due to a vetting issue.
+        If you need to access data for any of the parties on your node
+        use the ledger API.
 
     - SV deployment
 
-        - Updated ``participantAddress``` in `scan-values.yaml` and ``sv-validator-values.yaml`` to use the participant adress with a migration suffix.
-          Ensure you override this with the correct helm install name for the participant ore reinstall the participant without a migration suffix ().
-
-        - Cometbft: increased resource requests from 2 CPU and 5Gi to 3 CPUs and 7Gi, and the limit from 8Gi to 10Gi to better fit observed resource usage.
+        - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
+          in the security context of the pods as the participant, validator app, and sv app charts.

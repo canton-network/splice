@@ -31,7 +31,12 @@ def load_thresholds(path: Path) -> dict:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError(f"thresholds file {path} must be a JSON object")
-    return {k: v for k, v in data.items() }
+    # keys starting with "_" are comments, so skip them
+    return {
+        test: {k: v for k, v in rules.items() if not k.startswith("_")}
+        for test, rules in data.items()
+        if not test.startswith("_") and isinstance(rules, dict)
+    }
 
 
 def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
@@ -49,6 +54,17 @@ def get_metric_value(data: dict, name: str) -> float | None:
             except (TypeError, ValueError):
                 return None
     return None
+
+
+def extract_threshold(rule) -> float | None:
+    """Extract the `max` threshold from a rule of the form {"max": <number>}.
+    """
+    if not isinstance(rule, dict):
+        return None
+    try:
+        return float(rule.get("max"))
+    except (TypeError, ValueError):
+        return None
 
 
 def append_step_output(key: str, value: str) -> None:
@@ -113,16 +129,13 @@ def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict 
                 f"add a rule to {DEFAULT_THRESHOLDS}"
             )
 
-        for metric_name, raw_threshold in rules.items():
-            try:
-                threshold = float(raw_threshold)
-            except (TypeError, ValueError):
-                print(
-                    f"warning: rule {test_name}::{metric_name} has non-numeric "
-                    f"value {raw_threshold}, skipping",
-                    file=sys.stderr,
+        for metric_name, rule in rules.items():
+            threshold = extract_threshold(rule)
+            if threshold is None:
+                raise ValueError(
+                    f"rule {test_name}::{metric_name} has no usable numeric 'max' "
+                    f"(got {rule}); fix it in {DEFAULT_THRESHOLDS}"
                 )
-                continue
 
             observed = get_metric_value(data, metric_name)
             if observed is None:

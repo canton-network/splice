@@ -131,6 +131,27 @@ export function valuesForSvApp(
             ),
           }
         : {}),
+      ...(synchronizerNodes.additionalLegacy.length > 0
+        ? {
+            additionalLegacy: synchronizerNodes.additionalLegacy.map(node => {
+              const info = decentralizedSynchronizerMigrationConfig.additionalLegacy.find(
+                m => m.id === node.migrationId
+              );
+              if (!info) {
+                throw new Error(
+                  `No matching additionalLegacy migration info found for node with upgrade id ${node.migrationId}`
+                );
+              }
+              return localSynchronizerNodeValues(
+                node,
+                info,
+                ingressName,
+                config.cometBftGovernanceKey,
+                config.pruning?.sequencer
+              );
+            }),
+          }
+        : {}),
     },
   };
   // if you add a top level field here that is an object make sure to handle merging it in the caller

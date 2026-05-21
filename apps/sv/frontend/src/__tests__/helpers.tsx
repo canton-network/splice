@@ -53,9 +53,12 @@ const WrapperProviders: React.FC<{ children: React.ReactNode }> = ({ children })
   );
 };
 
-export const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const Wrapper: React.FC<{
+  children: React.ReactNode;
+  initialEntries?: string[];
+}> = ({ children, initialEntries }) => {
   return (
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <SvConfigProvider>
         <WrapperProviders children={children} />
         <Toaster richColors />

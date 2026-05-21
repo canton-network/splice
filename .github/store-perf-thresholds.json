@@ -1,21 +1,52 @@
 {
   "SvDsoStoreIngestionPerformanceTest": {
-    "splice_perf_ingestion_total_time_ns": 600000000000
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
+    "splice_perf_ingestion_avg_item_time_ns": {
+      "max": 2500000
+    },
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m based on the past data collected on 2026-May-07 to detect the trends earlier",
+    "splice_perf_ingestion_total_time_ns": {
+      "max": 600000000000
+    }
   },
-
   "ScanStoreIngestionPerformanceTest": {
-    "splice_perf_ingestion_total_time_ns": 600000000000
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
+    "splice_perf_ingestion_avg_item_time_ns": {
+      "max": 2400000
+    },
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m based on the past data collected on 2026-May-07 to detect the trends earlier",
+    "splice_perf_ingestion_total_time_ns": {
+      "max": 600000000000
+    }
   },
-
   "UpdateHistoryIngestionPerformanceTest": {
-    "splice_perf_ingestion_total_time_ns": 1800000000000
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
+    "splice_perf_ingestion_avg_item_time_ns": {
+      "max": 16800000
+    },
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 20m based on the past data collected on 2026-May-07 to detect the trends earlier",
+    "splice_perf_ingestion_total_time_ns": {
+      "max": 1200000000000
+    }
   },
-
   "UpdateHistoryReadPerformanceTest-getUpdate": {
-    "splice_perf_read_total_time_ns": 5000000000
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
+    "splice_perf_read_avg_item_time_ns": {
+      "max": 753600000
+    },
+    "_comment_total_time_ns": "hard max same as avg_item_time_ns, as we read 1 item",
+    "splice_perf_read_total_time_ns": {
+      "max": 753600000
+    }
   },
-
   "UpdateHistoryReadPerformanceTest-encodeUpdate": {
-    "splice_perf_read_total_time_ns": 5000000000
+    "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-May-07",
+    "splice_perf_read_avg_item_time_ns": {
+      "max": 337000000
+    },
+    "_comment_total_time_ns": "hard max same as avg_item_time_ns, as we read 1 item",
+    "splice_perf_read_total_time_ns": {
+      "max": 337000000
+    }
   }
 }
