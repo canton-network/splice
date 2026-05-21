@@ -173,6 +173,8 @@ template AmuletRules
       with
         context : PaymentTransferContext
         inputs : [TransferInput]
+          -- ^ You will only be charged if the duration is longer than transferPreapprovalBaseDuration. You can check `amuletPaid <= 0` in the result
+          -- to confirm whether you have been charged or not.
         user : Party
         validator : Party
         preapprovalExpiresAt : Time
