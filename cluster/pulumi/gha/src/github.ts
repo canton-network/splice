@@ -95,7 +95,7 @@ export function installGithubRepo(repo: string): void {
 
   copySecretToGithubActionsSecret(
     'auth0-validator-audience',
-    'AUTH0_VALIDATOR_AUDIENCE',
+    'AUTH0_TESTS_VALIDATOR_AUDIENCE',
     repo,
     orgProvider
   );
