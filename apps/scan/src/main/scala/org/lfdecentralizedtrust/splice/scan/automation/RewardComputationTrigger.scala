@@ -78,14 +78,9 @@ class RewardComputationTrigger(
           case _ => Seq.empty[Long]
         }
 
-        // Look up OpenMiningRound for eligible rounds and extract inputs,
-        // collecting up to the parallelism limit. Rounds whose OpenMiningRound
-        // is not yet ingested are skipped without counting toward the limit.
-        tasks <- RewardComputationTrigger.takeFirstN(
-          eligible,
-          context.config.parallelism,
-          (r: Long) => buildTask(r, roundToContract(r)),
-        )
+        // Look up OpenMiningRound for each eligible round and extract inputs.
+        // PollingParallelTaskExecutionTrigger handles parallelism of task execution.
+        tasks <- Future.traverse(eligible)(r => buildTask(r, roundToContract(r)))
       } yield tasks
   }
 
@@ -108,7 +103,7 @@ class RewardComputationTrigger(
   private def buildTask(
       roundNumber: Long,
       contractId: CalculateRewardsV2.ContractId,
-  )(implicit tc: TraceContext): Future[Option[RewardComputationTrigger.Task]] =
+  )(implicit tc: TraceContext): Future[RewardComputationTrigger.Task] =
     rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
       case None =>
         throw Status.INTERNAL
@@ -127,7 +122,7 @@ class RewardComputationTrigger(
               )
               .asRuntimeException()
           }
-        Some(RewardComputationTrigger.Task(roundNumber, batchSize, inputs, contractId))
+        RewardComputationTrigger.Task(roundNumber, batchSize, inputs, contractId)
     }
 
   override protected def isStaleTask(
@@ -148,26 +143,6 @@ class RewardComputationTrigger(
 }
 
 object RewardComputationTrigger {
-
-  /** Collect up to `n` successful results by applying `f` to each element
-    * of `candidates` in order, skipping `None` results without counting
-    * them toward the limit.
-    */
-  private[automation] def takeFirstN[A, B](
-      candidates: Seq[A],
-      n: Int,
-      f: A => Future[Option[B]],
-      acc: Seq[B] = Seq.empty,
-  )(implicit ec: ExecutionContext): Future[Seq[B]] =
-    candidates match {
-      case _ if n <= 0 => Future.successful(acc)
-      case candidate +: rest =>
-        f(candidate).flatMap {
-          case Some(result) => takeFirstN(rest, n - 1, f, acc :+ result)
-          case None => takeFirstN(rest, n, f, acc)
-        }
-      case _ => Future.successful(acc)
-    }
 
   final case class Task(
       roundNumber: Long,
