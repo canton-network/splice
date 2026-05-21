@@ -17,7 +17,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -261,10 +260,6 @@ class ScanTimeBasedIntegrationTest
         expectedLastRound,
       )
     }
-
-    def walletClientParty(walletClient: WalletAppClientReference) =
-      Codec.decode(Codec.Party)(walletClient.userStatus().party).value
-    val latestRound = baseRoundWithLatestData + 4
   }
 
   "Not get aggregates for incorrect ranges" in { implicit env =>

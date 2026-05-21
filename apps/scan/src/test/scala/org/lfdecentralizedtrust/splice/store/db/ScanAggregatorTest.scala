@@ -28,15 +28,12 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
-import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 
 import scala.concurrent.ExecutionContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.topology.ParticipantId
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
-import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.scalatest.Assertion
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -296,8 +293,7 @@ class ScanAggregatorTest
             expectedRoundPartyRewardTotals.filter { case (round, _) => round <= restartRound },
             aggr,
             store,
-            restartRound,
-            lastRound.toInt,
+            restartRound
           )
         }
         // simulate migration, no active_parties exist
@@ -310,8 +306,7 @@ class ScanAggregatorTest
             expectedRoundPartyRewardTotals,
             aggr,
             store,
-            lastRound,
-            lastRound.toInt,
+            lastRound
           )
           assertActiveParties(store, nrParties, lastRound)
         }
@@ -336,8 +331,7 @@ class ScanAggregatorTest
           expectedRoundPartyRewardTotals,
           aggr,
           store,
-          lastRound,
-          lastRound.toInt,
+          lastRound
         )
         val activeParties = queryActiveParties()
 
@@ -385,8 +379,7 @@ class ScanAggregatorTest
           expectedRoundPartyRewardTotals,
           aggr,
           store,
-          lastRound,
-          lastRound.toInt,
+          lastRound
         )
         val activeParties = queryActiveParties()
 
@@ -590,14 +583,12 @@ class ScanAggregatorTest
         .map(sumRoundPartyTotalsPerRound)
     } yield {
       aggregateRounds(aggr, initialRound, lastRound)
-      val limit = 4
 
       assertRoundPartyTotalsWithLeaderBoards(
         expectedRoundPartyRewardTotals,
         aggr,
         store,
-        lastRound,
-        limit,
+        lastRound
       )
 
       store.getAggregatedRounds().futureValue.value shouldBe ScanAggregator.RoundRange(
@@ -723,8 +714,7 @@ class ScanAggregatorTest
       expectedRoundPartyRewardTotals: Map[Long, List[RoundPartyTotals]],
       aggr: ScanAggregator,
       store: DbScanStore,
-      lastRound: Long,
-      limit: Int,
+      lastRound: Long
   ) = {
     for (i <- 0 to lastRound.toInt) {
       val round = i.toLong
