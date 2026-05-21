@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as gcp from '@pulumi/gcp';
 import * as github from '@pulumi/github';
 import { DockerConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
@@ -21,6 +22,27 @@ function copySecretToGithubActionsSecret(
       value: secret.secretData,
     },
     { provider }
+  );
+}
+
+function createSaKeySecret(
+  saName: string,
+  githubSecretName: string,
+  repo: string,
+  provider: github.Provider
+): void {
+  const dataExportTestsKey = new gcp.serviceaccount.Key(`${saName}-key-${repo}`, {
+    serviceAccountId: `${saName}@da-cn-splice.iam.gserviceaccount.com`,
+    privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
+  });
+  new github.ActionsSecret(
+    `${saName}-key-secret-${repo}`,
+    {
+      repository: repo,
+      secretName: githubSecretName,
+      value: dataExportTestsKey.privateKey.apply(k => Buffer.from(k, 'base64').toString('utf-8')),
+    },
+    { provider: provider }
   );
 }
 
@@ -80,6 +102,19 @@ export function installGithubRepo(repo: string): void {
   copySecretToGithubActionsSecret(
     'compose-validator-web-ui-password',
     'COMPOSE_VALIDATOR_WEB_UI_PASSWORD',
+    repo,
+    orgProvider
+  );
+
+  createSaKeySecret(
+    'splice-data-export-tests',
+    'GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS',
+    repo,
+    orgProvider
+  );
+  createSaKeySecret(
+    'splice-kms-integration-test',
+    'GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS',
     repo,
     orgProvider
   );
