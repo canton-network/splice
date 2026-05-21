@@ -49,7 +49,7 @@ Validators
 
     **Option 2:** check the participant logs for the actual traffic used for a specific transaction. To do so, follow these steps:
 
-    1. Ensure you have ``DEBUG`` logs enabled in your participant configuration.
+    1. Ensure ``DEBUG`` logs are enabled for the relevant Canton classes. The container default for ``LOG_LEVEL_CANTON`` is ``INFO``, which suppresses these ``c.d.c.s.t.TrafficStateController`` lines — set ``LOG_LEVEL_CANTON=DEBUG`` on the participant container (via ``additionalEnvVars`` in Helm or the ``--log-level-canton=DEBUG`` CLI flag) before reproducing.
     2. Determine the trace-id of your command submission in your participant logs.
     3. Search for the ``DEBUG`` log lines containing ``EventCost`` and that ``trace-id``.
        There are typically two such log lines, due to how the `Canton protocol <https://docs.daml.com/canton/architecture/overview.html#transaction-processing-in-canton>`_ works.

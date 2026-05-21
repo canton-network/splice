@@ -23,9 +23,9 @@ Where to find logs
 Canton logs into ``canton.log``.
 
 .. note::
-    The default log levels in container deployments (the splice-node image used by both SV and validator Helm charts) are ``INFO`` for Canton classes (loggers under ``com.daml`` and ``com.digitalasset``) and ``DEBUG`` for the stdout sink, which keeps Canton Network application logs (``org.lfdecentralizedtrust.splice``) at ``DEBUG`` while reducing the log volume produced by Canton itself.
+    The default log levels in container deployments (the splice-node image used by both SV and validator Helm charts) are ``INFO`` for Canton classes (loggers under ``com.daml`` and ``com.digitalasset``), ``DEBUG`` for Canton Network application classes (``org.lfdecentralizedtrust.splice``), and ``DEBUG`` for the stdout sink. This keeps application-level debugging signal available while reducing the log volume produced by Canton itself.
 
-    The levels can be overridden via the ``LOG_LEVEL_CANTON`` and ``LOG_LEVEL_STDOUT`` environment variables on the splice-node container (for Helm deployments, set these through ``additionalEnvVars`` on the affected pods), or via the ``--log-level-canton`` and ``--log-level-stdout`` CLI flags when invoking ``splice-node`` directly (for example ``splice-node --config "${OUTPUT_CONFIG}" --log-level-canton=DEBUG ...``).
+    The levels can be overridden via the ``LOG_LEVEL_CANTON``, ``LOG_LEVEL_CN``, and ``LOG_LEVEL_STDOUT`` environment variables on the splice-node container (for Helm deployments, set these through ``additionalEnvVars`` on the affected pods, or via the ``logLevel`` / ``logLevelCn`` / ``logLevelStdout`` chart values). The ``--log-level-canton`` and ``--log-level-stdout`` CLI flags can also be used when invoking ``splice-node`` directly (for example ``splice-node --config "${OUTPUT_CONFIG}" --log-level-canton=DEBUG ...``).
 
     Debugging support is best-effort under non-default log levels: maintainers may ask you to reproduce issues with the defaults restored before investigating further.
 

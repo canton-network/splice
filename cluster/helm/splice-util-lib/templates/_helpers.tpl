@@ -203,6 +203,8 @@ spec:
   value: {{ .logLevel | default "INFO" }}
 - name: LOG_API_REQUEST_CANTON
   value: {{ .apiRequestLogLevel | default "DEBUG" }}
+- name: LOG_LEVEL_CN
+  value: {{ .logLevelCn | default "DEBUG" }}
 - name: LOG_LEVEL_STDOUT
   value: {{ .logLevelStdout | default "DEBUG" }}
 - name: LOG_IMMEDIATE_FLUSH
