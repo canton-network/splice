@@ -1235,24 +1235,15 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
     )
   }
 
-  def ensureValidatorLivenessActivityRecordReceivedForCurrentRound(
-      scanBackend: ScanAppBackendReference,
+  def ensureValidatorLivenessActivityRecordReceivedForRound(
+      round: Long,
       walletClient: WalletAppClientReference,
   ): Assertion = {
-    val currentRound =
-      scanBackend
-        .getOpenAndIssuingMiningRounds()
-        ._1
-        .head
-        .contract
-        .payload
-        .round
-        .number
-    (walletClient
-      .listValidatorLivenessActivityRecords()
-      .map(_.payload.round.number) should contain(currentRound))
+    val received = walletClient.listValidatorLivenessActivityRecords()
+    (received.map(_.payload.round.number) should contain(round))
       .withClue(
-        s"Wallet: ${walletClient.name} did not receive a ValidatorLivenessActivityRecord for round $currentRound."
+        s"Wallet: ${walletClient.name} did not receive a ValidatorLivenessActivityRecord for round $round. " +
+          s"Records present for rounds: ${received.map(_.payload.round.number).sorted.distinct}."
       )
   }
 
