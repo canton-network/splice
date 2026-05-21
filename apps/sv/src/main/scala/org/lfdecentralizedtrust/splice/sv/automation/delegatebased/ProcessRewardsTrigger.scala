@@ -112,9 +112,17 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
       )
     } yield TaskSuccess(
-      s"Processed batch for ProcessRewardsV2 round $round, batchHash=$batchHash, dryRun=$isDryRun, processingDelay=$delay"
+      s"Processed round $round, processingDelay=$delay, batchType=${batchTypeOf(batch)}"
     )
   }
+
+  private def batchTypeOf(response: GetRewardAccountingBatchResponse): String =
+    response match {
+      case _: GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfBatches =>
+        "BatchOfBatches"
+      case _: GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfMintingAllowances =>
+        "BatchOfMintingAllowances"
+    }
 
   private def convertBatch(
       response: GetRewardAccountingBatchResponse
