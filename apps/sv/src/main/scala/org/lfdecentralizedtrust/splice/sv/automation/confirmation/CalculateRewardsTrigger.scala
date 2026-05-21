@@ -58,6 +58,7 @@ abstract class CalculateRewardsTriggerBase(
   private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
+    // These are ordered by round, so we process the oldest first
     calculateRewards <- store.listCalculateRewardsV2()
     confirmedCids <- listConfirmedCalculateRewardsCids()
   } yield calculateRewards
