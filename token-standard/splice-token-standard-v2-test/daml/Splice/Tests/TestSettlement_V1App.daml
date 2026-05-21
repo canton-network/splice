@@ -99,9 +99,6 @@ setupOtcTrade  = do
   TestTokenV2_RegistryV2.mint registry aliceAccount "Y" 1000.0
   TestTokenV2_RegistryV2.mint registry bobSendAccount "X" 1000.0
 
-  -- Note: here we use Amulet as the single asset, as that is all we have available in this repository.
-  -- Given that we are using only the DvP interface, that should though be a fine stand-in for
-  -- a DvP across two assets from different registries.
   let aliceLeg = Api.Token.AllocationV1.TransferLeg with
         sender = alice
         receiver = bob
