@@ -60,7 +60,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
 
   type SpliceTestConsoleEnvironment = BaseTestConsoleEnvironment[SpliceConfig, SpliceEnvironment]
   type SharedSpliceEnvironment =
-    SharedEnvironment[SpliceConfig, SpliceEnvironment]
+    BaseSharedEnvironment[SpliceConfig, SpliceEnvironment]
   type IsolatedSpliceEnvironments =
     IsolatedEnvironments[SpliceConfig, SpliceEnvironment]
 

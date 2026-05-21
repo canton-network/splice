@@ -321,7 +321,7 @@ object EnvironmentSetup {
   * As a result, the environment state at the beginning of a test case equals the state at the end
   * of the previous test case.
   */
-trait SharedEnvironment[C <: SharedCantonConfig[C], E <: Environment[C]]
+trait BaseSharedEnvironment[C <: SharedCantonConfig[C], E <: Environment[C]]
     extends EnvironmentSetup[C, E]
     with CloseableTest {
   this: Suite with NamedLogging =>
