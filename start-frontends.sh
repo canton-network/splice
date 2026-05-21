@@ -79,14 +79,14 @@ function start_frontend() {
 
   tmux send-keys -t "${tmux_session}:$((tmux_window - 1))" \
     "BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
-    npm start 2>&1 | tee -a $log_file" C-m
+    \"$NPM\" start 2>&1 | tee -a $log_file" C-m
 }
 
 function start_test() {
   local app=$1
   local frontend_dir="${SPLICE_ROOT}/apps/${app}/frontend"
 
-  tmux_cmd "${app}-test" "${frontend_dir}" "npm run test"
+  tmux_cmd "${app}-test" "${frontend_dir}" "\"$NPM\" run test"
 }
 
 function usage() {
@@ -135,6 +135,15 @@ while getopts "hdapvsmtl" arg; do
   esac
 done
 
+# Resolve binaries in the parent shell so the panes execute the binary from
+# the active environment's PATH. Without this, if tmux is launched from one
+# nix env and start-frontends.sh is then re-run from another, the panes pick
+# up the binary from the tmux server's inherited PATH (the first env), which
+# is silent and confusing. See https://github.com/canton-network/splice/issues/458.
+# Assumes the binaries are real executables on PATH; aliases and shell
+# functions would resolve to strings that are not usable as a tmux command.
+NPM=$(command -v npm) || { echo "start-frontends.sh: 'npm' not found on PATH" >&2; exit 1; }
+
 tmux_session="cn-frontends"
 tmux_window=0
 
@@ -154,7 +163,7 @@ function wait_for_workspace_build() {
   local log_file="${LOG_DIR}/npm-${log_file_suffix}.out"
   echo "Logging to ${log_file}"
 
-  tmux_cmd "$workspace" "$SPLICE_ROOT/apps" "npm run start --workspace $workspace 2>&1 | tee -a $log_file"
+  tmux_cmd "$workspace" "$SPLICE_ROOT/apps" "\"$NPM\" run start --workspace $workspace 2>&1 | tee -a $log_file"
 
   local count=0
   while [ ! -f "$SPLICE_ROOT/apps/$index" ]; do
