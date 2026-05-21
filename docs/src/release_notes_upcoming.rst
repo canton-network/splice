@@ -37,3 +37,13 @@
 
         - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
           in the security context of the pods as the participant, validator app, and sv app charts.
+
+    - Scan app
+
+        - The following deprecated endpoints have been removed from the public API:
+
+          - ``/v0/top-validators-by-validator-faucets``
+          - ``/v0/top-providers-by-app-rewards``
+          - ``/v0/top-validators-by-validator-rewards``
+          - ``/v0/top-validators-by-purchased-traffic``
+
