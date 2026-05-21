@@ -51,6 +51,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
   -- ** SettlementFactory template implementations
   settlementFactoryV2_settleBatchDefaultImpl,
   fetchAndValidateAllocations,
+  validateNextIterationArgs,
 
   settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl,
   settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl,
@@ -216,7 +217,7 @@ isValidAllocationSpecificationV2 validInstrumentId AllocationV2.AllocationSpecif
     (not (null transferLegSides) || isSome nextIterationFunding) && -- empty transfer legs are only allowed for iterated settlement
     unique (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides) &&
     all isValidLeg transferLegSides &&
-    all validInstrumentId (optional [] textMapKeys nextIterationFunding)
+    all (\(iid, amount) -> validInstrumentId iid && amount >= 0.0) (optional [] TextMap.toList nextIterationFunding)
   where
     isValidLeg leg =
       leg.amount > 0.0 &&
@@ -386,6 +387,22 @@ settlementFactoryV2_settleBatchDefaultImpl admin self arg = do
     allocationSettleResults
     meta = emptyMetadata
 
+-- | Validate the arguments for a next iteration of allocation settlement.
+validateNextIterationArgs
+  : Text -- ^ The name of the action for error reporting
+  -> Bool  -- ^ Whether iterated settlement is allowed.
+  -> [AllocationV2.TransferLegSide] -- ^ The extra transfer leg sides for the next iteration.
+  -> Optional (TextMap.TextMap Decimal) -- ^ The next iteration funding for the next iteration.
+  -> Update ()
+validateNextIterationArgs name iteratedSettlementAllowed extraTransferLegSides nextIterationFunding = do
+  unless iteratedSettlementAllowed $ do
+    requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
+    requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
+  forA_ nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
+    require' (name <> ".nextIterationFunding.amount", amount) isGreaterR ("zero", 0.0)
+  forA_ extraTransferLegSides $ \leg -> do
+    require' (name <> ".extraTransferLegSides.amount", leg.amount) isGreaterR ("zero", 0.0)
+
 -- | Core logic to validate the allocations for a batch settlement.
 -- Used in `settlementFactoryV2_settleBatchDefaultImpl` and exposed as a standalone function to
 -- be reused by factories that need custom settlement execution logic.
@@ -394,6 +411,8 @@ fetchAndValidateAllocations
   -> Update [(AllocationV2.FinalizedAllocation, AllocationV2.AllocationView)]
 fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..} = do
   requireUnique "SettleBatch.transferLegsIds" (map (.transferLegId) transferLegs)
+  forA_ transferLegs $ \leg -> do
+    require' ("transferLeg.amount", leg.amount) isGreaterR ("zero", 0.0)
 
   -- fetch and validate all allocations
   allocations <- forA allocations $ \finalizedAlloc -> do
@@ -403,13 +422,9 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
 
     requireMatchExpected ("allocation.settlement", allocationView.settlement) settlement
     requireMatchExpected ("allocation.admin", allocation.admin) admin
-    -- prudent engineering: check that iterated settlement is allowed, when it is used
-    unless (isSome (allocation.nextIterationFunding)) $ do
-      requireMatchExpected ("finalizedAllocation.extraTransferLegs", finalizedAlloc.extraTransferLegSides) []
-      requireMatchExpected ("finalizedAllocation.nextIterationFunding", finalizedAlloc.nextIterationFunding) None
-    forA_ finalizedAlloc.nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
-      require' ("finalizedAllocation.nextIterationFunding.amount", amount) isGreaterR ("zero", 0.0)
-
+    -- validate finalized allocation and record extra legs
+    validateNextIterationArgs "finalizedAllocation" (isSome allocation.nextIterationFunding)
+      finalizedAlloc.extraTransferLegSides allocation.nextIterationFunding
     let adjustedAllocView = allocationView with
           allocation = allocation with
             transferLegSides = allocation.transferLegSides ++ finalizedAlloc.extraTransferLegSides

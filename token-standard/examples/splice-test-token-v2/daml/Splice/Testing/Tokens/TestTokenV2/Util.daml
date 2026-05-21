@@ -3,8 +3,7 @@
 
 -- | Utility functions for the TestTokenV2 module.
 module Splice.Testing.Tokens.TestTokenV2.Util
-( mergeAmountMaps
-, union
+( union
 , insertWithUnion
 , tokenRulesContextKey
 , getTokenRulesFromContext
@@ -21,10 +20,6 @@ import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
-
-
-mergeAmountMaps : TextMap.TextMap Decimal -> TextMap.TextMap Decimal -> TextMap.TextMap (Decimal, Decimal)
-mergeAmountMaps = TextMap.merge (\_ x -> Some (x, 0.0)) (\_ y -> Some (0.0, y)) (\_ x y -> Some (x, y))
 
 
 -- Set theoretic union for sets represented as sorted deduplicated lists.

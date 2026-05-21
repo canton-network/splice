@@ -183,6 +183,7 @@ token_allocationFactoryV2_allocateImpl
 token_allocationFactoryV2_allocateImpl callSource allocationKind tokenRules allocateBefore _self arg = do
   let admin = tokenRules.admin
   requireMatchExpected ("allocation.admin", arg.allocation.admin) admin
+  -- check that the holdings are owned by the right account and have the right admin
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token
     token <- fetch tokenCid

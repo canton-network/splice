@@ -23,28 +23,88 @@ import Splice.TokenStandard.Utils
 
 import Splice.Testing.Utils
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 
--- TODO(#5464): generalize the tests to also test TestTokenV2
+-- Amulet and TestTokenV2 tests
+-------------------------------
+
+amulet_test_locked_funds : Script ()
+amulet_test_locked_funds = mkAmuletTestCase >>= test_locked_funds
+
+amulet_test_refresh_and_withdrawal : Script ()
+amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
+
+
+testTokenV2_test_locked_funds : Script ()
+testTokenV2_test_locked_funds = mkTestTokenV2TestCase >>= test_locked_funds
+
+testTokenV2_test_refresh_and_withdrawal : Script ()
+testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
+
+mkAmuletTestCase : Script TestCase
+mkAmuletTestCase = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  let instrId = env.amuletV2.instrumentId
+  let admin = instrId.admin
+  AmuletRegistryV2.tapFaucet env.amuletV2 alice 1000.0
+  registry <- MultiRegistry.getRegistryApiV2 env.registries admin
+  pure TestCase with
+    admins = Map.keys env.registries
+    provider
+    alice
+    instrIds = [instrId]
+    registry
+    admin
+    env
+
+mkTestTokenV2TestCase : Script TestCase
+mkTestTokenV2TestCase = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  let admin = env.testTokenV2.admin
+  let xId = V2.InstrumentId with
+        id = "X"
+        admin
+  let yId = V2.InstrumentId with
+        id = "Y"
+        admin
+  TestTokenV2_RegistryV2.mint env.testTokenV2 (basicAccount alice) "X" 1000.0
+  TestTokenV2_RegistryV2.mint env.testTokenV2 (basicAccount alice) "Y" 1000.0
+  registry <- MultiRegistry.getRegistryApiV2 env.registries admin
+  pure TestCase with
+    admins = Map.keys env.registries
+    provider
+    alice
+    instrIds = [xId, yId]
+    registry
+    admin
+    env
+
+
+-- Generic test infra
+---------------------
+
+data TestCase = TestCase with
+  admins : [Party]
+  provider : Party
+  admin : Party
+  alice : Party
+  instrIds : [V2.InstrumentId]
+  registry : V2.GenericRegistry
+  env : TestRegistries.Env
 
 -- | Test that an iterated allocation can be used to control locked funds.
 -- The test uses a simplified billing workflow as an example.
-test_locked_funds : Script ()
-test_locked_funds = do
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-
-  provider <- allocateParty "provider"
-  alice <- allocateParty "alice"
-
-  -- create some holdings for alice
-  let instrId = env.amuletV2.instrumentId
-  let registry = env.amuletV2
-  let admins = Map.keys env.registries
-  AmuletRegistryV2.tapFaucet registry alice 1000.0
-
+test_locked_funds : TestCase -> Script ()
+test_locked_funds TestCase {..} = do
    -- create prefunded allocation
   let settlement = V2.SettlementInfo with
         executors = [provider]
@@ -53,14 +113,14 @@ test_locked_funds = do
         meta = emptyMetadata
   let alloc = V2.AllocationSpecification with
         authorizer = basicAccount alice
-        admin = instrId.admin
+        admin
         transferLegSides = []
         settlementDeadline = None
-        nextIterationFunding = Some (TextMap.singleton instrId.id 100.0)
+        nextIterationFunding = Some (TextMap.fromList [(instrId.id, 100.0) | instrId <- instrIds])
         committed = True
         meta = reasonToMeta "fund regular billing" emptyMetadata
   now <- getTime
-  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  inputHoldingCids <- fmap concat $ forA instrIds $ \instrId -> WalletClientV2.listHoldingCids alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
     settlement
     allocation = alloc
@@ -73,26 +133,28 @@ test_locked_funds = do
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let V2.AllocationInstructionResult_Completed aliceAllocationCid = result.output
 
-  WalletClientV2.checkUnlockedBalance alice instrId 900.0
+  forA_ instrIds $ \instrId -> WalletClientV2.checkUnlockedBalance alice instrId 900.0
 
   -- check that allocation metadata is passed on
   Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
   aliceAllocView.allocation.meta === reasonToMeta "fund regular billing" emptyMetadata
 
   -- provider creates allocation to accept license fee payment
-  let billingLeg = V2.TransferLeg with
-        transferLegId = "billing-leg"
-        sender = basicAccount alice
-        receiver = basicAccount provider
-        amount = 0.5
-        instrumentId = instrId.id
-        meta = reasonToMeta "daily license fee" emptyMetadata
+  let billingLegs = do
+        (i, instrId) <- zip [0 .. length instrIds] instrIds
+        pure V2.TransferLeg with
+              transferLegId = "billing-leg-" <> show i
+              sender = basicAccount alice
+              receiver = basicAccount provider
+              amount = 0.5
+              instrumentId = instrId.id
+              meta = reasonToMeta "daily license fee" emptyMetadata
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
     settlement
     allocation = V2.AllocationSpecification with
       authorizer = basicAccount provider
-      admin = instrId.admin
-      transferLegSides = [receiverSide billingLeg]
+      admin
+      transferLegSides = map receiverSide billingLegs
       settlementDeadline = None
       nextIterationFunding = None
       committed = False
@@ -110,13 +172,13 @@ test_locked_funds = do
   enrichedChoice <- V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
     actors = [provider]
     settlement
-    transferLegs = [billingLeg]
+    transferLegs = billingLegs
     allocations =
       [ nonIteratedAllocation providerAllocationCid
       , V2.FinalizedAllocation with
           allocationCid = aliceAllocationCid
-          extraTransferLegSides = [senderSide billingLeg]
-          nextIterationFunding = Some (TextMap.singleton instrId.id 99.0)
+          extraTransferLegSides = map senderSide billingLegs
+          nextIterationFunding = Some (TextMap.fromList [(instrId.id, 99.0) | instrId <- instrIds])
       ]
     extraArgs = emptyExtraArgs
 
@@ -126,24 +188,28 @@ test_locked_funds = do
   let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
 
   -- payout of 0.5 Amulet to alice, and 0.5 Amulet to the provider
-  WalletClientV2.checkUnlockedBalance alice instrId 900.5
-  WalletClientV2.checkUnlockedBalance provider instrId 0.5
+  forA_ instrIds $ \instrId -> do
+    WalletClientV2.checkUnlockedBalance alice instrId 900.5
+    WalletClientV2.checkUnlockedBalance provider instrId 0.5
 
   -- test a top-up via a self-transfer
-  let topupLeg = V2.TransferLeg with
-        transferLegId = "topup-leg"
-        sender = basicAccount alice
-        receiver = basicAccount alice
-        amount = 200.0
-        instrumentId = instrId.id
-        meta = reasonToMeta "topup funds for fee payments" emptyMetadata
-  inputHoldingCids <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount alice) alice instrId
+  let topupLegs = do
+        (i, instrId) <- zip [0 .. length instrIds] instrIds
+        pure V2.TransferLeg with
+          transferLegId = "topup-leg-" <> show i
+          sender = basicAccount alice
+          receiver = basicAccount alice
+          amount = 200.0
+          instrumentId = instrId.id
+          meta = reasonToMeta "topup funds for fee payments" emptyMetadata
+  inputHoldingCids <- fmap concat $ forA instrIds $ \instrId ->
+    WalletClientV2.listUnlockedHoldingCidsFor (basicAccount alice) alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
     settlement
     allocation = V2.AllocationSpecification with
       authorizer = basicAccount alice
-      admin = instrId.admin
-      transferLegSides = [senderSide topupLeg] -- This is key: here we approve the sender-side, which locks the funds
+      admin
+      transferLegSides = map senderSide topupLegs -- This is key: here we approve the sender-side, which locks the funds
       settlementDeadline = None
       nextIterationFunding = None
       committed = False
@@ -160,13 +226,13 @@ test_locked_funds = do
   enrichedChoice <- V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
     actors = [provider]
     settlement
-    transferLegs = [topupLeg]
+    transferLegs = topupLegs
     allocations =
       [ nonIteratedAllocation topupAllocationCid
       , V2.FinalizedAllocation with
           allocationCid = aliceAllocationCid
-          extraTransferLegSides = [receiverSide topupLeg]
-          nextIterationFunding = Some (TextMap.singleton instrId.id 299.0)
+          extraTransferLegSides = map receiverSide topupLegs
+          nextIterationFunding = Some (TextMap.fromList [(instrId.id, 299.0) | instrId <- instrIds])
       ]
     extraArgs = emptyExtraArgs
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
@@ -177,34 +243,24 @@ test_locked_funds = do
   -- there is exactly one allocation for alice
   [(cid, Some aliceAllocView)] <- queryInterface @V2.Allocation alice
   cid === aliceAllocationCid
-  aliceAllocView.allocation.nextIterationFunding === Some (TextMap.singleton instrId.id 299.0)
+  aliceAllocView.allocation.nextIterationFunding === Some (TextMap.fromList [(instrId.id, 299.0) | instrId <- instrIds])
   aliceAllocView.allocation.transferLegSides === []
 
-  -- there is one locked holding for alice
-  [(_, holding)] <- WalletClientV2.listLockedHoldings alice instrId
-  holding.amount === 299.0
+  forA_ instrIds $ \instrId -> do
+    -- there is one locked holding for alice
+    [(_, holding)] <- WalletClientV2.listLockedHoldings alice instrId
+    holding.amount === 299.0
 
-  -- the balances are as expected
-  WalletClientV2.checkBalance alice instrId 999.5
-  WalletClientV2.checkBalance provider instrId 0.5
+    -- the balances are as expected
+    WalletClientV2.checkBalance alice instrId 999.5
+    WalletClientV2.checkBalance provider instrId 0.5
 
   pure ()
 
 
 -- | Test that refresh on settlement and withdrawal of iterated allocations works as expected.
-test_refresh_and_withdrawal : Script ()
-test_refresh_and_withdrawal = do
-  env <- TestRegistries.initialize TestRegistries.defaultConfig
-
-  provider <- allocateParty "provider"
-  alice <- allocateParty "alice"
-
-  -- fund alice
-  let instrId = env.amuletV2.instrumentId
-  let registry = env.amuletV2
-  let dso = registry.dso
-  let admins = Map.keys env.registries
-
+test_refresh_and_withdrawal : TestCase -> Script ()
+test_refresh_and_withdrawal TestCase {..} = do
   -- create an allocation for iterated settlement with a settlement deadline in one year
   now <- getTime
   let aliceSettlementDeadline = addRelTime now (days 365)
@@ -215,13 +271,14 @@ test_refresh_and_withdrawal = do
         meta = emptyMetadata
   let alloc = V2.AllocationSpecification with
         authorizer = basicAccount alice
-        admin = instrId.admin
+        admin
         transferLegSides = []
         settlementDeadline = Some aliceSettlementDeadline
         nextIterationFunding = Some TextMap.empty
         committed = True
         meta = reasonToMeta "fund regular billing" emptyMetadata
-  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  inputHoldingCids <- fmap concat $ forA instrIds $ \instrId ->
+    WalletClientV2.listHoldingCids alice instrId
   enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
     settlement
     allocation = alloc
@@ -233,7 +290,7 @@ test_refresh_and_withdrawal = do
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let V2.AllocationInstructionResult_Completed aliceAllocationCid0 = result.output
   Some aliceAllocView0 <- queryInterfaceContractId alice aliceAllocationCid0
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- withdrawing Alice's allocation must fail, as it is committed until its settlement deadline
   context <- V2.getAllocation_WithdrawContext registry aliceAllocationCid0 emptyMetadata
@@ -270,7 +327,7 @@ test_refresh_and_withdrawal = do
   -- immediate refresh should work and not bump expiry
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid0
   aliceAllocView0.expiresAt === aliceAllocView1.expiresAt
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- refresh after 45 days still does not bump expiry
   passTime (days 45)
@@ -281,7 +338,7 @@ test_refresh_and_withdrawal = do
   passTime (microseconds 1)
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid1
   (fmap (`addRelTime` days 45) aliceAllocView0.expiresAt) === aliceAllocView1.expiresAt
-  checkAllocationsAndHoldingExpiryAgree dso
+  checkAllocationsAndHoldingExpiryAgree admin
 
   -- withdrawing Alice's allocation after the settlement deadline must succeed
   setTime (aliceSettlementDeadline `addRelTime` microseconds 1)
