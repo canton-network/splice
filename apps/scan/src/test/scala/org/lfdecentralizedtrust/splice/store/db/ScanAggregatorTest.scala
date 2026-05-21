@@ -293,7 +293,7 @@ class ScanAggregatorTest
             expectedRoundPartyRewardTotals.filter { case (round, _) => round <= restartRound },
             aggr,
             store,
-            restartRound
+            restartRound,
           )
         }
         // simulate migration, no active_parties exist
@@ -306,7 +306,7 @@ class ScanAggregatorTest
             expectedRoundPartyRewardTotals,
             aggr,
             store,
-            lastRound
+            lastRound,
           )
           assertActiveParties(store, nrParties, lastRound)
         }
@@ -331,7 +331,7 @@ class ScanAggregatorTest
           expectedRoundPartyRewardTotals,
           aggr,
           store,
-          lastRound
+          lastRound,
         )
         val activeParties = queryActiveParties()
 
@@ -379,7 +379,7 @@ class ScanAggregatorTest
           expectedRoundPartyRewardTotals,
           aggr,
           store,
-          lastRound
+          lastRound,
         )
         val activeParties = queryActiveParties()
 
@@ -588,7 +588,7 @@ class ScanAggregatorTest
         expectedRoundPartyRewardTotals,
         aggr,
         store,
-        lastRound
+        lastRound,
       )
 
       store.getAggregatedRounds().futureValue.value shouldBe ScanAggregator.RoundRange(
@@ -714,7 +714,7 @@ class ScanAggregatorTest
       expectedRoundPartyRewardTotals: Map[Long, List[RoundPartyTotals]],
       aggr: ScanAggregator,
       store: DbScanStore,
-      lastRound: Long
+      lastRound: Long,
   ) = {
     for (i <- 0 to lastRound.toInt) {
       val round = i.toLong

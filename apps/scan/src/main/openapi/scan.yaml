@@ -2110,49 +2110,6 @@ components:
       properties:
         approved:
           type: boolean
-    GetTopProvidersByAppRewardsResponse:
-      type: object
-      required: ["providersAndRewards"]
-      properties:
-        providersAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    GetTopValidatorsByValidatorRewardsResponse:
-      type: object
-      required: ["validatorsAndRewards"]
-      properties:
-        validatorsAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    PartyAndRewards:
-      type: object
-      required: ["provider", "rewards"]
-      properties:
-        provider:
-          type: string
-        rewards:
-          type: string
-    GetTopValidatorsByValidatorFaucetsResponse:
-      type: object
-      required: ["validatorsByReceivedFaucets"]
-      properties:
-        validatorsByReceivedFaucets:
-          description: |
-            Up to `limit` validators, sorted greatest number of rounds
-            collected first
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorReceivedFaucets"
-    GetTopValidatorsByPurchasedTrafficResponse:
-      type: object
-      required: ["validatorsByPurchasedTraffic"]
-      properties:
-        validatorsByPurchasedTraffic:
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorPurchasedTraffic"
     ValidatorPurchasedTraffic:
       type: object
       required:
