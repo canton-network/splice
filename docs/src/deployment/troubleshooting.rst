@@ -23,9 +23,13 @@ Where to find logs
 Canton logs into ``canton.log``.
 
 .. note::
-    The default log level, initially set to Debug, can be changed using the ``--log-level-canton`` flag, for example: ``splice-node --config "${OUTPUT_CONFIG}" --log-level-canton=DEBUG ...``
+    The default log levels in container deployments (the splice-node image used by both SV and validator Helm charts) are ``INFO`` for Canton classes (loggers under ``com.daml`` and ``com.digitalasset``) and ``DEBUG`` for the stdout sink, which keeps Canton Network application logs (``org.lfdecentralizedtrust.splice``) at ``DEBUG`` while reducing the log volume produced by Canton itself.
 
-**When the node is launched in a kubernetes cluster**, we recommend to setup a log collector so that you can capture logs of at least the last day. For now, the default log level is set to Debug.
+    The levels can be overridden via the ``LOG_LEVEL_CANTON`` and ``LOG_LEVEL_STDOUT`` environment variables on the splice-node container (for Helm deployments, set these through ``additionalEnvVars`` on the affected pods), or via the ``--log-level-canton`` and ``--log-level-stdout`` CLI flags when invoking ``splice-node`` directly (for example ``splice-node --config "${OUTPUT_CONFIG}" --log-level-canton=DEBUG ...``).
+
+    Debugging support is best-effort under non-default log levels: maintainers may ask you to reproduce issues with the defaults restored before investigating further.
+
+**When the node is launched in a kubernetes cluster**, we recommend to setup a log collector so that you can capture logs of at least the last day.
 
 We recommend to use ``lnav`` to read the logs. A guideline is provided in `this documentation <https://github.com/canton-network/splice/blob/main/TESTING.md#setting-up-lnav-to-inspect-canton-and-cometbft-logs>`_.
 

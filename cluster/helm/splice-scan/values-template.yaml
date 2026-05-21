@@ -64,7 +64,7 @@ spliceInstanceNames:
 service:
   ui:
     port: 80
-logLevel: DEBUG
+logLevel: INFO
 
 # bulk storage configuration (still in dev, please do not enable in prod)
 # bulk-storage:
