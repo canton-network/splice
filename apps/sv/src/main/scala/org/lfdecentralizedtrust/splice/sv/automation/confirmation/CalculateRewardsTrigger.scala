@@ -59,7 +59,11 @@ abstract class CalculateRewardsTriggerBase(
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     calculateRewards <- store.listCalculateRewardsV2()
-  } yield calculateRewards.filter(_.payload.dryRun == isDryRun).map(Task(_))
+    confirmedCids <- listConfirmedCalculateRewardsCids()
+  } yield calculateRewards
+    .filter(_.payload.dryRun == isDryRun)
+    .filterNot(c => confirmedCids.contains(c.contractId))
+    .map(Task(_))
 
   override def completeTask(
       task: Task
@@ -130,7 +134,30 @@ abstract class CalculateRewardsTriggerBase(
   ): Future[Boolean] =
     store.multiDomainAcsStore
       .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewards.contractId)
-      .map(_.isEmpty)
+      .flatMap {
+        case None => Future.successful(true)
+        case Some(_) =>
+          listConfirmedCalculateRewardsCids().map(
+            _.contains(task.calculateRewards.contractId)
+          )
+      }
+
+  private def listConfirmedCalculateRewardsCids()(implicit
+      tc: TraceContext
+  ): Future[Set[CalculateRewardsV2.ContractId]] =
+    store.listConfirmationsByConfirmer(svParty).map { confirmations =>
+      confirmations.iterator.flatMap { c =>
+        c.payload.action match {
+          case arc: ARC_AmuletRules =>
+            arc.amuletRulesAction match {
+              case crarc: CRARC_StartProcessingRewardsV2 =>
+                Some(crarc.amuletRules_StartProcessingRewardsV2Value.calculateRewardsCid)
+              case _ => None
+            }
+          case _ => None
+        }
+      }.toSet
+    }
 
   // TODO (#5623) replace with non-ephemeral connection
   private def withScanConnection[T](f: ScanConnection => Future[T])(implicit
