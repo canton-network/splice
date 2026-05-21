@@ -204,11 +204,7 @@ template AmuletRules
       controller validator
       do
         checkExpectedDso dso expectedDso
-        createdAt <- case optCreatedAt of
-          None -> getTime
-          Some createdAt -> do
-            assertDeadlineExceeded "createdAt" createdAt
-            pure createdAt
+        createdAt <- getAndValidateCreatedAt optCreatedAt
         assertWithinDeadline "preapprovalExpiresAt" preapprovalExpiresAt
         (amuletPaid, transferResult, meta) <-
           payForTransferPreapproval dso validator context inputs createdAt preapprovalExpiresAt
@@ -238,11 +234,7 @@ template AmuletRules
       controller provider, receiver
       do
         checkExpectedDso dso expectedDso
-        createdAt <- case optCreatedAt of
-          None -> getTime
-          Some createdAt -> do
-            assertDeadlineExceeded "createdAt" createdAt
-            pure createdAt
+        createdAt <- getAndValidateCreatedAt optCreatedAt
         assertWithinDeadline "expiresAt" expiresAt
         (amuletPaid, transferResult, meta) <-
           payForTransferPreapproval dso provider context inputs createdAt expiresAt
@@ -2216,3 +2208,9 @@ bootstrapExternalPartyConfigState AmuletRules{..} openMiningRoundTriple = do
   create configState0
   create configState1
   pure ()
+
+getAndValidateCreatedAt : Optional Time -> Update Time
+getAndValidateCreatedAt None = getTime
+getAndValidateCreatedAt (Some createdAt) = do
+  assertDeadlineExceeded "createdAt" createdAt
+  pure createdAt
