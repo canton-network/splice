@@ -53,6 +53,10 @@
         - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
           in the security context of the pods as the participant, validator app, and sv app charts.
 
+    - Canton
+
+        - Fix LSU issue where participant restarts past freeze time could lead to losing the LSU announcement.
+
 .. release-notes:: 0.6.4
 
     .. important:: Validators must upgrade to 0.6.4 or newer before
