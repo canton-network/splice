@@ -185,8 +185,11 @@ object DarLockChecker {
       exhaustive: Boolean = true,
   ): Unit = {
     val lastReleaseNumber = File("LATEST_RELEASE").contentAsString.strip
+    val branch = s"release-line-$lastReleaseNumber"
+    val ref = s"refs/remotes/origin/$branch"
+    ensureRefAvailable(branch)
     val lastReleaseDarLock =
-      s"git show refs/remotes/origin/release-line-$lastReleaseNumber:daml/dars.lock".!!
+      s"git show $ref:daml/dars.lock".!!
     val lastReleaseDars = parseDarsLock(lastReleaseDarLock)
     val mismatches = actual.flatMap { case (pkg, currentHash) =>
       lastReleaseDars
@@ -352,6 +355,17 @@ object DarLockChecker {
             s"or pass a different ref via `--base=<ref>`. " +
             s"Underlying error: ${e.getMessage}"
         )
+    }
+  }
+
+  /** Ensure `refs/remotes/origin/$branch` exists locally
+    */
+  private def ensureRefAvailable(branch: String): Unit = {
+    val ref = s"refs/remotes/origin/$branch"
+    if (s"git rev-parse --verify --quiet $ref".! != 0) {
+      System.err.println(s"Fetching $branch, not present locally")
+      val rc = s"git fetch --no-tags --depth=1 origin $branch:$ref".!
+      if (rc != 0) sys.error(s"git fetch $branch failed (exit $rc)")
     }
   }
 }

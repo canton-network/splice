@@ -5,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Secret } from '@pulumi/kubernetes/core/v1';
 
-type Credentials = {
+export type Credentials = {
   username: string;
   password: string;
 };
@@ -110,7 +110,7 @@ export class DockerConfig {
     return Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
   }
 
-  private static fetchCredentialsFromSecret(secretName: string): pulumi.Output<Credentials> {
+  public static fetchCredentialsFromSecret(secretName: string): pulumi.Output<Credentials> {
     const temp = getSecretVersionOutput({ secret: secretName });
     return temp.apply(k => {
       const secretData = k.secretData;

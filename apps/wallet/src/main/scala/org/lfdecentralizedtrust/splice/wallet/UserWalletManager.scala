@@ -65,8 +65,6 @@ class UserWalletManager(
     walletSweep: Map[String, WalletSweepConfig],
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig],
     dedupDuration: DedupDuration,
-    txLogBackfillEnabled: Boolean,
-    txLogBackfillingBatchSize: Int,
     params: SpliceParametersConfig,
 )(implicit
     ec: ExecutionContext,
@@ -241,8 +239,6 @@ class UserWalletManager(
       walletSweep.get(endUserParty.toProtoPrimitive),
       autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
       dedupDuration,
-      txLogBackfillEnabled = txLogBackfillEnabled,
-      txLogBackfillingBatchSize = txLogBackfillingBatchSize,
       params,
     )
     (userRetryProvider, walletService)

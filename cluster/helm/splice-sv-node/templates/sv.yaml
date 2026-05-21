@@ -278,6 +278,53 @@ spec:
                 }
             {{- end }}
             {{- end }}
+            {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
+            - name: ADDITIONAL_CONFIG_SV_DOMAIN_ADDITIONAL_LEGACY_{{ $i }}
+              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
+              value: |
+                canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
+                  sequencer {
+                    {{- if (index $sync "enableBftSequencer") }}
+                    is-bft-sequencer = true
+                    {{- end }}
+                    admin-api {
+                      address = {{ $sync.sequencerAddress | quote }}
+                      port = 5009
+                    }
+                    internal-api {
+                      address = {{ $sync.sequencerAddress | quote }}
+                      port = 5008
+                    }
+                    external-public-api-url = {{ $sync.sequencerPublicUrl | quote }}
+                    {{- if $sync.sequencerPruningConfig.enabled }}
+                    pruning {
+                      pruning-interval = {{ $sync.sequencerPruningConfig.pruningInterval | quote }}
+                      retention-period = {{ $sync.sequencerPruningConfig.retentionPeriod | quote }}
+                    }
+                    {{- end }}
+                  }
+                  mediator {
+                    admin-api {
+                      address = {{ $sync.mediatorAddress | quote }}
+                      port = 5007
+                    }
+                  }
+                  {{- with $sync.cometBFT }}
+                  comet-bft-config {
+                    enabled = {{ .enabled }}
+                    {{- if .connectionUri }}
+                    connection-uri = {{ .connectionUri | quote }}
+                    {{- end }}
+                    {{- if .externalGovernanceKey }}
+                    governance-key {
+                      public-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY}
+                      private-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY}
+                    }
+                    {{- end }}
+                  }
+                  {{- end }}
+                }
+            {{- end }}
             {{- end }}
             {{- if .Values.decentralizedSynchronizerUrl }}
             - name: SPLICE_APP_SV_GLOBAL_DOMAIN_URL
@@ -312,6 +359,13 @@ spec:
               {{- if ($sync.cometBFT).externalGovernanceKey }}
                 {{- $anyGovernanceKey = true }}
               {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.synchronizers }}
+              {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
+                {{- if ($sync.cometBFT).externalGovernanceKey }}
+                  {{- $anyGovernanceKey = true }}
+                {{- end }}
               {{- end }}
             {{- end }}
             {{- if $anyGovernanceKey }}

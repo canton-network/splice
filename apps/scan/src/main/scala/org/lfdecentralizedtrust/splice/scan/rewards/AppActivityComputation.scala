@@ -17,6 +17,9 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 object AppActivityComputation {
   val MaxTrafficCostBytes: Long = 100L * 1024 * 1024 // 100 MB
+
+  /** Bump this when the functional behavior of the app activity computation changes. */
+  val ActivityIngestionCodeVersion: Int = 1
 }
 
 class AppActivityComputation(

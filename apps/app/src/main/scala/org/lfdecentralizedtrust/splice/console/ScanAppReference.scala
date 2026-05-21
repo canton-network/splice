@@ -399,7 +399,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 activity totals for a specific round")
   def getRewardAccountingActivityTotals(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingActivityTotalsResponse] =
+  ): definitions.GetRewardAccountingActivityTotalsResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber))
     }
@@ -407,7 +407,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 root hash for a specific round")
   def getRewardAccountingRootHash(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingRootHashResponse] =
+  ): definitions.GetRewardAccountingRootHashResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingRootHash(roundNumber))
     }

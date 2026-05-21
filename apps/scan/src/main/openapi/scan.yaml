@@ -1895,7 +1895,7 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/reward-accounting-process/rounds/earliest-available:
+  /v0/internal/reward-accounting-process/rounds/earliest-available:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1914,7 +1914,7 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/activity-totals:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1937,10 +1937,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingActivityTotalsResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/root-hash:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/root-hash:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1962,10 +1960,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingRootHashResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -4743,12 +4739,28 @@ components:
 
     GetRewardAccountingActivityTotalsResponse:
       type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsOk"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingActivityTotalsOk"
+          Undetermined: "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+
+    RewardAccountingActivityTotalsOk:
+      type: object
       required:
+        - status
         - round_number
         - total_app_activity_weight
         - active_parties_count
         - activity_records_count
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
@@ -4762,18 +4774,66 @@ components:
           type: integer
           format: int64
 
-    GetRewardAccountingRootHashResponse:
+    RewardAccountingActivityTotalsUndetermined:
       type: object
       required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingActivityTotalsCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    GetRewardAccountingRootHashResponse:
+      type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingRootHashOk"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingRootHashOk"
+          Undetermined: "#/components/schemas/RewardAccountingRootHashUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingRootHashCannotProvide"
+
+    RewardAccountingRootHashOk:
+      type: object
+      required:
+        - status
         - round_number
         - root_hash
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
         root_hash:
           type: string
           description: Hex-encoded root hash
+
+    RewardAccountingRootHashUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingRootHashCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
 
     GetRewardAccountingBatchResponse:
       type: object
