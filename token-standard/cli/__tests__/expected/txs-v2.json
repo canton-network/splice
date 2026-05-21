@@ -10,6 +10,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "200.0000000000",
@@ -71,6 +77,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "100.0000000000",
@@ -150,6 +162,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "10.0000000000",
@@ -229,6 +247,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "6000.0000000000",
@@ -290,6 +314,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -401,9 +431,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -435,6 +463,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -530,9 +564,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -564,6 +596,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -659,9 +697,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -693,6 +729,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -788,9 +830,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -822,6 +862,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -917,9 +963,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -951,6 +995,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [],
             "reason": "holders released lock",
             "meta": {
@@ -995,9 +1045,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -1021,6 +1069,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1000.0000000000",
@@ -1080,6 +1134,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [],
             "reason": "holders released lock",
             "meta": {
@@ -1124,9 +1184,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -1158,6 +1216,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [],
             "reason": "holders released lock",
             "meta": {
@@ -1202,9 +1266,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -1236,6 +1298,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "200.0000000000",
@@ -1295,6 +1363,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [],
             "reason": "owner released expired lock",
             "meta": {
@@ -1339,9 +1413,7 @@
                   "id": "Amulet"
                 },
                 "lock": {
-                  "holders": [
-                    "dso::normalized"
-                  ],
+                  "holders": ["dso::normalized"],
                   "context": "transfer to 'bob::normalized'",
                   "expiresAfter": null,
                   "expiresAt": "2025-06-18T00:00:00.000000Z"
@@ -1365,6 +1437,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "1.0000000000",
@@ -1537,6 +1615,12 @@
         {
           "label": {
             "type": "V2",
+            "admin": "dso::normalized",
+            "account": {
+              "id": "",
+              "owner": "alice::normalized",
+              "provider": null
+            },
             "transferLegSides": [
               {
                 "amount": "500.0000000000",
