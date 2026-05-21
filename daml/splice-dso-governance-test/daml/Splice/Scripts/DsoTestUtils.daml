@@ -32,6 +32,7 @@ import Splice.DsoRules
 import Splice.DsoBootstrap
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.GovernanceVoter
 import Splice.DSO.SvState
 import Splice.Scripts.AnsRulesParameters
 import Splice.Util
@@ -330,74 +331,155 @@ executeAllDefinitiveVotes app = do
   now <- getTime
   requests <- query @VoteRequest app.dso
   forA_ requests $ \(requestCid, request) -> do
-    let activeSvs = Set.fromList $ map (.name) $ Map.values rules.svs
+    let activeSvNames = Set.fromList [info.name | (_, info) <- Map.toList rules.svs]
     let execute = request.voteBefore <= now ||
-          (activeSvs == Set.fromList (Map.keys request.votes))
+          (activeSvNames == Set.fromList (Map.keys request.votes))
     when execute $ do
       void $ submit (actAs s.dsoDelegate <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
         requestCid
         amuletRulesCid = Some amuletRulesCid
         sv = Some s.dsoDelegate
+        currentBindings = None
+
+-- | Look up the represented SV's self-binding. SV onboarding installs a
+-- self-binding atomically, so this returns the binding established by
+-- DsoRules_AddSv; if no self-binding is found the test setup is broken.
+ensureSelfBinding : Party -> Party -> Script (ContractId SvGovernanceVoter)
+ensureSelfBinding dso sv = do
+  bindings <- queryFilter @SvGovernanceVoter dso $ \b ->
+    b.sv == sv && b.governanceVoter == sv
+  case bindings of
+    ((cid, _) :: _) -> pure cid
+    [] -> fail $ "ensureSelfBinding: no self-binding found for " <> show sv
+
+-- | Rotate an SV's governance-voter binding by running
+-- SRARC_RotateGovernanceVoter through the confirmation-quorum flow. Each
+-- confirming SV submits a Confirmation; one of them then executes the
+-- collected confirmations, which exercises DsoRules_RotateGovernanceVoter.
+-- Returns the new binding's cid (extracted from the active-contract set,
+-- since DsoRules_ExecuteConfirmedAction does not surface choice results).
+rotateGovernanceVoterByConfirmation
+  : AmuletApp
+  -> [Party]
+  -> Party
+  -> ContractId SvGovernanceVoter
+  -> Party
+  -> Script (ContractId SvGovernanceVoter)
+rotateGovernanceVoterByConfirmation app confirmers sv currentBindingCid newGovernanceVoter = do
+  [(dsoRulesCid, _)] <- query @DsoRules app.dso
+  let action = ARC_DsoRules with
+        dsoAction = SRARC_RotateGovernanceVoter DsoRules_RotateGovernanceVoter with
+          sv
+          currentBindingCid
+          newGovernanceVoter
+  confirmationCids <- forA confirmers $ \confirmer -> do
+    result <- submit (actAs confirmer <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer
+      action
+    pure result.confirmation
+  let executor = case confirmers of
+        (c :: _) -> c
+        [] -> error "rotateGovernanceVoterByConfirmation: require at least one confirmer"
+  submit (actAs executor <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_ExecuteConfirmedAction with
+    action
+    amuletRulesCid = None
+    confirmationCids
+    sv = Some executor
+  newBindings <- queryFilter @SvGovernanceVoter app.dso $ \b ->
+    b.sv == sv && b.governanceVoter == newGovernanceVoter
+  case newBindings of
+    ((cid, _) :: _) -> pure cid
+    [] -> fail $ "rotateGovernanceVoterByConfirmation: expected a binding to "
+      <> show newGovernanceVoter <> " for " <> show sv
+
+-- | Open a vote request via the path implied by the action: governance-voter
+-- eligible actions go through the governance-voter path of DsoRules_RequestVote
+-- (passing `bindingCid = Some <self-binding>`); everything else uses the
+-- operator path (`bindingCid = None`).
+requestVoteForAction
+  : AmuletApp
+  -> ContractId DsoRules
+  -> Party
+  -> ActionRequiringConfirmation
+  -> Reason
+  -> Optional Time
+  -> Optional RelTime
+  -> Script (ContractId VoteRequest)
+requestVoteForAction app dsoRulesCid initiator action reason targetEffectiveAt voteRequestTimeout = do
+  optBindingCid <- if isGovernanceVoterAction action
+    then Some <$> ensureSelfBinding app.dso initiator
+    else pure None
+  result <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = initiator
+    action
+    reason
+    targetEffectiveAt
+    voteRequestTimeout
+    bindingCid = optBindingCid
+  pure result.voteRequest
+
+-- | Cast a vote on a request, dispatching to the operator or governance-voter
+-- path based on the request's action: governance-voter eligible actions take
+-- the governance-voter path of DsoRules_CastVote (passing the represented
+-- SV's self-binding and `castBy = Some sv`); everything else uses the
+-- operator path (both Optional fields = None).
+castVoteOnRequest
+  : AmuletApp
+  -> ContractId DsoRules
+  -> Party
+  -> ContractId VoteRequest
+  -> Bool
+  -> Text
+  -> Script (ContractId VoteRequest)
+castVoteOnRequest app dsoRulesCid sv requestCid accept body = do
+  Some request <- queryContractId app.dso requestCid
+  let isGov = isGovernanceVoterAction request.action
+  optBindingCid <- if isGov
+    then Some <$> ensureSelfBinding app.dso sv
+    else pure None
+  let optCastBy = if isGov then Some sv else None
+      castByRole = if isGov then VCR_GovernanceVoter else VCR_Operator
+  result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    requestCid
+    vote = Vote with
+      sv
+      accept
+      reason = Reason with url = ""; body
+      optCastAt = None
+      castBy = Some sv
+      castByRole = Some castByRole
+      bindingCid = None
+        -- ^ Server-set by DsoRules_CastVote from the choice-arg `bindingCid`.
+    bindingCid = optBindingCid
+    castBy = optCastBy
+  pure result.voteRequest
 
 initiateAndCastVote : AmuletApp -> [Party] -> Optional Time -> ActionRequiringConfirmation -> Script (ContractId VoteRequest)
 initiateAndCastVote _ [] _ _ = error "initiateVote: require at least one party"
 initiateAndCastVote app (initiator::others) targetEffectiveAt action = do
     [(dsoRulesCid, _)] <- query @DsoRules app.dso
-    requestCid <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-      requester = initiator
-      action
-      reason = Reason with url = ""; body = "let's get it done"
+    requestCid <- requestVoteForAction app dsoRulesCid initiator action
+      (Reason with url = ""; body = "let's get it done")
       targetEffectiveAt
-      voteRequestTimeout = None
-    foldlA (castVote dsoRulesCid) requestCid.voteRequest others
-  where
-    castVote dsoRulesCid requestCid sv = do
-      result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-          requestCid
-          vote = Vote with
-            sv
-            accept = True
-            reason = Reason with url = ""; body = "✓"
-            optCastAt = None
-      return result.voteRequest
+      None
+    foldlA (\rc sv -> castVoteOnRequest app dsoRulesCid sv rc True "✓") requestCid others
 
 initiateAndAcceptVote : AmuletApp -> [Party] -> ActionRequiringConfirmation -> Script ()
 initiateAndAcceptVote _ [] _ = error "initiateAndAcceptVote: require at least one party"
 initiateAndAcceptVote app (initiator::others) action = do
     [(dsoRulesCid, _)] <- query @DsoRules app.dso
-    requestCid <- submit (actAs initiator <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-      requester = initiator
-      action
-      reason = Reason with url = ""; body = "let's get it done"
-      targetEffectiveAt = None
-      voteRequestTimeout = None
-    foldlA (castVote dsoRulesCid) requestCid.voteRequest others
+    requestCid <- requestVoteForAction app dsoRulesCid initiator action
+      (Reason with url = ""; body = "let's get it done")
+      None
+      None
+    _ <- foldlA (\rc sv -> castVoteOnRequest app dsoRulesCid sv rc True "✓") requestCid others
     executeAllDefinitiveVotes app
-  where
-    castVote dsoRulesCid requestCid sv = do
-      result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-          requestCid
-          vote = Vote with
-            sv
-            accept = True
-            reason = Reason with url = ""; body = "✓"
-            optCastAt = None
-      return result.voteRequest
 
--- cast a vote on a request
+-- cast a vote on a request, picking the correct authorization path
 castVote : AmuletApp -> Party -> ContractId VoteRequest -> Bool -> Script (ContractId VoteRequest)
-castVote app sv requestCid vote = do
+castVote app sv requestCid accept = do
     [(dsoRulesCid, _)] <- query @DsoRules app.dso
-    result <- submit (actAs sv <> actAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
-        requestCid = requestCid
-        vote = Vote with
-            sv = sv
-            accept = vote
-            reason = Reason with
-                url = ""
-                body = ""
-            optCastAt = None
-    return result.voteRequest
+    castVoteOnRequest app dsoRulesCid sv requestCid accept ""
 
 -- | Update all currently desired prices to the target price
 updateAgreedAmuletPrice : Party -> Decimal -> Script [ContractId AmuletPriceVote]

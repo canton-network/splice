@@ -1,0 +1,42 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.DSO.GovernanceVoter where
+
+import Splice.Types
+import Splice.Util
+
+-- | A binding from a represented SV to the party that may cast its vote on
+-- governance-voter eligible actions. The represented SV is always covered by a
+-- binding: onboarding establishes a self-binding (governanceVoter == sv)
+-- atomically via DsoRules_AddSv, and "returning control to the operator" is
+-- expressed as rotating back to self.
+--
+-- The DSO party is the sole signatory. The binding is therefore managed
+-- exclusively through DsoRules: it is created at SV onboarding and rotated by
+-- the SRARC_RotateGovernanceVoter action, which goes through the standard
+-- confirmation-quorum flow. Bare-create by the represented SV is not
+-- authorized, and there is no on-template Rotate choice.
+--
+-- The represented SV is the only observer besides the DSO party. The
+-- governance-voter party discovers the binding via Scan or explicit
+-- disclosure rather than as a ledger observer, so a participant hosting the
+-- governance-voter party does not need to vet this DAR.
+template SvGovernanceVoter
+  with
+    dso : Party
+    sv : Party
+    governanceVoter : Party
+  where
+    signatory dso
+    observer sv
+
+instance HasCheckedFetch SvGovernanceVoter ForDso where
+  contractGroupId SvGovernanceVoter {..} = ForDso with dso
+
+-- The governance-voter party is treated as the binding's owner: choices
+-- controlled by that party can use ForOwner to validate, in a single step,
+-- both that the binding belongs to the expected DSO party and that the
+-- caller is the authoritative governance voter on the binding.
+instance HasCheckedFetch SvGovernanceVoter ForOwner where
+  contractGroupId SvGovernanceVoter {..} = ForOwner with dso; owner = governanceVoter

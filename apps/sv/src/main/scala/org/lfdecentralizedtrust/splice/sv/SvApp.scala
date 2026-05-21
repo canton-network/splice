@@ -46,6 +46,20 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.governancevoter.SvGovernanceVoter
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
+  ARC_AmuletRules,
+  ARC_DsoRules,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_CreateUnallocatedUnclaimedActivityRecord,
+  SRARC_GrantFeaturedAppRight,
+  SRARC_OffboardSv,
+  SRARC_RevokeFeaturedAppRight,
+  SRARC_SetConfig,
+  SRARC_UpdateSvRewardWeight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.*
@@ -916,6 +930,24 @@ object SvApp {
     }
   }
 
+  def isGovernanceVoterAction(action: ActionRequiringConfirmation): Boolean =
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case _: SRARC_OffboardSv | _: SRARC_GrantFeaturedAppRight |
+              _: SRARC_RevokeFeaturedAppRight | _: SRARC_SetConfig | _: SRARC_UpdateSvRewardWeight |
+              _: SRARC_CreateUnallocatedUnclaimedActivityRecord =>
+            true
+          case _ => false
+        }
+      case arc: ARC_AmuletRules =>
+        arc.amuletRulesAction match {
+          case _: CRARC_SetConfig => true
+          case _ => false
+        }
+      case _ => false
+    }
+
   def createVoteRequest(
       requester: String,
       action: Json,
@@ -952,43 +984,74 @@ object SvApp {
           )
         case QueryResult(offset, None) =>
           for {
-            res <- retryProvider.retryForClientCalls(
-              "createVoteRequest",
-              "createVoteRequest",
-              for {
-                dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-                reason = new Reason(reasonUrl, reasonDescription)
-                request = new DsoRules_RequestVote(
-                  requester,
-                  decodedAction,
-                  reason,
-                  java.util.Optional.of(decodedExpiration),
-                  effectiveTime,
-                )
-                cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
-                res <- dsoStoreWithIngestion
-                  .connection(SpliceLedgerConnectionPriority.Low)
-                  .submit(
-                    actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
-                    readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
-                    cmd,
+            optBindingCidEither <-
+              if (isGovernanceVoterAction(decodedAction)) {
+                val svParty = dsoStoreWithIngestion.store.key.svParty
+                if (requester != svParty.toProtoPrimitive) {
+                  Future.successful(
+                    Left(
+                      "This endpoint can only create governance-voter-eligible requests " +
+                        "when the SV operator is its own governance voter."
+                    )
                   )
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.requestVote",
-                      Seq(
-                        dsoStoreWithIngestion.store.key.dsoParty,
-                        dsoStoreWithIngestion.store.key.svParty,
-                      ),
-                      action.toString,
-                    ),
-                    deduplicationOffset = offset,
+                } else {
+                  dsoStoreWithIngestion.store
+                    .lookupSvGovernanceVoter(svParty, svParty)
+                    .map {
+                      case Some(binding) =>
+                        Right(Optional.of[SvGovernanceVoter.ContractId](binding.contractId))
+                      case None =>
+                        Left(
+                          "This SV has delegated its governance voter; use the governance-voter " +
+                            "submission path to create this request."
+                        )
+                    }
+                }
+              } else Future.successful(Right(Optional.empty[SvGovernanceVoter.ContractId]()))
+            res <- optBindingCidEither match {
+              case Left(error) => Future.successful(Left(error))
+              case Right(bindingCid) =>
+                retryProvider
+                  .retryForClientCalls(
+                    "createVoteRequest",
+                    "createVoteRequest",
+                    for {
+                      dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+                      reason = new Reason(reasonUrl, reasonDescription)
+                      request = new DsoRules_RequestVote(
+                        requester,
+                        decodedAction,
+                        reason,
+                        java.util.Optional.of(decodedExpiration),
+                        effectiveTime,
+                        bindingCid,
+                      )
+                      cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
+                      res <- dsoStoreWithIngestion
+                        .connection(SpliceLedgerConnectionPriority.Low)
+                        .submit(
+                          actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
+                          readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
+                          cmd,
+                        )
+                        .withDedup(
+                          commandId = SpliceLedgerConnection.CommandId(
+                            "org.lfdecentralizedtrust.splice.sv.requestVote",
+                            Seq(
+                              dsoStoreWithIngestion.store.key.dsoParty,
+                              dsoStoreWithIngestion.store.key.svParty,
+                            ),
+                            action.toString,
+                          ),
+                          deduplicationOffset = offset,
+                        )
+                        .yieldResult()
+                    } yield res,
+                    logger,
                   )
-                  .yieldResult()
-              } yield res,
-              logger,
-            )
-          } yield Right(res.exerciseResult.voteRequest)
+                  .map(res => Right(res.exerciseResult.voteRequest))
+            }
+          } yield res
       }
   }
 
@@ -1008,38 +1071,77 @@ object SvApp {
       .lookupVoteByThisSvAndVoteRequestWithOffset(trackingCid)
       .flatMap { case QueryResult(_, _) =>
         for {
-          dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-          res <- retryProvider.retryForClientCalls(
-            "castVote",
-            "castVote",
-            for {
-              resolvedVoteRequest <- dsoStoreWithIngestion.store.getVoteRequest(trackingCid)
-              resolvedCid = resolvedVoteRequest.contractId
-              reason = new Reason(reasonUrl, reasonDescription)
-              cmd = dsoRules.exercise(
-                _.exerciseDsoRules_CastVote(
-                  resolvedCid,
-                  new Vote(
-                    dsoStoreWithIngestion.store.key.svParty.toProtoPrimitive,
-                    isAccepted,
-                    reason,
-                    Optional.empty(), // optCastAt
-                  ),
+          resolvedVoteRequest <- dsoStoreWithIngestion.store.getVoteRequest(trackingCid)
+          optGovPathEither <-
+            if (isGovernanceVoterAction(resolvedVoteRequest.payload.action)) {
+              val svParty = dsoStoreWithIngestion.store.key.svParty
+              dsoStoreWithIngestion.store
+                .lookupSvGovernanceVoter(svParty, svParty)
+                .map {
+                  case Some(binding) =>
+                    Right(
+                      (
+                        Optional.of(binding.contractId),
+                        Optional.of[String](svParty.toProtoPrimitive),
+                      )
+                    )
+                  case None =>
+                    Left(
+                      "This SV has delegated its governance voter; use the governance-voter " +
+                        "submission path to cast this vote."
+                    )
+                }
+            } else
+              Future.successful(
+                Right(
+                  (
+                    Optional.empty[SvGovernanceVoter.ContractId](),
+                    Optional.empty[String](),
+                  )
                 )
               )
-              res <- dsoStoreWithIngestion
-                .connection(SpliceLedgerConnectionPriority.Low)
-                .submit(
-                  actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
-                  readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
-                  update = cmd,
+          res <- optGovPathEither match {
+            case Left(error) => Future.successful(Left(error))
+            case Right((bindingCid, castBy)) =>
+              retryProvider
+                .retryForClientCalls(
+                  "castVote",
+                  "castVote",
+                  for {
+                    dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+                    resolvedCid = resolvedVoteRequest.contractId
+                    reason = new Reason(reasonUrl, reasonDescription)
+                    cmd = dsoRules.exercise(
+                      _.exerciseDsoRules_CastVote(
+                        resolvedCid,
+                        new Vote(
+                          dsoStoreWithIngestion.store.key.svParty.toProtoPrimitive,
+                          isAccepted,
+                          reason,
+                          Optional.empty(), // optCastAt
+                          Optional.empty(), // castBy (attribution metadata; server-set)
+                          Optional.empty(), // castByRole (attribution metadata; server-set)
+                          Optional.empty(), // bindingCid (staleness metadata; server-set)
+                        ),
+                        bindingCid,
+                        castBy,
+                      )
+                    )
+                    res <- dsoStoreWithIngestion
+                      .connection(SpliceLedgerConnectionPriority.Low)
+                      .submit(
+                        actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
+                        readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
+                        update = cmd,
+                      )
+                      .noDedup
+                      .yieldResult()
+                  } yield res,
+                  logger,
                 )
-                .noDedup
-                .yieldResult()
-            } yield res,
-            logger,
-          )
-        } yield Right(res.exerciseResult.voteRequest)
+                .map(res => Right(res.exerciseResult.voteRequest))
+          }
+        } yield res
       }
   }
 

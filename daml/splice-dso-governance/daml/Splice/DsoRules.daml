@@ -32,6 +32,7 @@ import Splice.Ans
 import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.GovernanceVoter
 import Splice.DSO.SvState
 import Splice.Schedule
 import Splice.Util
@@ -115,6 +116,10 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to create an UnallocatedUnclaimedActivityRecord contract.
   | SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
+  | SRARC_RotateGovernanceVoter DsoRules_RotateGovernanceVoter
+    -- ^ Replace an SV's governance-voter binding with a new one. Operational
+    -- action; runs through the confirmation-quorum flow rather than the
+    -- governance-voter vote path.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -123,6 +128,36 @@ data AnsEntryContext_ActionRequiringConfirmation
   | ANSRARC_RejectEntryInitialPayment AnsEntryContext_RejectEntryInitialPayment
     -- ^ Automated action to reject initial payment of an ans entry.
   deriving (Eq, Show)
+
+-- | Phase 1 governance-voter action taxonomy.
+--
+-- The SRARC_* branch is an explicit allowlist with no wildcard fall-through:
+-- adding a new SRARC_* constructor must be accompanied by an explicit decision
+-- here so that a new SV-side action cannot silently default to a particular
+-- eligibility. The CRARC_* branch retains a wildcard because AmuletRules
+-- actions are owned by a separate codebase area; their default of
+-- non-eligibility is preserved as-is, and any future change in policy for
+-- AmuletRules actions should be driven from that area.
+isGovernanceVoterAction : ActionRequiringConfirmation -> Bool
+isGovernanceVoterAction action = case action of
+  ARC_DsoRules with dsoAction -> case dsoAction of
+    SRARC_OffboardSv _ -> True
+    SRARC_GrantFeaturedAppRight _ -> True
+    SRARC_RevokeFeaturedAppRight _ -> True
+    SRARC_SetConfig _ -> True
+    SRARC_UpdateSvRewardWeight _ -> True
+    SRARC_CreateUnallocatedUnclaimedActivityRecord _ -> True
+    SRARC_AddSv _ -> False
+    SRARC_ConfirmSvOnboarding _ -> False
+    SRARC_CreateExternalPartyAmuletRules _ -> False
+    SRARC_CreateTransferCommandCounter _ -> False
+    SRARC_CreateBootstrapExternalPartyConfigStateInstruction _ -> False
+    SRARC_RotateGovernanceVoter _ -> False
+  ARC_AmuletRules with amuletRulesAction -> case amuletRulesAction of
+    CRARC_SetConfig _ -> True
+    _ -> False
+  ARC_AnsEntryContext _ _ -> False
+  ExtActionRequiringConformation _ -> False
 
 -- | Information about SVs relevant to DSO governance.
 data SvInfo = SvInfo with
@@ -189,10 +224,15 @@ data DsoRules_RequestVoteResult = DsoRules_RequestVoteResult with
 data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
     voteRequest : ContractId VoteRequest
 
+data DsoRules_RotateGovernanceVoterResult = DsoRules_RotateGovernanceVoterResult with
+    bindingCid : ContractId SvGovernanceVoter
+
 data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult with
     amuletPriceVote : ContractId AmuletPriceVote
 
 data DsoRules_GarbageCollectAmuletPriceVotesResult = DsoRules_GarbageCollectAmuletPriceVotesResult
+
+data DsoRules_GarbageCollectSvGovernanceVotersResult = DsoRules_GarbageCollectSvGovernanceVotersResult
 
 data DsoRules_SetConfigResult = DsoRules_SetConfigResult with
     newDsoRules : ContractId DsoRules
@@ -392,8 +432,11 @@ template VoteRequest
     voteBefore : Time
       -- ^ The time before which votes are accepted, and SHOULD be submitted.
     votes : Map.Map Text Vote
-      -- ^ The votes cast by current or previous SVs. These may be previous SVs in case
-      -- there was an SV change after the vote was requested.
+      -- ^ The votes cast by current or previous SVs, keyed by the SV's name
+      -- at the time the vote was recorded. The key is `Text` (and not
+      -- `Party`) to preserve backwards compatibility with `VoteRequest`
+      -- contracts created under older versions of this template; the
+      -- represented SV's party is recoverable from `vote.sv`.
     trackingCid : Optional (ContractId VoteRequest)
       -- ^ An optional tracking ContractId to be used for tracking the vote request through its updates.
       -- This is always set to the first ContractId of the original vote request (None on creation).
@@ -409,6 +452,12 @@ data DsoRules_CloseVoteRequestResult = DsoRules_CloseVoteRequestResult with
     offboardedVoters : [Text] -- ^ SVs that voted but were offboarded before the vote completed.
     abstainingSvs : [Text] -- ^ SVs that did not vote.
     outcome : VoteRequestOutcome  -- ^ The final result of the vote.
+    staleBindingVoters : Optional [Text]
+      -- ^ SVs whose governance-voter-cast votes were dropped because the
+      -- binding they were cast under was no longer authoritative at close
+      -- time. `None` when the caller did not supply `currentBindings` and
+      -- no staleness check was performed; `Some xs` (possibly empty) when
+      -- the check ran.
   deriving (Eq, Show)
 
 data DsoRules_BootstrapExternalPartyConfigStateResult = DsoRules_BootstrapExternalPartyConfigStateResult
@@ -424,16 +473,37 @@ data VoteRequestOutcome
       dummyUnitField : ()
         --  ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
   deriving (Eq, Show)
+data VoteCastRole
+  = VCR_Operator
+  | VCR_GovernanceVoter
+  deriving(Eq, Show)
+
 --
--- | A vote cast by an SV.
+-- | A vote cast for an SV.
 data Vote = Vote with
-    sv : Party -- ^ The SV party used to submit the vote.
+    sv : Party -- ^ The represented SV whose vote slot is updated.
     accept : Bool
       -- ^ Whether the responder accepted the request to execute the action or not.
     reason : Reason
       -- ^ The reason for voting this way.
     optCastAt : Optional Time
       -- ^ The time when the vote was cast. Used to rate-limit the casting of votes.
+    castBy : Optional Party
+      -- ^ Attribution metadata: the party that signed the vote command. Set
+      -- by the server when recording a vote; `None` on contracts that
+      -- pre-date this field. Not used for authorization (see the controllers
+      -- of the cast choices for that).
+    castByRole : Optional VoteCastRole
+      -- ^ Attribution metadata: the authority path used to cast the vote.
+      -- Set by the server when recording a vote; `None` on contracts that
+      -- pre-date this field.
+    bindingCid : Optional (ContractId SvGovernanceVoter)
+      -- ^ The SvGovernanceVoter binding under which this vote was cast on the
+      -- governance-voter path. Set by the server when recording a vote;
+      -- `None` on votes cast via the operator path and on contracts that
+      -- pre-date this field. Used at close-vote time to detect votes cast
+      -- under a binding that has since been rotated, so the vote can be
+      -- dropped from the tally (see `DsoRules_CloseVoteRequest`).
   deriving(Eq, Show)
 
 data Reason = Reason with
@@ -722,68 +792,169 @@ template DsoRules with
     -----------------------------------------------------
 
     -- TODO(#9317): rate limit inidiviual SVs wrt requesting votes
+    --
+    -- Open a vote request. The path the choice takes depends on the optional
+    -- binding:
+    --
+    -- * Operator path (`bindingCid = None`): for *operational* actions only.
+    --   `requester` must be an SV; the initial vote is recorded against the
+    --   SV's slot with VCR_Operator.
+    -- * Governance-voter path (`bindingCid = Some _`): for *governance-voter
+    --   eligible* actions only. `requester` is the governance-voter party
+    --   authenticated via the binding (the binding's `governanceVoter`); the
+    --   represented SV is taken from the binding and the initial vote is
+    --   recorded against that SV's slot with VCR_GovernanceVoter.
+    --
+    -- `bindingCid` is Optional and appended at the end so existing on-ledger
+    -- references and exercise records remain upgradable.
     nonconsuming choice DsoRules_RequestVote : DsoRules_RequestVoteResult
       with
         requester : Party
+          -- ^ The party opening the request: the represented SV on the
+          -- operator path, or the governance voter authenticated via
+          -- `bindingCid` on the governance-voter path.
         action : ActionRequiringConfirmation
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
+        bindingCid : Optional (ContractId SvGovernanceVoter)
+          -- ^ Present iff using the governance-voter path. `requester` must
+          -- be the governance voter named on the binding, and `action` must
+          -- be governance-voter eligible.
       controller requester
       do
-        requesterName <- case requester `Map.lookup` svs of
-          None -> fail "Requester is not an SV"
-          Some info -> pure (info.name)
         requireWellformedReason config reason
         now <- getTime
+        (requesterName, initialVote) <- case bindingCid of
+          None -> do
+            require "Action is governance-voter eligible; pass `bindingCid` to take the governance-voter path"
+              (not (isGovernanceVoterAction action))
+            name <- case requester `Map.lookup` svs of
+              None -> fail "Requester is not an SV"
+              Some info -> pure info.name
+            let v = Vote with
+                  sv = requester
+                  accept = True
+                  reason = Reason with url = ""; body = "I accept, as I requested the vote."
+                  optCastAt = Some now
+                  castBy = Some requester
+                  castByRole = Some VCR_Operator
+                  bindingCid = None
+            pure (name, v)
+          Some cid -> do
+            require "Action is not governance-voter eligible; omit `bindingCid` for the operator path"
+              (isGovernanceVoterAction action)
+            svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = requester) cid
+            name <- case svGovernanceVoter.sv `Map.lookup` svs of
+              None -> fail "Represented SV is not an SV"
+              Some info -> pure info.name
+            let v = Vote with
+                  sv = svGovernanceVoter.sv
+                  accept = True
+                  reason = Reason with url = ""; body = "I accept, as I requested the vote."
+                  optCastAt = Some now
+                  castBy = Some requester
+                  castByRole = Some VCR_GovernanceVoter
+                  bindingCid = Some cid
+            pure (name, v)
         let voteBefore = case voteRequestTimeout of
               Some value ->
                 now `addRelTime` value
               None ->
                 now `addRelTime` config.voteRequestTimeout
         require "There is some time to vote" (now < voteBefore)
-        let requesterVote = Vote with
-              sv = requester
-              accept = True
-              reason = Reason with url = ""; body = "I accept, as I requested the vote."
-              optCastAt = Some now
         voteRequest <- create VoteRequest with
           dso
           requester = requesterName
           action
           reason
           voteBefore
-          votes = Map.fromList [(requesterName, requesterVote)]
+          votes = Map.fromList [(requesterName, initialVote)]
           trackingCid = None
           targetEffectiveAt
         return DsoRules_RequestVoteResult with ..
 
 
-    -- Note that this choice can be used to both cast the initial vote, and update a vote.
+    -- Cast or update a vote on a vote request. The path depends on the
+    -- optional binding:
+    --
+    -- * Operator path (`bindingCid = None`, `castBy = None`): for
+    --   *operational* actions only. Controller is `vote.sv`; the recorded
+    --   vote is attributed as VCR_Operator with `castBy = vote.sv`.
+    -- * Governance-voter path (`bindingCid = Some _`, `castBy = Some _`):
+    --   for *governance-voter eligible* actions only. Controller is the
+    --   `castBy` party; the binding is checked-fetched via
+    --   `ForOwner with owner = castBy`; the recorded vote's SV is taken
+    --   from the binding (so it cannot drift from `vote.sv`); the vote is
+    --   attributed as VCR_GovernanceVoter with `castBy` set to that party.
+    --
+    -- `bindingCid` and `castBy` are Optional and appended at the end so
+    -- existing on-ledger references remain upgradable. They must be both
+    -- present or both absent.
     nonconsuming choice DsoRules_CastVote : DsoRules_CastVoteResult
       with
         requestCid : ContractId VoteRequest
         vote : Vote
-      controller vote.sv
+        bindingCid : Optional (ContractId SvGovernanceVoter)
+          -- ^ Present iff using the governance-voter path. `castBy` must
+          -- be the governance voter named on the binding, the request's
+          -- action must be governance-voter eligible, and the recorded
+          -- vote's SV is taken from the binding (overriding `vote.sv`).
+        castBy : Optional Party
+          -- ^ The governance-voter party signing the cast on the
+          -- governance-voter path; serves as the controller. Must be
+          -- present iff `bindingCid` is.
+      controller fromOptional vote.sv castBy
       do
-        -- validate vote parameters
         requireWellformedVote config vote
-        voterName <- case Map.lookup vote.sv svs of
+        -- Resolve path: which SV slot is being written, who is recorded as
+        -- the signer of the cast, and under which authority role.
+        (effectiveVoteSv, castByParty, castByRoleVal) <- case (bindingCid, castBy) of
+          (None, None) ->
+            pure (vote.sv, vote.sv, VCR_Operator)
+          (Some cid, Some p) -> do
+            svGovernanceVoter <- fetchChecked (ForOwner with dso; owner = p) cid
+            require "Vote SV must match binding SV" (vote.sv == svGovernanceVoter.sv)
+            pure (svGovernanceVoter.sv, p, VCR_GovernanceVoter)
+          (Some _, None) ->
+            fail "`castBy` must be present when `bindingCid` is set"
+          (None, Some _) ->
+            fail "`bindingCid` must be present when `castBy` is set"
+        voterName <- case Map.lookup effectiveVoteSv svs of
           None -> fail "Voter is not an SV"
           Some info -> pure info.name
-        -- validate and archive request
-        request <- fetchAndArchive (ForDso with dso) requestCid
-        -- rate limit casting of votes by the same SV to avoid them blocking others from making progress
-        -- Note: we currently ignore the optional self-declared vote casting time
-        -- `vote.optCastAt`. We'll use that in the future when adding support for larger
-        -- prepare-submission delays for external parties.
-        enforceCooldown ("voteCooldownTime for " <> partyToText vote.sv) (getVoteCooldownTime config) $ do
+        -- Validate the request before archiving it
+        request <- fetchChecked (ForDso with dso) requestCid
+        case bindingCid of
+          None ->
+            require "Action is governance-voter eligible; pass `bindingCid` to take the governance-voter path"
+              (not (isGovernanceVoterAction request.action))
+          Some _ ->
+            require "Action is not governance-voter eligible; omit `bindingCid` for the operator path"
+              (isGovernanceVoterAction request.action)
+        now <- getTime
+        let castDeadline = fromOptional request.voteBefore request.targetEffectiveAt
+        require "Vote request has expired" (now < castDeadline)
+        -- Rate limit casting of votes by the same represented SV to avoid
+        -- them blocking others from making progress.
+        -- Note: we currently ignore the optional self-declared vote casting
+        -- time `vote.optCastAt`. We'll use that in the future when adding
+        -- support for larger prepare-submission delays for external parties.
+        enforceCooldown ("voteCooldownTime for " <> partyToText effectiveVoteSv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
-        -- store vote
-        now <- getTime
+        archive requestCid
+        -- Bind to a local name to avoid the Vote.bindingCid field and the
+        -- choice-arg `bindingCid` colliding in record-update notation.
+        let castBindingCid = bindingCid
+        let recordedVote = vote with
+              sv = effectiveVoteSv
+              optCastAt = Some now
+              castBy = Some castByParty
+              castByRole = Some castByRoleVal
+              bindingCid = castBindingCid
         voteRequest <- create request with
-          votes = Map.insert voterName (vote with optCastAt = Some now) request.votes
+          votes = Map.insert voterName recordedVote request.votes
           trackingCid = Some (fromOptional requestCid request.trackingCid)
         return DsoRules_CastVoteResult with ..
 
@@ -814,6 +985,17 @@ template DsoRules with
         requestCid : ContractId VoteRequest
         amuletRulesCid : Optional (ContractId AmuletRules)
         sv : Optional Party
+        currentBindings : Optional [ContractId SvGovernanceVoter]
+          -- ^ Optional list of currently-active SvGovernanceVoter bindings.
+          -- When `Some cids`, each is `fetchChecked` (so the caller cannot
+          -- sneak in stale CIDs) and a `binding.sv -> ContractId` map is
+          -- built; any active-SV vote with `vote.bindingCid = Some cid`
+          -- where the live binding for `vote.sv` does not equal `cid` is
+          -- dropped from the tally and reported in `staleBindingVoters`.
+          -- The caller is trusted to pass the complete set of live bindings.
+          -- When `None`, no staleness check is performed and votes cast on
+          -- the governance-voter path are kept regardless of subsequent
+          -- rotation (back-compat fallback for pre-staleness callers).
       controller sv
       do
         _ <- getAndValidateSvParty this sv
@@ -822,14 +1004,42 @@ template DsoRules with
         let s = summarizeDso this
         request <- fetchAndArchive (ForDso with dso) requestCid
 
-        let activeSvs = map (.name) $ Map.values svs
+        let activeSvs = Map.keys svs
 
         let activeSvSet = Set.fromList activeSvs
-        let (validVotes, offboardedVoters) = partitionEithers
-              [ if voterName `Set.member` activeSvSet then Left vote else Right voterName
-              | (voterName, vote) <- Map.toList request.votes
+        let (activeSvVotes, offboardedVoters) = partitionEithers
+              [ if vote.sv `Set.member` activeSvSet then Left vote else Right (partyToText vote.sv)
+              | (_, vote) <- Map.toList request.votes
               ]
-        let abstainingSvs = [ name | name <- activeSvs, not (name `Map.member` request.votes) ]
+        -- Binding-staleness check: when the caller supplies `currentBindings`,
+        -- drop any governance-voter-cast vote whose recorded `bindingCid` is
+        -- no longer the live binding for the vote's SV.
+        (validVotes, staleBindingVoters) <- case currentBindings of
+          None ->
+            pure (activeSvVotes, None)
+          Some bindingCids -> do
+            -- fetchChecked enforces that each passed CID is live and bound
+            -- to the expected DSO party; we then key by binding.sv.
+            liveBindingPairs <- forA bindingCids $ \cid -> do
+              binding <- fetchChecked (ForDso with dso) cid
+              pure (binding.sv, cid)
+            let liveBindingMap : Map.Map Party (ContractId SvGovernanceVoter) =
+                  Map.fromList liveBindingPairs
+            require "Current bindings must include exactly one binding per active SV"
+              (length bindingCids == Map.size svs
+                && Map.size liveBindingMap == Map.size svs
+                && all (\activeSv -> activeSv `Map.member` liveBindingMap) activeSvs)
+            let isStale vote = case vote.bindingCid of
+                  None -> False  -- operator-path or legacy vote; no check
+                  Some cid -> Map.lookup vote.sv liveBindingMap /= Some cid
+            let (kept, stales) = partitionEithers
+                  [ if isStale vote
+                      then Right (partyToText vote.sv)
+                      else Left vote
+                  | vote <- activeSvVotes
+                  ]
+            pure (kept, Some stales)
+        let abstainingSvs = [ info.name | (_, info) <- Map.toList svs, not (info.name `Map.member` request.votes) ]
         let (yays, nays) = partition (.accept) validVotes
         let numYays = length yays
         let numNays = length nays
@@ -879,6 +1089,7 @@ template DsoRules with
             offboardedVoters
             abstainingSvs
             outcome
+            staleBindingVoters
 
 
     -- Voting on the amulet price
@@ -945,6 +1156,45 @@ template DsoRules with
                 require "SV of duplicate matches" (duplicate.sv == vote.sv)
         return DsoRules_GarbageCollectAmuletPriceVotesResult
 
+    nonconsuming choice DsoRules_GarbageCollectSvGovernanceVoters : DsoRules_GarbageCollectSvGovernanceVotersResult
+      -- ^ Garbage-collect SvGovernanceVoter bindings for removed SVs and
+      -- duplicate bindings that may be left behind by dev-net re-onboarding
+      -- or by older package versions that pre-date this cleanup path.
+      -- We expect this to be run as an OnAssignedContractTrigger for the
+      -- DsoRules contract.
+      with
+        nonSvBindingCids : [ContractId SvGovernanceVoter]
+        duplicateBindingCids : [[ContractId SvGovernanceVoter]]
+        sv : Optional Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this sv
+        let forDso = ForDso with dso
+        -- validate and archive bindings whose represented SV is no longer active
+        forA_ nonSvBindingCids $ \bindingCid -> do
+          binding <- fetchAndArchive forDso bindingCid
+          require "Represented SV is no longer an active SV" (not $ binding.sv `Map.member` svs)
+        -- validate and archive duplicates, keeping the first binding in each
+        -- caller-supplied group. The caller groups duplicates by represented
+        -- SV; the checks below make that grouping explicit on-ledger.
+        forA_ duplicateBindingCids $ \bindingCids -> do
+          require "Unique references to duplicate bindings" (unique bindingCids)
+          bindings <- forA bindingCids $ \bindingCid -> do
+            -- archival happens below for all but the first binding
+            binding <- fetchButArchiveLater forDso bindingCid
+            pure (bindingCid, binding)
+          case bindings of
+            [] -> fail "empty list of duplicate governance-voter bindings"
+            [_] -> fail "singleton list of duplicate governance-voter bindings"
+            ((_, binding)::duplicates) -> do
+              require "Represented SV is an active SV" (binding.sv `Map.member` svs)
+              forA_ duplicates $ \(duplicateCid, duplicate) -> do
+                -- safe, as we fetched it before and check the constraints below
+                potentiallyUnsafeArchive duplicateCid
+                require "matching DSO party" (duplicate.dso == dso)
+                require "SV of duplicate binding matches" (duplicate.sv == binding.sv)
+        return DsoRules_GarbageCollectSvGovernanceVotersResult
+
 
     -- DSO rules config management
     ------------------------------
@@ -1001,6 +1251,37 @@ template DsoRules with
         exercise rightCid FeaturedAppRight_Withdraw with
           reason = "revoked by governance decision"
         return DsoRules_RevokeFeaturedAppRightResult
+
+
+    -- Governance-voter binding management
+    --------------------------------------
+
+    -- Replace an SV's governance-voter binding with a new one. The current
+    -- binding is archived (so there is exactly one fresh binding per
+    -- represented SV after a successful rotation), and the new binding is
+    -- created with the DSO party as signatory. This choice is the only path
+    -- that mutates SvGovernanceVoter post-onboarding; invoking it requires
+    -- running the standard SRARC_RotateGovernanceVoter action through a
+    -- confirmation quorum, so a single SV operator cannot unilaterally rotate
+    -- their own binding.
+    nonconsuming choice DsoRules_RotateGovernanceVoter : DsoRules_RotateGovernanceVoterResult
+      with
+        sv : Party
+        currentBindingCid : ContractId SvGovernanceVoter
+        newGovernanceVoter : Party
+      controller dso
+      do
+        require "Rotation target is not the DSO party" (newGovernanceVoter /= dso)
+        require "Represented SV is an SV" (sv `Map.member` svs)
+        currentBinding <- fetchAndArchive (ForDso with dso) currentBindingCid
+        require "Binding represents the named SV" (currentBinding.sv == sv)
+        require "Rotation must change the governance voter"
+          (newGovernanceVoter /= currentBinding.governanceVoter)
+        bindingCid <- create SvGovernanceVoter with
+          dso
+          sv
+          governanceVoter = newGovernanceVoter
+        return DsoRules_RotateGovernanceVoterResult with ..
 
 
     -- Validator onboarding
@@ -1714,6 +1995,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RotateGovernanceVoter choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -1867,6 +2149,13 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
     svName = newSvName
     state = NodeState with
       synchronizerNodes
+  -- Onboarding default: the newly added SV is its own governance voter. Any
+  -- subsequent change must run through SRARC_RotateGovernanceVoter so the
+  -- single-binding-per-SV property is preserved.
+  void $ create SvGovernanceVoter with
+    dso
+    sv = newSvParty
+    governanceVoter = newSvParty
 
 getAndValidateSvParty : DsoRules -> Optional Party -> Update Party
 getAndValidateSvParty _ None = fail "no SV party provided"

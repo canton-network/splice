@@ -20,6 +20,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.governancevoter.SvGovernanceVoter
 import org.lfdecentralizedtrust.splice.sv.SvApp
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
@@ -111,25 +112,64 @@ class CopyVotesTrigger(
               for {
                 resolvedVoteRequest <- store.getVoteRequest(trackingCid)
                 reason = copiedReason(sourceVote)
-                cmd = dsoRules.exercise(
-                  _.exerciseDsoRules_CastVote(
-                    resolvedVoteRequest.contractId,
-                    new Vote(
-                      thisSvParty,
-                      sourceVote.accept,
-                      reason,
-                      Optional.empty(),
-                    ),
-                  )
-                )
-                _ <- connection
-                  .submit(Seq(store.key.svParty), Seq(store.key.dsoParty), cmd)
-                  .noDedup
-                  .yieldResult()
-              } yield TaskSuccess(
-                s"Copied ${if (sourceVote.accept) "accept"
-                  else "reject"} vote from $sourceSvName on vote request ${task.contractId}"
-              )
+                govPathEither <-
+                  if (SvApp.isGovernanceVoterAction(resolvedVoteRequest.payload.action)) {
+                    store.lookupSvGovernanceVoter(store.key.svParty, store.key.svParty).map {
+                      case Some(binding) =>
+                        Right(
+                          (
+                            Optional.of[SvGovernanceVoter.ContractId](binding.contractId),
+                            Optional.of[String](thisSvParty),
+                          )
+                        )
+                      case None =>
+                        Left(
+                          s"This SV has delegated its governance voter; cannot copy vote " +
+                            s"on governance-voter-eligible request ${task.contractId}"
+                        )
+                    }
+                  } else
+                    Future.successful(
+                      Right(
+                        (
+                          Optional.empty[SvGovernanceVoter.ContractId](),
+                          Optional.empty[String](),
+                        )
+                      )
+                    )
+                outcome <- govPathEither match {
+                  case Left(message) =>
+                    logger.warn(message)
+                    Future.successful(TaskNoop)
+                  case Right((bindingCid, castBy)) =>
+                    val cmd = dsoRules.exercise(
+                      _.exerciseDsoRules_CastVote(
+                        resolvedVoteRequest.contractId,
+                        new Vote(
+                          thisSvParty,
+                          sourceVote.accept,
+                          reason,
+                          Optional.empty(),
+                          Optional.empty(), // castBy (attribution metadata; server-set)
+                          Optional.empty(), // castByRole (attribution metadata; server-set)
+                          Optional.empty(), // bindingCid (staleness metadata; server-set)
+                        ),
+                        bindingCid,
+                        castBy,
+                      )
+                    )
+                    connection
+                      .submit(Seq(store.key.svParty), Seq(store.key.dsoParty), cmd)
+                      .noDedup
+                      .yieldResult()
+                      .map(_ =>
+                        TaskSuccess(
+                          s"Copied ${if (sourceVote.accept) "accept"
+                            else "reject"} vote from $sourceSvName on vote request ${task.contractId}"
+                        )
+                      )
+                }
+              } yield outcome
             case _ =>
               Future.successful(TaskNoop)
           }

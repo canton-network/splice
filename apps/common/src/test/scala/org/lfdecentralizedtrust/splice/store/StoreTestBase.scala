@@ -682,6 +682,7 @@ abstract class StoreTestBase
     util.List.of(),
     util.List.of(),
     new VRO_Accepted(effectiveAt),
+    Optional.empty(), // staleBindingVoters: no staleness check ran
   )
 
   protected def mkCloseVoteRequest(
@@ -691,6 +692,7 @@ abstract class StoreTestBase
       requestId,
       Optional.empty(),
       Optional.empty(),
+      Optional.empty(), // currentBindings: no staleness check requested
     ).toValue
   }
 

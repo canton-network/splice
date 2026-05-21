@@ -793,6 +793,35 @@ trait SvDsoStore
       )
     } yield votes map (_.contract)
 
+  final def listSvGovernanceVoters(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[
+    Seq[Contract[
+      splice.dso.governancevoter.SvGovernanceVoter.ContractId,
+      splice.dso.governancevoter.SvGovernanceVoter,
+    ]]
+  ] =
+    for {
+      bindings <- multiDomainAcsStore.listContracts(
+        splice.dso.governancevoter.SvGovernanceVoter.COMPANION,
+        limit,
+      )
+    } yield bindings map (_.contract)
+
+  final def lookupSvGovernanceVoter(
+      sv: PartyId,
+      governanceVoter: PartyId,
+  )(implicit tc: TraceContext): Future[Option[Contract[
+    splice.dso.governancevoter.SvGovernanceVoter.ContractId,
+    splice.dso.governancevoter.SvGovernanceVoter,
+  ]]] =
+    listSvGovernanceVoters().map(
+      _.find(binding =>
+        binding.payload.sv == sv.toProtoPrimitive &&
+          binding.payload.governanceVoter == governanceVoter.toProtoPrimitive
+      )
+    )
+
   /** List the current amulet price votes by the SVs. */
   def listSvAmuletPriceVotes(limit: Limit = defaultLimit)(implicit
       tc: TraceContext

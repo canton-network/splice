@@ -1898,11 +1898,27 @@ class DbSvDsoStoreTest
 
     val votesAccept =
       (1 to 4).map(n =>
-        new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+        new Vote(
+          userParty(n).toProtoPrimitive,
+          true,
+          new Reason("", ""),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+        )
       )
     val votesRefuse =
       (1 to 4).map(n =>
-        new Vote(userParty(n).toProtoPrimitive, false, new Reason("", ""), Optional.empty())
+        new Vote(
+          userParty(n).toProtoPrimitive,
+          false,
+          new Reason("", ""),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+        )
       )
     val nowMinus2Hours = Instant.now.truncatedTo(ChronoUnit.MICROS).minusSeconds(7200)
     val nowMinus1Hour = Instant.now.truncatedTo(ChronoUnit.MICROS).minusSeconds(3600)
@@ -2068,13 +2084,29 @@ class DbSvDsoStoreTest
       val goodVotes = (1 to 3).map(n =>
         Seq(n, n + 3)
           .map(i =>
-            new Vote(userParty(i).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+            new Vote(
+              userParty(i).toProtoPrimitive,
+              true,
+              new Reason("", ""),
+              Optional.empty(),
+              Optional.empty(),
+              Optional.empty(),
+              Optional.empty(),
+            )
           )
       )
       val badVotes = (1 to 3).map(n =>
         Seq(n)
           .map(i =>
-            new Vote(userParty(i).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+            new Vote(
+              userParty(i).toProtoPrimitive,
+              true,
+              new Reason("", ""),
+              Optional.empty(),
+              Optional.empty(),
+              Optional.empty(),
+              Optional.empty(),
+            )
           )
       )
       val goodVoteRequests =
@@ -2310,7 +2342,15 @@ class DbSvDsoStoreTest
 
     "find the vote by vote request done by this SV" in {
       val goodVote =
-        new Vote(storeSvParty.toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+        new Vote(
+          storeSvParty.toProtoPrimitive,
+          true,
+          new Reason("", ""),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
+        )
       val goodRequest = voteRequest(
         requester = storeSvParty,
         votes = Seq(goodVote),
