@@ -1017,7 +1017,8 @@ allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
 
 -- | Adapter to implement `V1.AllocationFactory_Allocate` using the body of the V2 choice.
 --
--- Built as an adapter, as the body needs to be configured so that it creates a `V1.Allocation`.
+-- Built as an adapter, as the body MUST be configured so that it creates a template that
+-- implements both the `V1.Allocation` and `V2.Allocation` interfaces.
 allocationFactory_v1_allocateDefaultImplUsingV2
   : Party
   -> (Optional Time -> ContractId AllocationInstructionV2.AllocationFactory -> AllocationInstructionV2.AllocationFactory_Allocate -> Update AllocationInstructionV2.AllocationInstructionResult)
