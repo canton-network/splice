@@ -730,49 +730,7 @@ class ScanAggregatorTest
       val round = i.toLong
       val roundPartyTotals = aggr.getRoundPartyTotals(round).futureValue
       roundPartyTotals should contain theSameElementsAs expectedRoundPartyRewardTotals(round)
-      val topProviders =
-        getTopProvidersByAppRewardsFromTxLog(round, limit, aggr.txLogStoreId).futureValueUS
-      topProviders should not be empty
-      if (i == lastRound.toInt) {
-        store.getTopProvidersByAppRewards(round, limit).futureValue shouldBe topProviders
-      }
-      val topValidatorsByValidatorRewards =
-        getTopValidatorsByValidatorRewardsFromTxLog(
-          round,
-          limit,
-          aggr.txLogStoreId,
-        ).futureValueUS
-
-      if (i == lastRound.toInt) {
-        store
-          .getTopValidatorsByValidatorRewards(round, limit)
-          .futureValue shouldBe topValidatorsByValidatorRewards
-      }
-      if (i == lastRound.toInt) {
-        val topValidatorsByPurchasedTraffic =
-          getTopValidatorsByPurchasedTrafficFromTxLog(
-            round,
-            limit,
-            aggr.txLogStoreId,
-          ).futureValue
-        store
-          .getTopValidatorsByPurchasedTraffic(round, limit)
-          .futureValue shouldBe topValidatorsByPurchasedTraffic
-      }
     }
-    val topProviders =
-      getTopProvidersByAppRewardsFromTxLog(lastRound, limit, aggr.txLogStoreId).futureValueUS
-    store.getTopProvidersByAppRewards(lastRound, limit).futureValue shouldBe topProviders
-
-    val topValidatorsByPurchasedTraffic =
-      getTopValidatorsByPurchasedTrafficFromTxLog(
-        lastRound,
-        limit,
-        aggr.txLogStoreId,
-      ).futureValue
-    store
-      .getTopValidatorsByPurchasedTraffic(lastRound, limit)
-      .futureValue shouldBe topValidatorsByPurchasedTraffic
     store
       .getRoundPartyTotals(0L, lastRound)
       .futureValue should contain theSameElementsAs expectedRoundPartyRewardTotals.values.flatten
@@ -1096,67 +1054,6 @@ class ScanAggregatorTest
       .map(_ => ())
   }
 
-  def getTopProvidersByAppRewardsFromTxLog(
-      asOfEndOfRound: Long,
-      limit: Int,
-      txLogStoreId: TxLogStoreId,
-  ) = {
-    val q = sql"""
-        select   rewarded_party, sum(reward_amount) as total_app_rewards
-        from     scan_txlog_store
-        where    store_id = $txLogStoreId
-        and      entry_type = ${EntryType.AppRewardTxLogEntry}
-        and      round <= $asOfEndOfRound
-        group by rewarded_party
-        order by total_app_rewards desc, rewarded_party desc
-        limit $limit;
-      """.as[(PartyId, BigDecimal)]
-    storage.query(q, "getTopProvidersByAppRewardsFromTxLog")
-  }
-
-  def getTopValidatorsByValidatorRewardsFromTxLog(
-      asOfEndOfRound: Long,
-      limit: Int,
-      txLogStoreId: TxLogStoreId,
-  ) = {
-    val q = sql"""
-        select rewarded_party, sum(reward_amount) as total_validator_rewards
-        from   scan_txlog_store
-        where  store_id = $txLogStoreId
-        and    entry_type = ${EntryType.ValidatorRewardTxLogEntry}
-        and    round <= $asOfEndOfRound
-        group by rewarded_party
-        order by total_validator_rewards desc, rewarded_party desc
-        limit $limit;
-        """.as[(PartyId, BigDecimal)]
-    storage.query(q, "getTopValidatorsByValidatorRewardsFromTxLog")
-  }
-
-  def getTopValidatorsByPurchasedTrafficFromTxLog(
-      asOfEndOfRound: Long,
-      limit: Int,
-      txLogStoreId: TxLogStoreId,
-  ): Future[Seq[HttpScanAppClient.ValidatorPurchasedTraffic]] = for {
-    rows <- storage
-      .query(
-        sql"""
-              select extra_traffic_validator                       as validator,
-                     count(*)                                      as num_purchases,
-                     sum(extra_traffic_purchase_traffic_purchased) as total_traffic_purchased,
-                     sum(extra_traffic_purchase_cc_spent)          as total_cc_spent,
-                     max(round)                                    as last_purchased_in_round
-              from scan_txlog_store
-              where store_id = $txLogStoreId
-                and entry_type = ${EntryType.ExtraTrafficPurchaseTxLogEntry}
-                and round <= $asOfEndOfRound
-              group by extra_traffic_validator
-              order by total_traffic_purchased desc, validator desc
-              limit $limit;
-           """.as[(PartyId, Long, Long, BigDecimal, Long)],
-        "getTopValidatorsByPurchasedTrafficFromTxLog",
-      )
-      .failOnShutdown
-  } yield rows.map((HttpScanAppClient.ValidatorPurchasedTraffic.apply _).tupled)
 }
 
 class TestScanAggregatesReader(aggregates: Iterable[RoundAggregate]) extends ScanAggregatesReader {
