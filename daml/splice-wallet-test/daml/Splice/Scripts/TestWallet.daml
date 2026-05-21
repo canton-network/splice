@@ -567,8 +567,6 @@ testTransferPreapproval = script do
 
   now <- getTime
   [(_, amuletRules)] <- query @AmuletRules app.dso
-  let createFee = (Splice.Schedule.getValueAsOf now amuletRules.configSchedule).transferConfig.createFee.fee
-
   install <- submit (actAs aliceValidator.primaryParty) $ createCmd $ WalletAppInstall with
     endUserParty = aliceValidator.primaryParty
     endUserName = "alice_validator_user"
@@ -606,14 +604,14 @@ testTransferPreapproval = script do
 
   -- Check results of TransferPreapproval purchase
   (preapprovalFee, _) <- calculateTransferPreapprovalFee app duration
-  -- Setup creates 1 amulet of value 1. The input amulet is split to pay the fee, so createFees are also charged
-  checkAmuletPositions aliceValidator [1.0, initialAmount - preapprovalFee - 2.0*createFee]
+  -- Setup creates 1 amulet of value 1. First preapproval is for 90 days wich is free. Second preapproval is > 90 days so we pay for it.
+  checkAmuletPositions aliceValidator [1.0, initialAmount - preapprovalFee]
   appRewardsAfter <- query @AppRewardCoupon aliceValidator.primaryParty
   validatorRewardsAfter <- query @ValidatorRewardCoupon aliceValidator.primaryParty
   appRewardsAfter === appRewardsBefore
   let Some [(_, newCoupon)] = stripPrefix validatorRewardsBefore validatorRewardsAfter
   newCoupon.user === aliceValidator.primaryParty
-  newCoupon.amount === preapprovalFee + createFee
+  newCoupon.amount === preapprovalFee
 
   result <- submit alice.primaryParty $ exerciseCmd proposalCid ExternalPartySetupProposal_Accept {}
   let preapprovalCid = result.transferPreapprovalCid
@@ -637,7 +635,7 @@ testTransferPreapproval = script do
     lastRenewedAt = preapprovalExpiresAt
     expiresAt = newExpiresAt
 
-  checkAmuletPositions aliceValidator [1.0, initialAmount - 2.0*preapprovalFee - 4.0*createFee]
+  checkAmuletPositions aliceValidator [1.0, initialAmount - 2.0*preapprovalFee]
 
   -- test CO_TransferPreapprovalSend
   -- --------------------------------
@@ -702,7 +700,7 @@ testTransferPreapproval = script do
     lastRenewedAt = now
     expiresAt = now `addRelTime` duration
 
-  checkAmuletPositions bobValidator [1.0, 10.0 - preapprovalFee - 2.0*createFee]
+  checkAmuletPositions bobValidator [1.0, 10.0 - preapprovalFee]
 
   pure ()
 
