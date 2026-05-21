@@ -439,7 +439,6 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
   requireUnique "allocated authorizations" allocatedAuthorizations
 
   -- check that exactly the required allocations are present
-  -- (Not that together with the uniqueness check abov)
   let requiredAuthorizations = Set.fromList $ concatMap transferLegSidesWithAuthorizer transferLegs
   let allocatedAuthorizationsSet = Set.fromList allocatedAuthorizations
   let superfluousAuthorizations = allocatedAuthorizationsSet `Set.difference` requiredAuthorizations

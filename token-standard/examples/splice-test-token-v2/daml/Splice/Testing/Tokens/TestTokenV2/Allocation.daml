@@ -250,7 +250,8 @@ applyAllocationTransitions callSource allocationKind this oSelf actors action oS
             meta = emptyMetadata
 
       (AS_Init, AS_Settled) -> do
-        -- Both are expected to be define when called through settle
+        -- Partial pattern matching is OK here, as these arguments must be defined, and
+        -- the failures point to the right lines of code.
         let (Some self) = oSelf
         let (Some settleArg) = oSettle
         settleTokenAllocationV2 accountMap this self settleArg
