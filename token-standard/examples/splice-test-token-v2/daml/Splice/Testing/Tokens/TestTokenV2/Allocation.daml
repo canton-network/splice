@@ -129,8 +129,11 @@ applyAllocationInstructionTransitions callSource allocationKind this@TokenAlloca
 
       (AIS_Init, AIS_Accepted) -> do
           let allocationSpec = allocationStateMachineSpec allocation.authorizer this.settlement.executors allocation.admin
+          let lockContext = Some $ "allocation for settlement of " <> settlement.id
           eventLogCid <- getEventLogFromContext extraArgs.context
-          (lockedTokens, authorizerChangeCids) <- splitAndLock this.settlement eventLogCid allocation inputHoldingCids
+          (lockedTokens, authorizerChangeCids) <- allocateTokenAllocationV2 eventLogCid
+            allocation.admin allocation.authorizer allocation.transferLegSides allocation.nextIterationFunding
+            inputHoldingCids lockContext allocation.settlementDeadline
           let v2Alloc = TokenAllocationV2 with
                 originalAllocationCid = None
                 availableActions = mkAvailableActions admin allocationSpec Map.empty accountMap
@@ -370,8 +373,56 @@ applyAllocationTransitions callSource allocationKind this oSelf actors action oS
     transition mkPending tryUseAuthority extraArgs
 
 -- | Create a locked input for an allocation.
-splitAndLock : V2.SettlementInfo -> ContractId TransferEventsV2.EventLog -> V2.AllocationSpecification -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
-splitAndLock settlement eventLogCid allocation inputTokenCids = do
+allocateTokenAllocationV2
+  :  ContractId TransferEventsV2.EventLog
+  -> Party
+  -> V2.Account
+  -> [V2.TransferLegSide]
+  -> Optional (TextMap.TextMap Decimal)
+  -> TextMap.TextMap [ContractId V2.Holding]
+  -> Optional Text
+  -> Optional Time
+  -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
+allocateTokenAllocationV2 eventLogCid admin authorizer transferLegSides nextIterationFunding inputTokenCids lockContext settlementDeadline = do
+
+  {- FIXME reactivate
+      -- prudent engineering to be extra sure, as the check happens also as part of the template's ensure clause
+      require' ("nextIterationFunding.amount for " <> instrumentId, nextIterationFundingAmount)
+        isGreaterOrEqualR ("zero", 0.0)
+  -}
+
+  let transferOutAmounts = (\amount -> max 0.0 (negate amount)) <$> netAllocationCreditAmounts admin authorizer transferLegSides
+  let requiredFundingAmount = textMapUnionWith (+) transferOutAmounts $ fromOptional TextMap.empty nextIterationFunding
+  (lockedCids, authorizerChangeCids) <- lockAllocationFunds
+    settlementDeadline admin authorizer requiredFundingAmount inputTokenCids lockContext
+
+  -- log the tx history v2 event
+  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
+    admin
+    account = authorizer
+    inputHoldingCids = concat (textMapValues inputTokenCids)
+    transferLegSides = []
+    outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
+    observers = accountParties admin authorizer
+    extraArgs = ExtraArgs with
+      context = emptyChoiceContext
+      meta = reasonToMeta ("lock holdings for allocation") emptyMetadata
+
+  pure (lockedCids, authorizerChangeCids)
+
+-- | Create the locked tokens that back an allocation, and return any change to the authorizer.
+lockAllocationFunds
+  :  Optional Time
+  -> Party
+  -> V2.Account
+  -> TextMap.TextMap Decimal
+  -> TextMap.TextMap [ContractId V2.Holding]
+  -> Optional Text
+  -> Update (TextMap.TextMap [ContractId V2.Holding], TextMap.TextMap [ContractId V2.Holding])
+lockAllocationFunds settlementDeadline admin authorizer requiredFundingAmount inputTokenCids lockContext = do
+  -- check deadline
+  forA_ settlementDeadline $ \deadline ->
+    assertWithinDeadline "allocation.settlementDeadline" deadline
 
   -- debit all input amounts
   inputAmounts <- TextMap.fromListWithR (+) . concat <$> forA (TextMap.toList inputTokenCids) (\(_, cids) -> forA cids (\cid -> do
@@ -382,53 +433,44 @@ splitAndLock settlement eventLogCid allocation inputTokenCids = do
       ))
 
   -- create locked tokens and change for the sender
-  let netTransferAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
-  let nextIterationFunding = fromOptional TextMap.empty allocation.nextIterationFunding
   let combinedAmounts =
-        textMapMergeWithDefault (0.0, (0.0, 0.0)) inputAmounts $
-        textMapMergeWithDefault (0.0, 0.0) netTransferAmounts nextIterationFunding
+        textMapMergeWithDefault (0.0, 0.0) inputAmounts requiredFundingAmount
   locksAndChange <- forA (TextMap.toList combinedAmounts) $
-    \(instrumentId, (inputAmount, (netTransferAmount, nextIterationFundingAmount))) -> do
-      -- prudent engineering to be extra sure, as the check happens also as part of the template's ensure clause
-      require' ("nextIterationFunding.amount for " <> instrumentId, nextIterationFundingAmount)
-        isGreaterOrEqualR ("zero", 0.0)
-      let transferOutAmount = max 0.0 (negate netTransferAmount)
-      let requiredFundingAmount = transferOutAmount + nextIterationFundingAmount
+    \(instrumentId, (inputAmount, requiredFundingAmount)) -> do
       let authorizerChangeAmount = inputAmount - requiredFundingAmount
       when (authorizerChangeAmount < 0.0) $
         fail $ T.unlines
-          [ "Allocation is under funded for " <> show allocation.authorizer
-          , "Instrument: " <> show (V2.InstrumentId with id = instrumentId, admin = allocation.admin)
+          [ "Allocation is under funded for " <> show authorizer
+          , "Instrument: " <> show (V2.InstrumentId with id = instrumentId, admin)
           , "Missing amount: " <> show (negate authorizerChangeAmount)
           , "Input holding amount: " <> show inputAmount
-          , "Net credit/debit from transfers: " <> show netTransferAmount
-          , "Next iteration funding amount: " <> show nextIterationFundingAmount
+          , "Required funding amount: " <> show requiredFundingAmount
           ]
       lockedTokens <-
         if requiredFundingAmount <= 0.0 then pure [] else do
           cid <- create Token with
             holding = V2.HoldingView with
-              account = allocation.authorizer
+              account = authorizer
               amount = requiredFundingAmount
               instrumentId = V2.InstrumentId with
                 id = instrumentId
-                admin = allocation.admin
+                admin
               lock = Some $ V2.Lock with
-                holders = allocation.admin :: accountParties allocation.admin allocation.authorizer
-                expiresAt = allocation.settlementDeadline
+                holders = dedupSort $ admin :: accountParties admin authorizer
+                expiresAt = settlementDeadline
                 expiresAfter = None
-                context = Some $ "allocation for settlement of " <> settlement.id
+                context = lockContext
               meta = emptyMetadata
           pure [(instrumentId, [toInterfaceContractId cid])]
       changeTokens <-
         if authorizerChangeAmount <= 0.0 then pure [] else do
           cid <- create Token with
             holding = V2.HoldingView with
-              account = allocation.authorizer
+              account = authorizer
               amount = authorizerChangeAmount
               instrumentId = V2.InstrumentId with
                 id = instrumentId
-                admin = allocation.admin
+                admin
               lock = None
               meta = emptyMetadata
           pure [(instrumentId, [toInterfaceContractId cid])]
@@ -438,23 +480,9 @@ splitAndLock settlement eventLogCid allocation inputTokenCids = do
     lockedCids = TextMap.fromListWithR (++) $ concatMap fst locksAndChange
     authorizerChangeCids = TextMap.fromListWithR (++) $ concatMap snd locksAndChange
 
-  -- log the tx history v2 event
-  logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
-    admin = allocation.admin
-    account = allocation.authorizer
-    inputHoldingCids = concat (textMapValues inputTokenCids)
-    transferLegSides = []
-    outputHoldingCids = concat (textMapValues lockedCids) <> concat (textMapValues authorizerChangeCids)
-    observers = accountParties allocation.admin allocation.authorizer
-    extraArgs = ExtraArgs with
-      context = emptyChoiceContext
-      meta = reasonToMeta ("lock holdings for allocation") emptyMetadata
 
   return (lockedCids, authorizerChangeCids)
 
-
--- Utilities
-------------
 
 unlockTokenAllocationV2 : Text -> TokenAllocationV2 -> ExtraArgs -> Update (TextMap.TextMap [ContractId V2.Holding])
 unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
@@ -479,6 +507,9 @@ unlockTokenAllocationV2 reason tokenAllocation extraArgs = do
       context = emptyChoiceContext
       meta = reasonToMeta reason emptyMetadata
   pure authorizerCids
+
+
+
 
 
 -- Shared handlers
