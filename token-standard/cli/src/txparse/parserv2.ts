@@ -301,6 +301,8 @@ export class V2TransactionParser {
     );
     return {
       type: "V2",
+      admin: holdingsChange.admin,
+      account: holdingsChange.account,
       transferLegSides: holdingsChange.transferLegSides,
       reason,
       meta: holdingsChange.extraArgs.meta,
