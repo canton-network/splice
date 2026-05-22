@@ -57,6 +57,11 @@
 
         - Fix LSU issue where participant restarts past freeze time could lead to losing the LSU announcement.
 
+    - UI
+
+        - offline_access scope has been removed from the default requested scopes for OAuth tokens in the CN UIs. When a token expires,
+          users will now be prompted to log in again instead of the UI refreshing the token.
+
 .. release-notes:: 0.6.4
 
     .. important:: Validators must upgrade to 0.6.4 or newer before
