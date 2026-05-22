@@ -228,6 +228,7 @@ export function getAmuletRulesConfig(
     optDevelopmentFundManager: null,
     externalPartyConfigStateTickDuration: null,
     rewardConfig: null,
+    transferPreapprovalBaseDuration: null,
   };
 }
 
