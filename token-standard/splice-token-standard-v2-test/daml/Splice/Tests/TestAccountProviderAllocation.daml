@@ -197,7 +197,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
 
   -- Initiate allocation
   [ar] <- WalletClientV2.listAllocationRequestsV2 accountConfig.account authorizer
-  WalletClientV2.acceptAllocationRequestV2 registries initiator ar
+  WalletClientV2.acceptAndCreateRequestedAllocationsV2 registries initiator ar
 
   -- Now fold through instruction actions
   foldlA (\() ([actor], action) -> do
