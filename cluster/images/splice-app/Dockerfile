@@ -1,19 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# docker run --rm -it eclipse-temurin:21-jdk-noble java -version
-# openjdk version "21.0.10" 2026-01-20 LTS
-# OpenJDK 64-Bit Server VM Temurin-21.0.10+7 (build 21.0.10+7-LTS, mixed mode, sharing)
-FROM eclipse-temurin:21-jdk-noble@sha256:efec1fca48fed530d4727c1ecd9c48d955153bad24067ee43ccf55e6e0d727c7
-
-# Install:
-# - screen for running the console in a headless server
-# - tini for handling signals and reaping zombie processes
-# - libjemalloc2 for debugging memory issues
-RUN apt-get update \
-   && DEBIAN_FRONTEND=noninteractive apt-get install -y screen tini libjemalloc2 \
-   && apt-get clean \
-   && rm -rf /var/lib/apt/lists/*
+FROM europe-docker.pkg.dev/da-images/public/docker/da-base-image:full-1.0.7@sha256:fb788e6f89eb6f28cee53dfc6c707d2d39aedcbc201d5c0c416e42b3da6f4fcd
 
 # create and switch to a working directory
 RUN mkdir /app
