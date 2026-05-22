@@ -47,7 +47,7 @@ function createSaKeySecret(
 }
 
 export function installGithubRepo(repo: string): void {
-  const orgProvider = new github.Provider('canton-network-provider', {
+  const orgProvider = new github.Provider(`canton-network-provider-${repo}`, {
     owner: ghaConfig.githubOrg
   });
 
