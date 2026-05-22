@@ -13,21 +13,16 @@
       before the SVs start testing traffic-based app rewards in dry-run mode
       (see `SV Longterm Operations Schedule <https://docs.google.com/document/d/1QhLL5bL0u8temBL86y957VbWDtZJhH9udH-_C7nBlvc/edit?tab=t.0#heading=h.ripdn5ydglli>`__ for dates for the different networks).
       Otherwise, CC transfers and reward collection will stop working for parties on your node until you upgrade.
-
       **Action recommended for app devs:** app's with Daml code that statically depends on ``splice-amulet``
       should recompile their Daml code
       to link against the new version of ``splice-amulet`` listed below. Otherwise, code involving CC transfers
       will stop working as both ``OpenMiningRound`` and ``AmuletRules`` include newly introduced config fields.
-
       Apps that build against the :ref:`token_standard` API are not required to change except for upgrading
       their validator node.
-
     - Daml
-
       - Add ``RewardCouponV2`` to represent rewards available from traffic-based app rewards that are computed
         by the SV apps off-ledger as described in `CIP 104 <https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md>`__.
         They are created in an efficient batched fashion once per-round for every party that is eligible for traffic-based app rewards.
-
         In contrast to the existing reward coupons, these new coupons are using time based expiry,
         and can be minted by default up to 36h after their creation. Thereby allowing their beneficiaries
         to batch the minting to save traffic costs.
@@ -60,3 +55,15 @@
         there will be a transition phase where token standard CC transfers still create featured app markers.
         These will be automatically archived as soon as traffic-based app rewards are enabled.
         Thus no double-issuance of rewards will occur.
+
+      - The Daml changes require an upgrade to these versions:
+
+          ================== =======
+          name               version
+          ================== =======
+          amulet             0.1.19
+          amuletNameService  0.1.20
+          dsoGovernance      0.1.25
+          wallet             0.1.20
+          walletPayments     0.1.19
+          ================== =======
