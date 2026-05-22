@@ -63,7 +63,7 @@ const ValidatorPermissioning: React.FC = () => {
           }
           autoComplete="off"
           id="validator-participant-id"
-          placeholder="e.g., PAR::participant1::1220a4d746"
+          placeholder="e.g., PAR::participant1::1220a4d7467"
           inputProps={{ 'data-testid': 'validator-participant-id' }}
           onChange={e => setValidatorParticipantId(e.target.value)}
           value={validatorParticipantId}
