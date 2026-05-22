@@ -110,7 +110,7 @@ two_svs=0
 run_tests=0
 permissioned="false"
 
-while getopts "hdapvsmtl" arg; do
+while getopts "hdavstp" arg; do
   case ${arg} in
     h)
       usage

@@ -11,13 +11,15 @@ function usage() {
   echo "  -h          display this help message"
   echo "  -s          skip bundle"
   echo "  -l          start backend with two super validators for local testing"
+  echo "  -p          start backend with permissioned-synchronizer mode for SVs"
 }
 
 skip_bundle=0
 topology="minimal-topology.conf"
 bootstrapScript="bootstrap-minimal.sc"
+permissioned=0
 
-while getopts "hdap:c:wsbtfgl" arg; do
+while getopts "hslp" arg; do
   case ${arg} in
     h)
       usage
@@ -31,6 +33,10 @@ while getopts "hdap:c:wsbtfgl" arg; do
       topology="minimal-topology-2svs.conf"
       bootstrapScript="bootstrap.sc"
       echo "deploying backend for sv1 and sv2"
+      ;;
+    p)
+      permissioned=1
+      echo "Flag set: Permissioned synchronizer mode enabled"
       ;;
     ?)
       usage
@@ -51,6 +57,14 @@ fi
 
 echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
 scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}"
+
+if [ $permissioned -eq 1 ]; then
+  echo "Injecting permissioned-synchronizer = true for SV apps..."
+  echo "canton.sv-apps.sv1.permissioned-synchronizer = true" >> "${OUTPUT_CONFIG}"
+  if [ "$topology" == "minimal-topology-2svs.conf" ]; then
+    echo "canton.sv-apps.sv2.permissioned-synchronizer = true" >> "${OUTPUT_CONFIG}"
+  fi
+fi
 
 echo "Starting Canton Network apps for local frontend testing"
 export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=./scripts/canton-logback.xml"
