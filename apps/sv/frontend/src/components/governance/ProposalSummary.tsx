@@ -92,7 +92,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
                 <ConfigValuesChanges
                   changes={[
                     {
-                      label: 'SV Reward Weight',
+                      label: 'Super Validator Reward Weight',
                       fieldName: 'svRewardWeight',
                       currentValue: props.currentWeight,
                       newValue: props.svRewardWeight,

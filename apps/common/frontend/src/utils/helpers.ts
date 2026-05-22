@@ -63,3 +63,13 @@ export const isDomainConnectionError: (error: Error) => boolean = (error: Error)
 export const retrySynchronizerError = (failureCount: number, error: Error): boolean => {
   return isDomainConnectionError(error) && failureCount < 10;
 };
+
+export const isUnauthorizedError = (error: Error): boolean => {
+  const err = error as { code?: unknown; status?: unknown };
+  return err.code === 401 || err.status === 401;
+};
+
+export const retryQuery = (failureCount: number, error: Error): boolean => {
+  if (isUnauthorizedError(error)) return false;
+  return failureCount < 3;
+};

@@ -723,98 +723,6 @@ object HttpScanAppClient {
     }
   }
 
-  private def decodePartiesAndRewards(
-      partiesAndRewards: Vector[definitions.PartyAndRewards]
-  ): Either[String, Seq[(PartyId, BigDecimal)]] =
-    partiesAndRewards.traverse(par =>
-      for {
-        p <- Codec.decode(Codec.Party)(par.provider)
-        r <- Codec.decode(Codec.BigDecimal)(par.rewards)
-      } yield (p, r)
-    )
-
-  case class getTopProvidersByAppRewards(asOfEndOfRound: Long, limit: Int)
-      extends InternalBaseCommand[http.GetTopProvidersByAppRewardsResponse, Seq[
-        (PartyId, BigDecimal)
-      ]] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetTopProvidersByAppRewardsResponse] =
-      client.getTopProvidersByAppRewards(asOfEndOfRound, limit, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.GetTopProvidersByAppRewardsResponse.OK(response) =>
-        decodePartiesAndRewards(response.providersAndRewards)
-      case http.GetTopProvidersByAppRewardsResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
-  case class getTopValidatorsByValidatorRewards(asOfEndOfRound: Long, limit: Int)
-      extends InternalBaseCommand[http.GetTopValidatorsByValidatorRewardsResponse, Seq[
-        (PartyId, BigDecimal)
-      ]] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.GetTopValidatorsByValidatorRewardsResponse] =
-      client.getTopValidatorsByValidatorRewards(asOfEndOfRound, limit, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.GetTopValidatorsByValidatorRewardsResponse.OK(response) =>
-        decodePartiesAndRewards(response.validatorsAndRewards)
-      case http.GetTopValidatorsByValidatorRewardsResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
-  final case class ValidatorPurchasedTraffic(
-      validator: PartyId,
-      numPurchases: Long,
-      totalTrafficPurchased: Long,
-      totalCcSpent: BigDecimal,
-      lastPurchasedInRound: Long,
-  )
-
-  case class GetTopValidatorsByPurchasedTraffic(asOfEndOfRound: Long, limit: Int)
-      extends InternalBaseCommand[http.GetTopValidatorsByPurchasedTrafficResponse, Seq[
-        ValidatorPurchasedTraffic
-      ]] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.GetTopValidatorsByPurchasedTrafficResponse] =
-      client.getTopValidatorsByPurchasedTraffic(asOfEndOfRound, limit, headers)
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetTopValidatorsByPurchasedTrafficResponse.OK(response) =>
-        response.validatorsByPurchasedTraffic.traverse(decodeValidatorPurchasedTraffic)
-      case http.GetTopValidatorsByPurchasedTrafficResponse.NotFound(err) =>
-        Left(err.error)
-    }
-
-    private def decodeValidatorPurchasedTraffic(traffic: definitions.ValidatorPurchasedTraffic) = {
-      for {
-        vp <- Codec.decode(Codec.Party)(traffic.validator)
-        n = traffic.numPurchases
-        tot = traffic.totalTrafficPurchased
-        cc <- Codec.decode(Codec.BigDecimal)(traffic.totalCcSpent)
-        lpr = traffic.lastPurchasedInRound
-      } yield ValidatorPurchasedTraffic(vp, n, tot, cc, lpr)
-    }
-  }
-
   case class GetMemberTrafficStatus(synchronizerId: SynchronizerId, memberId: Member)
       extends ExternalBaseCommand[
         http.GetMemberTrafficStatusResponse,
@@ -2553,9 +2461,14 @@ object HttpScanAppClient {
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ) extends InternalBaseCommand[http.ListVoteRequestResultsResponse, Seq[
-        DsoRules_CloseVoteRequestResult
-      ]] {
+      pageToken: Option[BigInt] = None,
+  ) extends InternalBaseCommand[
+        http.ListVoteRequestResultsResponse,
+        (
+            Seq[DsoRules_CloseVoteRequestResult],
+            Option[BigInt],
+        ),
+      ] {
 
     override def submitRequest(
         client: ScanClient,
@@ -2569,6 +2482,7 @@ object HttpScanAppClient {
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         ),
         headers = headers,
       )
@@ -2576,18 +2490,17 @@ object HttpScanAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case http.ListVoteRequestResultsResponse.OK(response) =>
-      Right(
-        response.dsoRulesVoteResults
-          .map(e =>
-            decoder.decodeValue(
-              DsoRules_CloseVoteRequestResult.valueDecoder(),
-              DsoRules_CloseVoteRequestResult._packageId,
-              "Splice.DsoRules",
-              "DsoRules_CloseVoteRequestResult",
-            )(e)
-          )
-          .toSeq
-      )
+      val results = response.dsoRulesVoteResults
+        .map(e =>
+          decoder.decodeValue(
+            DsoRules_CloseVoteRequestResult.valueDecoder(),
+            DsoRules_CloseVoteRequestResult._packageId,
+            "Splice.DsoRules",
+            "DsoRules_CloseVoteRequestResult",
+          )(e)
+        )
+        .toSeq
+      Right((results, response.nextPageToken))
     }
   }
 
@@ -2895,7 +2808,7 @@ object HttpScanAppClient {
   case class GetRewardAccountingActivityTotals(roundNumber: Long)
       extends InternalBaseCommand[
         http.GetRewardAccountingActivityTotalsResponse,
-        Option[definitions.GetRewardAccountingActivityTotalsResponse],
+        definitions.GetRewardAccountingActivityTotalsResponse,
       ] {
     override def submitRequest(
         client: ScanClient,
@@ -2908,16 +2821,14 @@ object HttpScanAppClient {
 
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
       case http.GetRewardAccountingActivityTotalsResponse.OK(response) =>
-        Right(Some(response))
-      case http.GetRewardAccountingActivityTotalsResponse.NotFound(_) =>
-        Right(None)
+        Right(response)
     }
   }
 
   case class GetRewardAccountingRootHash(roundNumber: Long)
       extends InternalBaseCommand[
         http.GetRewardAccountingRootHashResponse,
-        Option[definitions.GetRewardAccountingRootHashResponse],
+        definitions.GetRewardAccountingRootHashResponse,
       ] {
     override def submitRequest(
         client: ScanClient,
@@ -2930,9 +2841,7 @@ object HttpScanAppClient {
 
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
       case http.GetRewardAccountingRootHashResponse.OK(response) =>
-        Right(Some(response))
-      case http.GetRewardAccountingRootHashResponse.NotFound(_) =>
-        Right(None)
+        Right(response)
     }
   }
 

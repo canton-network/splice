@@ -46,6 +46,10 @@ final case class CircuitBreakerConfig(
     resetFailuresAfter: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(15),
 )
 
+object CircuitBreakerConfig {
+  val never: CircuitBreakerConfig = CircuitBreakerConfig(maxFailures = Int.MaxValue)
+}
+
 final case class CircuitBreakersConfig(
     highPriority: CircuitBreakerConfig = CircuitBreakerConfig(
       maxResetTimeout = NonNegativeFiniteDuration.ofMinutes(2)
@@ -67,6 +71,15 @@ final case class CircuitBreakersConfig(
       maxResetTimeout = NonNegativeFiniteDuration.ofMinutes(7),
     ),
 )
+
+object CircuitBreakersConfig {
+  val never: CircuitBreakersConfig = CircuitBreakersConfig(
+    highPriority = CircuitBreakerConfig.never,
+    mediumPriority = CircuitBreakerConfig.never,
+    lowPriority = CircuitBreakerConfig.never,
+    amuletExpiry = CircuitBreakerConfig.never,
+  )
+}
 
 final case class EnabledFeaturesConfig(
     enableNewAcsExport: Boolean = true,

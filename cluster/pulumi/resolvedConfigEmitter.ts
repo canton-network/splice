@@ -1,6 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { loadClusterYamlConfig, getClusterConfigPath } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configLoader';
+import {
+  loadClusterYamlConfig,
+  getClusterConfigPath,
+} from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configLoader';
 import { writeFileSync } from 'fs';
 import { dump } from 'js-yaml';
 import { dirname, resolve } from 'path';

@@ -38,7 +38,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({
 
   return (
     <OidcAuthProvider
-      automaticSilentRenew
+      automaticSilentRenew={false}
       userStore={new WebStorageStateStore({ store: window.localStorage })}
       onSigninCallback={user => {
         const redirectTo = extractRedirectToFromUser(user);

@@ -303,9 +303,12 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     protected val testEntryUrl = "https://ans-dir-url.com"
     protected val testEntryDescription = "Sample ANS Entry Description"
 
-    protected def initDso()(implicit env: SpliceTestConsoleEnvironment): Unit = {
-      env.fullDsoApps.local.foreach(_.start())
-      env.fullDsoApps.local.foreach(_.waitForInitialization())
+    protected def initDso(
+        includeLocal: Boolean = true
+    )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+      val apps = env.fullDsoApps.local.filter(a => !a.name.endsWith("Local") || includeLocal)
+      apps.foreach(_.start())
+      apps.foreach(_.waitForInitialization())
     }
 
     protected def initDsoWithSv1Only()(implicit env: SpliceTestConsoleEnvironment): Unit = {

@@ -25,6 +25,8 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetDsoInfoResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
@@ -50,6 +52,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   VoteRequest,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequestV1
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -303,10 +306,11 @@ trait ScanConnection
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: Int,
+      pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Seq[DsoRules_CloseVoteRequestResult]]
+  ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
 
   def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
@@ -322,6 +326,16 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[NonNegativeInt]
 
+  def getRewardAccountingRootHash(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingRootHashResponse]
+
+  def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[GetRewardAccountingBatchResponse]]
+
 }
 
 object ScanConnection {
@@ -332,6 +346,7 @@ object ScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
       retryConnectionOnInitialFailure: Boolean = true,
   )(implicit
       ec: ExecutionContextExecutor,
@@ -348,6 +363,7 @@ object ScanConnection {
         clock,
         retryProvider,
         loggerFactory,
+        connectionMetrics,
       ),
       retryConnectionOnInitialFailure,
     )
@@ -359,6 +375,7 @@ object ScanConnection {
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
       retryConnectionOnInitialFailure: Boolean,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -367,7 +384,14 @@ object ScanConnection {
       templateDecoder: TemplateJsonDecoder,
   ): Future[SingleScanConnection] =
     HttpAppConnection.checkVersionOrClose(
-      new SingleScanConnection(config, upgradesConfig, clock, retryProvider, loggerFactory),
+      new SingleScanConnection(
+        config,
+        upgradesConfig,
+        clock,
+        retryProvider,
+        loggerFactory,
+        connectionMetrics,
+      ),
       retryConnectionOnInitialFailure,
     )
 
@@ -377,6 +401,7 @@ object ScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -384,7 +409,14 @@ object ScanConnection {
       httpClient: HttpClient,
       templateDecoder: TemplateJsonDecoder,
   ): SingleScanConnection =
-    new SingleScanConnection(config, upgradesConfig, clock, retryProvider, loggerFactory)
+    new SingleScanConnection(
+      config,
+      upgradesConfig,
+      clock,
+      retryProvider,
+      loggerFactory,
+      connectionMetrics,
+    )
 
   private[client] case class CachedAmuletRules(
       cacheValidUntil: CantonTimestamp,

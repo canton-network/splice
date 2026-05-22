@@ -11,5 +11,5 @@ $(dir)/$(docker-build): $(target-party-allocator)  $(dir)/target/LICENSE  $(dir)
 $(target-party-allocator): $(party-allocator) | $(dir)/target
 	cp -r $< $@
 
-$(dir)/target/LICENSE: ${SPLICE_ROOT}/cluster/images/LICENSE | $(dir)/target
+$(dir)/target/LICENSE: ${SPLICE_ROOT}/LICENSE | $(dir)/target
 	cp $< $@
