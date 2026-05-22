@@ -81,10 +81,12 @@ class ExternalPartySetupProposalIntegrationTest
         (_, config) =>
           ConfigTransforms.updateAllValidatorConfigs_(
             _.focus(_.transferPreapproval)
-              .modify(c => c.copy(
-                renewalDuration = preapprovalLifetime,
-                preapprovalLifetime = preapprovalLifetime,
-              ))
+              .modify(c =>
+                c.copy(
+                  renewalDuration = preapprovalLifetime,
+                  preapprovalLifetime = preapprovalLifetime,
+                )
+              )
           )(config),
         // Disable renewal trigger till required in the test
         (_, config) =>
