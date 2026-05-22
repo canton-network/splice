@@ -566,7 +566,6 @@ testTransferPreapproval = script do
   -- -----------------------------------------
 
   now <- getTime
-  [(_, amuletRules)] <- query @AmuletRules app.dso
   install <- submit (actAs aliceValidator.primaryParty) $ createCmd $ WalletAppInstall with
     endUserParty = aliceValidator.primaryParty
     endUserName = "alice_validator_user"
