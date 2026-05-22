@@ -55,14 +55,19 @@ if [ $skip_bundle -eq 0 ]; then
   sbt --batch bundle
 fi
 
-permissioned_str="false"
+echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
+scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}"
+
+TOOL_OPTIONS="-Dlogback.configurationFile=./scripts/canton-logback.xml"
+
 if [ $permissioned -eq 1 ]; then
-  permissioned_str="true"
+  echo "Injecting permissioned-synchronizer = true via JVM System Properties..."
+  TOOL_OPTIONS="$TOOL_OPTIONS -Dcanton.sv-apps.sv1.permissioned-synchronizer=true"
+  if [ "$topology" == "minimal-topology-2svs.conf" ]; then
+    TOOL_OPTIONS="$TOOL_OPTIONS -Dcanton.sv-apps.sv2.permissioned-synchronizer=true"
+  fi
 fi
 
-echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
-scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}" "${permissioned_str}"
-
 echo "Starting Canton Network apps for local frontend testing"
-export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=./scripts/canton-logback.xml"
+export JAVA_TOOL_OPTIONS="$TOOL_OPTIONS"
 splice-node --config "${OUTPUT_CONFIG}" --bootstrap ./apps/splitwell/frontend/$bootstrapScript --log-level-canton=DEBUG --log-encoder json --log-file-name log/splice-node_local_frontend_testing.clog
