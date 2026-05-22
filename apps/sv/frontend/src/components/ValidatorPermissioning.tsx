@@ -10,8 +10,8 @@ import { Button, Stack, TextField, Typography } from '@mui/material';
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useSvConfig } from '../utils';
 
-const VALID_PARTY_ID_REGEX = /^.+::[a-zA-Z0-9]+$/;
-const VALID_PARTICIPANT_ID_REGEX = /^.+::[a-zA-Z0-9]+$/;
+const VALID_PARTY_ID_REGEX = /^[a-zA-Z0-9\-_]+::[a-zA-Z0-9]+$/;
+const VALID_PARTICIPANT_ID_REGEX = /^PAR::[a-zA-Z0-9\-_]+::[a-zA-Z0-9]+$/;
 
 const ValidatorPermissioning: React.FC = () => {
   const { grantValidatorPermission } = useSvAdminClient();
@@ -47,7 +47,7 @@ const ValidatorPermissioning: React.FC = () => {
           error={validatorPartyId === '' || !VALID_PARTY_ID_REGEX.test(validatorPartyId)}
           autoComplete="off"
           id="validator-party-id"
-          placeholder="e.g., validator::12345abcdef"
+          placeholder="e.g., Alice::12201ff69b"
           inputProps={{ 'data-testid': 'validator-party-id' }}
           onChange={e => setValidatorPartyId(e.target.value)}
           value={validatorPartyId}
@@ -63,7 +63,7 @@ const ValidatorPermissioning: React.FC = () => {
           }
           autoComplete="off"
           id="validator-participant-id"
-          placeholder="e.g., PAR::participant::12345abcdef"
+          placeholder="e.g., PAR::participant1::1220a4d746"
           inputProps={{ 'data-testid': 'validator-participant-id' }}
           onChange={e => setValidatorParticipantId(e.target.value)}
           value={validatorParticipantId}
