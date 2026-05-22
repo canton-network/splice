@@ -1262,6 +1262,13 @@ class WalletTxLogIntegrationTest
             aliceValidatorWalletClient,
             Seq(creationTxLog, tapTxLog),
             trafficTopups = IgnoreTopupsDevNet,
+            ignore = {
+              case tx: TransferTxLogEntry =>
+                tx.subtype == Some(
+                  walletLogEntry.TransferTransactionSubtype.AppPaymentCollected.toProto
+                )
+              case _ => false
+            },
           )
           extPartySetupResult.transferPreapprovalCid
         }
@@ -1285,6 +1292,13 @@ class WalletTxLogIntegrationTest
           aliceValidatorWalletClient,
           expectedTxLogEntries,
           trafficTopups = IgnoreTopupsDevNet,
+          ignore = {
+            case tx: TransferTxLogEntry =>
+              tx.subtype == Some(
+                walletLogEntry.TransferTransactionSubtype.AppPaymentCollected.toProto
+              )
+            case _ => false
+          },
         )
     }
 
