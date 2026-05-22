@@ -230,6 +230,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
+        amuletConfig.transferPreapprovalBaseDuration,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -379,6 +380,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
+        amuletConfig.transferPreapprovalBaseDuration,
       )
 
       val upgradeAction = new ARC_AmuletRules(

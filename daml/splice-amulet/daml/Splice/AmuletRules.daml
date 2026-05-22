@@ -199,8 +199,8 @@ template AmuletRules
         -- Must always be set to protect from malicious delegees swapping the AmuletRules contract out for
         -- one under their control.
         optCreatedAt : Optional Time
-        -- ^ Optional createdAt time set by the caller. Must be in the past.
-        -- Set this to your wall-clock time to avoid a dependency on `getTime`, which is problematic for external parties.
+          -- ^ Optional createdAt time set by the caller. Must be in the past.
+          -- Set this to your wall-clock time to avoid a dependency on `getTime`, which is problematic for external parties.
       controller validator
       do
         checkExpectedDso dso expectedDso
@@ -229,8 +229,8 @@ template AmuletRules
         -- Must always be set to protect from malicious delegees swapping the AmuletRules contract out for
         -- one under their control.
         optCreatedAt : Optional Time
-        -- ^ Optional createdAt time set by the caller. Must be in the past.
-        -- Set this to your wall-clock time to avoid a dependency on `getTime`, which is problematic for external parties.
+          -- ^ Optional createdAt time set by the caller. Must be in the past.
+          -- Set this to your wall-clock time to avoid a dependency on `getTime`, which is problematic for external parties.
       controller provider, receiver
       do
         checkExpectedDso dso expectedDso
