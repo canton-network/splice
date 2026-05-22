@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv
 
 import cats.data.OptionT
-import cats.implicits.{catsSyntaxTuple3Semigroupal, catsSyntaxTuple6Semigroupal, toTraverseOps}
+import cats.implicits.{catsSyntaxTuple4Semigroupal, catsSyntaxTuple6Semigroupal, toTraverseOps}
 import cats.instances.future.*
 import cats.syntax.either.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
@@ -215,7 +215,10 @@ class SvApp(
       ),
       config.localSynchronizerNodes.successor.traverse(localSyncNodeFromConfig),
       config.localSynchronizerNodes.legacy.traverse(localSyncNodeFromConfig),
-    ).mapN(SynchronizerNode.LocalSynchronizerNodes(_, _, _))
+      MonadUtil.sequentialTraverse(config.localSynchronizerNodes.additionalLegacy)(
+        localSyncNodeFromConfig
+      ),
+    ).mapN(SynchronizerNode.LocalSynchronizerNodes(_, _, _, _))
       .recoverWith { case err =>
         // TODO(#879) Replace this by a more general solution for closing resources on
         // init failures.
@@ -295,6 +298,7 @@ class SvApp(
           loggerFactory,
           retryProvider,
           config.spliceInstanceNames,
+          metrics.grpcClientMetrics,
           config.svAcsStoreDescriptorUserVersion,
           config.dsoAcsStoreDescriptorUserVersion,
         )
@@ -328,6 +332,7 @@ class SvApp(
               retryProvider,
               config.spliceInstanceNames,
               loggerFactory,
+              metrics.grpcClientMetrics,
               config.parameters.enabledFeatures,
               config.svAcsStoreDescriptorUserVersion,
               config.dsoAcsStoreDescriptorUserVersion,
@@ -353,6 +358,7 @@ class SvApp(
               loggerFactory,
               retryProvider,
               config.spliceInstanceNames,
+              metrics.grpcClientMetrics,
               newJoiningNodeInitializer,
               rollForwardLsuConfig,
             ).rollForward()

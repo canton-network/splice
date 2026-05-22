@@ -22,13 +22,13 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.LogicalSynchronizerUpgradeSchedule
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType
-import org.lfdecentralizedtrust.splice.sv.lsu.LogicalSynchronizerUpgradeAnnouncementTrigger.LsuAnnouncementTask
+import org.lfdecentralizedtrust.splice.sv.lsu.LsuAnnouncementTrigger.LsuAnnouncementTask
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
 
-class LogicalSynchronizerUpgradeAnnouncementTrigger(
+class LsuAnnouncementTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: ParticipantAdminConnection,
@@ -110,7 +110,7 @@ class LogicalSynchronizerUpgradeAnnouncementTrigger(
 
 }
 
-object LogicalSynchronizerUpgradeAnnouncementTrigger {
+object LsuAnnouncementTrigger {
 
   case class LsuAnnouncementTask(
       synchronizerId: SynchronizerId,

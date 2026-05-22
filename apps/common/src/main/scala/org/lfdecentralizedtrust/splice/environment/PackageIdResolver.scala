@@ -98,4 +98,16 @@ object PackageIdResolver {
     final case object SpliceWalletPayments extends Package
     final case object SpliceUtilBatchedMarkers extends Package
   }
+
+  val validatorPackages = Set(
+    PackageIdResolver.Package.SpliceAmulet,
+    PackageIdResolver.Package.SpliceAmuletNameService,
+    PackageIdResolver.Package.SpliceValidatorLifecycle,
+    PackageIdResolver.Package.SpliceWallet,
+    PackageIdResolver.Package.SpliceWalletPayments,
+  )
+
+  val svPackages = Set(
+    PackageIdResolver.Package.SpliceDsoGovernance
+  ) ++ validatorPackages
 }

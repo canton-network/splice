@@ -12,14 +12,13 @@ import org.lfdecentralizedtrust.splice.store.{Limit, MultiDomainAcsStore, Synchr
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** A cache over lookupFeaturedAppPartiesAsOf
+/** A cache over the as-of lookups used during app-activity computation.
   * All other methods are forwarded to the underlying store.
   *
-  * For lookupFeaturedAppPartiesAsOf, we keep the results of the last two
-  * distinct queries only; older entries are evicted. So that we keep in memory
-  * the active featured app parties for at most two open rounds while
-  * calculating the app activity records for the batch of verdicts, as the
-  * processing of verdicts happens in monotonically increasing time order.
+  * Each as-of cache keeps the results of the last two distinct queries; older
+  * entries are evicted. This keeps in memory the data for at most two open
+  * rounds while calculating activity records for a batch of verdicts, since
+  * verdicts are processed in monotonically increasing time order.
   */
 class CachingScanRewardsReferenceStore private[splice] (
     store: ScanRewardsReferenceStore,
@@ -36,6 +35,14 @@ class CachingScanRewardsReferenceStore private[splice] (
       loader = implicit tc => asOf => store.lookupFeaturedAppPartiesAsOf(asOf),
     )(logger, "featuredAppPartiesAsOf")
 
+  private val svParticipantIdsCache
+      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Set[String]] =
+    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Set[String]](
+      Scaffeine()
+        .maximumSize(2L),
+      loader = implicit tc => asOf => store.lookupSvParticipantIdsAsOf(asOf),
+    )(logger, "svParticipantIdsAsOf")
+
   override def key: ScanRewardsReferenceStore.Key = store.key
 
   override def waitUntilInitialized: Future[Unit] = store.waitUntilInitialized
@@ -49,6 +56,11 @@ class CachingScanRewardsReferenceStore private[splice] (
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Set[String]] =
     featuredAppPartiesCache.get(asOf)
+
+  override def lookupSvParticipantIdsAsOf(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Set[String]] =
+    svParticipantIdsCache.get(asOf)
 
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit

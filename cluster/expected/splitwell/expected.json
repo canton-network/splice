@@ -783,7 +783,7 @@
           "enable": true
         },
         "migration": {
-          "id": 3
+          "id": 9
         },
         "participantHost": "participant-2",
         "persistence": {

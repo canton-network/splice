@@ -5,7 +5,7 @@ import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../../../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
@@ -138,6 +138,39 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
     expect(submitButton.getAttribute('disabled')).toBeNull();
+  });
+
+  test('amount accepts decimals but rejects more than 10 decimal places', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <CreateUnallocatedUnclaimedActivityRecordForm />
+      </Wrapper>
+    );
+
+    const amountInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-amount');
+    const amountError = screen.getByTestId(
+      'create-unallocated-unclaimed-activity-record-amount-error'
+    );
+
+    await user.type(amountInput, '100.1234567891');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('');
+    });
+
+    await user.clear(amountInput);
+    await user.type(amountInput, '100.12345678912');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('Amount can have at most 10 decimal places');
+    });
+
+    // an invalid number (e.g. trailing dot) triggers the generic error, not the decimal-places one
+    await user.clear(amountInput);
+    await user.type(amountInput, '100.');
+    await waitFor(() => {
+      expect(amountError.textContent).toBe('Amount must be a valid number');
+    });
   });
 
   test('expiry date must be in the future', async () => {
@@ -340,8 +373,8 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
 
   test('should show error on form if submission fails', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.status(503), ctx.json({ error: 'Service Unavailable' }));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
       })
     );
 
@@ -393,8 +426,8 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
 
   test('should redirect to governance page after successful submission', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({});
       })
     );
 

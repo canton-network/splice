@@ -95,14 +95,15 @@ class LsuNodeInitializer(
             Right(())
         },
         (_: String) => {
+          val initParams = parameters.copy(
+            protocolVersion = successorSynchronizerId.protocolVersion
+          )
           logger.info(
-            show"Initializing sequencer from predecessor with $parameters"
+            show"Initializing sequencer from predecessor with $initParams"
           )
           successorSynchronizerNode.sequencerAdminConnection.initializeFromPredecessor(
             state.synchronizerStatePath,
-            parameters.copy(
-              protocolVersion = successorSynchronizerId.protocolVersion
-            ),
+            initParams,
             ignorePsidCheck,
           )
         },

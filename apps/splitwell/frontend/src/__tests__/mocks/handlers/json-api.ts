@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { RestHandler, rest } from 'msw';
+import { http, HttpHandler, HttpResponse } from 'msw';
 
 import { alicePartyId } from '../constants';
 
@@ -11,17 +11,15 @@ export const domainDisconnectErrorResponse = {
   ],
 };
 
-export const buildJsonApiMock = (jsonApiUrl: string): RestHandler[] => [
-  rest.get(`${jsonApiUrl}v2/users/:userid`, (_, res, ctx) => {
-    return res(
-      ctx.json({
-        user: {
-          primaryParty: alicePartyId,
-          userId: 'alice',
-        },
-        status: 200,
-      })
-    );
+export const buildJsonApiMock = (jsonApiUrl: string): HttpHandler[] => [
+  http.get(`${jsonApiUrl}v2/users/:userid`, () => {
+    return HttpResponse.json({
+      user: {
+        primaryParty: alicePartyId,
+        userId: 'alice',
+      },
+      status: 200,
+    });
   }),
 ];
 

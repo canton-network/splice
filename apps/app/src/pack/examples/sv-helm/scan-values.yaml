@@ -2,12 +2,11 @@
 migration:
   id: "MIGRATION_ID"
 
-# Replace MIGRATION_ID with the current migration ID of the global synchronizer.
-participantAddress: "participant-MIGRATION_ID"
+participantAddress: "participant"
 synchronizers:
   current:
-    sequencer: "global-domain-MIGRATION_ID-sequencer"
-    mediator: "global-domain-MIGRATION_ID-mediator"
+    sequencer: "global-domain-SERIAL_ID-sequencer"
+    mediator: "global-domain-SERIAL_ID-mediator"
 
 persistence:
   host: apps-pg

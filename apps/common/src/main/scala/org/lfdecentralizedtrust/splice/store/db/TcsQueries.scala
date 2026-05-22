@@ -44,8 +44,10 @@ trait TcsQueries extends AcsQueries {
       companion: C,
       asOf: CantonTimestamp,
       additionalWhere: SQLActionBuilder,
+      limit: Option[Int] = None,
   )(implicit companionClass: ContractCompanion[C, TCid, T]): SQLActionBuilder = {
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
+    val limitClause = limit.fold(sql"")(n => sql" limit $n")
     (sql"""(
        select #$columns
        from #$acsTableName acs
@@ -68,7 +70,7 @@ trait TcsQueries extends AcsQueries {
          and acs.archived_at > $asOf
          """ ++ additionalWhere ++ sql"""
        )
-       """).toActionBuilder
+       """ ++ limitClause).toActionBuilder
   }
 
   protected def selectFromTcsTableAsOf[C, TCid <: ContractId[?], T](
@@ -100,6 +102,7 @@ trait TcsQueries extends AcsQueries {
       companion: C,
       asOf: CantonTimestamp,
       additionalWhere: SQLActionBuilder = sql"",
+      limit: Option[Int] = None,
   )(implicit companionClass: ContractCompanion[C, TCid, T]): SqlStreamingAction[Vector[
     SelectFromAcsTableWithStateResult
   ], SelectFromAcsTableWithStateResult, Effect.Read] = {
@@ -112,6 +115,7 @@ trait TcsQueries extends AcsQueries {
       companion,
       asOf,
       additionalWhere,
+      limit,
     ).as[SelectFromAcsTableWithStateResult]
   }
 

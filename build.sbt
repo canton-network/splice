@@ -1773,13 +1773,19 @@ lazy val bundleTask = {
     val testResources = Seq("-r", "apps/app/src/test/resources", "testResources")
     val transformConfig =
       Seq("-r", "scripts/transform-config.sc", "testResources/transform-config.sc")
+    runCommand(Seq("scripts/observability/stage-grafana-dashboards.sh"), log)
+    val dashboardsStaging =
+      (file("target") / "bundle-staging" / "grafana-dashboards").getAbsoluteFile
     val dashboards = Seq(
       "-r",
-      "cluster/pulumi/observability/grafana-dashboards",
-      "grafana-dashboards",
+      (dashboardsStaging / "sv-grafana-dashboards").getPath,
+      "sv-grafana-dashboards",
+      "-r",
+      (dashboardsStaging / "validator-grafana-dashboards").getPath,
+      "validator-grafana-dashboards",
       "-r",
       "network-health",
-      "grafana-dashboards/docs",
+      "sv-grafana-dashboards/docs",
     )
     val dockerCompose = Seq("-r", "cluster/compose", "docker-compose")
     val webUis =
@@ -2049,8 +2055,10 @@ lazy val `apps-app`: Project =
       `apps-common-frontend`,
     )
     .settings(
+      // scalatestplus-selenium is lagging behind, it depends on selenium 4.12,
+      // but that's fine as it's compatible with selenium 4.44 that we end up using
       libraryDependencies += "org.scalatestplus" %% "selenium-4-12" % "3.2.17.0" % "test",
-      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.12.1" % "test",
+      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,
       libraryDependencies += kubernetes_client,
@@ -2153,7 +2161,7 @@ updateTestConfigForParallelRuns := {
   def isDynamicSynchronizerParamsReconciliationTest(name: String): Boolean =
     name contains "DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest"
   def isLSUTest(name: String): Boolean =
-    name contains "LogicalSynchronizerUpgradeIntegrationTest"
+    name contains "LsuIntegrationTest"
   def isLSURollForwardTest(name: String): Boolean =
     name contains "RollForwardLsu"
 
@@ -2267,14 +2275,14 @@ updateTestConfigForParallelRuns := {
       (t: String) => isEnterpriseIntegrationTest(t),
     ),
     (
-      "tests to check logical sync upgrade",
-      "test-full-class-names-lsu.log",
-      (t: String) => isLSUTest(t),
-    ),
-    (
       "tests to check logical sync roll-forward upgrade",
       "test-full-class-names-roll-forward-lsu.log",
       (t: String) => isLSURollForwardTest(t),
+    ),
+    (
+      "tests to check logical sync upgrade",
+      "test-full-class-names-lsu.log",
+      (t: String) => isLSUTest(t),
     ),
     (
       "tests with wall clock time",

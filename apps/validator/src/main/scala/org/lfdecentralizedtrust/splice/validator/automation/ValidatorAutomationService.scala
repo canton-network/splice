@@ -31,7 +31,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
@@ -62,7 +61,6 @@ class ValidatorAutomationService(
     domainUnpausedSync: DomainUnpausedSynchronization,
     walletManagerOpt: Option[UserWalletManager], // None when config.enableWallet=false
     store: ValidatorStore,
-    val updateHistory: UpdateHistory,
     storage: DbStorage,
     scanConnection: BftScanConnection,
     ledgerClient: SpliceLedgerClient,
@@ -100,8 +98,6 @@ class ValidatorAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =
     ValidatorAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   automationConfig.topologyMetricsPollingInterval.foreach(topologyPollingInterval =>
     registerTrigger(
@@ -237,18 +233,19 @@ class ValidatorAutomationService(
       )
     )
 
-  registerTrigger(
-    new ValidatorPackageVettingTrigger(
-      participantAdminConnection,
-      scanConnection,
-      triggerContext,
-      maxVettingDelay,
-      latestPackagesOnly,
-      svValidator,
-      enabledFeatures.enableUnsupportedDarsUnvetting,
-      additionalPackagesToUnvet,
+  if (!svValidator) {
+    registerTrigger(
+      new ValidatorPackageVettingTrigger(
+        participantAdminConnection,
+        scanConnection,
+        triggerContext,
+        maxVettingDelay,
+        latestPackagesOnly,
+        enabledFeatures.enableUnsupportedDarsUnvetting,
+        additionalPackagesToUnvet,
+      )
     )
-  )
+  }
 
   registerTrigger(
     new ValidatorLicenseMetadataTrigger(

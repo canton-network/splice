@@ -19,81 +19,24 @@ validator1:
     retention: "1h" # Keep 1h
   deduplicationDuration: 30m
 svs:
-  default:
-    logging:
-      cantonLogLevel: INFO
-    pruning:
-      cometbft:
-        retainBlocks: 2000 # corresponds to a retention period of ~2 hours
-    svApp:
-      resources:
-        limits:
-          cpu: "3"
-          memory: 4Gi
-        requests:
-          cpu: "1"
-          memory: 2Gi
-    scanApp:
-      resources:
-        limits:
-          memory: 4Gi
-        requests:
-          cpu: "2"
-          memory: 2Gi
-    participant:
-      resources:
-        requests:
-          cpu: "1"
-    sequencer:
-      # formerly the effect of `SEQUENCER_LOW_RESOURCES=true`
-      resources:
-        limits:
-          memory: 8Gi
-        requests:
-          cpu: "4"
-          memory: 4Gi
-      additionalEnvVars:
-        - name: ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS
-          value: |
-            canton.sequencers.sequencer.sequencer.config {
-              segment-length-for-pv-34 = 4
-              consensus-empty-block-creation-timeout = 500.milliseconds
-              min-requests-in-batch = 16
-            }
-        - name: ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS
-          value: |
-            canton.sequencers.sequencer.sequencer.block.throughput-cap {
-              enabled = true
-              messages = {
-                confirmation-request = {
-                  global-tps-cap = 100
-                  per-client-tps-cap = 60
-                  global-kbps-cap = 20000
-                  per-client-kbps-cap = 12000
-                }
-                topology = {
-                  global-tps-cap = 200
-                  per-client-tps-cap = 10
-                  global-kbps-cap = 2000
-                  per-client-kbps-cap = 500
-                }
-              }
-              strict = false
-            }
-    mediator:
-      resources:
-        limits:
-          memory: 4Gi
-        requests:
-          cpu: "1"
-          memory: 2Gi
-    cometbft:
-      resources:
-        limits:
-          memory: 4Gi
-        requests:
-          memory: 2Gi
-  sv-da-1:
+  sv-1: !include(scratchnet-sv.yaml) {}
+  sv-2: !include(scratchnet-sv.yaml) {}
+  sv-3: !include(scratchnet-sv.yaml) {}
+  sv-4: !include(scratchnet-sv.yaml) {}
+  sv-5: !include(scratchnet-sv.yaml) {}
+  sv-6: !include(scratchnet-sv.yaml) {}
+  sv-7: !include(scratchnet-sv.yaml) {}
+  sv-8: !include(scratchnet-sv.yaml) {}
+  sv-9: !include(scratchnet-sv.yaml) {}
+  sv-10: !include(scratchnet-sv.yaml) {}
+  sv-11: !include(scratchnet-sv.yaml) {}
+  sv-12: !include(scratchnet-sv.yaml) {}
+  sv-13: !include(scratchnet-sv.yaml) {}
+  sv-14: !include(scratchnet-sv.yaml) {}
+  sv-15: !include(scratchnet-sv.yaml) {}
+  sv-16: !include(scratchnet-sv.yaml) {}
+  sv: !include(scratchnet-sv.yaml) {}
+  sv-da-1: !include(scratchnet-sv.yaml)
     publicName: Digital-Asset-1
     subdomain: sv-1
     cometbft:

@@ -15,7 +15,13 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
 import com.digitalasset.canton.util.HexString
-import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
+import com.digitalasset.canton.version.ProtocolVersion
+import monocle.macros.syntax.lens.*
+import org.lfdecentralizedtrust.splice.config.{
+  CircuitBreakersConfig,
+  ConfigTransforms,
+  NetworkAppClientConfig,
+}
 import org.lfdecentralizedtrust.splice.console.*
 import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
@@ -33,10 +39,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvSynchronizerNodeConfig,
   SvSynchronizerNodesConfig,
 }
-import org.lfdecentralizedtrust.splice.sv.lsu.{
-  LogicalSyncUpgradeTransferTrafficTrigger,
-  LogicalSynchronizerUpgradeTrigger,
-}
+import org.lfdecentralizedtrust.splice.sv.lsu.{LsuTransferTrafficTrigger, LsuTrigger}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.config.WalletAppClientConfig
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.Http.BuyTrafficRequestStatus
@@ -51,7 +54,7 @@ import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.RichOptional
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
-class LogicalSynchronizerUpgradeIntegrationTest
+class LsuIntegrationTest
     extends IntegrationTest
     with ExternallySignedPartyTestUtil
     with ProcessTestUtil
@@ -79,6 +82,10 @@ class LogicalSynchronizerUpgradeIntegrationTest
     super.beforeAll()
     SynchronizerUpgradeUtil.migrationDumpDir.delete()
   }
+  // always set the successor PV to 35
+  // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
+  // otherwise we will run a PV35 -> PV35 LSU
+  val successorPv = ProtocolVersion.v35
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -89,7 +96,11 @@ class LogicalSynchronizerUpgradeIntegrationTest
           .updateAllSvAppConfigs { (name, config) =>
             config.copy(
               localSynchronizerNodes = config.localSynchronizerNodes
-                .copy(successor = config.localSynchronizerNodes.current.some),
+                .copy(successor =
+                  config.localSynchronizerNodes.current
+                    .copy(protocolVersion = successorPv)
+                    .some
+                ),
               domainMigrationDumpPath = Some(
                 (SynchronizerUpgradeUtil.migrationTestDumpDir(
                   name
@@ -98,22 +109,33 @@ class LogicalSynchronizerUpgradeIntegrationTest
               parameters = config.parameters.copy(
                 spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
                   physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
-                )
+                ),
+                // sv-4 is intentionally a late-joining node in this test, which means the
+                // sequencer spends some time catching up. This can cause the sv-app's
+                // circuit breakers to trip, which makes annoying logs and delays init.
+                // The circuit breakers tripping a bit during catchup would be just fine
+                // IRL, so as a simple fix to this test we disable them for sv-4.
+                circuitBreakers =
+                  if (name == "sv4") CircuitBreakersConfig.never
+                  else config.parameters.circuitBreakers,
               ),
             )
           }
-          .andThen(ConfigTransforms.updateAllScanAppConfigs { (_, config) =>
-            config.copy(
-              synchronizerNodes = config.synchronizerNodes.copy(
-                successor = Some(config.synchronizerNodes.current)
-              ),
-              parameters = config.parameters.copy(
-                spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
-                  physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
+          .andThen(
+            ConfigTransforms
+              .updateAllScanAppConfigs { (_, config) =>
+                config.copy(
+                  synchronizerNodes = config.synchronizerNodes.copy(
+                    successor = Some(config.synchronizerNodes.current)
+                  ),
+                  parameters = config.parameters.copy(
+                    spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
+                      physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
+                    )
+                  ),
                 )
-              ),
-            )
-          })(config)
+              }
+          )(config)
       })
       .withBftSequencersSuccessor
       .addConfigTransform((_, config) =>
@@ -122,6 +144,38 @@ class LogicalSynchronizerUpgradeIntegrationTest
       .addConfigTransform((_, config) =>
         ConfigTransforms
           .bumpCantonSyncSuccessorPortsBy(22_000)(config)
+      )
+      .addConfigTransform((_, c) =>
+        c.copy(
+          svApps = c.svApps ++
+            Seq(
+              InstanceName.tryCreate("sv1Local") ->
+                c
+                  .svApps(InstanceName.tryCreate(s"sv1"))
+                  .focus(_.localSynchronizerNodes)
+                  .modify(c =>
+                    c.copy(
+                      additionalLegacy = Seq(c.current),
+                      current = c.successor.getOrElse(
+                        throw new IllegalStateException("successor must be set")
+                      ),
+                      successor = None,
+                    )
+                  ),
+              InstanceName.tryCreate("sv1NoLegacyLocal") ->
+                c
+                  .svApps(InstanceName.tryCreate(s"sv1"))
+                  .focus(_.localSynchronizerNodes)
+                  .modify(c =>
+                    c.copy(
+                      current = c.successor.getOrElse(
+                        throw new IllegalStateException("successor must be set")
+                      ),
+                      successor = None,
+                    )
+                  ),
+            )
+        )
       )
       // use the standalone participant
       .addConfigTransforms((_, config) => {
@@ -159,7 +213,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
   }
 
   "cancel a scheduled logical synchronizer upgrade" in { implicit env =>
-    initDso()
+    initDso(includeLocal = false)
     startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
     val topologyFreezeTime = CantonTimestamp.now()
     val upgradeTime = CantonTimestamp.now().plusSeconds(120)
@@ -216,6 +270,8 @@ class LogicalSynchronizerUpgradeIntegrationTest
       sv3ScanBackend,
       sv4ScanBackend,
       sv1Backend,
+      sv1LocalBackend,
+      sv1NoLegacyLocalBackend,
       sv2Backend,
       sv3Backend,
       sv4Backend,
@@ -306,7 +362,10 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
     // account for the cancellation
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
-    val successorPsid = decentralizedSynchronizerPSId.copy(serial = newSynchronizerSerial)
+    val successorPsid = decentralizedSynchronizerPSId.copy(
+      serial = newSynchronizerSerial,
+      protocolVersion = successorPv,
+    )
     // Upload after starting validator which connects to global
     // synchronizers as upload_dar_unless_exists vets on all
     // connected synchronizers.
@@ -354,7 +413,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
         "Pause traffic transfer trigger on sv2 to simulate a participant that is connected to a non initialized sequencer past upgrade tiem"
       ) {
         sv2Backend.dsoAutomation
-          .trigger[LogicalSyncUpgradeTransferTrafficTrigger]
+          .trigger[LsuTransferTrafficTrigger]
           .pause()
           .futureValue
       }
@@ -389,7 +448,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
         sv2Backend.stop()
         sv2Backend.startSync()
         sv2Backend.dsoAutomation
-          .trigger[LogicalSyncUpgradeTransferTrafficTrigger]
+          .trigger[LsuTransferTrafficTrigger]
           .resume()
       }
 
@@ -613,7 +672,7 @@ class LogicalSynchronizerUpgradeIntegrationTest
 
       clue("sv4 upgrades") {
         loggerFactory.suppress(
-          SuppressionRule.forLogger[LogicalSynchronizerUpgradeTrigger] && SuppressionRule.Level(
+          SuppressionRule.forLogger[LsuTrigger] && SuppressionRule.Level(
             org.slf4j.event.Level.WARN
           )
         ) {
@@ -687,6 +746,33 @@ class LogicalSynchronizerUpgradeIntegrationTest
             }
           }
         }
+      }
+
+      clue("Restart with additionalLegacy") {
+        sv1Backend.stop()
+        sv1LocalBackend.startSync()
+        forExactly(1, sv1ScanBackend.listDsoSequencers().loneElement.sequencers) { s =>
+          s.serial shouldBe Some(0)
+          s.svName shouldBe sv1LocalBackend.config.onboarding.value.name
+        }
+      }
+
+      clue("Restart with no legacy") {
+        sv1LocalBackend.stop()
+        actAndCheck("restart with no legacy config", sv1NoLegacyLocalBackend.startSync())
+        (
+          "scan only lists sequencer for serial 2",
+          () =>
+            sv1ScanBackend
+              .listDsoSequencers()
+              .loneElement
+              .sequencers
+              .filter(c =>
+                c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
+              )
+              .loneElement
+              .serial shouldBe Some(2),
+        )
       }
 
       clue("stop apps manually to prevent errors from the synchronizer being force stopped") {

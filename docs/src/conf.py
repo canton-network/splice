@@ -87,6 +87,7 @@ copybutton_prompt_text = "@ "
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
+html_static_path = ["_static"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -115,12 +116,13 @@ html_theme_options = {
 # See https://docs.readthedocs.com/platform/latest/guides/edit-source-links-sphinx.html
 html_context = {
     "display_github": True,
-    "github_user": "hyperledger-labs",
+    "github_user": "canton-network",
     "github_repo": "splice",
     "github_version": "main",
     "conf_py_path": "/docs/src/",
 }
 
+html_css_files = ["deprecated-banner.css"]
 html_js_files = ["script.js"]
 
 SPLICE_ROOT = os.getenv("SPLICE_ROOT")
