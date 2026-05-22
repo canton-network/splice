@@ -11,15 +11,13 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice
-import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{
   PackageVersionSupport,
   PackageVettingLookupService,
   RetryProvider,
   SpliceLedgerConnection,
 }
-import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
@@ -53,13 +51,11 @@ class RestartDsoDelegateBasedAutomationTrigger(
     appLevelRetryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
     packageVettingService: PackageVettingLookupService,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
     override val ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends OnAssignedContractTrigger.Template[
       splice.dsorules.DsoRules.ContractId,
       splice.dsorules.DsoRules,
@@ -168,8 +164,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
          domainUnpausedSync,
          config,
          svTaskContext,
-         config.scan,
-         upgradesConfig,
+         scanConnectionF,
          retryProvider,
          loggerFactory,
        )

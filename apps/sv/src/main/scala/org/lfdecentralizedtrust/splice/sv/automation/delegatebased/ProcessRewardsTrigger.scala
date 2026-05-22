@@ -22,18 +22,14 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
   BatchOfBatches,
   BatchOfMintingAllowances,
 }
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
-import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetRewardAccountingBatchResponse,
   RewardAccountingMintingAllowance,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
-import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
-import org.lfdecentralizedtrust.splice.util.{AssignedContract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.AssignedContract
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -48,15 +44,12 @@ import ProcessRewardsTriggerBase.*
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends OnAssignedContractTrigger.Template[
       ProcessRewardsV2.ContractId,
       ProcessRewardsV2,
@@ -145,70 +138,43 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
   ): Future[GetRewardAccountingBatchResponse] =
-    withScanConnection { conn =>
-      conn.getRewardAccountingBatch(round, batchHash).map {
-        case Some(response) => response
-        case None =>
-          // TODO (#5623) replace with BFT read
-          throw new RuntimeException(
-            s"Batch not found from scan for round $round with hash $batchHash"
-          )
-      }
+    scanConnectionF.flatMap(_.getRewardAccountingBatch(round, batchHash)).map {
+      case Some(response) => response
+      case None =>
+        // TODO (#5623) replace with BFT read
+        throw new RuntimeException(
+          s"Batch not found from scan for round $round with hash $batchHash"
+        )
     }
-
-  // TODO (#5623) replace with non-ephemeral connection
-  private def withScanConnection[T](f: ScanConnection => Future[T])(implicit
-      tc: TraceContext
-  ): Future[T] =
-    ScanConnection
-      .singleUncached(
-        ScanAppClientConfig(
-          NetworkAppClientConfig(scanConfig.internalUrl)
-        ),
-        upgradesConfig,
-        context.clock,
-        context.retryProvider,
-        loggerFactory,
-        retryConnectionOnInitialFailure = false,
-      )
-      .flatMap(f)
 }
 
 class ProcessRewardsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends ProcessRewardsTriggerBase(
       context,
       svTaskContext,
-      scanConfig,
-      upgradesConfig,
+      scanConnectionF,
       isDryRun = false,
     )
 
 class ProcessRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends ProcessRewardsTriggerBase(
       context,
       svTaskContext,
-      scanConfig,
-      upgradesConfig,
+      scanConnectionF,
       isDryRun = true,
     )
 

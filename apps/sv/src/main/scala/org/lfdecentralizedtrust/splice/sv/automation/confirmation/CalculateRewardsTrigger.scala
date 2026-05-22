@@ -17,16 +17,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
-import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
-import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.{AssignedContract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -40,15 +36,12 @@ abstract class CalculateRewardsTriggerBase(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends PollingParallelTaskExecutionTrigger[CalculateRewardsTriggerBase.Task] {
 
   import CalculateRewardsTriggerBase.*
@@ -160,34 +153,17 @@ abstract class CalculateRewardsTriggerBase(
       }.toSet
     }
 
-  // TODO (#5623) replace with non-ephemeral connection
-  private def withScanConnection[T](f: ScanConnection => Future[T])(implicit
-      tc: TraceContext
-  ): Future[T] =
-    ScanConnection
-      .singleUncached(
-        ScanAppClientConfig(NetworkAppClientConfig(scanConfig.internalUrl)),
-        upgradesConfig,
-        context.clock,
-        context.retryProvider,
-        loggerFactory,
-        retryConnectionOnInitialFailure = false,
-      )
-      .flatMap(f)
-
   private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Option[Hash]] =
-    withScanConnection { conn =>
-      conn.getRewardAccountingRootHash(round).map {
-        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-          Some(new Hash(ok.rootHash))
-        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
-          None
-        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
-          // TODO (#5623) replace with BFT read
-          throw new RuntimeException(
-            s"Scan cannot provide root hash for round $round"
-          )
-      }
+    scanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).map {
+      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+        Some(new Hash(ok.rootHash))
+      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
+        None
+      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
+        // TODO (#5623) replace with BFT read
+        throw new RuntimeException(
+          s"Scan cannot provide root hash for round $round"
+        )
     }
 
   private def startProcessingRewardsAction(
@@ -209,20 +185,16 @@ class CalculateRewardsTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends CalculateRewardsTriggerBase(
       context,
       store,
       connection,
-      scanConfig,
-      upgradesConfig,
+      scanConnectionF,
       isDryRun = false,
     )
 
@@ -230,20 +202,16 @@ class CalculateRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends CalculateRewardsTriggerBase(
       context,
       store,
       connection,
-      scanConfig,
-      upgradesConfig,
+      scanConnectionF,
       isDryRun = true,
     )
 

@@ -151,6 +151,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       httpClient: HttpClient,
       templateJsonDecoder: TemplateJsonDecoder,
       esf: ExecutionSequencerFactory,
+      tc: TraceContext,
   ) =
     new SvDsoAutomationService(
       clock,

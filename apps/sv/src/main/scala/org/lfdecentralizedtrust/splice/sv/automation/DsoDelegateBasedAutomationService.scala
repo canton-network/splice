@@ -17,14 +17,12 @@ import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
 }
-import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
-import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvScanConfig}
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class DsoDelegateBasedAutomationService(
     clock: Clock,
@@ -32,16 +30,13 @@ class DsoDelegateBasedAutomationService(
     domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
-    scanConfig: SvScanConfig,
-    upgradesConfig: UpgradesConfig,
+    scanConnectionF: Future[ScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends AutomationService(
       config.automation,
       clock,
@@ -149,10 +144,10 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
-      new ProcessRewardsTrigger(triggerContext, svTaskContext, scanConfig, upgradesConfig)
+      new ProcessRewardsTrigger(triggerContext, svTaskContext, scanConnectionF)
     )
     registerTrigger(
-      new ProcessRewardsDryRunTrigger(triggerContext, svTaskContext, scanConfig, upgradesConfig)
+      new ProcessRewardsDryRunTrigger(triggerContext, svTaskContext, scanConnectionF)
     )
   }
 

@@ -6,10 +6,12 @@ package org.lfdecentralizedtrust.splice.sv.automation
 import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
-import com.digitalasset.canton.config.ClientConfig
+import com.digitalasset.canton.config.{ClientConfig, NonNegativeDuration}
+import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
@@ -24,11 +26,14 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
+  NetworkAppClientConfig,
   SpliceInstanceNamesConfig,
   UpgradesConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
@@ -59,7 +64,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class SvDsoAutomationService(
     clock: Clock,
@@ -87,6 +92,7 @@ class SvDsoAutomationService(
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
     esf: ExecutionSequencerFactory,
+    tc: TraceContext,
 ) extends SpliceAppAutomationService(
       config.automation,
       clock,
@@ -101,6 +107,23 @@ class SvDsoAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.type =
     SvDsoAutomationService
+
+  // Shared long-lived connection to the SV's own scan, used by the reward triggers
+  private val scanConnectionF: Future[ScanConnection] = ScanConnection.singleUncached(
+    ScanAppClientConfig(NetworkAppClientConfig(config.scan.internalUrl)),
+    upgradesConfig,
+    clock,
+    retryProvider,
+    loggerFactory,
+    retryConnectionOnInitialFailure = true,
+  )
+
+  override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    super.closeAsync() :+ AsyncCloseable(
+      "scan-connection",
+      scanConnectionF.map(_.close()),
+      NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
+    )
 
   private val packageVettingService = new PackageVettingLookupService(
     config.packageVettingCache,
@@ -128,7 +151,7 @@ class SvDsoAutomationService(
       retryProvider,
       packageVersionSupport,
       packageVettingService,
-      upgradesConfig,
+      scanConnectionF,
     )
 
   // required for triggers that must run in sim time as well
@@ -370,8 +393,7 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
-        config.scan,
-        upgradesConfig,
+        scanConnectionF,
       )
     )
 
@@ -380,8 +402,7 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
-        config.scan,
-        upgradesConfig,
+        scanConnectionF,
       )
     )
 
