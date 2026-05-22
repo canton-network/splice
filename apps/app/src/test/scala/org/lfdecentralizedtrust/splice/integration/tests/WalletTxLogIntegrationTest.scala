@@ -82,15 +82,25 @@ class WalletTxLogIntegrationTest
       )
       .addConfigTransform((_, config) =>
         ConfigTransforms
-          .updateAllValidatorConfigs_(
-            // set a large pre-approval duration to ensure that the fees paid are not so small
-            // as to be a rounding error in the test.
-            _.focus(_.transferPreapproval.preapprovalLifetime)
-              .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+          .updateAllValidatorConfigs((name, config) =>
+            if (name.contains("bob"))
+              // set a large pre-approval duration to ensure that the fees paid are not so small
+              // as to be a rounding error in the test.
+              config
+                .focus(_.transferPreapproval.preapprovalLifetime)
+                .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+                // set renewal duration to be same as pre-approval lifetime to ensure renewal gets
+                // triggered immediately
+                .focus(_.transferPreapproval.renewalDuration)
+                .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+            else
               // set renewal duration to be same as pre-approval lifetime to ensure renewal gets
               // triggered immediately
-              .focus(_.transferPreapproval.renewalDuration)
-              .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+              config
+                .focus(_.transferPreapproval.renewalDuration)
+                .replace(
+                  config.transferPreapproval.preapprovalLifetime
+                )
           )(config)
       )
       // Some tests use the splitwell app to generate multi-party payments
@@ -1150,7 +1160,8 @@ class WalletTxLogIntegrationTest
       )
     }
 
-    "handle external party transfer preapprovals" in { implicit env =>
+    // FIXME: add version check
+    "handle external party transfer preapprovals with lifetime > base duration" in { implicit env =>
       def renewTransferPreapprovalTrigger =
         bobValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
 
@@ -1218,6 +1229,63 @@ class WalletTxLogIntegrationTest
         expectedTxLogEntries,
         trafficTopups = IgnoreTopupsDevNet,
       )
+    }
+
+    // FIXME: add version check
+    "handle external party transfer preapprovals with lifetime <= base duration" in {
+      implicit env =>
+        def renewTransferPreapprovalTrigger =
+          aliceValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
+
+        val creationTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalCreation.toProto
+          logEntry.sender.value.party shouldBe aliceValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount shouldBe 0.0
+          logEntry.receivers shouldBe empty withClue "receivers"
+        }
+        val tapTxLog: CheckTxHistoryFn = { case logEntry: BalanceChangeTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+        }
+        aliceValidatorWalletClient.tap(30.0)
+
+        val onboarding = onboardExternalParty(aliceValidatorBackend)
+
+        val initialCid = setTriggersWithin(
+          triggersToPauseAtStart = Seq(renewTransferPreapprovalTrigger),
+          triggersToResumeAtStart = Seq.empty,
+        ) {
+          val extPartySetupResult =
+            createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, onboarding)
+          checkTxHistory(
+            aliceValidatorWalletClient,
+            Seq(creationTxLog, tapTxLog),
+            trafficTopups = IgnoreTopupsDevNet,
+          )
+          extPartySetupResult.transferPreapprovalCid
+        }
+
+        eventually() {
+          val preapproval =
+            aliceValidatorBackend.lookupTransferPreapprovalByParty(onboarding.party).value
+          preapproval.payload.lastRenewedAt should not be preapproval.payload.validFrom
+          preapproval.contractId should not be initialCid
+        }
+        val renewTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalRenewal.toProto
+          logEntry.sender.value.party shouldBe aliceValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount shouldBe 0.0
+          logEntry.receivers shouldBe empty withClue "receivers"
+        }
+        val expectedTxLogEntries = Seq(renewTxLog, creationTxLog, tapTxLog)
+        checkTxHistory(
+          aliceValidatorWalletClient,
+          expectedTxLogEntries,
+          trafficTopups = IgnoreTopupsDevNet,
+        )
     }
 
     "handle failed automation (app payment)" in { implicit env =>
