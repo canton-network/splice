@@ -395,6 +395,8 @@ object SpliceUtil {
       initialExternalPartyConfigStateTickDuration
         .map(t => new RelTime(TimeUnit.NANOSECONDS.toMicros(t.duration.toNanos)))
         .toJava,
+      // transferPreapprovalBaseDuration
+      Optional.empty(),
     )
 
   def defaultAnsConfig(
