@@ -397,6 +397,8 @@ object SpliceUtil {
         .map(t => new RelTime(TimeUnit.NANOSECONDS.toMicros(t.duration.toNanos)))
         .toJava,
       initialRewardConfig.toJava,
+      // transferPreapprovalBaseDuration
+      Optional.empty(),
     )
 
   def defaultAnsConfig(
