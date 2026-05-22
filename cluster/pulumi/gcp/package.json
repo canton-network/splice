@@ -1,5 +1,5 @@
 {
-  "name": "gcp-pulumi-deployment",
+  "name": "@lfdecentralizedtrust/gcp-pulumi-deployment",
   "version": "1.0.0",
   "main": "src/index.ts",
   "dependencies": {

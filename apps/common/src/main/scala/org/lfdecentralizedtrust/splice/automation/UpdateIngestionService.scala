@@ -9,14 +9,14 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.{Materializer, RestartSettings}
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient.GetTreeUpdatesResponse
 import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
-  SpliceLedgerConnection,
   ServiceWithGuaranteedShutdown,
+  SpliceLedgerConnection,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart
@@ -113,7 +113,17 @@ class UpdateIngestionService(
       offset: Long
   )(implicit traceContext: TraceContext): Future[Unit] = {
     ingestionSink.ingestAcsStreamInBatches(
-      batchSource(connection.activeContracts(filter, offset)),
+      batchSource(
+        connection.activeContracts(
+          filter,
+          offset,
+          RestartSettings(
+            config.ingestion.activeContractsMinBackoff.underlying,
+            config.ingestion.activeContractsMaxBackoff.underlying,
+            config.ingestion.activeContractsRandomFactor,
+          ),
+        )
+      ),
       offset,
     )
   }

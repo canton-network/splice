@@ -51,7 +51,9 @@ describe('Set DSO Config Rules Form', () => {
 
     const actionInput = screen.getByTestId('set-dso-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Set Dso Rules Configuration');
+    expect(actionInput.getAttribute('value')).toBe(
+      'Set Decentralized Synchronizer Operations (DSO) Rules Configuration'
+    );
 
     const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();

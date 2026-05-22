@@ -22,7 +22,7 @@ tests:
     template: deployment.yaml
     set:
       runtimeDetails:
-        migrationId: 0
+        migrationId: 99
         scanUrl: "https://scan.url"
     documentSelector:
       path: kind

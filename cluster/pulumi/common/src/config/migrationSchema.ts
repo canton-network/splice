@@ -43,6 +43,7 @@ export const MigrationInfoSchema = z
 export const SynchronizerMigrationSchema = z
   .object({
     legacy: MigrationInfoSchema.optional(),
+    additionalLegacy: z.array(MigrationInfoSchema).optional(),
     active: MigrationInfoSchema.extend({
       migratingFrom: z.number().optional(),
       version: CnChartVersionSchema,

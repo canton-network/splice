@@ -1487,7 +1487,7 @@ class SvFrontendIntegrationTest
 
     "NEW UI: Create Unclaimed Activity Record" in { implicit env =>
       val beneficiary = sv3Backend.getDsoInfo().svParty.toProtoPrimitive
-      val amount = "100"
+      val amount = "100.5"
 
       assertCreateProposal(
         "SRARC_CreateUnallocatedUnclaimedActivityRecord",

@@ -7,7 +7,8 @@ import { z } from 'zod';
 
 const GhaConfigSchema = z.object({
   gha: z.object({
-    githubRepo: z.string(),
+    githubOrg: z.string(),
+    githubRepos: z.array(z.string()),
     // these a Splice versions
     runnerVersion: z.string(),
     runnerHookVersion: z.string(),

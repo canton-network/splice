@@ -19,6 +19,8 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.CompactJson
+import definitions.GetRewardAccountingActivityTotalsResponse
+import definitions.GetRewardAccountingRootHashResponse
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
@@ -88,9 +90,11 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
 
     assertOldestOpenRound(0)
 
-    clue("Reward accounting endpoints return 404 before any data is available") {
+    clue("Reward accounting endpoints report 'Undetermined' before any data is available") {
       sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe None
-      sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe None
+      sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe an[
+        GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
+      ]
     }
 
     // Here we perform all settlements with verdict ingestion paused just to
@@ -237,26 +241,38 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     }
 
     clue("Verify activity totals for the computed round") {
-      val totals = sv1ScanBackend.getRewardAccountingActivityTotals(earliest)
-      totals.value.roundNumber shouldBe earliest
-      totals.value.activityRecordsCount should be > 0L
+      val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(earliest)) {
+        case GetRewardAccountingActivityTotalsResponse.members
+              .RewardAccountingActivityTotalsOk(t) =>
+          t
+      }
+      totals.roundNumber shouldBe earliest
+      totals.activityRecordsCount should be > 0L
     }
 
     clue("Verify root hash is available") {
-      val rootHash = sv1ScanBackend.getRewardAccountingRootHash(earliest)
-      rootHash shouldBe defined
-      rootHash.value.roundNumber shouldBe earliest
-      rootHash.value.rootHash should have length 64 // hex-encoded SHA-256
+      val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(earliest)) {
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) => h
+      }
+      rootHash.roundNumber shouldBe earliest
+      rootHash.rootHash should have length 64 // hex-encoded SHA-256
     }
 
     clue("Verify batch lookup for root hash returns batch contents") {
-      val rootHashHex = sv1ScanBackend.getRewardAccountingRootHash(earliest).value.rootHash
+      val rootHashHex = inside(sv1ScanBackend.getRewardAccountingRootHash(earliest)) {
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+          h.rootHash
+      }
       sv1ScanBackend.getRewardAccountingBatch(earliest, rootHashHex) shouldBe defined
     }
 
-    clue("Verify 404 for non-existent data") {
-      sv1ScanBackend.getRewardAccountingActivityTotals(earliest + 100) shouldBe None
-      sv1ScanBackend.getRewardAccountingRootHash(earliest + 100) shouldBe None
+    clue("Verify response for non-existent data") {
+      sv1ScanBackend.getRewardAccountingActivityTotals(earliest + 100) shouldBe an[
+        GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
+      ]
+      sv1ScanBackend.getRewardAccountingRootHash(earliest + 100) shouldBe an[
+        GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined
+      ]
       sv1ScanBackend.getRewardAccountingBatch(earliest, "0" * 64) shouldBe None
     }
   }
