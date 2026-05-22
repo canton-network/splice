@@ -11,15 +11,13 @@ function usage() {
   echo "  -h          display this help message"
   echo "  -s          skip bundle"
   echo "  -l          start backend with two super validators for local testing"
-  echo "  -p          start backend with permissioned-synchronizer mode for SVs"
 }
 
 skip_bundle=0
 topology="minimal-topology.conf"
 bootstrapScript="bootstrap-minimal.sc"
-permissioned=0
 
-while getopts "hslp" arg; do
+while getopts "hdap:c:wsbtfgl" arg; do
   case ${arg} in
     h)
       usage
@@ -33,10 +31,6 @@ while getopts "hslp" arg; do
       topology="minimal-topology-2svs.conf"
       bootstrapScript="bootstrap.sc"
       echo "deploying backend for sv1 and sv2"
-      ;;
-    p)
-      permissioned=1
-      echo "Flag set: Permissioned synchronizer mode enabled"
       ;;
     ?)
       usage
@@ -58,21 +52,6 @@ fi
 echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
 scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}"
 
-CANTON_OVERRIDES=()
-if [ $permissioned -eq 1 ]; then
-  echo "Injecting permissioned-synchronizer = true via Canton CLI overrides..."
-
-  CANTON_OVERRIDES+=("-C" "canton.sv-apps.sv1.permissioned-synchronizer=true")
-
-  CANTON_OVERRIDES+=("-C" "canton.validator-apps.aliceValidator.permissioned-synchronizer=true")
-  CANTON_OVERRIDES+=("-C" "canton.validator-apps.splitwellValidator.permissioned-synchronizer=true")
-  CANTON_OVERRIDES+=("-C" "canton.validator-apps.sv1Validator.permissioned-synchronizer=true")
-
-  if [ "$topology" == "minimal-topology-2svs.conf" ]; then
-    CANTON_OVERRIDES+=("-C" "canton.sv-apps.sv2.permissioned-synchronizer=true")
-  fi
-fi
-
 echo "Starting Canton Network apps for local frontend testing"
 export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=./scripts/canton-logback.xml"
-splice-node --config "${OUTPUT_CONFIG}" "${CANTON_OVERRIDES[@]:-}" --bootstrap ./apps/splitwell/frontend/$bootstrapScript --log-level-canton=DEBUG --log-encoder json --log-file-name log/splice-node_local_frontend_testing.clog
+splice-node --config "${OUTPUT_CONFIG}" --bootstrap ./apps/splitwell/frontend/$bootstrapScript --log-level-canton=DEBUG --log-encoder json --log-file-name log/splice-node_local_frontend_testing.clog

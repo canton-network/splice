@@ -7,6 +7,7 @@ object TransformConfig extends App {
   val inputFileName = Paths.get(args(1))
   val outputFileName = Paths.get(args(2))
   mode match {
+
     case "useSelfSignedTokensForLedgerApiAuth" =>
       val inputConfig = SpliceConfig.parseAndLoadOrThrow(Seq(inputFileName.toFile))
       val outputConfig =
