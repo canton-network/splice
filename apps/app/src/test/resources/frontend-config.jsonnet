@@ -111,4 +111,5 @@ function(
   clusterAddress,
   spliceInstanceNames,
   port,
-) auth(authAlgorithm, auth0Config) + testAuth(std.parseJson(enableTestAuth), auth0Config) + services(validatorNode, clusterProtocol, clusterAddress, port) + spliceInstanceNames
+  permissioned='false',
+) auth(authAlgorithm, auth0Config) + testAuth(std.parseJson(enableTestAuth), auth0Config) + services(validatorNode, clusterProtocol, clusterAddress, port) + spliceInstanceNames + (if app == 'sv' then { permissioned: std.parseJson(permissioned) } else {})
