@@ -20,6 +20,15 @@
 
 .. release-notes:: 0.6.5
 
+    .. important:: Validators must upgrade to 0.6.5 or newer before
+                   any LSU. If you don't upgrade in time, your node
+                   will be unable to receive or submit transactions
+                   until you upgrade.
+
+    - Canton
+
+        - Fix LSU issue where participant restarts past freeze time could lead to losing the LSU announcement. Validators must update to consume this bugfix before any LSU.
+
     - Observability
 
        - The release bundle now ships a separate Grafana dashboard folder ``validator-grafana-dashboards/`` for Validator operators.
@@ -52,10 +61,6 @@
 
         - The sequencer and mediator helm charts are now setting the same ``fsGroup``, ``runAsUser``, and ``runAsGroup``
           in the security context of the pods as the participant, validator app, and sv app charts.
-
-    - Canton
-
-        - Fix LSU issue where participant restarts past freeze time could lead to losing the LSU announcement.
 
     - UI
 
