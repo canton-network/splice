@@ -48,7 +48,7 @@ function createSaKeySecret(
 
 export function installGithubRepo(repo: string): void {
   const orgProvider = new github.Provider('canton-network-provider', {
-    owner: ghaConfig.githubOrg.replaceAll('https://github.com/', ''), // TODO(#5570): after we change the config to be just the org, remove the replaceAll
+    owner: ghaConfig.githubOrg
   });
 
   // A bit ugly that we reuse this straight from DockerConfig, but we plan to
