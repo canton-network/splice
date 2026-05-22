@@ -55,16 +55,13 @@ if [ $skip_bundle -eq 0 ]; then
   sbt --batch bundle
 fi
 
-echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
-scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}"
-
+permissioned_str="false"
 if [ $permissioned -eq 1 ]; then
-  echo "Injecting permissioned-synchronizer = true for SV apps..."
-  echo "canton.sv-apps.sv1.permissioned-synchronizer = true" >> "${OUTPUT_CONFIG}"
-  if [ "$topology" == "minimal-topology-2svs.conf" ]; then
-    echo "canton.sv-apps.sv2.permissioned-synchronizer = true" >> "${OUTPUT_CONFIG}"
-  fi
+  permissioned_str="true"
 fi
+
+echo "Generating config file ${OUTPUT_CONFIG} with self-signed tokens"
+scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "useSelfSignedTokensForLedgerApiAuth" "${INPUT_CONFIG}" "${OUTPUT_CONFIG}" "${permissioned_str}"
 
 echo "Starting Canton Network apps for local frontend testing"
 export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=./scripts/canton-logback.xml"
