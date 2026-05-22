@@ -4,8 +4,8 @@ import React from 'react';
 import { Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import BftAnsEntry from './BftAnsEntry';
-import MetaDisplay from './MetaDisplay';
 import { SettlementInfo } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
+import { TextMapDisplay } from './TextMap';
 
 const AllocationSettlementDisplay: React.FC<{
   settlement: SettlementInfo;
@@ -41,7 +41,7 @@ const AllocationSettlementDisplay: React.FC<{
       {Object.keys(settlementMeta.values).length > 0 ? (
         <>
           <Typography variant="h5">Settlement Meta</Typography>
-          <MetaDisplay meta={settlementMeta.values} />
+          <TextMapDisplay textMap={settlementMeta.values} />
         </>
       ) : null}
     </Stack>

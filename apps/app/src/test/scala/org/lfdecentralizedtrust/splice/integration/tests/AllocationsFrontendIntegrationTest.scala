@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg as TransferLegV1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2.{
@@ -198,6 +199,8 @@ class AllocationsFrontendIntegrationTest
             .listAmuletAllocations() shouldBe empty withClue "alice AmuletAllocations"
         }
 
+        Threading.sleep(60_000L)
+
         actAndCheck(
           "click on accepting the allocation request", {
             eventuallyClickOn(
@@ -227,6 +230,8 @@ class AllocationsFrontendIntegrationTest
             findAll(className("allocation-request")).toSeq.loneElement
           }
         }
+
+        Threading.sleep(60_000L)
 
         actAndCheck(
           "click on withdrawing the allocation", {
