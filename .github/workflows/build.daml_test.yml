@@ -19,6 +19,7 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
+          path: "splice"
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if static only
