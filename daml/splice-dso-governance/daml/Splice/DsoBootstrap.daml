@@ -75,6 +75,7 @@ template DsoBootstrap with
               initialTrafficState
               isDevNet
               hostedSvs = None
+              offboardedHostedSvs = None
         create dsoRules
         -- create initial per-sv and per-operator contracts for sv1
         let addSvChoiceArgs = DsoRules_AddSv with
