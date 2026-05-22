@@ -389,6 +389,90 @@ class AllocationsFrontendIntegrationTest
       }
     }
 
+    "create a prefunded (committed) allocation with next iteration funding" in { implicit env =>
+      val aliceDamlUser = aliceWalletClient.config.ledgerApiUser
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
+
+      aliceWalletClient.tap(1000)
+
+      withFrontEnd("alice") { implicit webDriver =>
+        browseToAliceWallet(aliceDamlUser)
+        browseToAllocationsPage()
+
+        val settlementRefId = "billing/prefunded-test"
+        val nextIterationAmount = "100"
+        val amuletInstrumentKey = amuletInstrumentIdName
+
+        actAndCheck(
+          "fill and submit the create allocation form with committed=true and next iteration funding", {
+            textField("create-allocation-settlement-ref-id").underlying
+              .sendKeys(settlementRefId)
+            eventuallyClickOn(id("create-allocation-settlement-executor-0"))
+            setAnsField(
+              textField("create-allocation-settlement-executor-0"),
+              validatorPartyId.toProtoPrimitive,
+              validatorPartyId.toProtoPrimitive,
+            )
+
+            // Add a self-transfer leg (alice -> alice) to fund the allocation
+            textField("create-allocation-transfer-leg-id-0").underlying
+              .sendKeys("funding-leg-0")
+            eventuallyClickOn(id("create-allocation-transfer-leg-sender-0"))
+            setAnsField(
+              textField("create-allocation-transfer-leg-sender-0"),
+              aliceParty.toProtoPrimitive,
+              aliceParty.toProtoPrimitive,
+            )
+            eventuallyClickOn(id("create-allocation-transfer-leg-receiver-0"))
+            setAnsField(
+              textField("create-allocation-transfer-leg-receiver-0"),
+              aliceParty.toProtoPrimitive,
+              aliceParty.toProtoPrimitive,
+            )
+            eventuallyClickOn(id("create-allocation-0-amulet-amount"))
+            numberField("create-allocation-0-amulet-amount").value = ""
+            numberField("create-allocation-0-amulet-amount").underlying.sendKeys("100")
+
+            // Check the committed checkbox
+            inside(find(id("create-allocation-committed"))) { case Some(element) =>
+              element.underlying.click()
+            }
+
+            // Set next iteration funding: key = amulet instrument id, value = 100
+            eventuallyClickOn(id("create-allocation-next-iteration-funding-add-meta"))
+            textField("create-allocation-next-iteration-funding-meta-key-0").underlying
+              .sendKeys(amuletInstrumentKey)
+            textField("create-allocation-next-iteration-funding-meta-value-0").underlying
+              .sendKeys(nextIterationAmount)
+
+            eventuallyClickOn(id("create-allocation-submit-button"))
+          },
+        )(
+          "the committed allocation is shown with next iteration funding",
+          _ => {
+            val allocation = findAll(className("allocation")).toSeq.loneElement
+
+            checkSettlementInfo(
+              allocation,
+              settlementRefId,
+              None,
+              Seq(validatorPartyId.toProtoPrimitive),
+            )
+
+            // Verify committed and next iteration funding are displayed
+            seleniumText(
+              allocation.childElement(className("allocation-committed"))
+            ) should include("yes")
+
+            seleniumText(
+              allocation.childElement(className("allocation-next-iteration-funding"))
+            ) should include(nextIterationAmount)
+          },
+        )
+      }
+    }
+
   }
 
   private def browseToAllocationsPage()(implicit driver: WebDriverType) = {

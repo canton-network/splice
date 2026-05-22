@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import { Container, Stack, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import { Box, Container, Stack, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import BftAnsEntry from './BftAnsEntry';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
@@ -41,11 +41,15 @@ const AllocationSpecificationDisplay: React.FC<{
           <DateWithDurationDisplay datetime={settlementDeadline} enableDuration />)
         </Typography>
       ) : null}
-      <Typography variant="body2">Committed: {committed ? 'yes' : 'no'}</Typography>
+      <Typography variant="body2" className="allocation-committed">
+        Committed: {committed ? 'yes' : 'no'}
+      </Typography>
       {hasNextIterationFunding ? (
         <>
           <Typography variant="body2">Next iteration funding</Typography>
-          <TextMapDisplay textMap={nextIterationFunding} />
+          <Box className="allocation-next-iteration-funding">
+            <TextMapDisplay textMap={nextIterationFunding} />
+          </Box>
         </>
       ) : null}
       {hasAllocationMeta ? (
