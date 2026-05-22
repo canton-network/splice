@@ -61,7 +61,12 @@ scala -classpath "$BUNDLE/lib/splice-node.jar" ./scripts/transform-config.sc "us
 CANTON_OVERRIDES=()
 if [ $permissioned -eq 1 ]; then
   echo "Injecting permissioned-synchronizer = true via Canton CLI overrides..."
+
   CANTON_OVERRIDES+=("-C" "canton.sv-apps.sv1.permissioned-synchronizer=true")
+
+  CANTON_OVERRIDES+=("-C" "canton.validator-apps.aliceValidator.permissioned-synchronizer=true")
+  CANTON_OVERRIDES+=("-C" "canton.validator-apps.splitwellValidator.permissioned-synchronizer=true")
+  CANTON_OVERRIDES+=("-C" "canton.validator-apps.sv1Validator.permissioned-synchronizer=true")
 
   if [ "$topology" == "minimal-topology-2svs.conf" ]; then
     CANTON_OVERRIDES+=("-C" "canton.sv-apps.sv2.permissioned-synchronizer=true")
