@@ -459,6 +459,10 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       class="jsondiffpatch-unchanged"
       data-key="externalPartyConfigStateTickDuration"><div
         class="jsondiffpatch-property-name">externalPartyConfigStateTickDuration</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="transferPreapprovalBaseDuration"><div
+        class="jsondiffpatch-property-name">transferPreapprovalBaseDuration</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;
