@@ -10,7 +10,7 @@ import { Button, Stack, TextField, Typography } from '@mui/material';
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useSvConfig } from '../utils';
 
-const VALID_PARTY_ID_REGEX = /^[^-]+-[^-]+-\d+$/;
+const VALID_PARTY_ID_REGEX = /^.+::[a-zA-Z0-9]+$/;
 const VALID_PARTICIPANT_ID_REGEX = /^.+::[a-zA-Z0-9]+$/;
 
 const ValidatorPermissioning: React.FC = () => {
