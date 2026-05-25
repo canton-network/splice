@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanAppRewardsStore,
   ScanRewardsReferenceStore,
 }
-import org.lfdecentralizedtrust.splice.store.{PageLimit, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
@@ -64,9 +64,7 @@ class RewardComputationTrigger(
         // and filter out
         // - rounds where the rewards are already computed
         // - rounds with incomplete activity
-        candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2(
-          PageLimit.tryCreate(context.config.parallelism)
-        )
+        candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2()
         candidateRounds = candidates.map(_.payload.round.number.toLong).distinct.sorted
         computedRounds <- appRewardsStore.roundsWithComputedRewards(candidateRounds)
         afterComputedFilter = candidateRounds.filterNot(computedRounds.contains)
