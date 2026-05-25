@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanAppRewardsStore,
   ScanRewardsReferenceStore,
 }
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{PageLimit, UpdateHistory}
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
@@ -65,7 +65,9 @@ class RewardComputationTrigger(
         // and filter out
         // - rounds where the rewards are already computed
         // - rounds with incomplete activity
-        candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2()
+        candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2(
+          PageLimit.tryCreate(context.config.parallelism)
+        )
         roundToContract = candidates.map(c => c.payload.round.number.toLong -> c.contractId).toMap
         candidateRounds = roundToContract.keys.toSeq.sorted
         computedRounds <- appRewardsStore.roundsWithComputedRewards(candidateRounds)
