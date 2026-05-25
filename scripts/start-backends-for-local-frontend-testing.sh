@@ -11,14 +11,13 @@ function usage() {
   echo "  -h          display this help message"
   echo "  -s          skip bundle"
   echo "  -l          start backend with two super validators for local testing"
-  echo "  -p          start backend in permissioned mode"
 }
 
 skip_bundle=0
 topology="minimal-topology.conf"
 bootstrapScript="bootstrap-minimal.sc"
 
-while getopts "hslp" arg; do
+while getopts "hdap:c:wsbtfgl" arg; do
   case ${arg} in
     h)
       usage
@@ -32,10 +31,6 @@ while getopts "hslp" arg; do
       topology="minimal-topology-2svs.conf"
       bootstrapScript="bootstrap.sc"
       echo "deploying backend for sv1 and sv2"
-      ;;
-    p)
-      topology="permissioned-sv1-only-topology.conf"
-      bootstrapScript="bootstrap-permissioned.sc"
       ;;
     ?)
       usage
