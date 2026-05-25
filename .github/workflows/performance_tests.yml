@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload ingestion metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: store-ingestion-perf-metrics-${{ github.run_id }}
           path: /tmp/store-ingestion-perf-metrics
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload read metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: store-read-perf-metrics-${{ github.run_id }}
           path: /tmp/store-read-perf-metrics
