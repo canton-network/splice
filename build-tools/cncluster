@@ -267,6 +267,11 @@ function _assert_lock() {
         fi
 
         # Check lock for CI...
+        if env-bool CN_INFRA_RUNNER; then
+            _info "CI workflow ran by $GITHUB_ACTOR and locked by ${lockholder}"
+            return
+        fi
+
         if ! approver=$( "$SPLICE_ROOT/build-tools/approved-by.sh" ); then
             _error "Could not determine approver for CI workflow"
         fi
