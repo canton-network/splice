@@ -77,6 +77,11 @@ class CachingScanRewardsReferenceStore private[splice] (
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
     store.listActiveCalculateRewardsV2(limit)
 
+  override def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    store.listActiveCalculateRewardsV2ForRound(roundNumber)
+
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit
   override lazy val acsContractFilter = store.acsContractFilter

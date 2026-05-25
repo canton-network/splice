@@ -327,6 +327,47 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
+    "listActiveCalculateRewardsV2ForRound returns contracts for the given round" in {
+      val store = mkStore()
+      val cr5 = calculateRewardsV2(dsoParty, round = 5)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(200).toInstant)
+      val cr7 = calculateRewardsV2(dsoParty, round = 7)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(cr5, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr3, recordTime = CantonTimestamp.ofEpochSecond(200).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr7, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+
+        // Returns contract for matching round
+        result5 <- store.listActiveCalculateRewardsV2ForRound(5)
+        _ = result5.map(_.payload.round.number) shouldBe Seq(5L)
+
+        // Returns empty for non-existent round
+        result99 <- store.listActiveCalculateRewardsV2ForRound(99)
+        _ = result99 shouldBe empty
+
+        // Returns empty after archiving
+        _ <- sync1.archive(cr5, recordTime = CantonTimestamp.ofEpochSecond(400).toInstant)(
+          store.multiDomainAcsStore
+        )
+        afterArchive <- store.listActiveCalculateRewardsV2ForRound(5)
+        _ = afterArchive shouldBe empty
+
+        // Other rounds unaffected
+        still3 <- store.listActiveCalculateRewardsV2ForRound(3)
+        _ = still3.map(_.payload.round.number) shouldBe Seq(3L)
+      } yield succeed
+    }
+
     "lookupActiveOpenMiningRounds" in {
       val store = mkStore()
       // Timeline (ingestion start = 250, earliest archived_at):

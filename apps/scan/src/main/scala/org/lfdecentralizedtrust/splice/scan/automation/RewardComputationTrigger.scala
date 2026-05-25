@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.scan.metrics.RewardComputationMetrics
 import org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputs
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -68,8 +67,7 @@ class RewardComputationTrigger(
         candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2(
           PageLimit.tryCreate(context.config.parallelism)
         )
-        roundToContract = candidates.map(c => c.payload.round.number.toLong -> c.contractId).toMap
-        candidateRounds = roundToContract.keys.toSeq.sorted
+        candidateRounds = candidates.map(_.payload.round.number.toLong).distinct.sorted
         computedRounds <- appRewardsStore.roundsWithComputedRewards(candidateRounds)
         afterComputedFilter = candidateRounds.filterNot(computedRounds.contains)
         earliestCompleteO <- appActivityStore.earliestRoundWithCompleteAppActivity()
@@ -79,64 +77,55 @@ class RewardComputationTrigger(
             afterComputedFilter.filter(r => r >= earliest && r <= latest)
           case _ => Seq.empty[Long]
         }
-
-        // Look up OpenMiningRound for each eligible round and extract inputs.
-        tasks <- Future.traverse(eligible)(r => buildTask(r, roundToContract(r)))
-      } yield tasks
+      } yield eligible.map(RewardComputationTrigger.Task(_))
   }
 
   override protected def completeTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[TaskOutcome] =
-    appRewardsStore
-      .computeAndStoreRewards(task.roundNumber, task.batchSize, task.inputs)
-      .map { summary =>
-        rewardMetrics.record(summary)
-        TaskSuccess(
-          s"Computed rewards for round ${task.roundNumber}: " +
-            s"${summary.activePartiesCount} active parties, " +
-            s"${summary.activityRecordsCount} activity records, " +
-            s"${summary.rewardedPartiesCount} rewarded parties, " +
-            s"${summary.batchesCreatedCount} batches"
-        )
-      }
-
-  private def buildTask(
-      roundNumber: Long,
-      contractId: CalculateRewardsV2.ContractId,
-  )(implicit tc: TraceContext): Future[RewardComputationTrigger.Task] =
-    rewardsReferenceStore.lookupOpenMiningRoundByNumber(roundNumber).map {
-      case None =>
-        throw Status.INTERNAL
-          .withDescription(
-            s"Round $roundNumber has a CalculateRewardsV2 contract and complete activity " +
-              s"but its OpenMiningRound is not in the rewards reference store."
-          )
-          .asRuntimeException()
-      case Some(contract) =>
-        val (inputs, batchSize) =
+    for {
+      roundContract <- rewardsReferenceStore.lookupOpenMiningRoundByNumber(task.roundNumber)
+      (inputs, batchSize) = roundContract match {
+        case None =>
+          throw Status.INTERNAL
+            .withDescription(
+              s"Round ${task.roundNumber} has a CalculateRewardsV2 contract and complete activity " +
+                s"but its OpenMiningRound is not in the rewards reference store."
+            )
+            .asRuntimeException()
+        case Some(contract) =>
           RewardComputationInputs.fromOpenMiningRound(contract.payload).getOrElse {
             throw Status.INTERNAL
               .withDescription(
-                s"Round $roundNumber has a CalculateRewardsV2 contract but its " +
+                s"Round ${task.roundNumber} has a CalculateRewardsV2 contract but its " +
                   s"OpenMiningRound is missing rewardConfig or trafficPrice."
               )
               .asRuntimeException()
           }
-        RewardComputationTrigger.Task(roundNumber, batchSize, inputs, contractId)
+      }
+      summary <- appRewardsStore.computeAndStoreRewards(task.roundNumber, batchSize, inputs)
+    } yield {
+      rewardMetrics.record(summary)
+      TaskSuccess(
+        s"Computed rewards for round ${task.roundNumber}: " +
+          s"${summary.activePartiesCount} active parties, " +
+          s"${summary.activityRecordsCount} activity records, " +
+          s"${summary.rewardedPartiesCount} rewarded parties, " +
+          s"${summary.batchesCreatedCount} batches"
+      )
     }
 
   override protected def isStaleTask(
       task: RewardComputationTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] =
     for {
-      contractGone <- rewardsReferenceStore.multiDomainAcsStore
-        .lookupContractById(CalculateRewardsV2.COMPANION)(task.calculateRewardsId)
-        .map(_.isEmpty)
+      contractExists <- rewardsReferenceStore
+        .listActiveCalculateRewardsV2ForRound(task.roundNumber)
+        .map(_.nonEmpty)
       alreadyComputed <- appRewardsStore
         .roundsWithComputedRewards(Seq(task.roundNumber))
         .map(_.nonEmpty)
-    } yield contractGone || alreadyComputed
+    } yield !contractExists || alreadyComputed
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+
@@ -146,16 +135,11 @@ class RewardComputationTrigger(
 object RewardComputationTrigger {
 
   final case class Task(
-      roundNumber: Long,
-      batchSize: Int,
-      inputs: RewardComputationInputs,
-      calculateRewardsId: CalculateRewardsV2.ContractId,
+      roundNumber: Long
   ) extends PrettyPrinting {
-    import com.digitalasset.canton.participant.pretty.Implicits.prettyContractId
     override def pretty: Pretty[this.type] =
       prettyOfClass(
-        param("roundNumber", _.roundNumber),
-        param("calculateRewardsId", _.calculateRewardsId),
+        param("roundNumber", _.roundNumber)
       )
   }
 }

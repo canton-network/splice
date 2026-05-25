@@ -85,6 +85,12 @@ trait ScanRewardsReferenceStore extends AppStore {
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]]
 
+  /** List active CalculateRewardsV2 contracts for the given round.
+    */
+  def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]]
+
   override lazy val acsContractFilter: MultiDomainAcsStore.ContractFilter[
     ScanRewardsReferenceStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,

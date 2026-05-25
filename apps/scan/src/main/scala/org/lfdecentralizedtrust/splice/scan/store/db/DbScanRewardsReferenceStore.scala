@@ -237,4 +237,23 @@ class DbScanRewardsReferenceStore(
       )
       limited = applyLimit("listActiveCalculateRewardsV2", limit, result)
     } yield limited.map(contractFromRow(CalculateRewardsV2.COMPANION)(_))
+
+  override def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    for {
+      _ <- waitUntilInitialized
+      result <- futureUnlessShutdownToFuture(
+        storage.query(
+          selectFromAcsTable(
+            ScanRewardsReferenceTables.acsTableName,
+            multiDomainAcsStore.acsStoreId,
+            multiDomainAcsStore.domainMigrationId,
+            CalculateRewardsV2.COMPANION,
+            where = sql"""acs.round = $roundNumber""",
+          ),
+          "listActiveCalculateRewardsV2ForRound",
+        )
+      )
+    } yield result.map(contractFromRow(CalculateRewardsV2.COMPANION)(_))
 }
