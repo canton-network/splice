@@ -150,4 +150,4 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   logback.xml: |
-{{ .Files.Get "../../../scripts/canton-logback.xml" | indent 4 }}
+{{ .Files.Get "files/canton-logback.xml" | indent 4 }}
