@@ -26,6 +26,10 @@ on:
         type: boolean
         required: false
         default: false
+      start_frontend_args:
+        type: string
+        required: false
+        default: "-d -s"
       skip_if_commit_tag:
         type: string
         required: false

@@ -5,7 +5,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, SvFrontendTestUtil, SvTestUtil}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.SynchronizerPermissionState
 
-class PermissionedSynchronizerSvFrontEndIntegrationTest
+class PermissionedSynchronizerSvFrontendIntegrationTest
     extends SvFrontendCommonIntegrationTest
     with SvTestUtil
     with SvFrontendTestUtil
