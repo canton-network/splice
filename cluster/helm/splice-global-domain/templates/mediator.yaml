@@ -202,7 +202,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   logback.xml: |
-{{ .Files.Get "files/canton-logback.xml" | indent 4 }}
+{{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.mediator.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
