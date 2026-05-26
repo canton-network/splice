@@ -166,16 +166,6 @@ trait ScanStore
 
   def lookupRoundOfLatestData()(implicit tc: TraceContext): Future[Option[(Long, Instant)]]
 
-  // ensures that data is aggregated at least up to and including asOfEndOfRound, passes the last round aggregated to f
-  def ensureAggregated[T](asOfEndOfRound: Long)(f: Long => Future[T])(implicit
-      tc: TraceContext
-  ): Future[T] = for {
-    (lastRound, _) <- getRoundOfLatestData()
-    result <-
-      if (lastRound >= asOfEndOfRound) f(lastRound)
-      else Future.failed(roundNotAggregated())
-  } yield result
-
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
       splice.validatorlicense.ValidatorLicense.ContractId,
