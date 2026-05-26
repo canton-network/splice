@@ -41,7 +41,7 @@ object TxLogEntry extends StoreErrors {
     val VoteRequestTxLogEntry = String3.tryCreate("vot")
     val TransferCommandTxLogEntry = String3.tryCreate("trc")
     val AbortTransferInstructionTxLogEntry = String3.tryCreate("ati")
-    val SvOnboardingTxLogEntry = String3.tryCreate("asv")
+    val SvOnboardingTxLogEntry = String3.tryCreate("svo")
     // The following entry types correspond to entries that were removed from `scan_tx_log.proto`
     // Those entries might still exist in databases, but we don't produce new ones and we don't read them.
     // The values are only kept for documentation purposes.
