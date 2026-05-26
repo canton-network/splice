@@ -153,7 +153,6 @@ object ScanTables extends AcsTables {
       transferCommandSender: Option[PartyId] = None,
       transferCommandNonce: Option[Long] = None,
       svOnboardingParty: Option[PartyId] = None,
-      svOnboardingWeight: Option[Long] = None,
       svOnboardingEffectiveAt: Option[CantonTimestamp] = None,
       voteSvParty: Option[PartyId] = None,
   ) extends TxLogRowData {
@@ -177,7 +176,6 @@ object ScanTables extends AcsTables {
       "transfer_command_sender" -> transferCommandSender,
       "transfer_command_nonce" -> transferCommandNonce,
       "sv_onboarding_party" -> svOnboardingParty,
-      "sv_onboarding_weight" -> svOnboardingWeight,
       "sv_onboarding_effective_at" -> svOnboardingEffectiveAt,
       "vote_sv_party" -> voteSvParty,
     )
@@ -287,7 +285,6 @@ object ScanTables extends AcsTables {
             ScanTxLogRowData(
               entry = entry,
               svOnboardingParty = Some(entry.svParty),
-              svOnboardingWeight = Some(entry.initialWeight),
               svOnboardingEffectiveAt = entry.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
           case _ =>

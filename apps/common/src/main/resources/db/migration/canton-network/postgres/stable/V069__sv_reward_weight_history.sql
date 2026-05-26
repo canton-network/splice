@@ -1,8 +1,6 @@
 alter table scan_txlog_store
     add column sv_onboarding_party text;
 alter table scan_txlog_store
-    add column sv_onboarding_weight bigint;
-alter table scan_txlog_store
     add column sv_onboarding_effective_at bigint;
 
 alter table scan_txlog_store
