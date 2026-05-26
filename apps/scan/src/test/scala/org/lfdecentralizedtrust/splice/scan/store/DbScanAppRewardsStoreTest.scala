@@ -540,8 +540,9 @@ class DbScanAppRewardsStoreTest
             Seq("alice::provider", "bob::provider"),
             Seq(5000000L, 50000L),
           )
+          // totalIssuanceForFeaturedAppRewards is 0.45, and alice gets almost all of it. Only alice will therefore be above the threshold of 0.4
           nonZeroThresholdInputs = testInputs.copy(
-            appRewardCouponThreshold = RewardComputationInputs.fromBigDecimal(BigDecimal("0.5"))
+            appRewardCouponThreshold = RewardComputationInputs.fromBigDecimal(BigDecimal("0.4"))
           )
           summary <- store.computeAndStoreRewards(
             roundNumber,
