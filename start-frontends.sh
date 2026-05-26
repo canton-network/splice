@@ -133,7 +133,7 @@ while getopts "hdavstp" arg; do
       ;;
     p)
       permissioned="true"
-      echo "Enabled permissioned mode in frontend..."
+      echo "Enabled permissioned mode in (sv) frontend."
       ;;
     ?)
       usage
