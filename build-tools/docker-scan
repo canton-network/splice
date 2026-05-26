@@ -88,7 +88,7 @@ image_version="$(get-snapshot-version)"
 index=$(ls .. | grep -nx "${image_name}" | sed 's/:.*//')
 
 BASE_PORT=9000
-TMP_DIR="/tmp/blackduck-docker-scan/${index}"
+TMP_DIR="${GITHUB_WORKSPACE}/.blackduck/blackduck-docker-scan/${index}"
 mkdir -p "${TMP_DIR}"
 export DETECT_JAR_DOWNLOAD_DIR="${TMP_DIR}/detect_jars"
 
