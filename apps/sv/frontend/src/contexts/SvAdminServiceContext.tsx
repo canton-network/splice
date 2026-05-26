@@ -246,7 +246,7 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
           sv_party: svParty,
           before: new Date(before),
         });
-        return response.prior_weight ?? null;
+        return response.prior_weight;
       },
     };
   }, [url, userAccessToken]);

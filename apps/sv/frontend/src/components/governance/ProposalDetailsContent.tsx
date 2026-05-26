@@ -668,9 +668,7 @@ const UpdateSvRewardWeightSection = ({
   const { data: priorWeight } = useSvRewardWeightBefore(svToUpdate, before);
 
   const beforeValue =
-    before && priorWeight !== null && priorWeight !== undefined
-      ? formatBasisPoints(priorWeight.toString())
-      : currentWeight;
+    priorWeight != null ? formatBasisPoints(priorWeight.toString()) : currentWeight;
 
   return (
     <>
