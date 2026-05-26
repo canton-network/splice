@@ -581,7 +581,10 @@ class SvFrontendIntegrationTest
     )(implicit env: SpliceTestConsoleEnvironment): VoteRequest.ContractId = {
       val action: ActionRequiringConfirmation = new ARC_DsoRules(
         new SRARC_UpdateSvRewardWeight(
-          new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, java.lang.Long.valueOf(targetWeight))
+          new DsoRules_UpdateSvRewardWeight(
+            sv.toProtoPrimitive,
+            java.lang.Long.valueOf(targetWeight),
+          )
         )
       )
       val (_, voteRequest) = actAndCheck(
