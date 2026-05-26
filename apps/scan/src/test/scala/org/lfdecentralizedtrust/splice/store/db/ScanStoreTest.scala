@@ -527,27 +527,9 @@ abstract class ScanStoreTest
 
       "ingestion writes an SvOnboardingTxLogEntry for DsoRules_AddSv" in {
         val sv = providerParty(7)
-        val weightLong: java.lang.Long = 5L
-        val roundLong: java.lang.Long = 1L
-        val addSvArg = new DsoRules_AddSv(
-          sv.toProtoPrimitive,
-          "sv7",
-          weightLong,
-          "sv7ParticipantId",
-          new org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round(roundLong),
-        )
-        val addSvResult = new DsoRules_AddSvResult(
-          new DsoRules.ContractId(nextCid())
-        )
         for {
           store <- mkStore()
-          _ <- dummyDomain.exercise(
-            contract = dsoRules(dsoParty),
-            interfaceId = None,
-            choiceName = DsoRulesAddSv.choice.name,
-            addSvArg.toValue,
-            addSvResult.toValue,
-          )(store.multiDomainAcsStore)
+          _ <- ingestAddSv(store, sv, initialWeight = 5L)
           entries <- listAllSvOnboardings(store)
         } yield {
           entries should have length 1
@@ -1256,23 +1238,18 @@ abstract class ScanStoreTest
 
   protected def listAllSvOnboardings(store: ScanStore): Future[Seq[SvOnboardingTxLogEntry]]
 
-  /** Ingest a DsoRules_AddSv exercise for the given SV with the given initial weight.
-    * Uses txEffectiveAt = time(50).toInstant so that it falls before the default
-    * "before" boundaries used in the lookupSvRewardWeightBefore tests.
-    */
   private def ingestAddSv(
       store: ScanStore,
       sv: PartyId,
       initialWeight: Long,
+      effectiveAt: CantonTimestamp = time(50),
   ): Future[?] = {
-    val weightLong: java.lang.Long = initialWeight
-    val roundLong: java.lang.Long = 1L
     val addSvArg = new DsoRules_AddSv(
       sv.toProtoPrimitive,
       "sv-name",
-      weightLong,
+      initialWeight,
       "svParticipantId",
-      new org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round(roundLong),
+      new Round(1L),
     )
     val addSvResult = new DsoRules_AddSvResult(new DsoRules.ContractId(nextCid()))
     dummyDomain.exercise(
@@ -1281,23 +1258,19 @@ abstract class ScanStoreTest
       choiceName = DsoRulesAddSv.choice.name,
       addSvArg.toValue,
       addSvResult.toValue,
-      txEffectiveAt = time(50).toInstant,
+      txEffectiveAt = effectiveAt.toInstant,
     )(store.multiDomainAcsStore)
   }
 
-  /** Ingest an accepted SRARC_UpdateSvRewardWeight vote result for the given SV.
-    * The effectiveAt of the vote result is controlled by the `effectiveAt` parameter.
-    */
   private def ingestUpdateSvRewardWeightVote(
       store: ScanStore,
       sv: PartyId,
       newWeight: Long,
-      effectiveAt: com.digitalasset.canton.data.CantonTimestamp,
+      effectiveAt: CantonTimestamp,
   ): Future[?] = {
-    val newWeightLong: java.lang.Long = newWeight
     val action = new ARC_DsoRules(
       new SRARC_UpdateSvRewardWeight(
-        new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, newWeightLong)
+        new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, newWeight)
       )
     )
     val voteReq = voteRequest(requester = userParty(1), votes = Seq.empty, action = action)
@@ -1311,8 +1284,8 @@ abstract class ScanStoreTest
     )(store.multiDomainAcsStore)
   }
 
-  protected lazy val user1 = userParty(1)
-  protected lazy val user2 = userParty(2)
+  private lazy val user1 = userParty(1)
+  private lazy val user2 = userParty(2)
 
   implicit class ScanStoreExt(store: ScanStore) {
     @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))

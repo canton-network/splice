@@ -675,69 +675,67 @@ class DbScanStore(
       before: Instant,
   )(implicit tc: TraceContext): Future[Option[Long]] = {
     val beforeIso = before.toString
-    val beforeMicros = before.getEpochSecond * 1_000_000L + before.getNano / 1_000L
-    for {
-      voteHit <- futureUnlessShutdownToFuture(
-        storage
-          .querySingle(
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = sql"""
-                entry_type = ${EntryType.VoteRequestTxLogEntry}
-                and vote_action_name = 'SRARC_UpdateSvRewardWeight'
-                and vote_accepted = true
-                and vote_sv_party = ${svParty.toProtoPrimitive}
-                and vote_effective_at::timestamptz < $beforeIso::timestamptz
-              """,
-              orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
-            ).headOption,
-            "lookupSvRewardWeightBefore.vote",
-          )
-          .value
-      )
-      addSvHit <- voteHit match {
-        case Some(_) =>
-          Future.successful(Option.empty[TxLogQueries.SelectFromTxLogTableResult])
-        case None =>
-          futureUnlessShutdownToFuture(
-            storage
-              .querySingle(
-                selectFromTxLogTable(
-                  txLogTableName,
-                  txLogStoreId,
-                  where = sql"""
-                    entry_type = ${EntryType.SvOnboardingTxLogEntry}
-                    and sv_onboarding_party = ${svParty.toProtoPrimitive}
-                    and sv_onboarding_effective_at < $beforeMicros
-                  """,
-                  orderLimit = sql"order by sv_onboarding_effective_at desc limit 1",
-                ).headOption,
-                "lookupSvRewardWeightBefore.addSv",
-              )
-              .value
-          )
-      }
-    } yield {
-      val voteWeight: Option[Long] = voteHit.map { row =>
-        val vr = txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig)(row)
-        val result = vr.result.getOrElse(throw txMissingField())
-        result.request.action match {
-          case arc: ARC_DsoRules =>
-            arc.dsoAction match {
-              case u: SRARC_UpdateSvRewardWeight =>
-                u.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.toLong
-              case other =>
-                sys.error(s"vote_sv_party set but action is not weight update: $other")
-            }
+    val beforeMicros = CantonTimestamp.assertFromInstant(before).toMicros
+
+    val voteWeight: Future[Option[Long]] = futureUnlessShutdownToFuture(
+      storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = sql"""
+              entry_type = ${EntryType.VoteRequestTxLogEntry}
+              and vote_action_name = 'SRARC_UpdateSvRewardWeight'
+              and vote_accepted = true
+              and vote_sv_party = ${svParty.toProtoPrimitive}
+              and vote_effective_at::timestamptz < $beforeIso::timestamptz
+            """,
+            orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
+          ).headOption,
+          "lookupSvRewardWeightBefore.vote",
+        )
+        .value
+    ).map(_.map(newRewardWeightFromVoteRow))
+
+    val onboardingWeight: Future[Option[Long]] = futureUnlessShutdownToFuture(
+      storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = sql"""
+              entry_type = ${EntryType.SvOnboardingTxLogEntry}
+              and sv_onboarding_party = ${svParty.toProtoPrimitive}
+              and sv_onboarding_effective_at < $beforeMicros
+            """,
+            orderLimit = sql"order by sv_onboarding_effective_at desc limit 1",
+          ).headOption,
+          "lookupSvRewardWeightBefore.addSv",
+        )
+        .value
+    ).map(_.map(row => txLogEntryFromRow[SvOnboardingTxLogEntry](txLogConfig)(row).initialWeight))
+
+    voteWeight.flatMap {
+      case some @ Some(_) => Future.successful(some)
+      case None => onboardingWeight
+    }
+  }
+
+  private def newRewardWeightFromVoteRow(
+      row: TxLogQueries.SelectFromTxLogTableResult
+  ): Long = {
+    val vr = txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig)(row)
+    val result = vr.result.getOrElse(throw txMissingField())
+    result.request.action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case u: SRARC_UpdateSvRewardWeight =>
+            u.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.toLong
           case other =>
-            sys.error(s"vote_sv_party set but action is not ARC_DsoRules: $other")
+            sys.error(s"vote_sv_party set but action is not weight update: $other")
         }
-      }
-      val addSvWeight: Option[Long] = addSvHit.map { row =>
-        txLogEntryFromRow[SvOnboardingTxLogEntry](txLogConfig)(row).initialWeight
-      }
-      voteWeight.orElse(addSvWeight)
+      case other =>
+        sys.error(s"vote_sv_party set but action is not ARC_DsoRules: $other")
     }
   }
 
