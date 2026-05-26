@@ -76,54 +76,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getTotalRewardsCollectedEver" should {
-
-      "return the sum of reward amounts (ValidatorReward & AppReward)" in {
-        val validatorRewards = Seq(
-          9.5,
-          11.5,
-        )
-        val appRewards = Seq(
-          11.25,
-          9.75,
-        )
-        val closedRounds = (0 to 1).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(appRewards.zip(validatorRewards).zipWithIndex) {
-            case ((appAmount, validatorAmount), round) =>
-              dummyDomain.exercise(
-                amuletRules(),
-                Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-                Transfer.choice.name,
-                mkAmuletRulesTransfer(user1, 1.0),
-                mkTransferResultRecord(
-                  round = round.toLong,
-                  inputAppRewardAmount = appAmount,
-                  inputValidatorRewardAmount = validatorAmount,
-                  inputSvRewardAmount = 0,
-                  inputAmuletAmount = 0,
-                  balanceChanges = Map(),
-                  amuletPrice = 0.0005,
-                ),
-              )(store.multiDomainAcsStore)
-          }
-          _ = closedRounds.map(closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore).futureValue
-          )
-          _ <- store.aggregate()
-        } yield {
-          store
-            .getTotalRewardsCollectedEver()
-            .futureValue shouldBe validatorRewards.sum + appRewards.sum
-        }
-      }
-
-    }
-
     "getAmuletConfigForRound" should {
 
       "return the amulet OpenMiningRoundTxLogEntry for the round" in {

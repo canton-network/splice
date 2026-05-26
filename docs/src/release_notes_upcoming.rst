@@ -15,6 +15,7 @@
           - ``/v0/top-providers-by-app-rewards``
           - ``/v0/top-validators-by-validator-rewards``
           - ``/v0/top-validators-by-purchased-traffic``
+          - ``/v0/rewards-collected``
 
     - Deployment
 

@@ -602,25 +602,6 @@ class DbScanStore(
       }
     } yield nodeStates.map(_.contract.payload).toVector
 
-  override def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal] =
-    waitUntilAcsIngested {
-      for {
-        result <- storage.query(
-          sql"""
-          select coalesce(cumulative_app_rewards, 0) + coalesce(cumulative_validator_rewards, 0)
-          from   round_totals
-          where  store_id = $roundTotalsStoreId
-          and    closed_round = (
-                    select max(closed_round)
-                    from round_totals
-                    where store_id = $roundTotalsStoreId
-                 );
-          """.as[BigDecimal].headOption,
-          "getTotalRewardsCollectedEver",
-        )
-      } yield result.getOrElse(0)
-    }
-
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]] = waitUntilAcsIngested {

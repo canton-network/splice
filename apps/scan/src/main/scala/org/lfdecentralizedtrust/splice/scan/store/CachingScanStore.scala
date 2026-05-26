@@ -110,13 +110,6 @@ class CachingScanStore(
       (_: Unit) => store.lookupAnsRules(),
     ).get(())
 
-  override def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal] =
-    getCache(
-      "totalRewardsCollected",
-      cacheConfig.totalRewardsCollected,
-      (_: Unit) => store.getTotalRewardsCollectedEver(),
-    ).get(())
-
   override def getAmuletConfigForRound(round: Long)(implicit
       tc: TraceContext
   ): Future[OpenMiningRoundTxLogEntry] =
