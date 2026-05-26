@@ -319,7 +319,6 @@ describe('Proposal Details Content', () => {
 
   test('should render completed update sv reward weight proposal with prior weight from lookup', async () => {
     const svToUpdate = 'sv2';
-    const effectiveAt = '2024-02-02 13:00';
 
     let capturedSvParty: string | undefined;
     server.use(
@@ -336,19 +335,11 @@ describe('Proposal Details Content', () => {
       createdAt: '2024-02-02T13:00:00.000Z',
       isVoteRequest: false,
       proposal: {
-        svToUpdate: svToUpdate,
+        svToUpdate,
         currentWeight: '10',
         weightChange: '10',
       } as UpdateSvRewardWeightProposal,
     } as ProposalDetails;
-
-    const completedVotingInformation: ProposalVotingInformation = {
-      requester: 'sv1',
-      requesterIsYou: true,
-      votingThresholdDeadline: '2024-02-01 13:00',
-      voteTakesEffect: effectiveAt,
-      status: 'Implemented',
-    };
 
     render(
       <Wrapper>
@@ -356,15 +347,15 @@ describe('Proposal Details Content', () => {
           currentSvPartyId={voteResult.votingInformation.requester}
           contractId={voteResult.contractId}
           proposalDetails={completedUpdateSvRewardWeightDetails}
-          votingInformation={completedVotingInformation}
+          votingInformation={voteResult.votingInformation}
           votes={voteResult.votes}
         />
       </Wrapper>
     );
 
-    const section = await screen.findByTestId('proposal-details-update-sv-reward-weight-section');
-    expect(section).toBeInTheDocument();
-
+    expect(
+      await screen.findByTestId('proposal-details-update-sv-reward-weight-section')
+    ).toBeInTheDocument();
     expect(await screen.findByTestId('config-change-field-label')).toHaveTextContent('Weight');
     await waitFor(() => {
       expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('5');
