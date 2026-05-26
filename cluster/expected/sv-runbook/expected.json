@@ -864,6 +864,10 @@
           "name": "activities",
           "type": "unlimited"
         },
+        "/api/scan/v0/admin/sv/reward-weight-before": {
+          "name": "sv-reward-weight-before",
+          "type": "unlimited"
+        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
