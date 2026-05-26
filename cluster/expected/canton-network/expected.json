@@ -1765,22 +1765,6 @@
           "name": "synchronizer-identities",
           "type": "unlimited"
         },
-        "/api/scan/v0/top-providers-by-app-rewards": {
-          "name": "top-providers",
-          "type": "banned"
-        },
-        "/api/scan/v0/top-validators-by-purchased-traffic": {
-          "name": "top-validators-by-purchased-traffic",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-faucets": {
-          "name": "top-validators-by-validator-faucets",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-rewards": {
-          "name": "top-validators-by-validator-rewards",
-          "type": "unlimited"
-        },
         "/api/scan/v0/transactions": {
           "name": "transactions",
           "type": "unlimited"
@@ -2030,22 +2014,6 @@
         },
         "/api/scan/v0/synchronizer-identities": {
           "name": "synchronizer-identities",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-providers-by-app-rewards": {
-          "name": "top-providers",
-          "type": "banned"
-        },
-        "/api/scan/v0/top-validators-by-purchased-traffic": {
-          "name": "top-validators-by-purchased-traffic",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-faucets": {
-          "name": "top-validators-by-validator-faucets",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-rewards": {
-          "name": "top-validators-by-validator-rewards",
           "type": "unlimited"
         },
         "/api/scan/v0/transactions": {
