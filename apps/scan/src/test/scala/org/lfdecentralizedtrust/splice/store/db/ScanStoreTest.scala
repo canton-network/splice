@@ -39,12 +39,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbScanStore,
-  DbScanStoreMetrics,
-  ScanAggregatesReader,
-  ScanAggregator,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
@@ -56,7 +51,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
@@ -101,44 +96,6 @@ abstract class ScanStoreTest
         }
       }
 
-    }
-
-    "getRoundOfLatestData" should {
-
-      "return the latest closed round" in {
-        val closedBefore = (0 until 2).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-        val closed = closedMiningRound(dsoParty, round = 2)
-        for {
-          store <- mkStore()
-          closeTime = Instant.ofEpochSecond(1500)
-          _ <- MonadUtil.sequentialTraverse(closedBefore) { closed =>
-            dummyDomain.create(closed, txEffectiveAt = closeTime)(
-              store.multiDomainAcsStore
-            )
-          }
-          _ <- dummyDomain.create(closed, txEffectiveAt = closeTime)(
-            store.multiDomainAcsStore
-          )
-          _ <- store.aggregate()
-        } yield {
-          val (round, effectiveAt) = store.getRoundOfLatestData().futureValue
-          round should be(2)
-          effectiveAt should be(closeTime)
-        }
-      }
-
-      "fail if there's no closed round" in {
-        val open = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(open)(store.multiDomainAcsStore)
-        } yield {
-          val failure = store.getRoundOfLatestData().failed.futureValue
-          failure.getMessage should be(roundNotAggregated().getMessage)
-        }
-      }
     }
 
     "getTotalPurchasedMemberTraffic" should {
@@ -1664,19 +1621,8 @@ class DbScanStoreTest
     val store = new DbScanStore(
       key = ScanStore.Key(dsoParty),
       storage,
-      // to allow aggregating from round zero without previous round aggregate
-      isFirstSv = true,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      // required to instantiate a DbScanStore, returns none not to affect this test.
-      _ =>
-        new ScanAggregatesReader() {
-          def readRoundAggregateFromDso(round: Long)(implicit
-              ec: ExecutionContext,
-              traceContext: TraceContext,
-          ): Future[Option[ScanAggregator.RoundAggregate]] = Future.successful(None)
-          def close(): Unit = ()
-        },
       DomainMigrationInfo(
         domainMigrationId,
         None,
@@ -1684,7 +1630,6 @@ class DbScanStoreTest
       participantId = mkParticipantId("ScanStoreTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
-      initialRound = 0,
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       acsStoreDescriptorUserVersion,
       txLogStoreDescriptorUserVersion,

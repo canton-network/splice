@@ -37,7 +37,6 @@ import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
 import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanAppClientConfig}
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   ChoiceContextWithDisclosures,
@@ -555,27 +554,6 @@ abstract class ScanAppReference(
           ownerPartyIds,
           recordTimeMatch,
         )
-      )
-    }
-
-  def getAggregatedRounds(): Option[ScanAggregator.RoundRange] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAggregatedRounds
-      )
-    }
-
-  def listRoundTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundTotals(start, end)
-      )
-    }
-
-  def listRoundPartyTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundPartyTotals(start, end)
       )
     }
 

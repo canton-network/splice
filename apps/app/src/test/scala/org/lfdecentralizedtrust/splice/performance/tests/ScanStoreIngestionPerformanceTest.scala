@@ -57,12 +57,10 @@ class ScanStoreIngestionPerformanceTest(
     new DbScanStore(
       ScanStore.Key(dsoParty),
       storage,
-      isFirstSv = true,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
         NoReportingTracerProvider.tracer
       ),
-      _ => throw new RuntimeException("Scan Aggregates do not matter for this test."),
       DomainMigrationInfo(
         migrationId,
         None,
@@ -70,7 +68,6 @@ class ScanStoreIngestionPerformanceTest(
       participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
-      0L,
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
     )(ec, templateJsonDecoder, closeContext).multiDomainAcsStore
   }

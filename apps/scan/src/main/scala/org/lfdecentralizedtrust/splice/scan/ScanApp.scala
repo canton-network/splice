@@ -19,7 +19,6 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.cors.scaladsl.CorsDirectives.cors
 import org.apache.pekko.http.cors.scaladsl.settings.CorsSettings
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round as roundCodegen
@@ -71,8 +70,6 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
-  ScanAggregatesReader,
-  ScanAggregatesReaderContext,
 }
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
@@ -183,17 +180,6 @@ class ScanApp(
         appInitConnection.getInitialRoundFromUserMetadata(config.svUser)
       }
       _ = logger.debug(s"Started with initial round $initialRound")
-      scanAggregatesReaderContext = new ScanAggregatesReaderContext(
-        clock,
-        ledgerClient,
-        amuletAppParameters.upgradesConfig,
-        loggerFactory,
-        retryProvider,
-        ec,
-        Materializer(ac),
-        httpClient,
-        templateDecoder,
-      )
       participantAdminConnection = new ParticipantAdminConnection(
         config.participantClient.adminApi,
         amuletAppParameters.loggingConfig.api,
@@ -223,18 +209,13 @@ class ScanApp(
       store = ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
         storage,
-        isFirstSv = config.isFirstSv,
         loggerFactory,
         retryProvider,
-        { store =>
-          ScanAggregatesReader(store, scanAggregatesReaderContext)
-        },
         migrationInfo,
         participantId,
         config.cache,
         nodeMetrics.dbScanStore,
         config.automation.ingestion,
-        initialRound.toLong,
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,

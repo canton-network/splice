@@ -21,12 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProv
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbScanStore,
-  DbScanStoreMetrics,
-  ScanAggregatesReader,
-  ScanAggregator,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
 import org.lfdecentralizedtrust.splice.store.{
@@ -59,14 +54,6 @@ trait ScanStore
     with MiningRoundsStore
     with VotesStore
     with ExternalPartyConfigStateStore {
-
-  def aggregate()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundTotals]]
-
-  def backFillAggregates()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]]
 
   def key: ScanStore.Key
 
@@ -237,16 +224,6 @@ trait ScanStore
       tc: TraceContext
   ): Future[Seq[TxLogEntry.TransactionTxLogEntry]]
 
-  def getAggregatedRounds()(implicit tc: TraceContext): Future[Option[ScanAggregator.RoundRange]]
-
-  def getRoundTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundTotals]]
-
-  def getRoundPartyTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundPartyTotals]]
-
   def lookupLatestTransferCommandEvents(
       sender: PartyId,
       nonce: Long,
@@ -279,16 +256,13 @@ object ScanStore {
   def apply(
       key: ScanStore.Key,
       storage: DbStorage,
-      isFirstSv: Boolean,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      createScanAggregatesReader: DbScanStore => ScanAggregatesReader,
       domainMigrationInfo: DomainMigrationInfo,
       participantId: ParticipantId,
       cacheConfigs: ScanCacheConfig,
       metrics: DbScanStoreMetrics,
       ingestionConfig: IngestionConfig,
-      initialRound: Long,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
       txLogStoreDescriptorUserVersion: Option[Long] = None,
@@ -303,15 +277,12 @@ object ScanStore {
       new DbScanStore(
         key = key,
         storage,
-        isFirstSv,
         loggerFactory,
         retryProvider,
-        createScanAggregatesReader,
         domainMigrationInfo,
         participantId,
         ingestionConfig,
         metrics,
-        initialRound,
         defaultLimit,
         acsStoreDescriptorUserVersion,
         txLogStoreDescriptorUserVersion,

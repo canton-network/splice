@@ -16,6 +16,10 @@
           - ``/v0/top-validators-by-validator-rewards``
           - ``/v0/top-validators-by-purchased-traffic``
           - ``/v0/rewards-collected``
+          - ``v0/round-party-totals``
+          - ``v0/round-totals``
+          - ``v0/aggregated-rounds``
+
 
     - Deployment
 

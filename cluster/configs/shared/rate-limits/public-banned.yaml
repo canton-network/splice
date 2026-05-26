@@ -5,21 +5,6 @@ rateLimits:
     type: banned
 
   # banned because deprecated
-  /api/scan/v0/aggregated-rounds:
-    name: aggregated-rounds
-    type: banned
-
-  # banned because deprecated
-  /api/scan/v0/round-totals:
-    name: round-totals
-    type: banned
-
-  # banned because deprecated
-  /api/scan/v0/round-party-totals:
-    name: round-party-totals
-    type: banned
-
-  # banned because deprecated
   /api/scan/v0/amulet-config-for-round:
     name: amulet-config-for-round
     type: banned
