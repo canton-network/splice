@@ -1469,30 +1469,6 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/rewards-collected:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getRewardsCollected"
-      description: "**Deprecated**. Get the total rewards collected ever"
-      parameters:
-        - in: query
-          name: round
-          required: false
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GetRewardsCollectedResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/activities:
     post:
       deprecated: true
@@ -2088,12 +2064,6 @@ components:
         effectiveAt:
           type: string
           format: date-time
-    GetRewardsCollectedResponse:
-      type: object
-      required: ["amount"]
-      properties:
-        amount:
-          type: string
     GetValidatorTrafficBalanceResponse:
       type: object
       required: ["remainingBalance", "totalPurchased"]

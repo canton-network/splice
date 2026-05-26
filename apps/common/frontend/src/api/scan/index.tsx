@@ -20,7 +20,6 @@ import useLookupFeaturedAppRight, {
   useLookupFeaturedAppRightBuilder,
 } from './useLookupFeaturedAppRight';
 import useOpenRounds from './useOpenRounds';
-import useTotalRewards from './useTotalRewards';
 
 export {
   useScanClient,
@@ -36,7 +35,6 @@ export {
   useLookupFeaturedAppRight,
   useLookupFeaturedAppRightBuilder,
   useActivity,
-  useTotalRewards,
   useListAnsEntries,
   useListAnsEntriesFromResponse,
   useLookupAnsEntryByName,

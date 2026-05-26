@@ -548,25 +548,6 @@ class HttpScanHandler(
     }
   }
 
-  def getRewardsCollected(
-      response: v0.ScanResource.GetRewardsCollectedResponse.type
-  )(
-      round: Option[Long]
-  )(extracted: TraceContext): Future[v0.ScanResource.GetRewardsCollectedResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRewardsCollected") { _ => _ =>
-      round
-        .fold(store.getTotalRewardsCollectedEver())(store.getRewardsCollectedInRound(_))
-        .map { case amount =>
-          v0.ScanResource.GetRewardsCollectedResponse.OK(
-            definitions
-              .GetRewardsCollectedResponse(Codec.encode(amount))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(

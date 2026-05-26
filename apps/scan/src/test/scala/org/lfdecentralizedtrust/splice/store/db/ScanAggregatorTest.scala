@@ -553,9 +553,6 @@ class ScanAggregatorTest
           cumulativeAppRewards = BigDecimal(3),
           cumulativeValidatorRewards = BigDecimal(6),
         )
-      store
-        .getRewardsCollectedInRound(initialRound + 2L)
-        .futureValue shouldBe prevTotals.appRewards + prevTotals.validatorRewards
       val (round, effectiveAt) = store.getRoundOfLatestData().futureValue
       round shouldBe prevTotals.closedRound
       effectiveAt shouldBe prevTotals.closedRoundEffectiveAt.toInstant

@@ -704,25 +704,6 @@ object HttpScanAppClient {
     }
   }
 
-  case class GetRewardsCollected(round: Option[Long])
-      extends InternalBaseCommand[http.GetRewardsCollectedResponse, BigDecimal] {
-
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetRewardsCollectedResponse] =
-      client.getRewardsCollected(round, headers)
-
-    override protected def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetRewardsCollectedResponse.OK(response) =>
-        for {
-          amount <- Codec.decode(Codec.BigDecimal)(response.amount)
-        } yield amount
-      case http.GetRewardsCollectedResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
   case class GetMemberTrafficStatus(synchronizerId: SynchronizerId, memberId: Member)
       extends ExternalBaseCommand[
         http.GetMemberTrafficStatusResponse,

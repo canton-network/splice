@@ -137,25 +137,5 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
       }
     }
 
-    val validatorLivenessActivityRecordAmount = 2.85
-
-    clue("Aggregated rewards collected on both scan apps should match") {
-      forEvery(
-        Table(
-          ("round", "total floor", "total ceiling"),
-          (2L, BigDecimal(0), BigDecimal(0)),
-          (
-            3L,
-            walletUsdToAmulet(validatorLivenessActivityRecordAmount * 3 - smallAmount),
-            walletUsdToAmulet(validatorLivenessActivityRecordAmount * 3),
-          ),
-        )
-      ) { (round, floor, ceil) =>
-        val rewards1 = sv1ScanBackend.getRewardsCollectedInRound(round)
-        val rewards2 = sv2ScanBackend.getRewardsCollectedInRound(round)
-        rewards1 shouldBe rewards2
-        rewards1 should beWithin(floor, ceil)
-      }
-    }
   }
 }

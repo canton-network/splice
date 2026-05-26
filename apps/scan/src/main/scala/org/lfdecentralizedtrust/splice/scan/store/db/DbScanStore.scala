@@ -621,24 +621,6 @@ class DbScanStore(
       } yield result.getOrElse(0)
     }
 
-  override def getRewardsCollectedInRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[BigDecimal] = waitUntilAcsIngested {
-    for {
-      result <- ensureAggregated(round) { _ =>
-        storage.query(
-          sql"""
-            select coalesce(app_rewards, 0) + coalesce(validator_rewards, 0)
-            from   round_totals
-            where  store_id = $roundTotalsStoreId
-            and    closed_round = $round;
-            """.as[BigDecimal].headOption,
-          "getRewardsCollectedInRound",
-        )
-      }
-    } yield result.getOrElse(0)
-  }
-
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]] = waitUntilAcsIngested {
