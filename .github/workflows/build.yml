@@ -152,7 +152,7 @@ jobs:
   scala_test_permissioned_canton_frontend:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-permissioned-frontend.log'
       start_canton_options: -w
       parallelism: 1
