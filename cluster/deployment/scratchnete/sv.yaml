@@ -1,0 +1,15 @@
+svApp:
+  additionalEnvVars:
+    - name: ADDITIONAL_CONFIG_DABFT_PRUNING
+      value: |
+        canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.dabft-pruning = null
+    - name: ADDITIONAL_CONFIG_PROTOCOL_VERSION
+      value: |
+        canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = "35"
+sequencer:
+  cloudSql:
+    tier: 'db-perf-optimized-N-4'
+    enterprisePlus: true
+    flags:
+      max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
+      maintenance_work_mem: '2000000' # 2Gi, but GCP doesn't allow to write it that way and must be a number indicating KB

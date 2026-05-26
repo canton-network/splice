@@ -6,19 +6,24 @@ loadTester:
   enable: true
   iterationsPerMinute: 1200
 svs:
-  default:
-    svApp:
-      additionalEnvVars:
-        - name: ADDITIONAL_CONFIG_DABFT_PRUNING
-          value: |
-            canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.dabft-pruning = null
-    sequencer:
-      cloudSql:
-        tier: 'db-perf-optimized-N-4'
-        enterprisePlus: true
-        flags:
-          max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
-          maintenance_work_mem: '2000000' # 2Gi, but GCP doesn't allow to write it that way and must be a number indicating KB
+  sv-1: !include(sv.yaml) {}
+  sv-2: !include(sv.yaml) {}
+  sv-3: !include(sv.yaml) {}
+  sv-4: !include(sv.yaml) {}
+  sv-5: !include(sv.yaml) {}
+  sv-6: !include(sv.yaml) {}
+  sv-7: !include(sv.yaml) {}
+  sv-8: !include(sv.yaml) {}
+  sv-9: !include(sv.yaml) {}
+  sv-10: !include(sv.yaml) {}
+  sv-11: !include(sv.yaml) {}
+  sv-12: !include(sv.yaml) {}
+  sv-13: !include(sv.yaml) {}
+  sv-14: !include(sv.yaml) {}
+  sv-15: !include(sv.yaml) {}
+  sv-16: !include(sv.yaml) {}
+  sv: !include(sv.yaml) {}
+  sv-da-1: !include(sv.yaml) {}
 persistentHeapDumps: true
 chaosMesh:
   dabftLatency: 50ms
