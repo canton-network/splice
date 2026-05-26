@@ -153,18 +153,6 @@ rateLimits:
     name: synchronizer-identities
     type: unlimited
 
-  /api/scan/v0/top-validators-by-purchased-traffic:
-    name: top-validators-by-purchased-traffic
-    type: unlimited
-
-  /api/scan/v0/top-validators-by-validator-faucets:
-    name: top-validators-by-validator-faucets
-    type: unlimited
-
-  /api/scan/v0/top-validators-by-validator-rewards:
-    name: top-validators-by-validator-rewards
-    type: unlimited
-
   /api/scan/v0/transfer-command-counter:
     name: transfer-command-counter
     type: unlimited

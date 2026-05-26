@@ -321,7 +321,7 @@ subcommand_whitelist[start_network]='Starts a full network (one SV + one validat
 function subcmd_start_network {
   external_access=0
   wait=0
-  while getopts 'hwE' arg; do
+  while getopts 'hwEB' arg; do
     case ${arg} in
       h)
         subcmd_help
@@ -332,6 +332,9 @@ function subcmd_start_network {
         ;;
       E)
         external_access=1
+        ;;
+      B)
+        bft_custom=1
         ;;
       ?)
         subcmd_help
@@ -385,7 +388,21 @@ function subcmd_start_network {
   curl -sf "scan.localhost:8080/api/scan/readyz" || _error "Scan is not ready after 5 minutes" || exit 1
 
   _info "Starting validator"
-  _do_start_validator -l -o "$secret" -p "local-composeValidator-1" -m 0  "${sv_flags[@]}"
+  validator_args=(
+    "-l"
+    "-o" "$secret"
+    "-p" "local-composeValidator-1"
+    "-m" "0"
+  )
+  if [ "$bft_custom" -eq 1 ]; then
+    validator_args+=(
+      "-B"
+      "-u" "http://scan:5012"
+      "-S" "sv"
+      "-T" "1"
+    )
+  fi
+  _do_start_validator "${validator_args[@]}" "${sv_flags[@]}"
 
   _info "The full network is ready"
 }
@@ -393,6 +410,7 @@ function usage_start_network {
   _info "     Options: [-w] [-E]"
   _info "    -w: Wait also for the validator to be ready (for the SV we must always wait before starting the validator)"
   _info "    -E: Bind  to 0.0.0.0 for external access."
+  _info "    -B: Start the validator using bft-custom configuration."
 }
 
 subcommand_whitelist[stop_network]='Stop a full network, started with start_network'

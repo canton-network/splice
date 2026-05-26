@@ -29,7 +29,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStoreMetrics, ScanAggregator}
 import org.lfdecentralizedtrust.splice.store.{
@@ -145,34 +144,6 @@ class CachingScanStore(
       cacheConfig.roundOfLatestData,
       (_: Unit) => store.lookupRoundOfLatestData(),
     ).get(())
-
-  override def getTopProvidersByAppRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] = {
-    getCache(
-      "topProvidersByAppRewards",
-      cacheConfig.topProvidersByAppRewards,
-      store.getTopProvidersByAppRewards _ tupled,
-    ).get((asOfEndOfRound, limit))
-  }
-
-  override def getTopValidatorsByValidatorRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] =
-    getCache(
-      "topValidatorsByValidatorRewards",
-      cacheConfig.topValidators,
-      store.getTopValidatorsByValidatorRewards _ tupled,
-    ).get((asOfEndOfRound, limit))
-
-  override def getTopValidatorsByPurchasedTraffic(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[HttpScanAppClient.ValidatorPurchasedTraffic]] =
-    getCache(
-      "topValidatorsByPurchasedTraffic",
-      cacheConfig.topValidators,
-      store.getTopValidatorsByPurchasedTraffic _ tupled,
-    ).get((asOfEndOfRound, limit))
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext

@@ -35,7 +35,7 @@ spec:
         {{- end }}
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+          value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         - name: SPLICE_APP_SPLITWELL_SCAN_URL
           value: {{ .Values.scanAddress }}
         - name: SPLICE_APP_SPLITWELL_MIGRATION_ID
@@ -79,6 +79,12 @@ spec:
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
+        volumeMounts:
+          - name: logback-config
+            # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+            # would not receive configmap updates.
+            # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+            mountPath: /app/logback
       initContainers:
         - name: {{ .Release.Name }}-init
           image: postgres:14
@@ -113,6 +119,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-splitwell-app-logback-config
 ---
 apiVersion: v1
 kind: Service
@@ -132,3 +142,12 @@ spec:
   - name: metrics
     port: 10013
     protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-splitwell-app-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}

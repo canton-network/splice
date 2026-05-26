@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   AuthProvider,
   ErrorRouterPage,
+  retryQuery,
   retrySynchronizerError,
   theme,
   UserProvider,
@@ -54,6 +55,7 @@ const App: React.FC = () => {
         queries: {
           refetchInterval,
           structuralSharing: replaceEqualDeep,
+          retry: retryQuery,
         },
         mutations: {
           retry: retrySynchronizerError,
