@@ -320,7 +320,7 @@ class ScanApp(
         acsSnapshotStore,
         serviceUserPrimaryParty,
         svName,
-        amuletAppParameters.upgradesConfig
+        amuletAppParameters.upgradesConfig,
       )
       scanVerdictStore = DbScanVerdictStore(
         storage,

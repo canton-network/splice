@@ -53,7 +53,7 @@ class ScanAutomationService(
     snapshotStore: AcsSnapshotStore,
     svParty: PartyId,
     svName: String,
-    upgradesConfig: UpgradesConfig
+    upgradesConfig: UpgradesConfig,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
