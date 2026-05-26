@@ -53,8 +53,7 @@ class ScanAutomationService(
     snapshotStore: AcsSnapshotStore,
     svParty: PartyId,
     svName: String,
-    upgradesConfig: UpgradesConfig,
-    initialRound: Long,
+    upgradesConfig: UpgradesConfig
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -76,10 +75,6 @@ class ScanAutomationService(
       : org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService.type =
     ScanAutomationService
 
-  registerTrigger(new ScanAggregationTrigger(store, triggerContext))
-  registerTrigger(
-    new ScanBackfillAggregatesTrigger(store, triggerContext, initialRound)
-  )
   for {
     appRewardsStore <- appRewardsStoreO
     appActivityStore <- appActivityStoreO
