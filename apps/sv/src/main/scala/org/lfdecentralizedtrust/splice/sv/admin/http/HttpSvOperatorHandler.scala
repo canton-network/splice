@@ -177,8 +177,8 @@ class HttpSvOperatorHandler(
           body.svParty,
           body.before.toInstant,
         )
-      } yield r0.LookupSvRewardWeightBeforeResponse.OK(
-        definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
+      } yield respond.OK(
+        definitions.LookupSvRewardWeightBeforeResponse(priorWeight)
       )
     }
   }
