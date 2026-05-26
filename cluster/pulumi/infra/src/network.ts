@@ -91,6 +91,9 @@ function certManager(certManagerNamespaceName: string): certmanager.CertManager 
     cainjector: {
       ...infraAffinityAndTolerations,
     },
+    startupapicheck: {
+      ...infraAffinityAndTolerations,
+    },
   });
 }
 

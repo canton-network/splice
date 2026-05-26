@@ -5,6 +5,7 @@ package com.digitalasset.canton.synchronizer.mediator
 
 import cats.data.EitherT
 import com.daml.grpc.adapter.ExecutionSequencerFactory
+import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.{BatchingConfig, ProcessingTimeout}
 import com.digitalasset.canton.connection.GrpcApiInfoService
 import com.digitalasset.canton.connection.v30.ApiInfoServiceGrpc
@@ -82,9 +83,10 @@ final class MediatorRuntime(
   val inspectionService: ServerServiceDefinition = MediatorInspectionServiceGrpc.bindService(
     new GrpcMediatorInspectionService(
       mediator.state.finalizedResponseStore,
-      mediator.state.recordOrderTimeAwaiter,
+      () => mediator.getCurrentWatermark,
+      ts => traceContext => mediator.awaitWatermark(ts)(traceContext),
       batchingConfig.maxItemsInBatch,
-      mediator.getActiveLsuSuccessor,
+      mediator.lsuSuccessorAfterUpgradeTime,
       loggerFactory,
     ),
     ec,
@@ -129,6 +131,7 @@ object MediatorRuntimeFactory {
       metrics: MediatorMetrics,
       config: MediatorConfig,
       loggerFactory: NamedLoggerFactory,
+      futureSupervisor: FutureSupervisor,
   )(implicit
       ec: ExecutionContext,
       esf: ExecutionSequencerFactory,
@@ -194,6 +197,7 @@ object MediatorRuntimeFactory {
       clock,
       metrics,
       loggerFactory,
+      futureSupervisor,
     )
 
     EitherT.pure[FutureUnlessShutdown, String](

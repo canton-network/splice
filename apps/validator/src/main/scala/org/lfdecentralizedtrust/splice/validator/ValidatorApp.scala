@@ -63,8 +63,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.setup.{NodeInitializer, ParticipantInitializer}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.ValidatorApp.OAuthRealms
 import org.lfdecentralizedtrust.splice.validator.admin.http.*
@@ -214,6 +213,7 @@ class ValidatorApp(
                 clock,
                 retryProvider,
                 loggerFactory,
+                Some(metrics.scanConnections),
                 ValidatorScanConnection.getPersistedScanList(configProvider),
                 ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
               )
@@ -484,7 +484,7 @@ class ValidatorApp(
       logger: TracedLogger,
       retryProvider: RetryProvider,
   )(implicit traceContext: TraceContext): Future[ByteString] =
-    // TODO (hyperledger-labs/splice#4026) use the standard BftScanConnection instead of creating a new SingleScanConnection.
+    // TODO (canton-network/splice#4026) use the standard BftScanConnection instead of creating a new SingleScanConnection.
     retryProvider.retry(
       RetryFor.WaitingOnInitDependency,
       "get_acs_snapshot_from_single_scan",
@@ -495,6 +495,7 @@ class ValidatorApp(
         clock,
         retryProvider,
         loggerFactory,
+        Some(metrics.scanConnections),
       ) { scanConnection =>
         // We don't set the record time for now here. We assume recover node from
         // keys
@@ -710,6 +711,7 @@ class ValidatorApp(
           clock,
           retryProvider,
           loggerFactory,
+          Some(metrics.scanConnections),
           ValidatorScanConnection.getPersistedScanList(configProvider),
           ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
         )
@@ -765,18 +767,6 @@ class ValidatorApp(
         config.automation.ingestion,
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
-      )
-      validatorUpdateHistory = new UpdateHistory(
-        storage,
-        domainMigrationInfo,
-        store.storeName,
-        participantId,
-        store.acsContractFilter.ingestionFilter.primaryParty,
-        BackfillingRequirement.BackfillingNotRequired,
-        loggerFactory,
-        enableissue12777Workaround = false,
-        enableImportUpdateBackfill = false,
-        HistoryMetrics(retryProvider.metricsFactory, domainMigrationInfo.currentMigrationId),
       )
       domainTimeAutomationService = new DomainTimeAutomationService(
         config.domains.global.alias,
@@ -859,8 +849,6 @@ class ValidatorApp(
             config.walletSweep,
             config.autoAcceptTransfers,
             dedupDuration,
-            txLogBackfillEnabled = config.txLogBackfillEnabled,
-            txLogBackfillingBatchSize = config.txLogBackfillBatchSize,
             config.parameters,
           )
           Some(walletManager)
@@ -874,14 +862,13 @@ class ValidatorApp(
         validatorTopupConfig,
         config.domains.global.buyExtraTraffic.grpcDeadline,
         config.transferPreapproval,
-        config.domains.global.url.isEmpty,
+        config.domains.global.url.isEmpty && !(config.svValidator && config.disableSvValidatorBftSequencerConnection),
         config.svValidator,
         clock,
         domainTimeAutomationService.domainTimeSync,
         domainParamsAutomationService.domainUnpausedSync,
         walletManagerOpt,
         store,
-        validatorUpdateHistory,
         storage,
         scanConnection,
         ledgerClient,
@@ -895,7 +882,6 @@ class ValidatorApp(
           retryProvider,
           loggerFactory,
         ),
-        config.domainMigrationDumpPath,
         config.domainMigrationId,
         retryProvider,
         config.svValidator,
@@ -908,6 +894,7 @@ class ValidatorApp(
         config.latestPackagesOnly,
         config.parameters.enabledFeatures,
         config.additionalPackagesToUnvet,
+        config.domains.global.alias,
         loggerFactory,
       )
       _ <- MonadUtil.sequentialTraverse_(config.appInstances.toList)({ case (name, instance) =>

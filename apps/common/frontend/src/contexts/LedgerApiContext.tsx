@@ -1,11 +1,15 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useUserState } from '@lfdecentralizedtrust/splice-common-frontend';
-import { callWithLogging } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import {
+  callWithLogging,
+  fireAuthExpired,
+} from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import React, { useContext } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
-import { DisclosedContract } from '@daml/ledger';
+import { DisclosedContract } from '@lfdecentralizedtrust/splice-common-frontend-utils/interfaces';
+
 import { Choice, ContractId, Template, TemplateOrInterface } from '@daml/types';
 
 const ANS_LEDGER_NAME = 'ans-ledger';
@@ -65,7 +69,7 @@ export abstract class PackageIdResolver {
   }
 }
 
-// Uses the JSON API (via @daml/ledger) to connect to the ledger.
+// Uses the JSON API to connect to the ledger.
 export class LedgerApiClient {
   private jsonApiUrl: string;
   private userId: string;
@@ -86,6 +90,12 @@ export class LedgerApiClient {
     this.packageIdResolver = packageIdResolver;
   }
 
+  private checkUnauthorized(response: Response): void {
+    if (response.status === 401) {
+      fireAuthExpired();
+    }
+  }
+
   async getPrimaryParty(): Promise<string> {
     const user = await callWithLogging(
       ANS_LEDGER_NAME,
@@ -98,6 +108,7 @@ export class LedgerApiClient {
           const responseBody = await response.json();
           return responseBody.user;
         } else {
+          this.checkUnauthorized(response);
           const responseBody = await response.text();
           throw new Error(
             `getPrimaryParty: HTTP ${response.status} ${response.statusText}: ${responseBody}`
@@ -116,7 +127,7 @@ export class LedgerApiClient {
     contractId: ContractId<T>,
     argument: C,
     domainId?: string,
-    disclosedContracts: DisclosedContract[] = []
+    disclosedContracts: DisclosedContract<unknown>[] = []
   ): Promise<R> {
     const choice = await this.packageIdResolver.resolveChoice(unresolvedChoice);
     console.debug(
@@ -168,6 +179,7 @@ export class LedgerApiClient {
           console.debug(`${describeChoice} succeeded.`);
           return r.json();
         } else {
+          this.checkUnauthorized(r);
           const body = await r.text();
           throw new JsonApiError({
             status: r.status,

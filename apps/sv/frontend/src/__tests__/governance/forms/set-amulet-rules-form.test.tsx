@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { SvConfigProvider } from '../../../utils';
 import App from '../../../App';
 import { svPartyId } from '../../mocks/constants';
@@ -184,6 +184,38 @@ describe('Set Amulet Config Rules Form', () => {
     });
   });
 
+  test('should show error when submitting without configuration changes', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
+
+    const summaryInput = screen.getByTestId('set-amulet-config-rules-summary');
+    await user.type(summaryInput, 'Summary of the proposal');
+
+    const urlInput = screen.getByTestId('set-amulet-config-rules-url');
+    await user.type(urlInput, 'https://example.com');
+
+    const actionInput = screen.getByTestId('set-amulet-config-rules-action');
+    await user.click(actionInput);
+
+    const submitButton = screen.getByTestId('submit-button');
+    await waitFor(() => {
+      expect(submitButton.getAttribute('disabled')).toBeNull();
+    });
+
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Cannot submit a proposal with no configuration changes')
+      ).toBeInTheDocument();
+    });
+  });
+
   test('changing config fields should render the current value', async () => {
     const user = userEvent.setup();
 
@@ -247,8 +279,8 @@ describe('Set Amulet Config Rules Form', () => {
 
   test('should show error on form if submission fails', { timeout: 10000 }, async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.status(503), ctx.json({ error: 'Service Unavailable' }));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
       })
     );
 
@@ -287,8 +319,8 @@ describe('Set Amulet Config Rules Form', () => {
 
   test('should redirect to governance page after successful submission', async () => {
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/voterequest/create`, (_, res, ctx) => {
-        return res(ctx.json({}));
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        return HttpResponse.json({});
       })
     );
 

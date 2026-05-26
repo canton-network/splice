@@ -96,7 +96,6 @@ object ConfigTransforms {
                 )
               )
             case Some(joinWithKey: SvOnboardingConfig.JoinWithKey) => Some(joinWithKey)
-            case Some(domainMigration: SvOnboardingConfig.DomainMigration) => Some(domainMigration)
             case Some(rollForwardLsu: SvOnboardingConfig.RollForwardLsu) => Some(rollForwardLsu)
             case None => None
           },
@@ -338,7 +337,6 @@ object ConfigTransforms {
           case Some(foundDso: SvOnboardingConfig.FoundDso) =>
             Some(update(foundDso))
           case Some(joinWithKey: SvOnboardingConfig.JoinWithKey) => Some(joinWithKey)
-          case Some(domainMigration: SvOnboardingConfig.DomainMigration) => Some(domainMigration)
           case Some(rollForwardLsu: SvOnboardingConfig.RollForwardLsu) => Some(rollForwardLsu)
           case None => None
         }
@@ -429,6 +427,27 @@ object ConfigTransforms {
       updateAllScanAppConfigs((_, conf) =>
         conf
           .focus(_.synchronizerNodes.successor)
+          .some
+          .modify(
+            portTransform(bump, _)
+              .focus(_.bftSequencerConfig)
+              .some
+              .modify(_.focus(_.p2pUrl).modify(bumpUrl(bump, _)))
+          )
+      )
+    )
+  }
+
+  def bumpCantonSyncLegacyPortsBy(bump: Int) = {
+    updateAllSvAppConfigs((_, conf) =>
+      conf
+        .focus(_.localSynchronizerNodes.legacy)
+        .some
+        .modify(portTransform(bump, _))
+    ).andThen(
+      updateAllScanAppConfigs((_, conf) =>
+        conf
+          .focus(_.synchronizerNodes.legacy)
           .some
           .modify(
             portTransform(bump, _)

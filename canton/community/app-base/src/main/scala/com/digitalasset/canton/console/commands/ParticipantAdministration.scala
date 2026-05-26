@@ -401,13 +401,14 @@ class ParticipantTestingGroup(
   def fetch_synchronizer_time(
       synchronizer: Synchronizer,
       timeout: config.NonNegativeDuration = consoleEnvironment.commandTimeouts.ledgerCommand,
+      freshnessBound: config.NonNegativeFiniteDuration = config.NonNegativeFiniteDuration.Zero,
   ): CantonTimestamp =
     check(FeatureFlag.Testing) {
       consoleEnvironment.run {
         adminCommand(
           SynchronizerTimeCommands.FetchTime(
             synchronizer.some,
-            NonNegativeFiniteDuration.Zero,
+            freshnessBound.toInternal,
             timeout,
           )
         )
@@ -1969,7 +1970,8 @@ trait ParticipantAdministration extends FeatureFlagFilter {
     @Help.Description(
       """Yields false, if the synchronizer is not connected or not healthy.
         |Yields false, if the synchronizer is configured in the Canton configuration and
-        |the participant is not active from the perspective of the synchronizer."""
+        |the participant is not active from the perspective of the synchronizer.
+        |Uses the local clock to evaluate `ParticipantSynchronizerPermission.login_after`."""
     )
     def active(synchronizerAlias: SynchronizerAlias): Boolean =
       list_connected().exists { r =>
@@ -2689,7 +2691,39 @@ trait ParticipantAdministration extends FeatureFlagFilter {
     ): Unit = consoleEnvironment.run {
       adminCommand(
         ParticipantAdminCommands.SynchronizerConnectivity
-          .PerformManualLsu(currentPsid, successorPsid, upgradeTime, sequencerSuccessors)
+          .PerformManualLsu(currentPsid, successorPsid, upgradeTime, Left(sequencerSuccessors))
+      )
+    }
+
+    @Help.Summary("Perform a manual LSU")
+    @Help.Description("""
+        |Perform a local manual logical synchronizer upgrade to switch to the designated successor
+        |
+        |Unlike the other method above, a new config is specified and replaces the current one.
+        |This should be used only if the goal is to change the synchronizer connection config
+        |as part of the upgrade (e.g., if one sequencer does not migrate).
+        |
+        |
+        |Parameters:
+        |- currentPsid: current physical synchronizer id
+        |- successorPsid: physical synchronizer id of the successor
+        |- upgradeTime:
+        |     If defined:
+        |       - MUST be higher than any message received by the node on the synchronizer id
+        |       - Upgrade will not start until all events until upgrade_time have been processed
+        |     If empty:
+        |       - Clean synchronizer index from ledger api server will be used.
+        |- config: Config for the the new synchronizer
+        |""")
+    def perform_manual_lsu(
+        currentPsid: PhysicalSynchronizerId,
+        successorPsid: PhysicalSynchronizerId,
+        upgradeTime: Option[CantonTimestamp],
+        config: SynchronizerConnectionConfig,
+    ): Unit = consoleEnvironment.run {
+      adminCommand(
+        ParticipantAdminCommands.SynchronizerConnectivity
+          .PerformManualLsu(currentPsid, successorPsid, upgradeTime, Right(config.toInternal))
       )
     }
   }

@@ -529,6 +529,14 @@ class LocalSynchronizerNode(
       config.mediator.pruning
     )
 
+  def ensureDABFTPruningSchedule()(implicit tc: TraceContext): Future[Unit] = {
+    if (config.sequencer.isBftSequencer) {
+      sequencerAdminConnection.ensurePruningSchedule(
+        config.sequencer.dabftPruning
+      )
+    } else Future.unit
+  }
+
   override protected def onClosed(): Unit = {
     LifeCycle.close(sequencerAdminConnection, mediatorAdminConnection)(logger)
     super.onClosed()
@@ -540,8 +548,8 @@ object LocalSynchronizerNode {
 
   // TODO(DACH-NY/canton-network-node#5107) Consider using something other than a ClientConfig in the config file
   // to simplify conversion to GrpcSequencerConnection.
-  private def toEndpoints(config: ClientConfig): NonEmpty[Seq[Endpoint]] =
-    NonEmpty.mk(Seq, toEndpoint(config))
+  private def toEndpoints(config: ClientConfig): NonEmpty[Set[Endpoint]] =
+    NonEmpty.mk(Set, toEndpoint(config))
 
   private def toSequencerConnection(
       config: ClientConfig,

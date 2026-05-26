@@ -3,8 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
+import cats.implicits.showInterpolator
 import cats.syntax.foldable.*
-import cats.implicits.{catsSyntaxOptionId, showInterpolator}
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.admin.api.client.data.SequencerHealthStatus.implicitPrettyString
@@ -15,21 +15,18 @@ import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.topology.transaction.GrpcConnection
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider}
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.setup.NodeInitializer
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
-import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
 
-import io.grpc.Status
 import java.net.URI
 import scala.concurrent.{ExecutionContext, Future}
 
 class LsuNodeInitializer(
     localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
     successorSynchronizerNode: LocalSynchronizerNode,
-    reconciler: Option[SynchronizerNodeReconciler],
     val loggerFactory: NamedLoggerFactory,
     retryProvider: RetryProvider,
 )(implicit ec: ExecutionContext)
@@ -77,6 +74,7 @@ class LsuNodeInitializer(
       successorSynchronizerId: PhysicalSynchronizerId,
       now: CantonTimestamp,
       upgradeTime: Option[CantonTimestamp],
+      ignorePsidCheck: Boolean,
   )(implicit tc: TraceContext): Future[StaticSynchronizerParameters] = {
     logger.info("Initializing sequencer and mediators from the data of the old nodes")
     for {
@@ -97,14 +95,16 @@ class LsuNodeInitializer(
             Right(())
         },
         (_: String) => {
+          val initParams = parameters.copy(
+            protocolVersion = successorSynchronizerId.protocolVersion
+          )
           logger.info(
-            show"Initializing sequencer from predecessor with $parameters"
+            show"Initializing sequencer from predecessor with $initParams"
           )
           successorSynchronizerNode.sequencerAdminConnection.initializeFromPredecessor(
             state.synchronizerStatePath,
-            parameters.copy(
-              protocolVersion = successorSynchronizerId.protocolVersion
-            ),
+            initParams,
+            ignorePsidCheck,
           )
         },
         logger,
@@ -125,13 +125,6 @@ class LsuNodeInitializer(
           Future.unit
         }
       }
-      _ <- reconciler.traverse_(
-        _.reconcileSynchronizerNodeConfigIfRequired(
-          localSynchronizerNodes.some,
-          psid.logical,
-          OnboardedImmediately,
-        )
-      )
       _ <- retryProvider.ensureThat(
         RetryFor.InitializingClientCalls,
         "init_mediator_lsu",

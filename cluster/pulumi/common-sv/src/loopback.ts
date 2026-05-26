@@ -14,8 +14,8 @@ import {
 import { allSvsToDeploy, coreSvsToDeploy } from './svConfigs';
 import { cometBFTExternalPort } from './synchronizer/cometbftConfig';
 
-export function installSvLoopback(namespace: ExactNamespace): pulumi.Resource[] {
-  return installLoopback(namespace, true);
+export function installSvLoopback(namespace: ExactNamespace, cometbft: boolean): pulumi.Resource[] {
+  return installLoopback(namespace, cometbft);
 }
 
 export function installLoopback(
@@ -150,7 +150,7 @@ function getCometBftPorts(numMigrations: number, numSvs: number): ServicePort[] 
     name: `cometbft-${migration}-${node}-p2p`,
     protocol: 'TCP',
   });
-  return Array.from({ length: numMigrations }, (_, i) => i).flatMap(migration => {
+  return Array.from({ length: Math.min(numMigrations, 10) }, (_, i) => i).flatMap(migration => {
     const ret = Array.from({ length: numSvs }, (_, node) => node).map(node =>
       port(migration, node + 1)
     );

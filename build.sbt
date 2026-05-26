@@ -174,6 +174,13 @@ lazy val root: Project = (project in file("."))
         (`build-tools-dar-lock-checker` / Compile / run)
           .toTask(" check" + damlDarsLockCheckerFileArg.value)
       }.value,
+    damlBumpPackageVersionsMutate := Def.inputTaskDyn {
+      import sbt.complete.DefaultParsers.*
+      val ref: Option[String] = (Space ~> StringBasic).?.parsed
+      val refArg = ref.filter(_.nonEmpty).map(r => s" --base=$r").getOrElse("")
+      (`build-tools-dar-lock-checker` / Compile / run)
+        .toTask(" bump" + refArg + damlDarsLockCheckerFileArg.value)
+    }.evaluated,
     Headers.OtherHeaderSettings,
     // Disable assembly for all submodules as we want to assemble just the splice-node jar from the apps module
     assembly / aggregate := false,
@@ -181,6 +188,11 @@ lazy val root: Project = (project in file("."))
 
 val damlDarsLockFileCheck = taskKey[Unit]("Check the daml/dars.lock file")
 val damlDarsLockFileUpdate = taskKey[Unit]("Update the daml/dars.lock file")
+val damlBumpPackageVersionsMutate =
+  inputKey[Unit](
+    "Edit daml.yaml and apps/package.json based on comparison with the latest release line " +
+      "(override via an optional git ref argument, e.g. `damlBumpPackageVersionsMutate origin/main`)"
+  )
 val damlDarsLockCheckerFileArg =
   taskKey[String]("Argument line for updating the daml/dars.lock file")
 
@@ -190,6 +202,7 @@ lazy val `build-tools-dar-lock-checker` = project
     libraryDependencies ++= Seq(
       Dependencies.better_files,
       CantonDependencies.daml_lf_archive_reader,
+      Dependencies.scalatest % Test,
     ),
     Headers.ApacheDAHeaderSettings,
   )
@@ -272,7 +285,8 @@ lazy val docs = project
       val srcDir = sourceDirectory.value
       val outDir = baseDirectory.value / "html"
       val log = streams.value.log
-      val version = BuildUtil.runCommandOptionalLog(Seq("./build-tools/get-snapshot-version"))
+      val version =
+        BuildUtil.runCommandOptionalLog(Seq("./build-tools/get-snapshot-version"), Some(log))
       val cacheDir = streams.value.cacheDirectory
       val cache = FileFunction.cached(cacheDir) { _ =>
         runCommand(
@@ -315,6 +329,10 @@ lazy val `splice-api-token-metadata-v1-daml`: Project =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
+      Compile / damlPrebuiltDar :=
+        Some(
+          (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-metadata-v1-1.0.0.dar"
+        ),
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
       Compile / sourceGenerators +=
         Def.taskDyn {
@@ -350,8 +368,10 @@ lazy val `splice-api-token-holding-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar :=
+        Some(
+          (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-holding-v1-1.0.0.dar"
+        ),
     )
 
 lazy val `splice-api-token-transfer-instruction-v1-daml` =
@@ -360,9 +380,10 @@ lazy val `splice-api-token-transfer-instruction-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar :=
+        Some(
+          (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-transfer-instruction-v1-1.0.0.dar"
+        ),
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
       Compile / sourceGenerators +=
         Def.taskDyn {
@@ -386,9 +407,9 @@ lazy val `splice-api-token-allocation-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-transfer-instruction-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-allocation-request-v1-daml` =
@@ -397,10 +418,9 @@ lazy val `splice-api-token-allocation-request-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-transfer-instruction-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-allocation-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-request-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-allocation-instruction-v1-daml` =
@@ -409,10 +429,9 @@ lazy val `splice-api-token-allocation-instruction-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-allocation-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-instruction-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-burn-mint-v1-daml` =
@@ -421,9 +440,9 @@ lazy val `splice-api-token-burn-mint-v1-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-burn-mint-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-token-test-trading-app-daml` =
@@ -652,7 +671,10 @@ lazy val `splice-featured-app-api-v1-daml` =
     .in(file("daml/splice-api-featured-app-v1"))
     .enablePlugins(DamlPlugin)
     .settings(
-      BuildCommon.damlSettings
+      BuildCommon.damlSettings,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-featured-app-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-featured-app-api-v2-daml` =
@@ -660,7 +682,10 @@ lazy val `splice-featured-app-api-v2-daml` =
     .in(file("daml/splice-api-featured-app-v2"))
     .enablePlugins(DamlPlugin)
     .settings(
-      BuildCommon.damlSettings
+      BuildCommon.damlSettings,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-featured-app-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-amulet-daml` =
@@ -1106,6 +1131,7 @@ lazy val `apps-scan` =
             new File(s"apps/scan/src/main/openapi/scan.yaml"),
             pkg = "org.lfdecentralizedtrust.splice.http.v0",
             modules = List("pekko-http-v1.0.0", "circe"),
+            imports = List("org.lfdecentralizedtrust.splice.scan.admin.http.ScanJsonSupport._"),
             customExtraction = true,
           ),
           ScalaClient(
@@ -1693,6 +1719,7 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case PathList("google", "protobuf", _*) => MergeStrategy.first
     case PathList("org", "apache", "logging", _*) => MergeStrategy.first
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
+    case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
     case PathList("META-INF", "okio.kotlin_module") => MergeStrategy.last
     case PathList(
           "META-INF",
@@ -1721,6 +1748,8 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.first
     case PathList("com", "google", _*) => MergeStrategy.first
     case PathList("io", "grpc", _*) => MergeStrategy.first
+    // Copy-pasta from Canton (DACH-NY/canton#31788): Remove this merge strategy once zipkin exporter is removed
+    case PathList("okhttp3", _ @_*) => MergeStrategy.first
     // this file comes in multiple flavors, from io.get-coursier:interface and from org.scala-lang.modules:scala-collection-compat. Since the content differs it is resolve this explicitly with this MergeStrategy.
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
@@ -1744,13 +1773,19 @@ lazy val bundleTask = {
     val testResources = Seq("-r", "apps/app/src/test/resources", "testResources")
     val transformConfig =
       Seq("-r", "scripts/transform-config.sc", "testResources/transform-config.sc")
+    runCommand(Seq("scripts/observability/stage-grafana-dashboards.sh"), log)
+    val dashboardsStaging =
+      (file("target") / "bundle-staging" / "grafana-dashboards").getAbsoluteFile
     val dashboards = Seq(
       "-r",
-      "cluster/pulumi/infra/grafana-dashboards",
-      "grafana-dashboards",
+      (dashboardsStaging / "sv-grafana-dashboards").getPath,
+      "sv-grafana-dashboards",
+      "-r",
+      (dashboardsStaging / "validator-grafana-dashboards").getPath,
+      "validator-grafana-dashboards",
       "-r",
       "network-health",
-      "grafana-dashboards/docs",
+      "sv-grafana-dashboards/docs",
     )
     val dockerCompose = Seq("-r", "cluster/compose", "docker-compose")
     val webUis =
@@ -1848,7 +1883,19 @@ illegalDamlReferencesCheck := {
 lazy val cleanCnDars = taskKey[Unit]("Remove all `.dar` files in `apps` and `canton-amulet`")
 cleanCnDars := {
   val log = streams.value.log
-  runCommand(Seq("find", "apps", "-name", "*.dar", "-delete"), log)
+  runCommand(
+    Seq(
+      "find",
+      "apps",
+      "-name",
+      "*.dar",
+      "-not",
+      "-path",
+      "apps/app/src/test/resources/*",
+      "-delete",
+    ),
+    log,
+  )
   // daml/dars contains the versions of all dars that we want to keep committed, so we don't delete them
   runCommand(
     Seq(
@@ -2008,13 +2055,13 @@ lazy val `apps-app`: Project =
       `apps-common-frontend`,
     )
     .settings(
+      // scalatestplus-selenium is lagging behind, it depends on selenium 4.12,
+      // but that's fine as it's compatible with selenium 4.44 that we end up using
       libraryDependencies += "org.scalatestplus" %% "selenium-4-12" % "3.2.17.0" % "test",
-      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.12.1" % "test",
+      libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,
       libraryDependencies += kubernetes_client,
-      libraryDependencies +=
-        "com.google.cloud" % "google-cloud-bigquery" % "2.53.0" % "test",
       libraryDependencies += "com.monovore" %% "decline" % "2.5.0" % "test",
       // Force SBT to use the right version of opentelemetry libs.
       dependencyOverrides ++= Seq(
@@ -2053,8 +2100,6 @@ updateTestConfigForParallelRuns := {
   def isNonDevNetTest(name: String): Boolean = name.contains("NonDevNet")
   def isPreflightIntegrationTest(name: String): Boolean = name.contains("PreflightIntegrationTest")
   def isEnterpriseIntegrationTest(name: String): Boolean = name.contains("Enterprise")
-  def isPermissionedSynchronizerTest(name: String): Boolean =
-    name.contains("PermissionedSynchronizer")
   def isIntegrationTest(name: String): Boolean =
     name.contains("org.lfdecentralizedtrust.splice.integration.tests") || name.contains(
       "IntegrationTest"
@@ -2090,7 +2135,6 @@ updateTestConfigForParallelRuns := {
   def isDockerComposeValidatorPreflightIntegrationTest(name: String): Boolean =
     isPreflightIntegrationTest(name) && name.contains("DockerComposeValidator")
 
-  def isDisasterRecoveryTest(name: String): Boolean = name contains "DisasterRecovery"
   def isAppUpgradeTest(name: String): Boolean = name contains "AppUpgrade"
   // These are tests that are particularly resource intensive and need larger runners.
   // Usually that is because they need to spin up an additional Canton instance within the test.
@@ -2117,7 +2161,7 @@ updateTestConfigForParallelRuns := {
   def isDynamicSynchronizerParamsReconciliationTest(name: String): Boolean =
     name contains "DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest"
   def isLSUTest(name: String): Boolean =
-    name contains "LogicalSynchronizerUpgradeIntegrationTest"
+    name contains "LsuIntegrationTest"
   def isLSURollForwardTest(name: String): Boolean =
     name contains "RollForwardLsu"
 
@@ -2135,11 +2179,6 @@ updateTestConfigForParallelRuns := {
 
   // Order matters as each test is included in just one group, with the first match being used
   val testSplitRules = Seq(
-    (
-      "permissioned synchronizer tests",
-      "test-full-class-names-permissioned.log",
-      (t: String) => isPermissionedSynchronizerTest(t),
-    ),
     (
       "manual tests with custom canton instance",
       "test-full-class-names-signatures.log",
@@ -2211,19 +2250,9 @@ updateTestConfigForParallelRuns := {
       (t: String) => isRunbookValidatorPreflightIntegrationTest(t) && isNonDevNetTest(t),
     ),
     (
-      "disaster recovery tests",
-      "test-full-class-names-disaster-recovery.log",
-      (t: String) => !isTimeBasedTest(t) && isDisasterRecoveryTest(t),
-    ),
-    (
       "app upgrade tests",
       "test-full-class-names-app-upgrade.log",
       (t: String) => !isTimeBasedTest(t) && isAppUpgradeTest(t),
-    ),
-    (
-      "BigQuery-accessing tests",
-      "test-full-class-names-bigquery.log",
-      (t: String) => t contains "BigQuery",
     ),
     (
       "resource intensive tests",
@@ -2246,14 +2275,14 @@ updateTestConfigForParallelRuns := {
       (t: String) => isEnterpriseIntegrationTest(t),
     ),
     (
-      "tests to check logical sync upgrade",
-      "test-full-class-names-lsu.log",
-      (t: String) => isLSUTest(t),
-    ),
-    (
       "tests to check logical sync roll-forward upgrade",
       "test-full-class-names-roll-forward-lsu.log",
       (t: String) => isLSURollForwardTest(t),
+    ),
+    (
+      "tests to check logical sync upgrade",
+      "test-full-class-names-lsu.log",
+      (t: String) => isLSUTest(t),
     ),
     (
       "tests with wall clock time",

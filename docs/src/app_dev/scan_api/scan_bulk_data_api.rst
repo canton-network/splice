@@ -73,7 +73,7 @@ The below table provides a quick overview of the endpoints that the Scan Bulk Da
      - Returns the ACS Snapshot for a given record time
 
 If you would rather read the yaml Open API specification file directly, this can be found in the Splice repository at
-`scan.yaml <https://github.com/hyperledger-labs/splice/blob/08fc692cf2952a52cce00473793d1dca08c0fba5/apps/scan/src/main/openapi/scan.yaml>`_.
+`scan.yaml <https://github.com/canton-network/splice/blob/08fc692cf2952a52cce00473793d1dca08c0fba5/apps/scan/src/main/openapi/scan.yaml>`_.
 
 Example URLs for accessing the Scan Bulk Data API are:
 
@@ -145,10 +145,10 @@ and ``after_migration_id`` is the migration ID that was active at that time.
 
 Note that the record time ranges of different migrations may overlap,
 i.e., the record time can go back after a hard domain migration.
-Read the `OpenAPI documentation <https://github.com/hyperledger-labs/splice/blob/main/apps/scan/src/main/openapi/scan.yaml>`_
+Read the `OpenAPI documentation <https://github.com/canton-network/splice/blob/main/apps/scan/src/main/openapi/scan.yaml>`_
 to understand how the ``after_migration_id`` field affects the response.
 
-If you don't know what migration ID was active at the chose time,
+If you don't know what migration ID was active at the chosen time,
 start with migration ID 0 and keep incrementing it by one
 until you find the lowest migration id that includes a higher record time than the one you specified in `after_record_time`.
 
@@ -226,7 +226,7 @@ An exercised event has the following important fields:
   traverse events in preorder (process them recursively).
 * **consuming**: A boolean indicating whether the contract is archived by the exercise. If true, the contract is archived. This is important if you want to track the ACS.
 
-See the `ExercisedEvent <https://github.com/hyperledger-labs/splice/blob/7345124f9f05395ab4797c0478c7e1dd37186369/canton/community/ledger-api/src/main/protobuf/com/daml/ledger/api/v2/event.proto#L166>`_ protobuf message definition for a complete description of the event.
+See the `ExercisedEvent <https://github.com/canton-network/splice/blob/7345124f9f05395ab4797c0478c7e1dd37186369/canton/community/ledger-api/src/main/protobuf/com/daml/ledger/api/v2/event.proto#L166>`_ protobuf message definition for a complete description of the event.
 
 An example of an exercised event in the ``events_by_id`` object is shown below:
 
@@ -351,7 +351,7 @@ A created event has the following important fields:
 * **contract_id**: The contract ID uniquely identifies the contract.
 * **create_arguments**: The arguments used to create the contract, encoded in JSON
 
-See the `CreatedEvent <https://github.com/hyperledger-labs/splice/blob/7345124f9f05395ab4797c0478c7e1dd37186369/canton/community/ledger-api/src/main/protobuf/com/daml/ledger/api/v2/event.proto#L33>`_ protobuf message definition for a complete description of the event.
+See the `CreatedEvent <https://github.com/canton-network/splice/blob/7345124f9f05395ab4797c0478c7e1dd37186369/canton/community/ledger-api/src/main/protobuf/com/daml/ledger/api/v2/event.proto#L33>`_ protobuf message definition for a complete description of the event.
 
 In this case the ``create_arguments`` contains the fields that are used to create the contract, such as the round number, the price of the Amulet,
 the time the round opens and closes, and the configuration for Amulet transfers and issuance.
@@ -410,6 +410,54 @@ The response returns a list of objects, each of which may include an ``update`` 
    * **informees**: The parties informed of the contents of the transaction view
    * **confirming_parties**: The parties responsible for confirming the validity of the transaction view, along with their quorum threshold.
    * **sub_views**: Other views that the current one depends on, referred to by their ``view_id`` fields.
+
+Traffic summary
+^^^^^^^^^^^^^^^
+
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
+
+.. warning::
+
+   This field is experimental while CIP-0104 traffic-based app rewards are in preview.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
+
+Each event includes a ``traffic_summary`` field containing traffic cost data
+from the sequencer for the confirmation request corresponding to the event.
+
+The ``traffic_summary`` object contains:
+
+* **total_traffic_cost** : Total traffic cost in bytes of the confirmation request, paid by the
+  validator node that submitted it.
+* **envelope_traffic_summaries** : An array of per-envelope traffic data. Each entry contains:
+
+   * **traffic_cost**: Traffic cost in bytes for this envelope.
+   * **view_ids**: View IDs from the verdict contained in this envelope. These correspond to the
+     ``view_id`` fields in the ``transaction_views`` array.
+
+App activity records
+^^^^^^^^^^^^^^^^^^^^
+
+.. TODO(#5277): Remove this warning once CIP-0104 exits the preview phase.
+
+.. warning::
+
+   This field is experimental while CIP-0104 traffic-based app rewards are in preview.
+   Until CIP-0104 exits the preview phase and is fully enabled on MainNet,
+   this field may not always be served and its format can still change.
+
+Each event includes an ``app_activity_records`` field containing per-app-provider
+activity weights computed from traffic summaries as per
+`CIP-0104 <https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md>`_.
+This is present when a traffic summary is available for the event.
+
+The ``app_activity_records`` object contains:
+
+* **round_number** : The minting round number assigned to the activity records.
+* **records** : An array of activity records, one per app provider. Each entry contains:
+
+   * **party**: The app provider party identifier.
+   * **weight**: Activity weight in bytes of traffic attributed to this app provider.
 
 ACS Snapshots
 ~~~~~~~~~~~~~
@@ -908,4 +956,3 @@ evolve, the structure of the transactions may change, and future transactions ma
 differently than described here. Specifically, at the time of writing, there is already a planned change
 where traffic purchases do not go through an intermediate ``transfer`` transaction, but are directly
 burning coin.
-

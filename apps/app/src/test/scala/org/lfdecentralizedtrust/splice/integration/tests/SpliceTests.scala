@@ -38,11 +38,9 @@ import org.lfdecentralizedtrust.splice.integration.plugins.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvOnboardingConfig, SynchronizerFeesConfig}
 import org.lfdecentralizedtrust.splice.test.HasRetryProvider
-import org.lfdecentralizedtrust.splice.util.CommonAppInstanceReferences
-import org.scalactic.source
-import org.scalatest.{AppendedClues, BeforeAndAfterEach}
+import org.lfdecentralizedtrust.splice.util.{BigDecimalMatchers, CommonAppInstanceReferences}
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.matchers.{Matcher, MatchResult}
+import org.scalatest.{AppendedClues, BeforeAndAfterEach}
 
 import java.time.Duration
 import java.util.concurrent.ScheduledExecutorService
@@ -50,7 +48,6 @@ import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 import scala.language.implicitConversions
-import scala.math.BigDecimal.RoundingMode
 import scala.util.{Failure, Success, Try}
 
 /** Analogue to Canton's CommunityTests */
@@ -292,7 +289,8 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       extends BaseTest
       with CommonAppInstanceReferences
       with LedgerApiExtensions
-      with AppendedClues {
+      with AppendedClues
+      with BigDecimalMatchers {
 
     val grpcClientMetrics: GrpcClientMetrics = testGrpcClientMetrics
 
@@ -305,9 +303,12 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     protected val testEntryUrl = "https://ans-dir-url.com"
     protected val testEntryDescription = "Sample ANS Entry Description"
 
-    protected def initDso()(implicit env: SpliceTestConsoleEnvironment): Unit = {
-      env.fullDsoApps.local.foreach(_.start())
-      env.fullDsoApps.local.foreach(_.waitForInitialization())
+    protected def initDso(
+        includeLocal: Boolean = true
+    )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+      val apps = env.fullDsoApps.local.filter(a => !a.name.endsWith("Local") || includeLocal)
+      apps.foreach(_.start())
+      apps.foreach(_.waitForInitialization())
     }
 
     protected def initDsoWithSv1Only()(implicit env: SpliceTestConsoleEnvironment): Unit = {
@@ -319,7 +320,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       NonNegativeFiniteDuration.ofSeconds((sv1Backend.config.onboarding match {
         case Some(foundDso: SvOnboardingConfig.FoundDso) =>
           foundDso.initialTickDuration.asJava
-        case Some(_: SvOnboardingConfig.JoinWithKey) | Some(_: SvOnboardingConfig.DomainMigration) |
+        case Some(_: SvOnboardingConfig.JoinWithKey) |
             Some(_: SvOnboardingConfig.RollForwardLsu) | None =>
           fail("Failed to retrieve defaultTickDuration from sv1.")
       }).toSeconds)
@@ -333,32 +334,9 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       sv1Backend.config.onboarding match {
         case Some(foundDso: SvOnboardingConfig.FoundDso) =>
           foundDso.initialSynchronizerFeesConfig
-        case Some(_: SvOnboardingConfig.JoinWithKey) | Some(_: SvOnboardingConfig.DomainMigration) |
-            Some(_: SvOnboardingConfig.RollForwardLsu) | None =>
+        case Some(_: SvOnboardingConfig.JoinWithKey) | Some(_: SvOnboardingConfig.RollForwardLsu) |
+            None =>
           fail("Failed to retrieve defaultSynchronizerFeesConfig from sv1.")
-      }
-
-    def assertInRange(value: BigDecimal, range: (BigDecimal, BigDecimal))(implicit
-        pos: source.Position
-    ): Unit =
-      value should beWithin(range._1, range._2)
-
-    // Upper bound for fees in any of the above transfers
-    // TODO(#806): Figure out something better for upper bounds of fees
-    val smallAmount: BigDecimal = BigDecimal(1.0)
-    def beWithin(lower: BigDecimal, upper: BigDecimal): Matcher[BigDecimal] =
-      be >= lower and be <= upper
-    def beAround(value: BigDecimal): Matcher[BigDecimal] =
-      beWithin(value - smallAmount, value + smallAmount)
-
-    /** Asserts two BigDecimals are equal up to `n` decimal digits. */
-    def beEqualUpTo(right: BigDecimal, n: Int): Matcher[BigDecimal] =
-      Matcher { (left: BigDecimal) =>
-        MatchResult(
-          left.setScale(n, RoundingMode.HALF_EVEN) == right.setScale(n, RoundingMode.HALF_EVEN),
-          s"$left was not equal to $right up to $n digits",
-          s"$left was equal to $right up to $n digits",
-        )
       }
 
     /** A function abstracting the common pattern of acting and then waiting for the action to

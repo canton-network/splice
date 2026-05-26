@@ -157,6 +157,20 @@ paths:
               schema:
                 "$ref": "#/components/schemas/ListSvBftSequencersResponse"
 
+  /v0/roll-forward-lsu:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getRollForwardLsu"
+      description: |
+        Retrieve information on a roll-forward LSU
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRollForwardLsuResponse"
 
   /v0/active-synchronizer-serial:
     get:
@@ -463,6 +477,44 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v2/updates/hash/{hash}:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getUpdateByHash"
+      description: |
+        Returns the update associated with the given hash of the prepared transaction.
+
+        This endpoint is not always BFT safe.
+        For transactions committed before a scan instance started indexing hashes, the instance will return a 404 error.
+        For transactions committed around the time different scans started indexing hashes,
+        some scan instances might return a 404 error while others return the matching update.
+
+        This is in contrast to the `v2/updates` and `v2/updates/{update_id}` endpoints, which are guaranteed to be always BFT safe.
+      parameters:
+        - name: "hash"
+          in: "path"
+          required: true
+          schema:
+            type: string
+        - name: "daml_value_encoding"
+          in: "query"
+          schema:
+            $ref: "#/components/schemas/DamlValueEncoding"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateHistoryItemV2WithHash"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/state/acs/snapshot-timestamp:
     get:
       tags: [external, scan]
@@ -543,11 +595,12 @@ paths:
 
   /v0/state/acs:
     post:
-      tags: [external, scan]
+      deprecated: true
+      tags: [ deprecated ]
       x-jvm-package: scan
       operationId: "getAcsSnapshotAt"
       description: |
-        Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
+        Deprecated. Please use /v1/state/acs instead. Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
       requestBody:
         required: true
         content:
@@ -561,6 +614,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AcsResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v1/state/acs:
+    post:
+      tags: [ external, scan ]
+      x-jvm-package: scan
+      operationId: "getAcsSnapshotAtV1"
+      description: |
+        Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
+        Unlike /v0/state/acs, every contract is identified by an (optional) update_id
+        (as opposed to the event ID in /v0/state/acs, which was not BFT-safe).
+        The update_id is the ID of the update in which the contract was created, and can be used to correlate with updates returned by /v2/updates.
+        For contracts created in an earlier migration ID, the update_id will be absent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AcsRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcsResponseV1"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -593,11 +677,11 @@ paths:
 
   /v0/holdings/state:
     post:
-      tags: [external, scan]
+      tags: [deprecated]
       x-jvm-package: scan
       operationId: "getHoldingsStateAt"
       description: |
-        Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
+        Deprecated. Please use /v1/holdings/state instead. Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
       requestBody:
         required: true
         content:
@@ -618,13 +702,41 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/holdings/summary:
+  /v1/holdings/state:
     post:
       tags: [external, scan]
       x-jvm-package: scan
+      operationId: "getHoldingsStateAtV1"
+      description: |
+        Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HoldingsStateRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcsResponseV1"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/holdings/summary:
+    post:
+      deprecated: true
+      tags: [deprecated]
+      x-jvm-package: scan
       operationId: "getHoldingsSummaryAt"
       description: |
-        Returns the summary of active amulet contracts for a given migration id and record time, for the given parties.
+        Deprecated. Please use /v1/holdings/summary instead. Returns the summary of active amulet contracts for a given migration id and record time, for the given parties.
         This is an aggregate of `/v0/holdings/state` by owner party ID with better performance than client-side computation.
       requestBody:
         required: true
@@ -639,6 +751,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HoldingsSummaryResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v1/holdings/summary:
+    post:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getHoldingsSummaryAtV1"
+      description: |
+        Returns the summary of active amulet contracts for a given migration id and record time, for the given parties.
+        This is an aggregate of `/v0/holdings/state` by owner party ID with better performance than client-side computation.
+        Unlike /v0/holdings/summary, this version does not include holding fee fields
+        as they do not express a meaningful aggregate value.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HoldingsSummaryRequestV1"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoldingsSummaryResponseV1"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -836,35 +978,48 @@ paths:
               schema:
                 "$ref": "#/components/schemas/LookupFeaturedAppRightResponse"
 
-  /v0/top-validators-by-validator-faucets:
+  /v0/featured-apps/by-provider/{provider_party_id}:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorFaucets"
+      operationId: "listFeaturedAppRightsByProvider"
       description: |
-        Get a list of top validators by number of rounds in which they collected
-        faucets, and basis statistics on their round collection history
+        List all `FeaturedAppRight` contracts for the given provider.
       parameters:
-        - in: query
-          name: limit
-          description: |
-            Maximum number of validator records that may be returned in the
-            response
+        - name: "provider_party_id"
+          in: "path"
           required: true
           schema:
-            type: integer
-            format: int32
+            type: string
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorFaucetsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+                "$ref": "#/components/schemas/ListFeaturedAppRightsResponse"
+
+  /v0/featured-apps/by-contract-id/{contract_id}:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "lookupFeaturedAppRightByContractId"
+      description: |
+        Look up a `FeaturedAppRight` contract by its contract ID.
+        Returns `featured_app_right` if found, empty otherwise.
+      parameters:
+        - name: "contract_id"
+          in: "path"
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/LookupFeaturedAppRightResponse"
 
   /v0/transfer-preapprovals/by-party/{party}:
     get:
@@ -1338,108 +1493,6 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/top-providers-by-app-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopProvidersByAppRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning app providers, and the total earned app
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopProvidersByAppRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-validator-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning validators, and the total earned validator
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-purchased-traffic:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByPurchasedTraffic"
-      description: |
-        **Deprecated**. Get a list of validators and their domain fees spends, sorted by the
-        amount of extra traffic purchased
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByPurchasedTrafficResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/activities:
     post:
       deprecated: true
@@ -1673,6 +1726,105 @@ paths:
                 "$ref": "#/components/schemas/ListUnclaimedDevelopmentFundCouponsResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/internal/reward-accounting-process/rounds/earliest-available:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getRewardAccountingEarliestAvailableRound"
+      description: |
+        SV node internal API (CIP-0104, subject to change).
+        Returns the earliest round for which CIP-0104 reward accounting activity
+        records are complete.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardAccountingEarliestAvailableRoundResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+
+  /v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getRewardAccountingActivityTotals"
+      description: |
+        SV node internal API (CIP-0104, subject to change).
+        Return the CIP-0104 per-round activity totals for the
+        specified round number.
+      parameters:
+        - name: "round_number"
+          in: "path"
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardAccountingActivityTotalsResponse"
+
+  /v0/internal/reward-accounting-process/rounds/{round_number}/root-hash:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getRewardAccountingRootHash"
+      description: |
+        SV node internal API (CIP-0104, subject to change).
+        Returns the root hash computed for the specified round.
+      parameters:
+        - name: "round_number"
+          in: "path"
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardAccountingRootHashResponse"
+
+  /v0/internal/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getRewardAccountingBatch"
+      description: |
+        SV node internal API (CIP-0104, subject to change).
+        Returns the contents of a reward batch identified by its hash.
+        The response is either a list of child batch hashes (for internal nodes)
+        or a list of minting allowances (for leaf nodes).
+      parameters:
+        - name: "round_number"
+          in: "path"
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: "batch_hash"
+          in: "path"
+          required: true
+          schema:
+            type: string
+            description: Hex-encoded batch hash
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardAccountingBatchResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
   /v0/history/bulk/acs:
     get:
@@ -1958,49 +2110,6 @@ components:
       properties:
         approved:
           type: boolean
-    GetTopProvidersByAppRewardsResponse:
-      type: object
-      required: ["providersAndRewards"]
-      properties:
-        providersAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    GetTopValidatorsByValidatorRewardsResponse:
-      type: object
-      required: ["validatorsAndRewards"]
-      properties:
-        validatorsAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    PartyAndRewards:
-      type: object
-      required: ["provider", "rewards"]
-      properties:
-        provider:
-          type: string
-        rewards:
-          type: string
-    GetTopValidatorsByValidatorFaucetsResponse:
-      type: object
-      required: ["validatorsByReceivedFaucets"]
-      properties:
-        validatorsByReceivedFaucets:
-          description: |
-            Up to `limit` validators, sorted greatest number of rounds
-            collected first
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorReceivedFaucets"
-    GetTopValidatorsByPurchasedTrafficResponse:
-      type: object
-      required: ["validatorsByPurchasedTraffic"]
-      properties:
-        validatorsByPurchasedTraffic:
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorPurchasedTraffic"
     ValidatorPurchasedTraffic:
       type: object
       required:
@@ -2098,6 +2207,27 @@ components:
             Any participant should subscribe to this sequencer after this time.
           type: string
           format: date-time
+    GetRollForwardLsuResponse:
+      type: object
+      properties:
+        rollForwardLsu:
+          description: "Info on a roll-forward LSU"
+          "$ref": "#/components/schemas/RollForwardLsu"
+    RollForwardLsu:
+      type: object
+      required:
+        - upgradeTime
+        - currentPhysicalSynchronizerId
+        - successorPhysicalSynchronizerId
+      properties:
+        upgradeTime:
+          description: The time at which to upgrade
+          type: string
+          format: date-time
+        currentPhysicalSynchronizerId:
+          type: string
+        successorPhysicalSynchronizerId:
+          type: string
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
       required: ["serial"]
@@ -2322,6 +2452,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UpdateHistoryItem"
+    UpdateHistoryItemV2WithHash:
+      type: object
+      description: |
+        An individual item in the update history. May be a transaction or a contract reassignment.
+      oneOf:
+        - $ref: "#/components/schemas/UpdateHistoryTransactionV2WithHash"
+        - $ref: "#/components/schemas/UpdateHistoryReassignment"
     UpdateHistoryItemV2:
       type: object
       description: |
@@ -2513,10 +2650,12 @@ components:
             $ref: "#/components/schemas/TreeEvent"
         external_transaction_hash:
           description: |
-            For transaction externally signed, contains the external transaction hash
+            For an externally signed transaction, contains the external transaction hash
             signed by the external party. Can be used to correlate an external submission with a committed transaction.
+            This field is conditionally omitted from JSON when null (see OmitNullString).
           type: string
-    UpdateHistoryTransactionV2:
+          x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
+    BaseUpdateHistoryTransaction:
       type: object
       required:
         - update_id
@@ -2574,11 +2713,31 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/TreeEvent"
-        external_transaction_hash:
-          description: |
-            For transaction externally signed, contains the external transaction hash
-            signed by the external party. Can be used to correlate an external submission with a committed transaction.
-          type: string
+    UpdateHistoryTransactionV2:
+      allOf:
+        - $ref: "#/components/schemas/BaseUpdateHistoryTransaction"
+        - type: object
+          properties:
+            external_transaction_hash:
+              description: |
+                For an externally signed transaction, contains the external transaction hash
+                signed by the external party. Can be used to correlate an external submission with a committed transaction.
+                This field is conditionally omitted from JSON when null (see OmitNullString).
+              type: string
+              x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
+    UpdateHistoryTransactionV2WithHash:
+      allOf:
+        - $ref: "#/components/schemas/BaseUpdateHistoryTransaction"
+        - type: object
+          required:
+            - external_transaction_hash
+          properties:
+            external_transaction_hash:
+              description: |
+                For an externally signed transaction, contains the external transaction hash
+                signed by the external party. Can be used to correlate an external submission with a committed transaction.
+              type: string
+              x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
     TreeEvent:
       type: object
       description: |
@@ -2610,6 +2769,56 @@ components:
           description: |
             The ID of this particular event. Equal to the key of this element of
             the containing `events_by_id` if this is part of a `TreeEvent`.
+          type: string
+        contract_id:
+          description: |
+            The ID of the created contract.
+          type: string
+        template_id:
+          description: |
+            The template of the created contract.
+          type: string
+        package_name:
+          description: |
+            The package name of the created contract.
+          type: string
+        create_arguments:
+          description: |
+            The arguments that have been used to create the contract, in the
+            form of JSON representation of a Daml record.
+          type: object
+        created_at:
+          description: |
+            Ledger effective time of the transaction that created the contract.
+          type: string
+          format: date-time
+        signatories:
+          description: |
+            Signatories to the contract, in the form of party IDs.
+          type: array
+          items:
+            type: string
+        observers:
+          description: |
+            Observers to the contract, in the form of party IDs.
+          type: array
+          items:
+            type: string
+    ActiveContract:
+      type: object
+      required:
+        - contract_id
+        - template_id
+        - package_name
+        - create_arguments
+        - created_at
+        - signatories
+        - observers
+      properties:
+        created_in_update_id:
+          description: |
+            The id of the update in which this contract was created.
+            Optional and will be absent for contracts created in prior migration IDs.
           type: string
         contract_id:
           description: |
@@ -2872,6 +3081,43 @@ components:
           description: |
             Compute holding fees as of this round. Defaults to the earliest open mining round.
 
+    HoldingsSummaryRequestV1:
+      type: object
+      required:
+        - migration_id
+        - record_time
+        - owner_party_ids
+      properties:
+        migration_id:
+          type: integer
+          format: int64
+          description: |
+            The migration id for which to return the summary.
+        record_time:
+          type: string
+          format: date-time
+          description: |
+            The timestamp at which the contract set was active.
+            This needs to be an exact timestamp, i.e.,
+            needs to correspond to a timestamp reported by `/v0/state/acs/snapshot-timestamp` if `record_time_match` is set to `exact` (which is the default).
+            If `record_time_match` is set to `at_or_before`, this can be any timestamp, and the most recent snapshot at or before the given `record_time` will be returned.
+        record_time_match:
+           type: string
+           description: |
+             How to match the record_time. "exact" requires the record_time to match exactly.
+             "at_or_before" finds the most recent snapshot at or before the given record_time.
+           enum:
+             - "exact"
+             - "at_or_before"
+           default: "exact"
+        owner_party_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: |
+            The owners for which to compute the summary.
+
     ForceAcsSnapshotResponse:
       type: object
       required:
@@ -2909,6 +3155,36 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CreatedEvent"
+        next_page_token:
+          type: integer
+          format: int64
+          description: |
+            When requesting the next page of results, pass this as `after`
+            to the `AcsRequest` or `HoldingsStateRequest`.
+            Will be absent when there are no more pages.
+
+    AcsResponseV1:
+      type: object
+      required:
+        - record_time
+        - migration_id
+        - created_events
+      properties:
+        record_time:
+          description: The same `record_time` as in the request.
+          type: string
+          format: date-time
+        migration_id:
+          description: The same `migration_id` as in the request.
+          type: integer
+          format: int64
+        created_events:
+          description: |
+            Up to `page_size` contracts in the ACS.
+            `create_arguments` are always encoded as `compact_json`.
+          type: array
+          items:
+            $ref: "#/components/schemas/ActiveContract"
         next_page_token:
           type: integer
           format: int64
@@ -2990,6 +3266,53 @@ components:
         total_available_coin:
           description:
             Same as `total_unlocked_coin` - `accumulated_holding_fees_unlocked`.
+          type: string
+
+    HoldingsSummaryResponseV1:
+      type: object
+      required:
+        - record_time
+        - migration_id
+        - summaries
+      properties:
+        record_time:
+          description: The same `record_time` as in the request.
+          type: string
+          format: date-time
+        migration_id:
+          description: The same `migration_id` as in the request.
+          type: integer
+          format: int64
+        summaries:
+          type: array
+          items:
+            $ref: "#/components/schemas/HoldingsSummaryV1"
+    HoldingsSummaryV1:
+      description: Aggregate Amulet totals for a particular owner party ID.
+      type: object
+      required:
+        - party_id
+        - total_unlocked_coin
+        - total_locked_coin
+        - total_coin_holdings
+      properties:
+        party_id:
+          description: |
+            Owner party ID of the amulet. Guaranteed to be unique among `summaries`.
+          type: string
+        total_unlocked_coin:
+          description: |
+            Sum of unlocked amulet initial amounts, not counting holding
+            fees deducted since.
+          type: string
+        total_locked_coin:
+          description: |
+            Sum of locked amulet initial amounts, not
+            counting holding fees deducted since.
+          type: string
+        total_coin_holdings:
+          description: |
+            `total_unlocked_coin` + `total_locked_coin`.
           type: string
 
     ListActivityRequest:
@@ -4188,3 +4511,171 @@ components:
             The sha256 digest of the bulk storage object, for verification of integrity and consistency across SVs.
           type: string
 
+    GetRewardAccountingEarliestAvailableRoundResponse:
+      type: object
+      required:
+        - earliest_round
+      properties:
+        earliest_round:
+          type: integer
+          format: int64
+
+    GetRewardAccountingActivityTotalsResponse:
+      type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsOk"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingActivityTotalsOk"
+          Undetermined: "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+
+    RewardAccountingActivityTotalsOk:
+      type: object
+      required:
+        - status
+        - round_number
+        - total_app_activity_weight
+        - active_parties_count
+        - activity_records_count
+      properties:
+        status:
+          type: string
+        round_number:
+          type: integer
+          format: int64
+        total_app_activity_weight:
+          type: integer
+          format: int64
+        active_parties_count:
+          type: integer
+          format: int64
+        activity_records_count:
+          type: integer
+          format: int64
+
+    RewardAccountingActivityTotalsUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingActivityTotalsCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    GetRewardAccountingRootHashResponse:
+      type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingRootHashOk"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingRootHashOk"
+          Undetermined: "#/components/schemas/RewardAccountingRootHashUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingRootHashCannotProvide"
+
+    RewardAccountingRootHashOk:
+      type: object
+      required:
+        - status
+        - round_number
+        - root_hash
+      properties:
+        status:
+          type: string
+        round_number:
+          type: integer
+          format: int64
+        root_hash:
+          type: string
+          description: Hex-encoded root hash
+
+    RewardAccountingRootHashUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingRootHashCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    GetRewardAccountingBatchResponse:
+      type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingBatchOfBatches"
+        - "$ref": "#/components/schemas/RewardAccountingBatchOfMintingAllowances"
+      discriminator:
+        propertyName: batch_type
+        mapping:
+          BatchOfBatches: "#/components/schemas/RewardAccountingBatchOfBatches"
+          BatchOfMintingAllowances: "#/components/schemas/RewardAccountingBatchOfMintingAllowances"
+
+    BaseRewardAccountingBatch:
+      type: object
+      required:
+        - batch_type
+      properties:
+        batch_type:
+          type: string
+          description: |
+            The type of batch.
+            BatchOfBatches: Contains child batch hashes.
+            BatchOfMintingAllowances: Contains party + amount pairs.
+
+    RewardAccountingBatchOfBatches:
+      type: object
+      allOf:
+        - "$ref": "#/components/schemas/BaseRewardAccountingBatch"
+        - type: object
+          required:
+            - child_hashes
+          properties:
+            child_hashes:
+              type: array
+              items:
+                type: string
+              description: Hex-encoded child batch hashes
+
+    RewardAccountingBatchOfMintingAllowances:
+      type: object
+      allOf:
+        - "$ref": "#/components/schemas/BaseRewardAccountingBatch"
+        - type: object
+          required:
+            - minting_allowances
+          properties:
+            minting_allowances:
+              type: array
+              items:
+                "$ref": "#/components/schemas/RewardAccountingMintingAllowance"
+              description: Party + amount pairs
+
+    RewardAccountingMintingAllowance:
+      type: object
+      required:
+        - provider
+        - amount
+      properties:
+        provider:
+          type: string
+        amount:
+          type: string

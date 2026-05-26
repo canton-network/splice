@@ -11,7 +11,7 @@ This guide outlines steps to resolve common issues that a contributor might enco
 
 ### 1. Setup Environment
 
-- Clone the repository: `git clone https://github.com/hyperledger-labs/splice.git`.
+- Clone the repository: `git clone https://github.com/canton-network/splice.git`.
 - Navigate to the project directory: `cd splice`.
 - Enable **`direnv`** to load environment variables (e.g., `DAML_COMPILER_VERSION`):
 
@@ -19,7 +19,7 @@ This guide outlines steps to resolve common issues that a contributor might enco
     direnv allow
     ```
 
-- Verify: `echo $DAML_COMPILER_VERSION` should match the value in [daml-compiler-sources.json](./nix/daml-compiler-sources.json).
+- Verify: `echo $DAML_COMPILER_VERSION` should match the value in [dpm-sdk-sources.json](./nix/dpm-sdk-sources.json).
 
 ### 2. Clean Build Artifacts
 

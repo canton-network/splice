@@ -354,24 +354,16 @@ The implementation of the `sbt` plugin can be found in [`/project/DamlPlugin.sca
 
 To edit the files in a particular Daml project, for example, `/apps/wallet/daml`, proceed as follows:
 
-1. As a setup step: install the specific version of the Daml SDK used in the Splice repo by running
-   ```
-   ./build-tools/install-daml-sdk.sh
-   ```
-   TODO(#2722): replace our legacy custom setup with standard Daml SDK installation instructions
-2. Start `sbt` in the repo root to get access to an `sbt` shell (or use the one in IntelliJ).
-3. Start `damlBuild` in your `sbt` shell to build the .dars for all Daml projects.
-4. Start `daml studio --replace=always` in the repo root, which starts VS code.
-   Note that we need `--replace=always`, as there's a bug in later versions of the Daml extension
-   which prevents them from working with the Daml SDK version used in this repo
-   ([issue](https://github.com/digital-asset/daml/issues/22398)).
-5. Open and edit the .daml files in `/apps/wallet/daml` in VS code.
+1. Start `sbt` in the repo root to get access to an `sbt` shell (or use the one in IntelliJ).
+2. Start `damlBuild` in your `sbt` shell to build the .dars for all Daml projects.
+3. Start `dpm studio` in the repo root, which starts VS code.
+4. Open and edit the .daml files in `/apps/wallet/daml` in VS code.
    You should see them being typechecked on the fly.
-6. See `/apps/wallet/daml/daml.yaml` for the .dar dependencies of `/apps/wallet/daml`.
+5. See `/apps/wallet/daml/daml.yaml` for the .dar dependencies of `/apps/wallet/daml`.
    If you change any of them, then you can propagate these changes across the .dars as follows:
    1. redo Step 2
     3. use Ctrl-Shift-P "Developer: Reload Window" in VS code to restart the `daml studio` language server with the updated package dependencies.
-7. When updating a DAR, make sure to run `sbt updateDarResources` before running integration tests. CI enforces that this is always done.
+6. When updating a DAR, make sure to run `sbt updateDarResources` before running integration tests. CI enforces that this is always done.
 
 *Tip:* if `damlBuild` fails with weird errors, then that might be due to stale `damlBuild` outputs.
 Try forcing a clean rebuild by cleaning via SBT, e.g., `apps-common/clean` and similar for the dependent project.
@@ -381,15 +373,34 @@ from the repo root to delete all `.daml` build directories.
 
 ## Daml Version Bump
 
-Whenever you update a .dar file, you need to bump the version of the corresponding daml package,
-and the version of daml packages that (recursively) depend on it. For that,
+Whenever you update a .dar file, the version of the corresponding daml package — and of every daml package that (recursively) depends on it — must be bumped.
+
+The one-command path:
+
+```bash
+git fetch origin            # needed so the tool can compare against the latest release line branch
+sbt damlBumpPackageVersions
+```
+
+By default the bump target is `max(latest release line version) + 1`, matching what the
+DAR lock checker enforces — so a branch that's about to land on `main` doesn't re-bump a
+package that has already been bumped on `main` since the last release.
+
+For long-running branches that aren't merging to main soon, bumping relative to `main` or some other branch might make more sense.
+You can achieve that by passing a git ref as an argument; this ref will be used as the base for the bump instead of the latest release line.
+For example:
+
+```bash
+sbt 'damlBumpPackageVersions origin/main'
+```
+
+If the auto-bumper can't help (e.g. you want a minor/major bump), fall back to the manual steps:
 
 1. Bump the version inside the `daml.yaml` file inside the updated module, and in all modules that (recursively) depend on it.
 2. Run `sbt damlBuild; sbt damlDarsLockFileUpdate` to compile the `.dar` files.
-3. Manually update the relevant daml package versions inside `apps/dar-resources-generator/src/main/scala/org/lfdecentralizedtrust/splice/darutils/DarResources.scala`.
-4. Run `sbt updateDarResources` to update DarResources.
-5. Manually update `apps/package.json` to update the versions of the daml packages that were updated in step 1.
-6. Run `sbt npmInstall ; sbt compile`
+3. Run `sbt updateDarResources` to update DarResources.
+4. Manually update `apps/package.json` to update the versions of the daml packages that were updated in step 1.
+5. Run `sbt npmInstall ; sbt compile`
 
 ## Daml Version Guards in Integration Tests
 
@@ -419,7 +430,7 @@ contains a list of additional arguments passed to scalatest which is
 then picked up when running the tests.
 
 To trigger the compat tests for a PR go to
-https://github.com/hyperledger-labs/splice/actions/workflows/build.yml
+https://github.com/canton-network/splice/actions/workflows/build.yml
 and click on `Run workflow`. Select the branch of your PR and the
 splice version you want to test compatibility against and input the
 commit sha of your branch.
@@ -438,12 +449,34 @@ assumes that the removal is not user facing, e.g., it won't break app
 devs or validator operators. If you are unsure about that, discuss it
 with the other splice maintainers.
 
-To bump the minimum version, go to `DarResources.scala` and edit the
-`minimumInitialization` field in the respective
-`PackageResource`. After doing that you can trigger CI. All the
+To bump the minimum version, go to `apps/dar-resources-generator/.../DarResourcesGenerator.scala`,
+edit the `minimumInitialization` map and run `sbt updateDarResources`.
+After doing that you can trigger CI. All the
 version checks from from `PackageVersionSupport` will warn for checks
 that are now redundant because the version they are testing against is
 now redundant so you can delete them and the code relying on them.
+
+## Maintaining Daml Interfaces
+
+Daml interfaces need a special treatment, as Daml does not support upgrading
+interfaces. Therefore, a released package that contains interfaces cannot
+be further developed like we do for other Daml code. Development guidelines
+are thus:
+
+1. Develop the API on a separate branch, or if it's a small one, on main is
+   ok, as long as you are certain that all your changes will land before
+   the coming release. Until the code is released, you can use the standard
+   daml build tooling in sbt, etc.
+1. Once a release is cut, the Daml interface is now fixed, and it should be
+   excluded from compilation, so that e.g. a Daml compiler version bump would not
+   introduce new Dar versions. To do so:
+
+    a. In build.sbt, exclude your package from compilation by setting `Compile / damlPrebuiltDar`
+       to the committed dar (typically under daml/dars).
+
+    b. Commit the generated docs for your package in a `docs` subdirectory in the package directory
+
+    c. Add your package to NON_COMPILED_DAML_PROJECTS in gen-daml-docs.sh
 
 # Troubleshooting
 

@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.ValidatorPurchasedTraffic
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
 import org.lfdecentralizedtrust.splice.scan.store.db.{
@@ -180,18 +179,6 @@ trait ScanStore
       else Future.failed(roundNotAggregated())
   } yield result
 
-  def getTopProvidersByAppRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]]
-
-  def getTopValidatorsByValidatorRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]]
-
-  def getTopValidatorsByPurchasedTraffic(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[ValidatorPurchasedTraffic]]
-
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
       splice.validatorlicense.ValidatorLicense.ContractId,
@@ -215,6 +202,10 @@ trait ScanStore
   def lookupFeaturedAppRight(providerPartyId: PartyId)(implicit
       tc: TraceContext
   ): Future[Option[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
+
+  def listFeaturedAppRightsByProvider(providerPartyId: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 
   def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit = defaultLimit)(implicit
       tc: TraceContext

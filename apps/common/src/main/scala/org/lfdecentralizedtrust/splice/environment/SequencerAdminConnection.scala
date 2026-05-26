@@ -9,6 +9,7 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.grpc.adapter.client.pekko.ClientAdapter
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
+  PruningSchedulerCommands,
   SequencerAdminCommands,
   TopologyAdminCommands,
 }
@@ -25,6 +26,7 @@ import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.sequencer.admin.v30.{
   OnboardingStateV2Request,
   OnboardingStateV2Response,
+  SequencerBftPruningAdministrationServiceGrpc,
 }
 import com.digitalasset.canton.sequencing.protocol
 import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
@@ -56,14 +58,17 @@ import org.apache.pekko.util.ByteString as PekkoByteString
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.{BackupDumpConfig, GcpCredentialsConfig}
 import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection.TrafficState
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyResult
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
+  TopologyResult,
+  TopologySnapshot,
+}
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 
 import java.nio.file.{Files, Path}
 import java.util.{Base64, Collections}
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import org.lfdecentralizedtrust.splice.store.bulk.ZstdGroupedWeight
 
 /** Connection to the subset of the Canton sequencer admin API that we rely
   * on in our own applications.
@@ -83,11 +88,26 @@ class SequencerAdminConnection(
       retryProvider,
     )
     with StatusAdminConnection
-    with SequencerBftAdminConnection {
+    with SequencerBftAdminConnection
+    with PruningAdminConnection {
 
   override val serviceName = "Canton Sequencer Admin API"
 
   override type Status = SequencerStatus
+
+  override val pruningCommands: PruningSchedulerCommands[
+    SequencerBftPruningAdministrationServiceGrpc.SequencerBftPruningAdministrationServiceStub
+  ] = new PruningSchedulerCommands[
+    SequencerBftPruningAdministrationServiceGrpc.SequencerBftPruningAdministrationServiceStub
+  ](
+    SequencerBftPruningAdministrationServiceGrpc.stub,
+    _.setSchedule(_),
+    _.clearSchedule(_),
+    _.setCron(_),
+    _.setMaxDuration(_),
+    _.setRetention(_),
+    _.getSchedule(_),
+  )
 
   override protected def getStatusRequest: GrpcAdminCommand[?, ?, NodeStatus[SequencerStatus]] =
     SequencerAdminCommands.Health.SequencerStatusCommand()
@@ -112,24 +132,31 @@ class SequencerAdminConnection(
   def getLsuState(file: File, ts: Option[CantonTimestamp])(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
-    val responseObserver = new OutputFileStreamObserver[SequencerLsuStateResponse](
-      file,
-      _.chunk,
-    )
-    runCmd(
-      TopologyAdminCommands.Read
-        .SequencerLsuState(
-          store = None,
-          ts = ts,
-          observer = responseObserver,
+    Future {
+      blocking {
+        logger.info(s"Writing LSU dump to $file")
+        file.createFileIfNotExists(createParents = true)
+        new OutputFileStreamObserver[SequencerLsuStateResponse](
+          file,
+          _.chunk,
         )
-    ).map(_ => ())
+      }
+    }.flatMap { observer =>
+      runCmd(
+        TopologyAdminCommands.Read
+          .SequencerLsuState(
+            store = None,
+            ts = ts,
+            observer = observer,
+          )
+      ).flatMap(_ => observer.result).map(_ => logger.info("Finished writing LSU dump"))
+    }
   }
 
   def initializeFromPredecessor(
       topologySnapshot: Path,
       staticSynchronizerParameters: StaticSynchronizerParameters,
-      ignorePsidCheck: Boolean = false,
+      ignorePsidCheck: Boolean,
   )(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -152,7 +179,7 @@ class SequencerAdminConnection(
       _.successOption
         .map(_.synchronizerId)
         .getOrElse(
-          throw Status.FAILED_PRECONDITION
+          throw Status.UNAVAILABLE
             .withDescription("Sequencer does not have a synchronizer ID in its status response")
             .asRuntimeException()
         )
@@ -213,13 +240,13 @@ class SequencerAdminConnection(
           .withDescription("Stream genesis state works only with GCP buckets.")
           .asRuntimeException()
     }
-
+    val chunkSize = 256 * 1024 // Upload it in 256KB chunks
     val sink = GCStorage
       .resumableUpload(
         bucketConfig.bucketName,
         s"$prefix$fileName",
         contentType = ContentTypes.`application/octet-stream`,
-        chunkSize = 256 * 1024, // Upload it in 256KB chunks
+        chunkSize = chunkSize,
       )
       .withAttributes(
         GoogleAttributes.settings(
@@ -290,6 +317,9 @@ class SequencerAdminConnection(
         val proto: ByteString = response.onboardingStateForSequencer
         PekkoByteString(proto.asReadOnlyByteBuffer())
       }
+      .via(
+        ZstdGroupedWeight(compressionLevel = 3, minSize = chunkSize.toLong)
+      ) // 3 is the default zstd compression level
     val storageObject = source.runWith(sink)
     storageObject.onComplete { _ =>
       channel.close()

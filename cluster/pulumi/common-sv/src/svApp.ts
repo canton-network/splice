@@ -31,7 +31,7 @@ function localSynchronizerNodeValues(
     ...(useCantonBft ? { enableBftSequencer: true } : {}),
     ...(!useCantonBft
       ? {
-          cometBftConfig: {
+          cometBFT: {
             enabled: true,
             connectionUri: pulumi.interpolate`http://${(node as unknown as CometbftSynchronizerNode).cometbftRpcServiceName}:26657`,
             ...(cometBftGovernanceKey ? { externalGovernanceKey: true } : {}),
@@ -129,6 +129,27 @@ export function valuesForSvApp(
               config.cometBftGovernanceKey,
               config.pruning?.sequencer
             ),
+          }
+        : {}),
+      ...(synchronizerNodes.additionalLegacy.length > 0
+        ? {
+            additionalLegacy: synchronizerNodes.additionalLegacy.map(node => {
+              const info = decentralizedSynchronizerMigrationConfig.additionalLegacy.find(
+                m => m.id === node.migrationId
+              );
+              if (!info) {
+                throw new Error(
+                  `No matching additionalLegacy migration info found for node with upgrade id ${node.migrationId}`
+                );
+              }
+              return localSynchronizerNodeValues(
+                node,
+                info,
+                ingressName,
+                config.cometBftGovernanceKey,
+                config.pruning?.sequencer
+              );
+            }),
           }
         : {}),
     },

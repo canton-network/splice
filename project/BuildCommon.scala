@@ -25,6 +25,23 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object BuildCommon {
 
+  // Accepts an optional git ref that is forwarded to damlBumpPackageVersionsMutate
+  // as its `--base` target. With no arg, the underlying tool falls back to the
+  // latest release line.
+  private val damlBumpPackageVersionsCommand: Command =
+    Command.args("damlBumpPackageVersions", "[<git-ref>]") { (state, args) =>
+      val refArg = args.map(_.trim).filter(_.nonEmpty).mkString(" ")
+      val mutateInvocation =
+        if (refArg.nonEmpty) s"damlBumpPackageVersionsMutate $refArg"
+        else "damlBumpPackageVersionsMutate"
+      List(
+        mutateInvocation,
+        "damlDarsLockFileUpdate",
+        "updateDarResources",
+        "npmInstall",
+      ) ::: state
+    }
+
   object defs {
     lazy val bundle = taskKey[(File, Set[File])]("create a release bundle")
     lazy val damlTsCodegen = taskKey[Seq[File]]("generate typescript for the daml models")
@@ -257,8 +274,9 @@ object BuildCommon {
         addCommandAlias("splice-clean", "; clean-splice") ++
         addCommandAlias(
           "updateDarResources",
-          "apps-dar-resources-generator/runMain org.lfdecentralizedtrust.splice.darutils.DarResourcesGenerator apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala; apps-common/scalafmt; apps-common/headerCreate",
-        )
+          "apps-dar-resources-generator/runMain org.lfdecentralizedtrust.splice.darutils.DarResourcesGenerator apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala daml/dars; apps-common/scalafmt; apps-common/headerCreate",
+        ) ++
+        Seq(commands += damlBumpPackageVersionsCommand)
     val buildSettings = inThisBuild(
       Seq(
         organization := "org.lfdecentralizedtrust.splice",
@@ -342,7 +360,6 @@ object BuildCommon {
         `canton-pekko-fork`,
         `canton-magnolify-addon`,
         `canton-wartremover-extension` % "compile->compile;test->test",
-        `canton-util-observability`,
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
         // from the Daml repo listed in libraryDependencies below.
@@ -354,6 +371,7 @@ object BuildCommon {
         libraryDependencies ++= Seq(
           aws_kms,
           aws_sts,
+          better_files,
           gcp_kms,
           canton_observability_metrics,
           daml_tracing,
@@ -461,6 +479,7 @@ object BuildCommon {
       .apply("canton-util-observability", file("canton/community/util-observability"))
       .dependsOn(
         `canton-base-errors` % "compile->compile;test->test",
+        `canton-util-external`,
         `canton-wartremover-extension` % "compile->compile;test->test",
       )
       .settings(
@@ -616,6 +635,7 @@ object BuildCommon {
           chimney,
           circe_core,
           circe_generic,
+          daml_executors,
           flyway.excludeAll(ExclusionRule("org.apache.logging.log4j")),
           flyway_postgresql,
           grpc_services,
@@ -678,7 +698,8 @@ object BuildCommon {
       .apply("canton-community-testing", file("canton/community/testing"))
       .disablePlugins(WartRemover)
       .dependsOn(
-        `canton-community-base`
+        `canton-community-base`,
+        `canton-util-observability` % "compile->test",
       )
       .settings(
         sharedCantonSettings,
@@ -689,6 +710,7 @@ object BuildCommon {
           better_files,
           cats,
           cats_law,
+          daml_executors,
           jul_to_slf4j,
           mockito_scala,
           opentelemetry_api,
@@ -1376,7 +1398,10 @@ object BuildCommon {
     import CantonDependencies._
     sbt.Project
       .apply("canton-sequencer-driver-api", file("canton/community/sequencer-driver"))
-      .dependsOn(`canton-util-external`)
+      .dependsOn(
+        `canton-util-external`,
+        `canton-util-observability`,
+      )
       .settings(
         sharedCantonSettings,
         libraryDependencies ++= Seq(
@@ -1452,7 +1477,7 @@ object BuildCommon {
     val cache =
       FileFunction.cached(cacheDir, FileInfo.hash) { _ =>
         damlTsCodegenDir.value.delete()
-        BuildUtil.runCommand("daml2js" +: args, log)
+        BuildUtil.runCommand("dpm" +: "codegen-js" +: args, log)
         (baseDirectory.value / "daml.js" ** "*").get.toSet
       }
     cache(dars.toSet).toSeq

@@ -9,9 +9,6 @@ import useGetAmuletRules from './useGetAmuletRules';
 import useGetAnsRules, { useGetAnsRulesFromResponse } from './useGetAnsRules';
 import useGetDsoPartyId from './useGetDsoPartyId';
 import useGetRoundOfLatestData from './useGetRoundOfLatestData';
-import useGetTopValidatorsByPurchasedTraffic from './useGetTopValidatorsByPurchasedTraffic';
-import useGetTopValidatorsByValidatorFaucets from './useGetTopValidatorsByValidatorFaucets';
-import useGetTopValidatorsByValidatorRewards from './useGetTopValidatorsByValidatorRewards';
 import useListAnsEntries, { useListAnsEntriesFromResponse } from './useListAnsEntries';
 import useLookupAnsEntryByName, {
   useLookupAnsEntryByNameFromResponse,
@@ -23,7 +20,6 @@ import useLookupFeaturedAppRight, {
   useLookupFeaturedAppRightBuilder,
 } from './useLookupFeaturedAppRight';
 import useOpenRounds from './useOpenRounds';
-import useTopAppProviders from './useTopAppProviders';
 import useTotalRewards from './useTotalRewards';
 
 export {
@@ -37,13 +33,9 @@ export {
   useGetAnsRulesFromResponse,
   useGetRoundOfLatestData,
   useGetDsoPartyId,
-  useGetTopValidatorsByValidatorRewards,
-  useGetTopValidatorsByPurchasedTraffic,
-  useGetTopValidatorsByValidatorFaucets,
   useLookupFeaturedAppRight,
   useLookupFeaturedAppRightBuilder,
   useActivity,
-  useTopAppProviders,
   useTotalRewards,
   useListAnsEntries,
   useListAnsEntriesFromResponse,

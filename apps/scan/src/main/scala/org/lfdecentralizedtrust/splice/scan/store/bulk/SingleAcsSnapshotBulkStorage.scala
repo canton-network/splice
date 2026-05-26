@@ -66,7 +66,8 @@ class SingleAcsSnapshotBulkStorage(
       )
     } yield {
       val encoded = snapshot.createdEventsInPage.map(event =>
-        CompactJsonScanHttpEncodings().javaToHttpCreatedEvent(event.eventId, event.event)
+        CompactJsonScanHttpEncodings()
+          .javaToHttpActiveContract(event.eventId, event.recordTime, event.event)
       )
       val contractsStr = encoded.map(_.asJson.noSpacesSortKeys).mkString("\n") + "\n"
       val contractsBytes = ByteString(contractsStr.getBytes(StandardCharsets.UTF_8))
@@ -97,7 +98,9 @@ class SingleAcsSnapshotBulkStorage(
           storageConfig,
           appConfig,
           s3Connection,
-          { objIdx => s"${storageConfig.getSegmentFolder(timestamp, None)}/ACS_$objIdx.zstd" },
+          { objIdx =>
+            s"${storageConfig.getSegmentFolder(timestamp.timestamp, None)}/ACS_$objIdx.zstd"
+          },
           loggerFactory,
         )
       )

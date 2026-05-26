@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.config
 
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.*
+import com.digitalasset.canton.data.CantonTimestamp
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.config.{
   AutomationConfig,
@@ -30,11 +31,7 @@ final case class ScanSynchronizerConfig(
 
 final case class MediatorVerdictIngestionConfig(
     /** Max verdicts items for DB insert batch. */
-    batchSize: Int = 50,
-    /** Max time window to wait for DB insert batch. */
-    batchMaxWait: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(1),
-    /** Delay before restart on stream failure. */
-    restartDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(5),
+    batchSize: Int = 50
 )
 
 final case class BulkStorageConfig(
@@ -76,6 +73,7 @@ case class ScanAppBackendConfig(
     cache: ScanCacheConfig = ScanCacheConfig(),
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,
+    activityIngestionUserVersion: Option[Long] = None,
     bulkStorage: BulkStorageConfig = BulkStorageConfig(),
     publicUrl: Option[Uri] = None,
     // The thresholdDate from which external transaction hashes are included in the updates from internal ScanAPIs.
@@ -83,6 +81,7 @@ case class ScanAppBackendConfig(
     externalTransactionHashThresholdTime: Option[Instant] =
       ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
     globalSynchronizerAlias: SynchronizerAlias = SynchronizerAlias.tryCreate("global"),
+    rollForwardLsu: Option[ScanRollForwardLsuConfig] = None,
 ) extends SpliceBackendConfig
     with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
@@ -90,6 +89,12 @@ case class ScanAppBackendConfig(
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
 }
+
+final case class ScanRollForwardLsuConfig(
+    upgradeTime: Option[
+      CantonTimestamp
+    ] // If not set, we assume that there is an LsuAnnouncement on the legacy synchronizer.
+)
 
 object ScanAppBackendConfig {
   val DefaultExternalTransactionHashThresholdTime: Option[Instant] =

@@ -4,9 +4,10 @@ import better.files.File.apply
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
 import com.digitalasset.canton.admin.api.client.data
+import com.digitalasset.canton.admin.api.client.data.PruningSchedule
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.config.{NonNegativeFiniteDuration, PositiveDurationSeconds}
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
@@ -17,10 +18,12 @@ import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
   SequencerAdminConnection,
 }
-// import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
+import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
+import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTest}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DomainSequencers
+import org.lfdecentralizedtrust.splice.scan.config.ScanRollForwardLsuConfig
 import org.lfdecentralizedtrust.splice.sv.config.{
   SvOnboardingConfig,
   SvSynchronizerNodeConfig,
@@ -31,12 +34,12 @@ import org.scalatest.time.{Minutes, Span}
 import org.scalatest.TryValues
 
 import java.time.{Duration, Instant}
-import monocle.macros.syntax.lens.*
 import scala.collection.parallel.CollectionConverters.seqIsParallelizable
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.RichOptional
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class RollForwardLsuIntegrationTest
     extends IntegrationTest
     with ExternallySignedPartyTestUtil
@@ -60,15 +63,14 @@ class RollForwardLsuIntegrationTest
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
       .unsafeWithSequencerAvailabilityDelay(NonNegativeFiniteDuration.ofSeconds(5))
+      .withSvBftSequencerConnectionDisabled()
       .addConfigTransforms(
         (_, config) => {
           ConfigTransforms
             .updateAllSvAppConfigs { (name, config) =>
               config.copy(
-                // TODO(#4682) Make it work with BFT connections.
-                bftSequencerConnection = false,
                 domainMigrationDumpPath = Some(
-                  (DomainMigrationUtil.migrationTestDumpDir(
+                  (SynchronizerUpgradeUtil.migrationTestDumpDir(
                     name
                   ) / "domain_migration_dump.json").path
                 ),
@@ -106,7 +108,6 @@ class RollForwardLsuIntegrationTest
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
                           ProtocolVersion.v34,
-                          // TODO(#4784) Test these with non-None values.
                           exportTimes = None,
                         )
                         .some
@@ -119,6 +120,8 @@ class RollForwardLsuIntegrationTest
                   .scanApps(InstanceName.tryCreate(s"sv${sv}Scan"))
                   .focus(_.synchronizerNodes)
                   .modify(c => c.copy(legacy = c.current.some))
+                  .focus(_.rollForwardLsu)
+                  .replace(Some(ScanRollForwardLsuConfig(upgradeTime = None)))
             ),
           ),
         (_, config) => ConfigTransforms.withBftSequencers(_.contains("Local"))(config),
@@ -151,27 +154,26 @@ class RollForwardLsuIntegrationTest
       sv2Backend,
       sv3Backend,
       sv4Backend,
-      // TODO(#4682): Fix with BFT connections
-      // sv1ValidatorBackend,
-      // sv2ValidatorBackend,
-      // sv3ValidatorBackend,
-      // sv4ValidatorBackend,
+      aliceValidatorBackend,
+      sv1ValidatorBackend,
+      sv2ValidatorBackend,
+      sv3ValidatorBackend,
+      sv4ValidatorBackend,
     )
 
     startAllSync(allNodes*)
 
-    // TODO(#4682): Fix with BFT connections
-    // actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
-    //   "Scan transaction history is recorded and wallet balance is updated",
-    //   _ => {
-    //     // buffer to account for domain fee payments
-    //     assertInRange(
-    //       sv1WalletClient.balance().unlockedQty,
-    //       (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
-    //     )
-    //     countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
-    //   },
-    // )
+    actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
+      "Scan transaction history is recorded and wallet balance is updated",
+      _ => {
+        // buffer to account for domain fee payments
+        assertInRange(
+          sv1WalletClient.balance().unlockedQty,
+          (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
+        )
+        countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
+      },
+    )
 
     clue("All sequencers are registered") {
       eventually() {
@@ -192,12 +194,19 @@ class RollForwardLsuIntegrationTest
       }
     }
 
+    // This is what is announced but then fails
+    val announcementNewSynchronizerSerial =
+      decentralizedSynchronizerPSId.serial + NonNegativeInt.one
+    // This is the synchronizer we roll forward two
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
-    val successorPsid = decentralizedSynchronizerPSId.copy(serial = newSynchronizerSerial)
+    val successorPsid = decentralizedSynchronizerPSId.copy(
+      serial = newSynchronizerSerial,
+      protocolVersion = ProtocolVersion.v34,
+    )
     val topologyFreezeTime = CantonTimestamp.now()
     val upgradeTime = CantonTimestamp.now().plusSeconds(60)
     clue("Schedule logical synchronizer upgrade") {
-      scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+      scheduleLsu(topologyFreezeTime, upgradeTime, announcementNewSynchronizerSerial.value.toLong)
     }
     clue("Topology state contains LSU announcement") {
       eventually(3.minutes) {
@@ -222,7 +231,11 @@ class RollForwardLsuIntegrationTest
       ),
       participants = false,
       enableBftSequencer = true,
-      logSuffix = "global-synchronizer-upgrade",
+      logSuffix = "roll-forward-lsu",
+      extraSequencerConfig = Seq(
+        s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${upgradeTime}",
+        s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",
+      ),
     )() {
       // Wait first so that the participant has observed the timestamp and will happily migrate.
       clue(s"wait for upgrade time $upgradeTime") {
@@ -358,11 +371,36 @@ class RollForwardLsuIntegrationTest
         }
       }
 
+      clue("Alice is connected to new physical synchronizer") {
+        eventually() {
+          aliceValidatorBackend.participantClient.synchronizers
+            .list_connected()
+            .loneElement
+            .physicalSynchronizerId
+            .serial shouldBe newSynchronizerSerial
+        }
+      }
+
+      clue("Alice can tap") {
+        aliceValidatorWalletClient.tap(100.0)
+      }
+
+      clue("SV1's DABFT node has pruning config set") {
+        sv1LocalBackend.sequencerClient.bft.pruning.get_schedule() shouldBe Some(
+          PruningSchedule(
+            "0 /10 * * * ?",
+            PositiveDurationSeconds.ofMinutes(5),
+            PositiveDurationSeconds.ofDays(30),
+          )
+        )
+      }
+
       clue("stop apps manually to prevent errors from the synchronizer being force stopped") {
         stopAllAsync(allNodes*).futureValue
         allSvLocalBackends.par.foreach(
-          _.participantClientWithAdminToken.synchronizers.disconnect_all()
+          _.participantClient.synchronizers.disconnect_all()
         )
+        aliceValidatorBackend.participantClient.synchronizers.disconnect_all()
       }
     }
   }
@@ -391,15 +429,15 @@ class RollForwardLsuIntegrationTest
       retryProvider,
     )
 
-  // private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
-  //   listTransactionsFromScan(scan).count(
-  //     _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
-  //   )
-  // }
+  private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
+    listTransactionsFromScan(scan).count(
+      _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
+    )
+  }
 
-  // private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
-  //   scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
-  // }
+  private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
+    scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
+  }
 
   private def getSequencerUrlSet(
       participantConnection: ParticipantClientReference,

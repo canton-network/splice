@@ -56,7 +56,7 @@ class GrpcSequencerConnectServiceTest
       cryptoClient,
       clock,
       initialTimeBound.map(ts =>
-        LsuSequencingBounds(upgradeTime = ts, lowerBoundSequencingTimeExclusive = ts)
+        LsuSequencingBounds.unsafeCreate(upgradeTime = ts, lowerBoundSequencingTimeExclusive = ts)
       ),
       loggerFactory,
     )(parallelExecutionContext)

@@ -26,13 +26,11 @@ export const GitReferenceSchema = z.object({
 
 export const MigrationInfoSchema = z
   .object({
-    id: z
-      .number()
-      .lt(10, 'Migration id must be less than or equal to 10 as we use in the cometbft ports.')
-      .gte(0),
+    id: z.number().gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),
     enableLogicalSynchronizerDeploymentMode: z.boolean().default(false),
+    migrateParticipantsFromSvCantonToSv: z.boolean().default(false),
     sequencer: z
       .object({
         enableBftSequencer: z.boolean().default(false),
@@ -45,6 +43,7 @@ export const MigrationInfoSchema = z
 export const SynchronizerMigrationSchema = z
   .object({
     legacy: MigrationInfoSchema.optional(),
+    additionalLegacy: z.array(MigrationInfoSchema).optional(),
     active: MigrationInfoSchema.extend({
       migratingFrom: z.number().optional(),
       version: CnChartVersionSchema,

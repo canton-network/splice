@@ -87,6 +87,7 @@ copybutton_prompt_text = "@ "
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
+html_static_path = ["_static"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -115,23 +116,24 @@ html_theme_options = {
 # See https://docs.readthedocs.com/platform/latest/guides/edit-source-links-sphinx.html
 html_context = {
     "display_github": True,
-    "github_user": "hyperledger-labs",
+    "github_user": "canton-network",
     "github_repo": "splice",
     "github_version": "main",
     "conf_py_path": "/docs/src/",
 }
 
+html_css_files = ["deprecated-banner.css"]
 html_js_files = ["script.js"]
 
 SPLICE_ROOT = os.getenv("SPLICE_ROOT")
 with open(SPLICE_ROOT + "/nix/canton-sources.json") as f:
     obj = json.load(f)
     canton_version = obj["version"]
-    daml_sdk_tooling_version = obj["tooling_sdk_version"]
 
-with open(SPLICE_ROOT + "/daml.yaml") as f:
-    obj = yaml.safe_load(f)
-    daml_sdk_version = obj["sdk-version"]
+with open(SPLICE_ROOT + "/nix/dpm-sdk-sources.json") as f:
+    obj = json.load(f)
+    daml_sdk_tooling_version = obj["version"]
+    daml_sdk_version = obj["version"]
 
 with open(os.path.join(os.getenv("CANTON"), "SUBDIR")) as f:
     canton_subdir = f.readline()

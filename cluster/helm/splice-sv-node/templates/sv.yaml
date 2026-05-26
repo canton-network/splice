@@ -8,8 +8,11 @@ kind: Deployment
 metadata:
   name: {{ $appIdentifier }}
   namespace: {{ .Release.Namespace }}
+  {{- $annotations := include "splice-util-lib.default-annotations" .Values }}
+  {{- if $annotations }}
   annotations:
-    {{- include "splice-util-lib.default-annotations" .Values | nindent 4 }}
+    {{- $annotations | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $appIdentifier) | nindent 4 }}
     migration: {{ .Values.migration.id | quote }}
@@ -41,7 +44,7 @@ spec:
           {{- end }}
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+              value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
             {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens) | indent 12}}
             {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator") | indent 12}}
             - name: SPLICE_APP_SV_PARTICIPANT_ADDRESS
@@ -72,6 +75,32 @@ spec:
                   key: private
                   name: "splice-app-sv-key"
                   optional: false
+            {{- else if .Values.rollForwardLsu }}
+            - name: ADDITIONAL_CONFIG_SV_ONBOARDING
+              value: |
+                _onboarding {
+                  type = "roll-forward-lsu"
+                  new-physical-synchronizer-serial = {{ .Values.rollForwardLsu.newPhysicalSynchronizerSerial }}
+                  new-physical-synchronizer-protocol-version = {{ .Values.rollForwardLsu.newPhysicalSynchronizerProtocolVersion | quote }}
+                  {{- with .Values.rollForwardLsu.exportTimes }}
+                  export-times = {
+                    topology-export-time = {
+                      type = "timestamp"
+                      time = {{ .topologyExportTime | quote }}
+                    }
+                    traffic-export-time = {
+                      type = "timestamp"
+                      time = {{ .trafficExportTime | quote }}
+                    }
+                    {{- with .upgradeTime }}
+                    upgrade-time = {
+                      type = "timestamp"
+                      time = {{ . | quote }}
+                    }
+                    {{- end }}
+                  }
+                  {{- end }}
+                }
             {{- else }}
               {{- if eq .Values.onboardingType "found-dso" }}
             - name: SPLICE_APP_SV_IS_DEV_NET
@@ -232,7 +261,7 @@ spec:
                       port = 5007
                     }
                   }
-                  {{- with $sync.cometBftConfig }}
+                  {{- with $sync.cometBFT }}
                   comet-bft-config {
                     enabled = {{ .enabled }}
                     {{- if .connectionUri }}
@@ -248,6 +277,53 @@ spec:
                   {{- end }}
                 }
             {{- end }}
+            {{- end }}
+            {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
+            - name: ADDITIONAL_CONFIG_SV_DOMAIN_ADDITIONAL_LEGACY_{{ $i }}
+              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
+              value: |
+                canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
+                  sequencer {
+                    {{- if (index $sync "enableBftSequencer") }}
+                    is-bft-sequencer = true
+                    {{- end }}
+                    admin-api {
+                      address = {{ $sync.sequencerAddress | quote }}
+                      port = 5009
+                    }
+                    internal-api {
+                      address = {{ $sync.sequencerAddress | quote }}
+                      port = 5008
+                    }
+                    external-public-api-url = {{ $sync.sequencerPublicUrl | quote }}
+                    {{- if $sync.sequencerPruningConfig.enabled }}
+                    pruning {
+                      pruning-interval = {{ $sync.sequencerPruningConfig.pruningInterval | quote }}
+                      retention-period = {{ $sync.sequencerPruningConfig.retentionPeriod | quote }}
+                    }
+                    {{- end }}
+                  }
+                  mediator {
+                    admin-api {
+                      address = {{ $sync.mediatorAddress | quote }}
+                      port = 5007
+                    }
+                  }
+                  {{- with $sync.cometBFT }}
+                  comet-bft-config {
+                    enabled = {{ .enabled }}
+                    {{- if .connectionUri }}
+                    connection-uri = {{ .connectionUri | quote }}
+                    {{- end }}
+                    {{- if .externalGovernanceKey }}
+                    governance-key {
+                      public-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY}
+                      private-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY}
+                    }
+                    {{- end }}
+                  }
+                  {{- end }}
+                }
             {{- end }}
             {{- end }}
             {{- if .Values.decentralizedSynchronizerUrl }}
@@ -280,9 +356,16 @@ spec:
             {{- end }}
             {{- range $syncName, $sync := .Values.synchronizers }}
               {{- if kindIs "map" $sync }}
-              {{- if ($sync.cometBftConfig).externalGovernanceKey }}
+              {{- if ($sync.cometBFT).externalGovernanceKey }}
                 {{- $anyGovernanceKey = true }}
               {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.synchronizers }}
+              {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
+                {{- if ($sync.cometBFT).externalGovernanceKey }}
+                  {{- $anyGovernanceKey = true }}
+                {{- end }}
               {{- end }}
             {{- end }}
             {{- if $anyGovernanceKey }}
@@ -473,8 +556,13 @@ spec:
             periodSeconds: 5
             failureThreshold: 5
             timeoutSeconds: 10
-          {{- if or .Values.participantIdentitiesDumpImport .Values.migration.attachPvc }}
           volumeMounts:
+            - name: logback-config
+              # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+              # would not receive configmap updates.
+              # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+              mountPath: /app/logback
+          {{- if or .Values.participantIdentitiesDumpImport .Values.migration.attachPvc }}
           {{- with .Values.participantIdentitiesDumpImport }}
             - name: participant-bootstrapping-dump-volume
               mountPath: /participant-bootstrapping-dump
@@ -511,6 +599,9 @@ spec:
                 sleep 2;
               done
       volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-sv-app-logback-config
       {{- with .Values.participantIdentitiesDumpImport }}
         - name: participant-bootstrapping-dump-volume
           secret:
@@ -569,6 +660,15 @@ spec:
       storage: 20G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
 {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-sv-app-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}

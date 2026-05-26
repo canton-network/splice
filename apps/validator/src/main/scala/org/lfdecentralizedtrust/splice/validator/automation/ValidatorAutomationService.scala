@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.validator.automation
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration as ConfigNonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.sequencing.SequencerConnectionPoolDelays
@@ -30,11 +31,10 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
-import org.lfdecentralizedtrust.splice.validator.migration.DecentralizedSynchronizerMigrationTrigger
+import org.lfdecentralizedtrust.splice.validator.lsu.RollForwardLsuTrigger
 import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import org.lfdecentralizedtrust.splice.wallet.automation.{
@@ -45,7 +45,6 @@ import org.lfdecentralizedtrust.splice.wallet.automation.{
 import org.lfdecentralizedtrust.splice.wallet.config.TransferPreapprovalConfig
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 
-import java.nio.file.Path
 import scala.concurrent.ExecutionContextExecutor
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 
@@ -62,14 +61,12 @@ class ValidatorAutomationService(
     domainUnpausedSync: DomainUnpausedSynchronization,
     walletManagerOpt: Option[UserWalletManager], // None when config.enableWallet=false
     store: ValidatorStore,
-    val updateHistory: UpdateHistory,
     storage: DbStorage,
     scanConnection: BftScanConnection,
     ledgerClient: SpliceLedgerClient,
     participantAdminConnection: ParticipantAdminConnection,
     participantIdentitiesStore: NodeIdentitiesStore,
     domainConnector: DomainConnector,
-    domainMigrationDumpPath: Option[Path],
     domainMigrationId: Long,
     retryProvider: RetryProvider,
     svValidator: Boolean,
@@ -82,6 +79,7 @@ class ValidatorAutomationService(
     latestPackagesOnly: Boolean,
     enabledFeatures: EnabledFeaturesConfig,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
+    globalSynchronizerAlias: SynchronizerAlias,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -100,8 +98,6 @@ class ValidatorAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =
     ValidatorAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   automationConfig.topologyMetricsPollingInterval.foreach(topologyPollingInterval =>
     registerTrigger(
@@ -237,18 +233,19 @@ class ValidatorAutomationService(
       )
     )
 
-  registerTrigger(
-    new ValidatorPackageVettingTrigger(
-      participantAdminConnection,
-      scanConnection,
-      triggerContext,
-      maxVettingDelay,
-      latestPackagesOnly,
-      svValidator,
-      enabledFeatures.enableUnsupportedDarsUnvetting,
-      additionalPackagesToUnvet,
+  if (!svValidator) {
+    registerTrigger(
+      new ValidatorPackageVettingTrigger(
+        participantAdminConnection,
+        scanConnection,
+        triggerContext,
+        maxVettingDelay,
+        latestPackagesOnly,
+        enabledFeatures.enableUnsupportedDarsUnvetting,
+        additionalPackagesToUnvet,
+      )
     )
-  )
+  }
 
   registerTrigger(
     new ValidatorLicenseMetadataTrigger(
@@ -268,23 +265,14 @@ class ValidatorAutomationService(
   )
 
   if (!svValidator) {
-    domainMigrationDumpPath.fold(
-      logger.info(
-        "Not starting SynchronizerUpgradeTrigger, as no domain migration dump path is configured."
-      )(TraceContext.empty)
-    ) { path =>
-      registerTrigger(
-        new DecentralizedSynchronizerMigrationTrigger(
-          domainMigrationId,
-          triggerContext,
-          connection(SpliceLedgerConnectionPriority.Medium),
-          participantAdminConnection,
-          path,
-          scanConnection,
-          enabledFeatures,
-        )
+    registerTrigger(
+      RollForwardLsuTrigger(
+        participantAdminConnection,
+        scanConnection,
+        globalSynchronizerAlias,
+        triggerContext,
       )
-    }
+    )
   }
 
   registerTrigger(

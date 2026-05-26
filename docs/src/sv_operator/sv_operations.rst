@@ -144,7 +144,7 @@ Determining the cost of a single CC transfer
 As per Canton Improvement Proposal `cip-0042 <https://github.com/global-synchronizer-foundation/cips>`_,
 the ``extraTrafficPrice`` should be set so that the cost of a standard CC transfer is 1 USD.
 Actual traffic costs change depending on factors such as the size of the DSO (number of SVs) and the Canton protocol version
-(so can change also on major upgrades).
+(so can change also on protocol upgrades).
 It is therefore recommended for SVs to measure current costs periodically and adjust traffic parameters accordingly.
 
 One way to determine the current :ref:`traffic consumption <traffic_accounting>` (in bytes)
@@ -388,7 +388,7 @@ minting proposal.
 
 The script is part of the Splice repository:
 
-`unclaimed_sv_rewards.py <https://github.com/hyperledger-labs/splice/blob/main/scripts/scan-txlog/unclaimed_sv_rewards.py>`_
+`unclaimed_sv_rewards.py <https://github.com/canton-network/splice/blob/main/scripts/scan-txlog/unclaimed_sv_rewards.py>`_
 
 ``unclaimed_sv_rewards.py`` is intended for operational use by SV node operators. It does
 not modify on-ledger state; it reads from the Scan API and produces a deterministic and
@@ -846,6 +846,26 @@ A subsequent re-ingestion can be triggered by incrementing the value, as shown i
       # Example to trigger re-ingestion of the TxLog store for the second time
       persistence:
         txLogStoreDescriptorUserVersion: 2
+
+The ``activityIngestionUserVersion`` field controls the activity record ingestion version. Incrementing this value causes the scan app to record a new app activity record completeness lower bound. Reward accounting excludes rounds before this boundary, even though their activity records are retained. Thus bumping the user version has the same effect as reinitializing the app activity record computation from the time of the bump onwards.
+
+Consequences of incrementing the user version:
+
+- Reward accounting excludes rounds before the new boundary, which may result in the SV node participating in reward computation by asking other SV nodes for the data for the rounds for which the SV node does not have complete activity records.
+- Scan will not serve activity records ingested before bumping the user version. The results of this SV node's ``v0/events`` Scan API may therefore miss some activity records compared to the responses from other Scan APIs.
+
+This is useful for recovering from unexpected ingestion or reward processing errors without reprocessing historical data.
+
+The user version must never decrease. A lower value than previously stored will cause the scan app to shut down to prevent data corruption.
+
+The HOCON configuration key is ``canton.scan-apps.scan-app.activity-ingestion-user-version``. It can be set via an ``ADDITIONAL_CONFIG`` environment variable:
+
+   .. code-block:: yaml
+
+      # Example to reset the activity ingestion completeness boundary
+      additionalEnvVars:
+        - name: ADDITIONAL_CONFIG_ACTIVITY_INGESTION_USER_VERSION
+          value: canton.scan-apps.scan-app.activity-ingestion-user-version = 1
 
 .. _sv-unvet_insecure_package_versions:
 

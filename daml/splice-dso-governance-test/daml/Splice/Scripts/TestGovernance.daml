@@ -28,6 +28,7 @@ import Splice.DecentralizedSynchronizer
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry.Parameters
+import Splice.Testing.Utils
 
 
 -- Vote Requests
@@ -45,7 +46,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider with no effective time
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -59,7 +60,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
   requestCid <- castVote app sv2 requestCid1 False
 
   -- there are two votes, which is not enough to consider the vote definitive and grant the app right
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -73,7 +74,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
   voteRequest.trackingCid === Some requestCid1
 
   -- there are still only two votes, which is not enough to consider the vote definitive and grant the app right
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -82,7 +83,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
   requestCid <- castVote app sv3 requestCid True
 
   -- now the majority svs have voted, therefore the request can be closed
-  submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -119,7 +120,7 @@ testVoteRequestAcceptanceWithEffectivity = do
   let effectiveTime = addRelTime now (days 8)
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -133,7 +134,7 @@ testVoteRequestAcceptanceWithEffectivity = do
   requestCid <- castVote app sv2 requestCid1 True
 
   -- there are two votes, which is not enough to consider the vote definitive and grant the app right
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -147,7 +148,7 @@ testVoteRequestAcceptanceWithEffectivity = do
 
   -- there are now three votes in favor of the change, but there is an effective date
   -- so it cannot be closed yet
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -159,7 +160,7 @@ testVoteRequestAcceptanceWithEffectivity = do
   passTime (days 7)
 
   -- even if everybody voted the request is not definitive yet, as the targetEffectiveAt time has not passed
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -171,7 +172,7 @@ testVoteRequestAcceptanceWithEffectivity = do
   passTime (days 1 + seconds 1)
 
   -- now the request becomes effective and the right is granted
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -209,7 +210,7 @@ testVoteRequestRejectionWithoutEffectivity = do
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -228,7 +229,7 @@ testVoteRequestRejectionWithoutEffectivity = do
 
   -- the request is directly rejected
   now <- getTime
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -254,7 +255,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
   [] <- query @FeaturedAppRight provider
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -273,7 +274,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
 
   -- even if an effective time is set, the majority rejected before the expiration date, so the request is rejected
   now <- getTime
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -299,7 +300,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
   [] <- query @FeaturedAppRight provider
 
   -- voteRequests with an effective time set before the expiration date must fail
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -309,7 +310,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     voteRequestTimeout = Some (days 2)
 
   -- sv1 initiates the granting of the featured app right for the provider
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -324,7 +325,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
   requestCid <- castVote _app sv4 requestCid True
 
   -- early closing is not possible when an effective time is set
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -338,7 +339,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
   requestCid <- castVote _app sv1 requestCid False
 
   -- SVs can change their vote as long as the vote request is active
-  result <- submitMulti[sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
@@ -360,7 +361,7 @@ testRacingSvRemoval = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   -- sv1 is not happy with sv2, and issues two removal requests at the same time!
-  result1 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -369,7 +370,7 @@ testRacingSvRemoval = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
 
-  result2 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -379,7 +380,7 @@ testRacingSvRemoval = do
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
 
   -- sv2 counters and wants to remove sv1
-  result3 <- submitMulti [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result3 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv2
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -392,7 +393,7 @@ testRacingSvRemoval = do
   now <- getTime
   let effectiveTime = addRelTime now (days 8)
 
-  result4 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result4 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -409,28 +410,28 @@ testRacingSvRemoval = do
   -- sv3 and sv4 are not happy with either of them, and accept both removal requests
   -- sv1 and sv2 accept both requests as well, so we can better test races
   [req1, req2, req3] <- forA [req1, req2, req3] $ \requestCid -> do
-    result1 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid
       vote = Vote with
         sv = sv1
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
-    result2 <- submitMulti [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    result2 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result1.voteRequest
       vote = Vote with
         sv = sv2
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
-    result3 <- submitMulti [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    result3 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result2.voteRequest
       vote = Vote with
         sv = sv3
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
-    result4 <- submitMulti [sv4] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    result4 <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result3.voteRequest
       vote = Vote with
         sv = sv4
@@ -441,7 +442,7 @@ testRacingSvRemoval = do
 
   -- sv1 attempts to immediatly accept the request to remove sv2
   now <- getTime
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
@@ -453,15 +454,11 @@ testRacingSvRemoval = do
 
   -- and it eagerly accepts its other vote request as well
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
-    requestCid = req2
-    amuletRulesCid = None
-    sv = Some sv1
-
-  result.completedAt === now
-  result.offboardedVoters === ["sv2"]
-  result.abstainingSvs === []
-  result.outcome === VRO_AcceptedButActionFailed with description = "Not a sv"
+  submitMultiMustFail'' (expectMessageContains "Not a sv")
+    [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+      requestCid = req2
+      amuletRulesCid = None
+      sv = Some sv1
 
   -- sv3 refuses and sv4 accepts request 4 with effectivity 8 days before the expiration.
   req4 <- castVote app sv3 req4 False
@@ -473,7 +470,7 @@ testRacingSvRemoval = do
   req4 <- castVote app sv1 req4 False
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv1
@@ -486,7 +483,7 @@ testRacingSvRemoval = do
 
   -- and forgets to turn off automation, which now submits the closing of the vote request to remove SV1
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req3
     amuletRulesCid = None
     sv = Some sv1
@@ -503,7 +500,7 @@ testRacingSvRemoval = do
 
   -- The story continues: sv3 tries to remove sv4
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result4 <- submitMulti [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result4 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv3
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -515,14 +512,14 @@ testRacingSvRemoval = do
 
   -- early closing is not possible, as the outcome of the vote is not determined, and we thus leave
   -- time for some of the SV's to change their vote
-  submitMultiMustFail [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
 
   -- after enough time has passed the closing works
   passTime (seconds 1)
-  result <- submitMulti [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
@@ -531,7 +528,7 @@ testRacingSvRemoval = do
   result.outcome === VRO_Expired
 
   -- Let's see if sv3 and sv4 can work together to also remove sv4
-  result5 <- submitMulti [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result5 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv3
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -540,7 +537,7 @@ testRacingSvRemoval = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 1)
 
-  castResult <- submitMulti [sv4] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  castResult <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = result5.voteRequest
     vote = Vote with
       sv = sv4
@@ -551,7 +548,7 @@ testRacingSvRemoval = do
 
   -- and actually early closing is possible, as everybody has voted and the outcome is definite
   now <- getTime
-  result <- submitMulti [sv3] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req5
     amuletRulesCid = None
     sv = Some sv3
@@ -614,7 +611,7 @@ testDsoRulesConfigChange = do
 
   -- creation of two concurrent independent vote requests
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result1 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
@@ -624,7 +621,7 @@ testDsoRulesConfigChange = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
 
-  result2 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
@@ -640,7 +637,7 @@ testDsoRulesConfigChange = do
   req1 <- castVote app sv3 req1 True
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
@@ -657,7 +654,7 @@ testDsoRulesConfigChange = do
   req2 <- castVote app sv2 req2 True
   req2 <- castVote app sv3 req2 True
 
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req2
     amuletRulesCid = None
     sv = Some sv1
@@ -687,7 +684,7 @@ testAmuletRulesTickDurationChange = do
   let newConfig = amuletRules.configSchedule.initialValue with tickDuration = seconds 20
 
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -703,7 +700,7 @@ testAmuletRulesTickDurationChange = do
   request <- castVote app sv2 request True
   request <- castVote app sv3 request True
 
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = request
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
@@ -790,7 +787,7 @@ testAmuletRulesConfigChange = do
 
   -- creation of two concurrent independent vote requests
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
-  result1 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -800,7 +797,7 @@ testAmuletRulesConfigChange = do
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
 
-  result2 <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -815,7 +812,7 @@ testAmuletRulesConfigChange = do
   req1 <- castVote app sv2 req1 True
   req1 <- castVote app sv3 req1 True
 
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req1
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
@@ -832,7 +829,7 @@ testAmuletRulesConfigChange = do
   req2 <- castVote app sv2 req2 True
   req2 <- castVote app sv3 req2 True
 
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = req2
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
@@ -887,7 +884,7 @@ testOffboardSvAndAmuletPriceVotes = do
 
   -- garbage collect the AmuletPriceVote of sv1
   let [(sv1VoteCid, _)] = filter (\(_, vote) -> vote.sv == sv1) amuletPriceVotes
-  submitMulti [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_GarbageCollectAmuletPriceVotes with
+  submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_GarbageCollectAmuletPriceVotes with
     nonSvVoteCids = [sv1VoteCid]
     duplicateVoteCids = [[sv2VoteCid1, sv2VoteCid2]]
     sv = Some sv2
@@ -898,7 +895,7 @@ testOffboardSvAndAmuletPriceVotes = do
 
   -- one cannot archive a vote by listing it as a duplicate of its own
   let [(sv3VoteCid, _)] = filter (\(_, vote) -> vote.sv == sv3) amuletPriceVotes
-  submitMultiMustFail [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_GarbageCollectAmuletPriceVotes with
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_GarbageCollectAmuletPriceVotes with
     nonSvVoteCids = []
     duplicateVoteCids = [[sv3VoteCid, sv3VoteCid]]
     sv = Some sv2
@@ -910,7 +907,7 @@ testVoteRequestExpireWithoutEffectivity = do
   provider <- allocateParty "provider"
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  requestResult <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -920,7 +917,7 @@ testVoteRequestExpireWithoutEffectivity = do
     voteRequestTimeout = None
 
   -- attempt to close the vote request before its voting period
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
@@ -929,7 +926,7 @@ testVoteRequestExpireWithoutEffectivity = do
   now <- getTime
 
   -- close the vote request once the voting period is over
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
@@ -952,7 +949,7 @@ testVoteRequestExpireWithEffectivity = do
   let effectiveTime = addRelTime now (days 8)
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  requestResult <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -962,7 +959,7 @@ testVoteRequestExpireWithEffectivity = do
     voteRequestTimeout = None
 
   -- attempt to close the vote request before its voting period
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
@@ -971,7 +968,7 @@ testVoteRequestExpireWithEffectivity = do
   now <- getTime
 
   -- close the vote request once the voting period is over
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
@@ -1011,7 +1008,7 @@ testAmuletPriceVoting = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   forA_ (zip [1, 2, 3, 4] [sv1, sv2, sv3, sv4]) $ \(amuletPriceInt, sv) -> do
     [(voteCid, _)] <- queryFilter @AmuletPriceVote dso (\vote -> vote.sv == sv)
-    submitMulti [sv] [dso] $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
       sv
       amuletPrice = intToDecimal amuletPriceInt
       voteCid
@@ -1019,14 +1016,14 @@ testAmuletPriceVoting = do
   [(voteCid, _)] <- queryFilter @AmuletPriceVote dso (\vote -> vote.sv == sv1)
 
   -- check that price vote updates fail if the coolodwn period is not over
-  submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
     sv = sv1
     amuletPrice = 5.0
     voteCid
 
   -- pass the cooldown and update the vote again
   passTime (minutes 1)
-  submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_UpdateAmuletPriceVote with
     sv = sv1
     amuletPrice = 5.0
     voteCid
@@ -1039,7 +1036,7 @@ testAmuletPriceVoting = do
   -- pass enough time to advance the open mining round and lock in the price
   [(roundToArchiveCid, _), (middleRoundCid, _), (latestRoundCid, _)] <- sortOn (._2.round) <$> query @OpenMiningRound dso
   amuletPriceVotes <- query @AmuletPriceVote dso
-  submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_AdvanceOpenMiningRounds with
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AdvanceOpenMiningRounds with
     amuletRulesCid
     roundToArchiveCid
     middleRoundCid
@@ -1060,7 +1057,7 @@ testVoteCastingCooldown  = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   -- create vote request to use for testing
-  result <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -1071,7 +1068,7 @@ testVoteCastingCooldown  = do
   let requestCid = result.voteRequest
 
   -- SV2 can immediately cast a vote
-  result <- submitMulti [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid
     vote = Vote with
       sv = sv2
@@ -1081,7 +1078,7 @@ testVoteCastingCooldown  = do
   let requestCid = result.voteRequest
 
   -- The second vote SV2 fails though
-  _ <- submitMultiMustFail [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  _ <- submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
         vote = Vote with
           sv = sv2
@@ -1090,7 +1087,7 @@ testVoteCastingCooldown  = do
           optCastAt = None
 
   -- And that same holds for SV1, as it voted as part of creating the request.
-  _ <- submitMultiMustFail [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  _ <- submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
         vote = Vote with
           sv = sv1
@@ -1102,7 +1099,7 @@ testVoteCastingCooldown  = do
   passTime (minutes 1)
 
   -- The second vote SV2 fails though
-  result <- submitMulti [sv2] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
         vote = Vote with
           sv = sv2
@@ -1112,7 +1109,7 @@ testVoteCastingCooldown  = do
   let requestCid = result.voteRequest
 
   -- And that same holds for SV1, as it voted as part of creating the request.
-  _ <- submitMulti [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+  _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
         requestCid
         vote = Vote with
           sv = sv1

@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.onboarding.lsu
 
+import cats.syntax.foldable.*
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -10,6 +11,8 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.environment.{
   ParticipantAdminConnection,
@@ -24,14 +27,12 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvOnboardingConfig}
-import SvOnboardingConfig.RollForwardLsuTimestampConfig
 import org.lfdecentralizedtrust.splice.sv.lsu.{LsuNodeInitializer, LsuStateExporter}
 import org.lfdecentralizedtrust.splice.sv.onboarding.{DsoPartyHosting, NodeInitializerUtil}
 import org.lfdecentralizedtrust.splice.sv.onboarding.joining.JoiningNodeInitializer
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 
-import io.grpc.Status
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class RollForwardLsuInitializer(
@@ -46,6 +47,7 @@ class RollForwardLsuInitializer(
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     override protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
+    override protected val grpcClientMetrics: GrpcClientMetrics,
     newJoiningNodeInitializer: Option[SvOnboardingConfig.JoinWithKey] => JoiningNodeInitializer,
     rollForwardConfig: SvOnboardingConfig.RollForwardLsu,
 )(implicit
@@ -69,7 +71,6 @@ class RollForwardLsuInitializer(
   val initializer = new LsuNodeInitializer(
     synchronizerNodeService.nodes,
     currentNode, // roll forward goes from legacy => current
-    None,
     loggerFactory,
     retryProvider,
   )
@@ -120,10 +121,15 @@ class RollForwardLsuInitializer(
         rollForwardConfig.newPhysicalSynchronizerSerial,
         rollForwardConfig.newPhysicalSynchronizerProtocolVersion,
       )
-      timestamps <- rollForwardConfig.exportTimes match {
+      (topologyExportTime, trafficExportTime, upgradeTime) <- rollForwardConfig.exportTimes match {
         case Some(config) =>
-          logger.info(s"Using export timestamps from config: $config")
-          Future.successful(config)
+          val resolved = (
+            config.topologyExportTime.getTimestamp(),
+            config.trafficExportTime.getTimestamp(),
+            config.upgradeTime.map(_.getTimestamp()),
+          )
+          logger.info(s"Using export timestamps from config: $config, resolved: $resolved")
+          Future.successful(resolved)
         case None =>
           for {
             announcements <- legacyNode.sequencerAdminConnection.listLsuAnnouncements(
@@ -133,10 +139,10 @@ class RollForwardLsuInitializer(
             announcements match {
               case Seq(announcement) =>
                 logger.info(s"Using export timestamps from announcement: $announcement")
-                RollForwardLsuTimestampConfig(
-                  topologyExportTime =
-                    CantonTimestamp.assertFromInstant(announcement.base.validFrom),
-                  trafficExportTime = announcement.mapping.upgradeTime,
+                (
+                  CantonTimestamp.assertFromInstant(announcement.base.validFrom),
+                  announcement.mapping.upgradeTime,
+                  Some(announcement.mapping.upgradeTime),
                 )
               case _ =>
                 throw new IllegalStateException(
@@ -153,7 +159,8 @@ class RollForwardLsuInitializer(
         } else {
           for {
             state <- exporter.exportLSUState(
-              topologyExportTime = rollForwardConfig.exportTimes.map(_.topologyExportTime)
+              topologyExportTime =
+                rollForwardConfig.exportTimes.map(_.topologyExportTime.getTimestamp())
             )
             _ <- initializer.initializeSynchronizer(
               state,
@@ -161,9 +168,10 @@ class RollForwardLsuInitializer(
               now = clock.now,
               // Upgrade time is used to publish the sequencer sucessor which we don't care about for roll-forward LSUs.
               upgradeTime = None,
+              ignorePsidCheck = true,
             )
             trafficState <- legacyNode.sequencerAdminConnection.getLsuTrafficControlState(ts =
-              rollForwardConfig.exportTimes.map(_.trafficExportTime)
+              rollForwardConfig.exportTimes.map(_.trafficExportTime.getTimestamp())
             )
             _ <- currentNode.sequencerAdminConnection.setLsuTrafficControlState(trafficState)
           } yield ()
@@ -184,7 +192,7 @@ class RollForwardLsuInitializer(
             .performManualLsu(
               legacyPhysicalSynchronizerId,
               newPhysicalSynchronizerId,
-              Some(timestamps.trafficExportTime),
+              upgradeTime,
               Map(
                 sequencerId -> initializer.successorConnection
               ),
@@ -194,6 +202,14 @@ class RollForwardLsuInitializer(
               r
             }
         }
-      result <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      result @ (_, _, _, _, store, _) <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      rulesAndState <- store.getDsoRulesWithSvNodeStates()
+      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
+      _ <- currentNode.cometbftNode.traverse_(
+        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
+      )
+      _ <- currentNode.cometbftNode.traverse_(
+        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
+      )
     } yield result
 }

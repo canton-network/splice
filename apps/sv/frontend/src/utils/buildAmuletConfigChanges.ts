@@ -31,7 +31,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'featuredAppActivityMarkerAmount',
       label:
-        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in USD)',
+        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in $USD)',
       currentValue: before?.featuredAppActivityMarkerAmount || '',
       newValue: after?.featuredAppActivityMarkerAmount || '',
     },
@@ -74,7 +74,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'transferConfigExtraFeaturedAppRewardAmount',
       label:
-        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in USD)',
+        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in $USD)',
       currentValue: before?.transferConfig.extraFeaturedAppRewardAmount || '',
       newValue: after?.transferConfig.extraFeaturedAppRewardAmount || '',
     },
@@ -142,7 +142,7 @@ function buildPackageConfigChanges(
     },
     {
       fieldName: 'packageConfigWallet',
-      label: 'Daml model vVersion: wallet',
+      label: 'Daml model version: wallet',
       currentValue: before?.wallet || '',
       newValue: after?.wallet || '',
     },
@@ -231,7 +231,7 @@ function buildIssuanceCurveChanges(
     },
     {
       fieldName: 'issuanceCurveInitialValueOptValidatorFaucetCap',
-      label: 'Minting curve: Initial value: Validator faucet cap',
+      label: 'Minting curve: Initial value: Validator liveness reward cap',
       currentValue: before?.initialValue?.optValidatorFaucetCap || '',
       newValue: after?.initialValue?.optValidatorFaucetCap || '',
     },
@@ -291,7 +291,7 @@ function buildIssuanceCurveChanges(
           },
           {
             fieldName: `issuanceCurveFutureValues${idx}OptValidatorFaucetCap`,
-            label: `Minting curve: Step ${idx}: Validator faucet cap`,
+            label: `Minting curve: Step ${idx}: Validator liveness reward cap`,
             currentValue: fv._2.optValidatorFaucetCap || '',
             newValue: after?.futureValues[idx]._2.optValidatorFaucetCap || '',
           },
@@ -331,7 +331,7 @@ function buildDecentralizedSynchronizerChanges(
   ].sort();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
-    label: `(unused) Decentralized synchronizer (Required synchronizer ${idx + 1})`,
+    label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,
     currentValue: beforeRequiredSynchronizers.includes(sync) ? sync : '',
     newValue: afterRequiredSynchronizers.includes(sync) ? sync : '',
     disabled: true,
@@ -360,7 +360,7 @@ function buildDecentralizedSynchronizerChanges(
     },
     {
       fieldName: 'decentralizedSynchronizerFeesExtraTrafficPrice',
-      label: 'Traffic fees: Extra traffic: Price (in USD/MB)',
+      label: 'Traffic fees: Extra traffic: Price (in $USD per MB)',
       currentValue: before?.fees.extraTrafficPrice || '',
       newValue: after?.fees.extraTrafficPrice || '',
     },

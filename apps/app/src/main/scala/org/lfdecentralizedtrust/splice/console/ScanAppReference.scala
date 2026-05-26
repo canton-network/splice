@@ -257,6 +257,14 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.LookupFeaturedAppRight(providerPartyId))
     }
 
+  @Help.Summary("Look up a featured app right by contract ID")
+  def lookupFeaturedAppRightByContractId(
+      contractId: String
+  ): Option[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.LookupFeaturedAppRightByContractId(contractId))
+    }
+
   @Help.Summary("Get the Amulet config parameters for a given round")
   def getAmuletConfigForRound(
       round: Long
@@ -287,33 +295,6 @@ abstract class ScanAppReference(
   def getRewardsCollectedInRound(round: Long): BigDecimal =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardsCollected(Some(round)))
-    }
-
-  @Help.Summary(
-    "Get a list of top-earning app providers, and the total earned app rewards for each"
-  )
-  def getTopProvidersByAppRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopProvidersByAppRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of top-earning validators, and the total earned validator rewards for each"
-  )
-  def getTopValidatorsByValidatorRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopValidatorsByValidatorRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of validators and their domain fees spends, sorted by the amount of extra traffic purchased"
-  )
-  def getTopValidatorsByPurchasedTraffic(
-      round: Long,
-      limit: Int,
-  ): Seq[HttpScanAppClient.ValidatorPurchasedTraffic] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetTopValidatorsByPurchasedTraffic(round, limit))
     }
 
   @Help.Summary(
@@ -366,6 +347,37 @@ abstract class ScanAppReference(
   ] =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.ListUnclaimedDevelopmentFundCoupons())
+    }
+
+  @Help.Summary("Get the earliest round with CIP-0104 reward accounting data")
+  def getRewardAccountingEarliestAvailableRound(): Option[Long] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetRewardAccountingEarliestAvailableRound())
+    }
+
+  @Help.Summary("Get CIP-0104 activity totals for a specific round")
+  def getRewardAccountingActivityTotals(
+      roundNumber: Long
+  ): definitions.GetRewardAccountingActivityTotalsResponse =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber))
+    }
+
+  @Help.Summary("Get CIP-0104 root hash for a specific round")
+  def getRewardAccountingRootHash(
+      roundNumber: Long
+  ): definitions.GetRewardAccountingRootHashResponse =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetRewardAccountingRootHash(roundNumber))
+    }
+
+  @Help.Summary("Get CIP-0104 batch contents by hash for a specific round")
+  def getRewardAccountingBatch(
+      roundNumber: Long,
+      batchHash: String,
+  ): Option[definitions.GetRewardAccountingBatchResponse] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash))
     }
 
   import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem
@@ -451,6 +463,31 @@ abstract class ScanAppReference(
       )
     }
 
+  def getAcsSnapshotAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      recordTimeMatch: Option[definitions.AcsRequest.RecordTimeMatch] = Some(
+        definitions.AcsRequest.RecordTimeMatch.Exact
+      ),
+      after: Option[Long] = None,
+      pageSize: Int = 100,
+      partyIds: Option[Vector[PartyId]] = None,
+      templates: Option[Vector[PackageQualifiedName]] = None,
+  ) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetAcsSnapshotAtV1(
+          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          migrationId,
+          recordTimeMatch,
+          after,
+          pageSize,
+          partyIds,
+          templates,
+        )
+      )
+    }
+
   def getHoldingsStateAt(
       at: CantonTimestamp,
       migrationId: Long,
@@ -464,6 +501,29 @@ abstract class ScanAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.GetHoldingsStateAt(
+          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          migrationId,
+          partyIds,
+          recordTimeMatch,
+          after,
+          pageSize,
+        )
+      )
+    }
+
+  def getHoldingsStateAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      partyIds: Vector[PartyId],
+      recordTimeMatch: Option[definitions.HoldingsStateRequest.RecordTimeMatch] = Some(
+        definitions.HoldingsStateRequest.RecordTimeMatch.Exact
+      ),
+      after: Option[Long] = None,
+      pageSize: Int = 100,
+  ) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetHoldingsStateAtV1(
           at.toInstant.atOffset(java.time.ZoneOffset.UTC),
           migrationId,
           partyIds,
@@ -491,6 +551,25 @@ abstract class ScanAppReference(
           ownerPartyIds,
           recordTimeMatch,
           asOfRound,
+        )
+      )
+    }
+
+  def getHoldingsSummaryAtV1(
+      at: CantonTimestamp,
+      migrationId: Long,
+      ownerPartyIds: Vector[PartyId] = Vector.empty,
+      recordTimeMatch: Option[definitions.HoldingsSummaryRequestV1.RecordTimeMatch] = Some(
+        definitions.HoldingsSummaryRequestV1.RecordTimeMatch.Exact
+      ),
+  ) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetHoldingsSummaryAtV1(
+          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          migrationId,
+          ownerPartyIds,
+          recordTimeMatch,
         )
       )
     }
@@ -558,6 +637,14 @@ abstract class ScanAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.GetUpdate(updateId, encoding)
+      )
+    }
+  }
+
+  def getUpdateByHash(extTxnHash: String, encoding: definitions.DamlValueEncoding) = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetUpdateByHash(extTxnHash, encoding)
       )
     }
   }
@@ -733,7 +820,8 @@ abstract class ScanAppReference(
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
       limit: BigInt,
-  ): Seq[DsoRules_CloseVoteRequestResult] = {
+      pageToken: Option[BigInt] = None,
+  ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.ListVoteRequestResults(
@@ -743,6 +831,7 @@ abstract class ScanAppReference(
           effectiveFrom,
           effectiveTo,
           limit,
+          pageToken,
         )
       )
     }

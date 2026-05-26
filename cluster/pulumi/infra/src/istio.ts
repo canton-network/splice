@@ -3,13 +3,13 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
+import * as assert from 'assert/strict';
 import {
   allSvsToDeployBasic,
   coreSvsToDeployBasic,
 } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
 import { cometBFTExternalPort } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
 import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { PodMonitor, ServiceMonitor } from '@lfdecentralizedtrust/splice-pulumi-common/src/metrics';
 import { mergeWith } from 'lodash';
 
 import {
@@ -34,11 +34,11 @@ interface ConfiguredIstio {
 }
 
 export const istioVersion = {
-  istio: '1.28.1',
+  istio: '1.29.2',
   //   updated from https://grafana.com/orgs/istio/dashboards, must be updated on each istio version
   dashboards: {
-    general: 280,
-    wasm: 237,
+    general: 300,
+    wasm: 258,
   },
 };
 
@@ -100,17 +100,46 @@ function configureIstiod(
       // taken from https://github.com/istio/istio/issues/37682
       accessLogFile: infraConfig.istio.enableClusterAccessLogging ? '/dev/stdout' : '',
       accessLogEncoding: 'JSON',
+      // Changing istio access log default format to include trace_id:
+      // - envoy access log configuration: https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage#config-access-log
+      // - w3c docs for trace context: https://www.w3.org/TR/trace-context/#header-name
+      accessLogFormat: JSON.stringify({
+        trace_id: '%REQ(traceparent)%',
+        authority: '%REQ(:AUTHORITY)%',
+        bytes_received: '%BYTES_RECEIVED%',
+        bytes_sent: '%BYTES_SENT%',
+        downstream_local_address: '%DOWNSTREAM_LOCAL_ADDRESS%',
+        downstream_remote_address: '%DOWNSTREAM_REMOTE_ADDRESS%',
+        duration: '%DURATION%',
+        method: '%REQ(:METHOD)%',
+        path: '%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%',
+        protocol: '%PROTOCOL%',
+        request_id: '%REQ(X-REQUEST-ID)%',
+        requested_server_name: '%REQUESTED_SERVER_NAME%',
+        response_code: '%RESPONSE_CODE%',
+        response_code_details: '%RESPONSE_CODE_DETAILS%',
+        response_flags: '%RESPONSE_FLAGS%',
+        start_time: '%START_TIME%',
+        upstream_cluster: '%UPSTREAM_CLUSTER%',
+        upstream_host: '%UPSTREAM_HOST%',
+        upstream_local_address: '%UPSTREAM_LOCAL_ADDRESS%',
+        upstream_service_time: '%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%',
+        user_agent: '%REQ(USER-AGENT)%',
+        x_forwarded_for: '%REQ(X-FORWARDED-FOR)%',
+      }),
       // https://istio.io/latest/docs/ops/integrations/prometheus/#option-1-metrics-merging  disable as we don't use annotations
       enablePrometheusMerge: false,
       defaultConfig: {
-        // It is expected that a single load balancer (GCP NLB) is used in front of K8s.
-        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#http-https
-        // Also see:
+        // The GCP NLB with externalTrafficPolicy: Local preserves the client's
+        // source IP without adding X-Forwarded-For hops, so there are no trusted
+        // proxies to account for. This ensures remoteIpBlocks in AuthorizationPolicy
+        // uses the direct connection IP rather than the X-Forwarded-For header.
+        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#network
+        // By contrast, the GKE L7 Gateway path overrides this to 2 via pod annotation,
+        // the minimum value per testing (as that gateway adds more Envoy hops).
         // https://istio.io/latest/docs/ops/configuration/traffic-management/network-topologies/#configuring-x-forwarded-for-headers
-        // This controls the value populated by the ingress gateway in the X-Envoy-External-Address header which can be reliably used
-        // by the upstream services to access client’s original IP address.
         gatewayTopology: {
-          numTrustedProxies: 1,
+          numTrustedProxies: 0,
         },
         // wait for the istio container to start before starting apps to avoid network errors
         holdApplicationUntilProxyStarts: true,
@@ -249,21 +278,19 @@ function configureCometBFTGatewayService(
   // and support easily deploying without refreshing the infra stack.
   const numSVs = numCoreSvsToDeploy < 4 && isDevNet ? 4 : numCoreSvsToDeploy;
 
-  const cometBftIngressPorts = Array.from({ length: numMigrations }, (_, i) => i).flatMap(
-    migration => {
-      const res = Array.from({ length: numSVs }, (_, node) => node).map(node =>
-        ingressPort(
-          `cometbft-${migration}-${node + 1}-gw`,
-          cometBFTExternalPort(migration, node + 1)
-        )
-      );
-      if (!isMainNet) {
-        // For non-mainnet clusters, include "node 0" for the sv runbook
-        res.unshift(ingressPort(`cometbft-${migration}-0-gw`, cometBFTExternalPort(migration, 0)));
-      }
-      return res;
+  const cometBftIngressPorts = Array.from(
+    { length: Math.min(numMigrations, 10) },
+    (_, i) => i
+  ).flatMap(migration => {
+    const res = Array.from({ length: numSVs }, (_, node) => node).map(node =>
+      ingressPort(`cometbft-${migration}-${node + 1}-gw`, cometBFTExternalPort(migration, node + 1))
+    );
+    if (!isMainNet) {
+      // For non-mainnet clusters, include "node 0" for the sv runbook
+      res.unshift(ingressPort(`cometbft-${migration}-0-gw`, cometBFTExternalPort(migration, 0)));
     }
-  );
+    return res;
+  });
   return configureGatewayService(
     ingressNs,
     pulumi.output(['0.0.0.0/0']),
@@ -272,6 +299,32 @@ function configureCometBFTGatewayService(
     istiod,
     '-cometbft'
   );
+}
+
+/**
+ * There doesn't seem to be an istio-level limit on number of IP lists but at
+ * some point we probably hit some k8s limits on the size of a definition so we
+ * split it into 100-500 IP ranges per policy.
+ *
+ * For 100k IPs, the difference between a chunk size of 100 vs 500 from scratch
+ * is 20min in pulumi vs 130min in pulumi. But we're still concerned about k8s
+ * limits on definition size. So if we break 10000 we'll gradually increase
+ * the chunk size, 20 IPs at a time, until reaching 500 chunk size for 50k IPs,
+ * which at least is tested for up to 100k IPs.
+ *
+ * Why 20? Too small jumps makes much noisier Pulumi previews. Too large, and we
+ * might jump right into a limit only revealed after extensive testing without
+ * really knowing where that limit is. 20 is a compromise: only jumps every 200
+ * IPs so realignment updates are rare.
+ */
+function istioAccessPolicyChunkSize(ipRangesLength: number) {
+  assert.ok(ipRangesLength >= 0, 'nonsense');
+  assert.ok(
+    ipRangesLength < 250000,
+    `${ipRangesLength} IPs untested, consider testing & increasing maximum chunk size`
+  );
+  const stepSize = 20;
+  return Math.max(100, Math.min(500, Math.ceil(ipRangesLength / (stepSize * 100)) * stepSize));
 }
 
 const istioApiVersion = 'security.istio.io/v1beta1';
@@ -300,8 +353,7 @@ function istioAccessPolicies(
     }
   );
   return externalIPRanges.apply(ipRanges => {
-    // There doesn't seem to be an istio-level limit on number of IP lists but at some point we probably hit some k8s limits on the size of a definition so we split it into 100 IP ranges per policy.
-    const chunkSize = 100;
+    const chunkSize = istioAccessPolicyChunkSize(ipRanges.length);
     const chunks = Array.from({ length: Math.ceil(ipRanges.length / chunkSize) }, (_, i) =>
       ipRanges.slice(i * chunkSize, i * chunkSize + chunkSize)
     );
@@ -554,16 +606,18 @@ function configureGateway(
     },
   });
 
-  const servers = Array.from({ length: numMigrations }, (_, i) => i).flatMap(migration => {
-    const ret = Array.from({ length: numSVs }, (_, node) => node).map(node =>
-      server(migration, node + 1)
-    );
-    if (!isMainNet) {
-      // For non-mainnet clusters, include "node 0" for the sv runbook
-      ret.unshift(server(migration, 0));
+  const servers = Array.from({ length: Math.min(numMigrations, 10) }, (_, i) => i).flatMap(
+    migration => {
+      const ret = Array.from({ length: numSVs }, (_, node) => node).map(node =>
+        server(migration, node + 1)
+      );
+      if (!isMainNet) {
+        // For non-mainnet clusters, include "node 0" for the sv runbook
+        ret.unshift(server(migration, 0));
+      }
+      return ret;
     }
-    return ret;
-  });
+  );
 
   const appsGw = new k8s.apiextensions.CustomResource(
     'cn-apps-gateway',
@@ -759,6 +813,100 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
   });
 }
 
+// Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
+// (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
+// to the sequencer and trigger netty flow control. This surfaces as requests that send back response headers but then nothing else until the client times out.
+// To mitigate that we set the connection window size meaningfully higher than the stream window size. To fully mitigate it it likely needs to be
+// connection window size >= stream window size * maxConcurrentStreams but that would increase istio memory significantly so for now the values are usually just high enough that it
+// doesn't happen in practice but not enough to fully prevent it.
+// We also enable http2 pings to ensure that connections get closed when clients go away and the istio buffers are cleared again.
+// Note that we deliberately do not set stream idle timeouts as this doesn't work with long running requests.
+// See https://github.com/DACH-NY/canton-network-internal/issues/4901#issuecomment-4461257908 for more details.
+function configureSequencerFlowControl(
+  ingressNs: k8s.core.v1.Namespace
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource('sequencer-flow-control', {
+    apiVersion: 'networking.istio.io/v1alpha3',
+    kind: 'EnvoyFilter',
+    metadata: {
+      name: 'sequencer-flow-control',
+      namespace: ingressNs.metadata.name,
+    },
+    spec: {
+      configPatches: [
+        {
+          // downstream (aka participant) -> istio
+          applyTo: 'NETWORK_FILTER',
+          match: {
+            context: 'SIDECAR_INBOUND',
+            listener: {
+              filterChain: {
+                filter: {
+                  name: 'envoy.filters.network.http_connection_manager',
+                },
+              },
+            },
+          },
+          patch: {
+            operation: 'MERGE',
+            value: {
+              typed_config: {
+                '@type':
+                  'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+                http2_protocol_options: {
+                  initial_stream_window_size:
+                    infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+                  initial_connection_window_size:
+                    infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+                  connection_keepalive: {
+                    interval: '30s',
+                    timeout: '5s',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          // istio -> upstream (aka sequencer)
+          applyTo: 'CLUSTER',
+          match: {
+            cluster: {
+              portNumber: 5008,
+              // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
+              // So for now we just apply it to the sequencer which is the only externally exposed http2 server so the only thing where this really should matter in practice.
+            },
+          },
+          patch: {
+            operation: 'MERGE',
+            value: {
+              typed_extension_protocol_options: {
+                'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
+                  '@type':
+                    'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
+                  use_downstream_protocol_config: {
+                    http_protocol_options: {},
+                    http2_protocol_options: {
+                      initial_stream_window_size:
+                        infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+                      initial_connection_window_size:
+                        infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+                      connection_keepalive: {
+                        interval: '30s',
+                        timeout: '5s',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
 export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
@@ -785,120 +933,16 @@ export function configureIstio(
   const sequencerHighPerformanceGrpcRules = configureSequencerHighPerformanceGrpcDestinationRules(
     ingressNs.ns
   );
+  const sequencerFlowControl = configureSequencerFlowControl(ingressNs.ns);
   return {
     allResources: [
       ...gateways,
       ...docsAndReleases,
       ...publicInfo,
       ...sequencerHighPerformanceGrpcRules,
+      ...[sequencerFlowControl],
     ],
     httpServiceName: 'istio-ingress',
     istioResource: gwSvc,
   };
-}
-
-export function istioMonitoring(
-  ingressNs: ExactNamespace,
-  dependsOn: pulumi.Resource[] = []
-): pulumi.Resource[] {
-  const svc = new ServiceMonitor(
-    'istiod-service-monitor',
-    {
-      istio: 'pilot',
-    },
-    'http-monitoring',
-    ingressNs.ns.metadata.name,
-    { dependsOn }
-  );
-
-  const sidecar = new PodMonitor(
-    `istio-sidecar-monitor`,
-    ingressNs.ns.metadata.name,
-    {
-      matchLabels: {
-        'security.istio.io/tlsMode': 'istio',
-      },
-      // specify the namespaces to monitor, to scrape only the istio-proxy sidecars used for our apps
-      namespaces: Array.from({ length: 16 }, (_, i) => `sv-${i + 1}`).concat([
-        'sv',
-        'splitwell',
-        'validator1',
-        'validator',
-      ]),
-      //https://github.com/istio/istio/blob/master/samples/addons/extras/prometheus-operator.yaml#L16
-      podMetricsEndpoints: [
-        {
-          port: 'http-envoy-prom',
-          path: '/stats/prometheus',
-          // keep only istio metrics, drop envoy metrics
-          metricRelabelings: [
-            {
-              sourceLabels: ['__name__'],
-              regex: 'istio_.*',
-              action: 'keep',
-            },
-            // drop instance label, we have the pod name
-            {
-              action: 'labeldrop',
-              regex: 'instance',
-            },
-          ],
-          relabelings: [
-            {
-              action: 'keep',
-              sourceLabels: ['__meta_kubernetes_pod_container_name'],
-              regex: 'istio-proxy',
-            },
-            {
-              action: 'replace',
-              regex: '(\\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})',
-              replacement: '[$2]:$1',
-              sourceLabels: [
-                '__meta_kubernetes_pod_annotation_prometheus_io_port',
-                '__meta_kubernetes_pod_ip',
-              ],
-              targetLabel: '__address__',
-            },
-            {
-              action: 'replace',
-              regex: '(\\d+);((([0-9]+?)(\\.|$)){4})',
-              replacement: '$2:$1',
-              sourceLabels: [
-                '__meta_kubernetes_pod_annotation_prometheus_io_port',
-                '__meta_kubernetes_pod_ip',
-              ],
-              targetLabel: '__address__',
-            },
-            {
-              action: 'labeldrop',
-              regex: '__meta_kubernetes_pod_label_(.+)',
-            },
-            {
-              sourceLabels: ['__meta_kubernetes_namespace'],
-              action: 'replace',
-              targetLabel: 'namespace',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      dependsOn,
-    }
-  );
-  const gateway = new PodMonitor(
-    `istio-gateway-monitor`,
-    ingressNs.ns.metadata.name,
-    {
-      matchLabels: {
-        istio: 'ingress',
-      },
-      podMetricsEndpoints: [{ port: 'http-envoy-prom', path: '/stats/prometheus' }],
-      namespaces: [ingressNs.ns.metadata.name],
-    },
-    {
-      dependsOn,
-    }
-  );
-  return [svc, sidecar, gateway];
 }

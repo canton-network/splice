@@ -91,6 +91,13 @@ abstract class InStackDecentralizedSynchronizerNode
           type: 'cantonbft';
           externalAddress: string;
           externalPort: number;
+          persistence?: {
+            host?: Output<string>;
+            secretName?: Output<string>;
+            databaseName?: string;
+            port?: number;
+            user?: string;
+          };
         },
     version: CnChartVersion,
     logLevel?: LogLevel,
@@ -108,7 +115,7 @@ abstract class InStackDecentralizedSynchronizerNode
     const decentralizedSynchronizerValues: ChartValues = loadYamlFromFile(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/global-domain-values.yaml`,
       {
-        MIGRATION_ID: this.migrationId.toString(),
+        SERIAL_ID: this.migrationId.toString(),
       }
     );
 
@@ -165,7 +172,7 @@ abstract class InStackDecentralizedSynchronizerNode
           additionalJvmOptions: getAdditionalJvmOptions(svConfig.sequencer?.additionalJvmOptions),
           pvc: spliceConfig.configuration.persistentHeapDumps
             ? {
-                size: '10Gi',
+                size: '35Gi',
                 volumeStorageClass: standardStorageClassName,
               }
             : undefined,
@@ -294,6 +301,9 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
         type: 'cantonbft',
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
+        persistence: {
+          databaseName: `sequencer_${migrationId}_dabft`,
+        },
       },
       version,
       svConfig.logging?.cantonLogLevel,

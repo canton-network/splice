@@ -20,6 +20,7 @@ import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.protocol.RequestId
 import com.digitalasset.canton.protocol.messages.InformeeMessage
+import com.digitalasset.canton.synchronizer.mediator.Mediator.LsuSuccessorAfterUpgradeTime
 import com.digitalasset.canton.synchronizer.mediator.MediatorVerdict.MediatorApprove
 import com.digitalasset.canton.synchronizer.mediator.service.GrpcMediatorInspectionService
 import com.digitalasset.canton.synchronizer.mediator.store.InMemoryFinalizedResponseStore
@@ -97,9 +98,13 @@ class GrpcMediatorInspectionServiceTest
 
     val scanService = new GrpcMediatorInspectionService(
       finalizedResponseStore,
-      timeAwaiter,
+      () => timeAwaiter.getCurrentKnownTime(),
+      ts => tc => timeAwaiter.awaitKnownTimestamp(ts)(tc),
       batchSize = PositiveInt.tryCreate(batchSize),
-      getActiveLsuSuccessor = Mediator.GetActiveLsuSuccessor.Never,
+      lsuSuccessorAfterUpgradeTime = new LsuSuccessorAfterUpgradeTime {
+        override def apply(at: CantonTimestamp)(implicit tc: TraceContext) =
+          FutureUnlessShutdown.pure(None)
+      },
       loggerFactory = loggerFactory,
     )
     implicit val cc: CloseContext = CloseContext(new FlagCloseable {

@@ -35,7 +35,6 @@ object PartyManagementServiceError extends PartyManagementServiceErrorGroup {
 
     final case class SynchronizerOffsetRecordTimeInvariantViolation(
         offset: Offset,
-        synchronizerOffset: Offset,
         timestamp: CantonTimestamp,
         recordTime: CantonTimestamp,
     )(implicit val loggingContext: ErrorLoggingContext)
@@ -43,7 +42,7 @@ object PartyManagementServiceError extends PartyManagementServiceErrorGroup {
           cause = s"Timestamp mismatch: requested=$timestamp != recordTime=$recordTime. " +
             s"If an event with a record time is known to exist for the requested timestamp (e.g., a topology transaction), please retry the request. " +
             s"If no event exists with a record time matching exactly the requested timestamp and you intentionally want the highest prior offset, set the 'force' flag to true. " +
-            s"(Context: offset=${offset.unwrap} -> synchronizer offset=${synchronizerOffset.unwrap})"
+            s"(Context: offset=${offset.unwrap})"
         )
         with PartyManagementServiceError
 
@@ -116,4 +115,26 @@ object PartyManagementServiceError extends PartyManagementServiceErrorGroup {
         with PartyManagementServiceError
   }
 
+  @Explanation(
+    "The requested timestamp is in the future relative to the fully processed synchronizer index."
+  )
+  @Resolution(
+    "Wait for the indexer to process events up to the requested timestamp, or set the 'force' flag to true to retrieve the highest available offset."
+  )
+  object UnprocessedRequestedTimestamp
+      extends ErrorCode(
+        id = "UNPROCESSED_REQUESTED_TIMESTAMP",
+        ErrorCategory.InvalidGivenCurrentSystemStateOther,
+      ) {
+    final case class Error(
+        synchronizerId: SynchronizerId,
+        requestedTimestamp: CantonTimestamp,
+        cleanSynchronizerTimestamp: CantonTimestamp,
+    )(implicit val loggingContext: ErrorLoggingContext)
+        extends CantonError.Impl(
+          cause =
+            s"Requested timestamp $requestedTimestamp exceeds the clean synchronizer timestamp $cleanSynchronizerTimestamp."
+        )
+        with PartyManagementServiceError
+  }
 }

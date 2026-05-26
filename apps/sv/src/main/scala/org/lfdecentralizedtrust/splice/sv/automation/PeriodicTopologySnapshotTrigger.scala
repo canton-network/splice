@@ -7,9 +7,10 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.tracing.TraceContext
+import io.circe.Json
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
@@ -23,7 +24,7 @@ import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.util.BackupDump
 
 import java.nio.file.Paths
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.{Failure, Success}
 
 /** As taking a topology snapshot is not a cheap operation, we limit this trigger to produce at most one snapshot per day.
@@ -46,12 +47,12 @@ class PeriodicTopologySnapshotTrigger(
       task: PeriodicTaskTrigger.PeriodicTask
   )(implicit traceContext: TraceContext): Future[TaskOutcome] = {
     participantAdminConnection
-      .getSynchronizerId(synchronizerAlias)
+      .getPhysicalSynchronizerId(synchronizerAlias)
       .transformWith {
         case Failure(s: StatusRuntimeException) if s.getStatus.getCode == Status.Code.NOT_FOUND =>
           Future.successful(TaskNoop)
         case Failure(e) => Future.failed(e)
-        case Success(synchronizerId) =>
+        case Success(physicalSynchronizerId) =>
           val now = clock.now
           val utcDate = now.toInstant.toString.split("T").head
           val folderName = s"topology_snapshot_${now.toInstant}"
@@ -63,7 +64,7 @@ class PeriodicTopologySnapshotTrigger(
                   folderName,
                   now,
                   utcDate,
-                  synchronizerId,
+                  physicalSynchronizerId,
                 )
               else Future.successful(TaskSuccess("Today's topology snapshot already exists."))
           } yield res
@@ -83,7 +84,7 @@ class PeriodicTopologySnapshotTrigger(
       folderName: String,
       now: CantonTimestamp,
       utcDate: String,
-      synchronizerId: SynchronizerId,
+      physicalSynchronizerId: PhysicalSynchronizerId,
   )(implicit
       traceContext: TraceContext,
       esf: ExecutionSequencerFactory,
@@ -98,7 +99,7 @@ class PeriodicTopologySnapshotTrigger(
         .streamOnboardingState(
           Right(now),
           config.location,
-          Paths.get(s"$folderName/onboarding-state").toString,
+          Paths.get(s"$folderName/onboarding-state.zst").toString,
         )
         .andThen {
           case Success(storageObject) =>
@@ -110,13 +111,16 @@ class PeriodicTopologySnapshotTrigger(
       authorizedStore <- sequencerAdminConnection.exportAuthorizedStoreSnapshot(sequencerId.uid)
       // list a summary of the transactions state at the time of the snapshot to validate further imports
       summary <- sequencerAdminConnection.getTopologyTransactionsSummary(
-        TopologyStoreId.Synchronizer(synchronizerId),
+        TopologyStoreId.Synchronizer(physicalSynchronizerId.logical),
         clock.now,
       )
       // we create a single metadata file to store the amounts of the different transactions along the sequencerId
-      metadata = summary.map(e =>
-        (e._1.code, e._2.toString)
-      ) + ("sequencerId" -> sequencerId.toProtoPrimitive)
+      metadataMap = summary.map(e => (e._1.code, e._2.toString)) +
+        ("sequencerId" -> sequencerId.toProtoPrimitive) +
+        ("physicalSynchronizerId" -> physicalSynchronizerId.toProtoPrimitive)
+      metadataJson = Json
+        .obj(metadataMap.map { case (k, v) => k -> Json.fromString(v) }.toSeq*)
+        .spaces2
       _ <- Future {
         blocking {
           val fileDesc =
@@ -132,7 +136,7 @@ class PeriodicTopologySnapshotTrigger(
             BackupDump.write(
               config.location,
               Paths.get(s"$folderName/metadata"),
-              metadata.toString(),
+              metadataJson,
               loggerFactory,
             ),
           )

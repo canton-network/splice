@@ -17,7 +17,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -261,87 +260,6 @@ class ScanTimeBasedIntegrationTest
         expectedLastRound,
       )
     }
-    clue("Data for a later round does not yet exist")({
-      val lastAggregatedRound = sv1ScanBackend.getRoundOfLatestData()._1
-      val laterRound = lastAggregatedRound + 1
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopProvidersByAppRewards(
-          laterRound,
-          10,
-        ),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopValidatorsByValidatorRewards(laterRound, 10),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-    })
-
-    def walletClientParty(walletClient: WalletAppClientReference) =
-      Codec.decode(Codec.Party)(walletClient.userStatus().party).value
-    val latestRound = baseRoundWithLatestData + 4
-    actAndCheck(
-      "Advance four more rounds, for the previous rounds to close (where rewards were collected)",
-      Range(0, 3).foreach(_ => advanceRoundsToNextRoundOpening),
-    )(
-      s"Test leaderboards for latest rounds ${latestRound}",
-      _ => {
-        val ledgerTime = getLedgerTime.toInstant
-        sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
-        sv1ScanBackend.getRoundOfLatestData() should be((latestRound, ledgerTime))
-
-        val aliceValidatorWalletClientParty =
-          walletClientParty(aliceValidatorWalletClient).toProtoPrimitive
-        val bobValidatorWalletClientParty =
-          walletClientParty(bobValidatorWalletClient).toProtoPrimitive
-
-        clue("Compare leaderboard getTopProvidersByAppRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeAppRewards))
-            }
-            .filter { case (p, (cr, appRewards)) =>
-              appRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-          sv1ScanBackend
-            .getTopProvidersByAppRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) shouldBe (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-        clue("Compare leaderboard getTopValidatorsByValidatorRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeValidatorRewards))
-            }
-            .filter { case (p, (cr, validatorRewards)) =>
-              validatorRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-
-          sv1ScanBackend
-            .getTopValidatorsByValidatorRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-      },
-    )
   }
 
   "Not get aggregates for incorrect ranges" in { implicit env =>
@@ -402,8 +320,23 @@ class ScanTimeBasedIntegrationTest
     ansRules.payload.config shouldBe defaultAnsConfig()
   }
 
+  def compareAcsV0V1(
+      v0: Vector[definitions.CreatedEvent],
+      v1: Vector[definitions.ActiveContract],
+  ): Unit = {
+    v0.zip(v1).foreach { case (c0, c1) =>
+      c0.contractId shouldBe c1.contractId
+      c0.templateId shouldBe c1.templateId
+      c0.packageName shouldBe c1.packageName
+      c0.createArguments shouldBe c1.createArguments
+      c0.createdAt shouldBe c1.createdAt
+      c0.signatories should contain theSameElementsInOrderAs c1.signatories
+      c0.observers should contain theSameElementsInOrderAs c1.observers
+    }
+  }
+
   "snapshotting" in { implicit env =>
-    val (aliceUserParty, _) = onboardAliceAndBob()
+    val (aliceUserParty, bobUserParty) = onboardAliceAndBob()
     val migrationId = sv1ScanBackend.config.domainMigrationId
 
     clue(
@@ -462,7 +395,7 @@ class ScanTimeBasedIntegrationTest
       .getDateOfFirstSnapshotAfter(CantonTimestamp.tryFromInstant(snapshot1.value.toInstant), 0)
       .value shouldBe snapshotAfter.value
 
-    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAt(
+    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
       CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant),
       migrationId,
       templates = Some(
@@ -479,7 +412,7 @@ class ScanTimeBasedIntegrationTest
     val atOrBefore = getLedgerTime
 
     // afOrBefore should return the same ACS snapshot as the exact time given by snapshotAfter
-    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAt(
+    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
       recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.AtOrBefore),
@@ -495,7 +428,7 @@ class ScanTimeBasedIntegrationTest
     snapshotAfterData shouldBe snapshotAtOrBeforeAfterData
     snapshotAtOrBeforeAfterData.value.recordTime shouldBe snapshotAfter.value
 
-    sv1ScanBackend.getAcsSnapshotAt(
+    sv1ScanBackend.getAcsSnapshotAtV1(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
       recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.Exact),
@@ -524,12 +457,18 @@ class ScanTimeBasedIntegrationTest
           .owner should be(aliceUserParty.toProtoPrimitive)
       }
       val snapshotAfterCts = CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant)
-      val holdingsState = sv1ScanBackend.getHoldingsStateAt(
+      val holdingsStateV0 = sv1ScanBackend.getHoldingsStateAt(
         snapshotAfterCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
       )
-      inside(holdingsState) { case Some(holdings) =>
+      val holdingsStateV1 = sv1ScanBackend.getHoldingsStateAtV1(
+        snapshotAfterCts,
+        migrationId,
+        partyIds = Vector(aliceUserParty),
+      )
+      compareAcsV0V1(holdingsStateV0.value.createdEvents, holdingsStateV1.value.createdEvents)
+      inside(holdingsStateV1) { case Some(holdings) =>
         holdings.createdEvents should be(coins)
       }
 
@@ -545,11 +484,55 @@ class ScanTimeBasedIntegrationTest
         res.summaries.map(_.partyId).distinct shouldBe (Vector(aliceUserParty.toProtoPrimitive))
       }
 
+      val holdingsSummaryV1 = sv1ScanBackend.getHoldingsSummaryAtV1(
+        snapshotAfterCts,
+        migrationId,
+        ownerPartyIds = Vector(aliceUserParty),
+      )
+
+      inside(holdingsSummaryV1) { case Some(res) =>
+        res.migrationId should be(migrationId)
+        res.recordTime should be(snapshotAfter.value)
+        res.summaries.map(_.partyId).distinct shouldBe (Vector(aliceUserParty.toProtoPrimitive))
+        forAll(res.summaries) { summary =>
+          // V1 response should contain non-zero coin totals
+          BigDecimal(summary.totalCoinHoldings) should be > BigDecimal(0)
+          BigDecimal(summary.totalCoinHoldings) shouldBe BigDecimal(
+            summary.totalUnlockedCoin
+          ) + BigDecimal(summary.totalLockedCoin)
+        }
+      }
+
+      // V1 coin totals should match V0 coin totals
+      inside((holdingsSummary, holdingsSummaryV1)) { case (Some(v0Res), Some(v1Res)) =>
+        v0Res.summaries.zip(v1Res.summaries).foreach { case (v0s, v1s) =>
+          v0s.totalUnlockedCoin shouldBe v1s.totalUnlockedCoin
+          v0s.totalLockedCoin shouldBe v1s.totalLockedCoin
+          v0s.totalCoinHoldings shouldBe v1s.totalCoinHoldings
+        }
+      }
+
+      // V1 multi-party query: querying with both alice and bob exercises
+      // multi-party support at the HTTP endpoint level
+      val holdingsSummaryV1MultiParty = sv1ScanBackend.getHoldingsSummaryAtV1(
+        snapshotAfterCts,
+        migrationId,
+        ownerPartyIds = Vector(aliceUserParty, bobUserParty),
+      )
+      inside(holdingsSummaryV1MultiParty) { case Some(res) =>
+        // Alice should appear in the multi-party result with the same values
+        val aliceSummaries = res.summaries.filter(_.partyId == aliceUserParty.toProtoPrimitive)
+        aliceSummaries should not be empty
+        inside(holdingsSummaryV1) { case Some(singleRes) =>
+          aliceSummaries shouldBe singleRes.summaries
+        }
+      }
+
       // afOrBefore should return the same holdingsState and holdingsSummary as the exact time given by snapshotAfter
       advanceTime(java.time.Duration.ofMinutes(10))
       val atOrBefore = getLedgerTime
       val atOrBeforeCts = CantonTimestamp.assertFromInstant(atOrBefore.toInstant)
-      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAt(
+      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAtV1(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
@@ -560,7 +543,7 @@ class ScanTimeBasedIntegrationTest
         holdings.recordTime shouldBe snapshotAfter.value
       }
 
-      sv1ScanBackend.getHoldingsStateAt(
+      sv1ScanBackend.getHoldingsStateAtV1(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
@@ -581,13 +564,28 @@ class ScanTimeBasedIntegrationTest
         ownerPartyIds = Vector(aliceUserParty),
         recordTimeMatch = Some(definitions.HoldingsSummaryRequest.RecordTimeMatch.Exact),
       ) shouldBe None
+
+      val holdingsSummaryV1AtOrBefore = sv1ScanBackend.getHoldingsSummaryAtV1(
+        atOrBeforeCts,
+        migrationId,
+        ownerPartyIds = Vector(aliceUserParty),
+        recordTimeMatch = Some(definitions.HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
+      )
+      holdingsSummaryV1AtOrBefore shouldBe holdingsSummaryV1
+
+      sv1ScanBackend.getHoldingsSummaryAtV1(
+        atOrBeforeCts,
+        migrationId,
+        ownerPartyIds = Vector(aliceUserParty),
+        recordTimeMatch = Some(definitions.HoldingsSummaryRequestV1.RecordTimeMatch.Exact),
+      ) shouldBe None
     }
 
     advanceTime(java.time.Duration.ofHours(24))
     val endTime = getLedgerTime
     val lastMidnight = endTime.toInstant.truncatedTo(ChronoUnit.DAYS);
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
-    val expectedAcsSnapshotKey = s"$lastMidnight-Migration-0-$nextMidnight/ACS_0.zstd"
+    val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
     val bucketConnection = new S3BucketConnectionForTests(s3ConfigMock, loggerFactory)
     eventually() {
@@ -614,11 +612,12 @@ class ScanTimeBasedIntegrationTest
       // at last midnight
       allS3Objs
         .map(_.key())
-        .filter(_.endsWith(s"Migration-0-$lastMidnight/updates_0.zstd")) should not be empty
+        .filter(_.endsWith(s"~$lastMidnight/updates_0.zstd")) should not be empty
 
       // Compare bulk storage data to hot storage data from scan
+      // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
       val acsAtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAt(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .getAcsSnapshotAtV1(CantonTimestamp.assertFromInstant(lastMidnight), 0)
         .value
         .createdEvents
       val acsObjUrl = getSnapshotResponse.objectRefs.head.url
@@ -631,7 +630,7 @@ class ScanTimeBasedIntegrationTest
       sv1ScanBackend.bulkStorageDownload(acsObjKey, out).futureValue
       val acsAtMidnightFromS3 = uncompressAndDecode(
         ByteString(out.toByteArray),
-        io.circe.parser.decode[definitions.CreatedEvent],
+        io.circe.parser.decode[definitions.ActiveContract],
       )
       acsAtMidnightFromScan should contain theSameElementsInOrderAs acsAtMidnightFromS3
 
@@ -669,8 +668,15 @@ class ScanTimeBasedIntegrationTest
       val updatesFromScan = sv1ScanBackend
         .getUpdateHistory(1000, None, CompactJson)
         .filter(isInTimeRange)
-
       updatesFromScan should contain theSameElementsAs updatesFromS3
+
+      // Compare acs v0 and v1 endpoints
+      val acsV0AtMidnightFromScan = sv1ScanBackend
+        .getAcsSnapshotAt(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .value
+        .createdEvents
+
+      compareAcsV0V1(acsV0AtMidnightFromScan, acsAtMidnightFromScan)
     }
   }
 }

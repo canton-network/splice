@@ -61,7 +61,7 @@ trait ProcessTestUtil { this: BaseTest =>
       extraEnv: (String, String)*
   )(test: => A): A = {
     Using.resource(
-      clue(s"Starting external Canton process $logSuffix")(
+      clue(s"Starting external Canton process $logSuffix with ${extraConfigs}")(
         startCantonInternal(
           configs.flatMap(config => Seq("-c", config.toString)) ++ extraConfigs.flatMap(
             Seq("-C", _)
@@ -114,7 +114,7 @@ trait ProcessTestUtil { this: BaseTest =>
       extraEnv*
     )
   }
-  val defaultJavaToolOptions = "-Xms4g -Xmx6g"
+  val defaultJavaToolOptions = "-Xms4g -Xmx8g"
   private def startCantonInternal(
       args: Seq[String],
       logSuffix: String,

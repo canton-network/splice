@@ -120,7 +120,7 @@ export async function installNode(
       bootstrappingConfig,
     });
 
-  const loopback = installSvLoopback(xns);
+  const loopback = installSvLoopback(xns, decentralizedSynchronizerMigrationConfig.usesCometbft());
 
   const imagePullDeps = imagePullSecret(xns);
 
@@ -255,7 +255,7 @@ async function installSvAndValidator(
     svRunbookConfig.ingressName
   );
 
-  const appsPg = installPostgres(
+  const appsPg = await installPostgres(
     xns,
     'apps-pg',
     'apps-pg-secret',
@@ -271,7 +271,8 @@ async function installSvAndValidator(
       YOUR_SV_NAME: onboardingName,
       OIDC_AUTHORITY_URL: auth0Config.auth0Domain,
       YOUR_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
+      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+      SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
       YOUR_CONTACT_POINT: daContactPoint,
     }
   );
@@ -374,7 +375,8 @@ async function installSvAndValidator(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/scan-values.yaml`,
     {
       TARGET_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
+      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+      SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
   const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
@@ -466,6 +468,7 @@ async function installSvAndValidator(
       {
         TARGET_HOSTNAME: CLUSTER_HOSTNAME,
         MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+        SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
         YOUR_SV_NAME: onboardingName,
         TRUSTED_SCAN_URL: `http://scan-app.${xns.logicalName}:5012`,
       }

@@ -10,7 +10,6 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   PackageConfig,
@@ -42,7 +41,6 @@ import org.lfdecentralizedtrust.splice.splitwell.admin.api.client.commands.HttpS
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, SpliceUtil, SplitwellTestUtil}
-import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.scalatest.time.{Minute, Span}
 
@@ -64,7 +62,7 @@ class BootstrapPackageConfigIntegrationTest
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(1, Minute)))
 
   // Factored out so we can reuse it in the test
-  val initialAmulet: DarResource = DarResources.amulet_0_1_14
+  val initialAmulet: DarResource = DarResources.amulet.minimumInitialization
 
   private val initialPackageConfig = InitialPackageConfig.minimumInitialPackageConfig
 
@@ -200,8 +198,6 @@ class BootstrapPackageConfigIntegrationTest
 
     val sv2PackageVettingTrigger =
       sv2Backend.appState.dsoAutomation.trigger[SvPackageVettingTrigger]
-    val sv2ValidatorPackageVettingTrigger =
-      sv2ValidatorBackend.appState.automation.trigger[ValidatorPackageVettingTrigger]
 
     // 20s picked empirically to be far enough in the future that the voting can go through before that date.
     // it must also leave enough time for the dars to be uploaded and vetting to happen to prevent command failures
@@ -209,7 +205,6 @@ class BootstrapPackageConfigIntegrationTest
     val scheduledTime =
       Instant.now().plus(expiration.microseconds, ChronoUnit.MICROS).plus(1, ChronoUnit.SECONDS)
     sv2PackageVettingTrigger.pause().futureValue
-    sv2ValidatorPackageVettingTrigger.pause().futureValue
 
     val vettingScheduledTime = CantonTimestamp.assertFromInstant(
       scheduledTime
@@ -259,8 +254,8 @@ class BootstrapPackageConfigIntegrationTest
         },
       )("vote request has been created", _ => sv1Backend.listVoteRequests().loneElement)
 
-      actAndCheck(timeUntilSuccess = 30.seconds)(
-        s"sv1-3 accept vote request for upraded packages",
+      actAndCheck(timeUntilSuccess = 45.seconds)(
+        s"sv1-3 accept vote request for upgraded packages",
         Seq(sv1Backend, sv2Backend, sv3Backend).map(sv =>
           eventuallySucceeds() {
             sv.castVote(
@@ -327,7 +322,6 @@ class BootstrapPackageConfigIntegrationTest
     val amuletCreateTimeWhenVettingResumed =
       amuletRulesCreateTimestamp
     sv2PackageVettingTrigger.resume()
-    sv2ValidatorPackageVettingTrigger.resume()
 
     clue(s"Vetting state for slow sv is updated after the trigger runs, and alice sees it") {
       eventually() {
@@ -481,17 +475,5 @@ class BootstrapPackageConfigIntegrationTest
     packagesAreVetted(DarResources.amulet.latest, PackageIdResolver.Package.SpliceAmulet)
     // also check wallet because for the sv we have 2 vetting triggers, and the wallet is used in the tap call but it's vetted by the validator trigger (amulet rules can be vetted by any of the triggers)
     packagesAreVetted(DarResources.wallet.latest, PackageIdResolver.Package.SpliceWallet)
-  }
-
-  private def alicesTapsWithPackageId(
-      packageId: String
-  )(implicit env: SpliceTestConsoleEnvironment) = {
-    val tapContractId = aliceValidatorWalletClient.tap(10)
-    aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-      .of_party(Amulet.COMPANION)(dsoParty)
-      .filter(_.contractId == tapContractId.contractId)
-      .loneElement
-      .getTemplateId
-      .packageId shouldBe packageId
   }
 }

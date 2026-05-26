@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanAppBackendConfig,
   ScanAppClientConfig,
   ScanCacheConfig,
+  ScanRollForwardLsuConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
   CacheConfig as SpliceCacheConfig,
@@ -102,6 +103,7 @@ case class SpliceConfig(
     ansAppExternalClients: Map[InstanceName, AnsAppExternalClientConfig] = Map.empty,
     splitwellApps: Map[InstanceName, SplitwellAppBackendConfig] = Map.empty,
     splitwellAppClients: Map[InstanceName, SplitwellAppClientConfig] = Map.empty,
+    override val remoteParticipants: Map[InstanceName, RemoteParticipantConfig] = Map.empty,
     monitoring: MonitoringConfig = MonitoringConfig(),
     parameters: CantonParameters = CantonParameters(
       timeouts = TimeoutSettings(
@@ -119,7 +121,6 @@ case class SpliceConfig(
 
   // TODO(DACH-NY/canton-network-node#736): we want to remove all of the configurations options below:
   override val participants: Map[InstanceName, ParticipantNodeConfig] = Map.empty
-  override val remoteParticipants: Map[InstanceName, RemoteParticipantConfig] = Map.empty
   override val mediators: Map[InstanceName, MediatorNodeConfig] = Map.empty
   override val remoteMediators: Map[InstanceName, RemoteMediatorConfig] = Map.empty
   override val sequencers: Map[InstanceName, SequencerNodeConfig] = Map.empty
@@ -479,8 +480,20 @@ object SpliceConfig {
       deriveReader[SpliceCacheConfig]
     implicit val scanSynchronizerNodes: ConfigReader[ScanSynchronizerNodesConfig] =
       deriveReader[ScanSynchronizerNodesConfig]
+    implicit val scanRollForwardLsuConfigReader: ConfigReader[ScanRollForwardLsuConfig] =
+      deriveReader[ScanRollForwardLsuConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
-      deriveReader[ScanAppBackendConfig]
+      deriveReader[ScanAppBackendConfig].emap { conf =>
+        for {
+          _ <- Either.cond(
+            conf.rollForwardLsu.isEmpty || conf.synchronizerNodes.legacy.isDefined,
+            (),
+            ConfigValidationFailed(
+              "If roll forward LSU is configured, the legacy synchronizer must be configured"
+            ),
+          )
+        } yield conf
+      }
 
     implicit val svClientConfigReader: ConfigReader[SvAppClientConfig] =
       deriveReader[SvAppClientConfig]
@@ -537,9 +550,6 @@ object SpliceConfig {
           _.as[SvOnboardingConfig.InitialPackageConfig].toTry
         }
       )
-    implicit val svOnboardingDomainMigrationReader
-        : ConfigReader[SvOnboardingConfig.DomainMigration] =
-      deriveReader[SvOnboardingConfig.DomainMigration]
     implicit val svOnboardingRollForwardLsuTimestampConfigReader
         : ConfigReader[SvOnboardingConfig.RollForwardLsuTimestampConfig] =
       deriveReader[SvOnboardingConfig.RollForwardLsuTimestampConfig]
@@ -627,7 +637,6 @@ object SpliceConfig {
           conf.onboarding.fold(true) {
             case foundDso: SvOnboardingConfig.FoundDso => check(conf, foundDso)
             case _: SvOnboardingConfig.JoinWithKey => true
-            case _: SvOnboardingConfig.DomainMigration => true
             case _: SvOnboardingConfig.RollForwardLsu => true
           }
         // SV1 only ever connects to its own sequencer so the url is specified in the localSynchronizerNode config
@@ -929,6 +938,8 @@ object SpliceConfig {
       ConfigWriter.forProduct1("p2p-url")(c => c.p2pUrl)
     implicit val scanSynchronizerNodes: ConfigWriter[ScanSynchronizerNodesConfig] =
       deriveWriter[ScanSynchronizerNodesConfig]
+    implicit val scanRollForwardLsuConfigWriter: ConfigWriter[ScanRollForwardLsuConfig] =
+      deriveWriter[ScanRollForwardLsuConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =
       deriveWriter[ScanAppBackendConfig]
     implicit val scanCacheConfigWriter: ConfigWriter[ScanCacheConfig] =
@@ -994,9 +1005,6 @@ object SpliceConfig {
     implicit val svOnboardingInitialPackageConfigWriter
         : ConfigWriter[SvOnboardingConfig.InitialPackageConfig] =
       ConfigWriter.stringConfigWriter.contramap(_.asJson.noSpaces)
-    implicit val svOnboardingDomainMigrationWriter
-        : ConfigWriter[SvOnboardingConfig.DomainMigration] =
-      deriveWriter[SvOnboardingConfig.DomainMigration]
     implicit val svOnboardingRollForwardLsuTimestampConfigWriter
         : ConfigWriter[SvOnboardingConfig.RollForwardLsuTimestampConfig] =
       deriveWriter[SvOnboardingConfig.RollForwardLsuTimestampConfig]

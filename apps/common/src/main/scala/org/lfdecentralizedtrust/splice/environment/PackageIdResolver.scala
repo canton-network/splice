@@ -7,6 +7,7 @@ import com.digitalasset.daml.lf.data.Ref.{IdString, PackageName, PackageVersion}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.PackageConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.util.Contract
 
@@ -52,6 +53,18 @@ object PackageIdResolver {
     PackageVersion.assertFromString(version)
   }
 
+  def toPackageConfigMap(packageConfig: PackageConfig): Map[PackageName, PackageVersion] = {
+    import Package.*
+    Seq(
+      SpliceAmulet,
+      SpliceAmuletNameService,
+      SpliceDsoGovernance,
+      SpliceValidatorLifecycle,
+      SpliceWallet,
+      SpliceWalletPayments,
+    ).map(pkg => pkg.packageName -> PackageIdResolver.readPackageVersion(packageConfig, pkg)).toMap
+  }
+
   sealed abstract class Package extends Product with Serializable with PrettyPrinting {
     def packageName: IdString.PackageName = {
       val clsName = this.productPrefix
@@ -85,4 +98,16 @@ object PackageIdResolver {
     final case object SpliceWalletPayments extends Package
     final case object SpliceUtilBatchedMarkers extends Package
   }
+
+  val validatorPackages = Set(
+    PackageIdResolver.Package.SpliceAmulet,
+    PackageIdResolver.Package.SpliceAmuletNameService,
+    PackageIdResolver.Package.SpliceValidatorLifecycle,
+    PackageIdResolver.Package.SpliceWallet,
+    PackageIdResolver.Package.SpliceWalletPayments,
+  )
+
+  val svPackages = Set(
+    PackageIdResolver.Package.SpliceDsoGovernance
+  ) ++ validatorPackages
 }

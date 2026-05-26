@@ -2,13 +2,13 @@ package org.lfdecentralizedtrust.splice.integration
 
 import better.files.{File, Resource, *}
 import com.digitalasset.canton.admin.api.client.data.User
-import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.config.{
   ClockConfig,
   NonNegativeFiniteDuration,
   TestingConfigInternal,
 }
+import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.console.TestConsoleOutput
 import com.digitalasset.canton.environment.EnvironmentFactory
 import com.digitalasset.canton.integration.{
@@ -20,6 +20,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, Suppre
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import com.typesafe.config.ConfigFactory
 import monocle.macros.syntax.lens.*
@@ -35,12 +36,16 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceEnvironmentFactory,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
-import org.lfdecentralizedtrust.splice.sv.config.SvCantonIdentifierConfig
+import org.lfdecentralizedtrust.splice.sv.config.{
+  SvAppBackendConfig,
+  SvCantonIdentifierConfig,
+  SvSynchronizerNodeConfig,
+}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.CommonAppInstanceReferences
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorCantonIdentifierConfig
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Inside, Inspectors, OptionValues}
+import org.scalatest.matchers.should.Matchers
 
 /** Analogue to Canton's CommunityEnvironmentDefinition. */
 case class EnvironmentDefinition(
@@ -75,6 +80,10 @@ case class EnvironmentDefinition(
       ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
     else configTransformsWithContext(context)
   }
+  def updateTestingConfig(
+      update: TestingConfigInternal => TestingConfigInternal
+  ): EnvironmentDefinition =
+    copy(testingConfig = update(testingConfig))
 
   def withManualStart: EnvironmentDefinition = {
     this
@@ -91,6 +100,8 @@ case class EnvironmentDefinition(
       .withMultiSyncFeatureFlag()
       .withTrafficTopupsEnabled
       .withInitialPackageVersions
+      .withProtocolVersion(ProtocolVersion.v35)
+      .withProtocolVersionFromEnv
       .withEagerAppActivityMarkerConversion
 
   def withAllocatedUsers(
@@ -164,6 +175,20 @@ case class EnvironmentDefinition(
             )
           )
         )(config),
+    )
+
+  def withProtocolVersionFromEnv: EnvironmentDefinition = {
+    val protocolVersionO = sys.env.get("PROTOCOL_VERSION").filter(_ != "")
+    protocolVersionO.fold(this)(pv => withProtocolVersion(ProtocolVersion.tryCreate(pv)))
+  }
+
+  def withProtocolVersion(protocolVersion: ProtocolVersion): EnvironmentDefinition =
+    addConfigTransforms((_, config) =>
+      ConfigTransforms.updateAllSvAppConfigs_(
+        updateAllSynchronizerNodeConfigs(
+          _.focus(_.protocolVersion).replace(protocolVersion)
+        )
+      )(config)
     )
 
   def withInitializedNodes(): EnvironmentDefinition =
@@ -335,6 +360,22 @@ case class EnvironmentDefinition(
   def withBftSequencersSuccessor: EnvironmentDefinition =
     addConfigTransform((_, config) => ConfigTransforms.withBftSequencersSuccessor()(config))
 
+  def withSvBftSequencerConnectionDisabled(): EnvironmentDefinition =
+    addConfigTransforms(
+      (_, config) =>
+        ConfigTransforms.updateAllSvAppConfigs_(
+          _.copy(bftSequencerConnection = false)
+        )(config),
+      (_, config) =>
+        ConfigTransforms.updateAllValidatorConfigs_ { validatorConfig =>
+          if (validatorConfig.svValidator)
+            validatorConfig.copy(
+              disableSvValidatorBftSequencerConnection = true
+            )
+          else validatorConfig
+        }(config),
+    )
+
   def withEagerAppActivityMarkerConversion: EnvironmentDefinition =
     addConfigTransforms((_, conf) =>
       ConfigTransforms.updateAllSvAppConfigs_(config =>
@@ -366,6 +407,20 @@ case class EnvironmentDefinition(
           )
       )(config)
     )
+
+  def updateAllSynchronizerNodeConfigs(
+      f: SvSynchronizerNodeConfig => SvSynchronizerNodeConfig
+  ): SvAppBackendConfig => SvAppBackendConfig =
+    c =>
+      c.focus(_.localSynchronizerNodes)
+        .modify(
+          _.focus(_.current)
+            .modify(f)
+            .focus(_.successor)
+            .modify(_.map(f))
+            .focus(_.legacy)
+            .modify(_.map(f))
+        )
 
   def withOnboardingParticipantPromotionDelayEnabled(): EnvironmentDefinition = {
     addConfigTransform((_, config) =>

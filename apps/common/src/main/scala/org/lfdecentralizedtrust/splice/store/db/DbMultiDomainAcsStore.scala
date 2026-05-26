@@ -1197,10 +1197,18 @@ final class DbMultiDomainAcsStore[TXE](
           sqlu"delete from incomplete_reassignments where store_id = $acsStoreId and migration_id = $domainMigrationId",
           "clearDataForCurrentMigrationId.deleteReassignments",
         )
+        nArchive <- acsArchiveConfigOpt match {
+          case Some(AcsArchiveConfig(archiveTableName, _)) =>
+            storage.update(
+              sqlu"delete from #$archiveTableName where store_id = $acsStoreId and migration_id = $domainMigrationId",
+              "clearDataForCurrentMigrationId.deleteArchive",
+            )
+          case None => FutureUnlessShutdown.pure(0)
+        }
       } yield {
-        if (nAcs > 0 || nReassignments > 0) {
+        if (nAcs > 0 || nReassignments > 0 || nArchive > 0) {
           logger.warn(
-            s"Deleted $nAcs rows from ACS table and $nReassignments incomplete reassignments for store $acsStoreId and migration $domainMigrationId. " +
+            s"Deleted $nAcs rows from ACS table, $nReassignments incomplete reassignments, and $nArchive archive rows for store $acsStoreId and migration $domainMigrationId. " +
               "This should only happen if the store already had some data, but was not marked as having ingested the ACS " +
               "(because of a previous failed ACS ingestion attempt)."
           )
@@ -1357,96 +1365,98 @@ final class DbMultiDomainAcsStore[TXE](
     ): Future[Unit] = {
       metrics.updateLastSeenMetrics(batch.last)
       metrics.batchSize.update(batch.length)
-      val steps = batchInsertionSteps(batch)
-      MonadUtil
-        .sequentialTraverse(steps) {
-          case batch: IngestTransactionTreesBatch =>
-            storage
-              .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
-              .map { summaryState =>
-                val lastTree = batch.batch.last.tree
-                val synchronizerIdToRecordTime = batch.batch
-                  .groupBy(_.synchronizerId)
-                  .view
-                  .mapValues(trees =>
-                    CantonTimestamp.assertFromInstant(trees.last.tree.getRecordTime)
-                  )
-                state
-                  .getAndUpdate(s =>
-                    s.withUpdate(
-                      s.acsSize + summaryState.acsSizeDiff,
-                      lastTree.getOffset,
-                      synchronizerIdToRecordTime.toMap,
+      metrics.ingestionTimePerBatch.timeFuture {
+        val steps = batchInsertionSteps(batch)
+        MonadUtil
+          .sequentialTraverse(steps) {
+            case batch: IngestTransactionTreesBatch =>
+              storage
+                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
+                .map { summaryState =>
+                  val lastTree = batch.batch.last.tree
+                  val synchronizerIdToRecordTime = batch.batch
+                    .groupBy(_.synchronizerId)
+                    .view
+                    .mapValues(trees =>
+                      CantonTimestamp.assertFromInstant(trees.last.tree.getRecordTime)
                     )
+                  state
+                    .getAndUpdate(s =>
+                      s.withUpdate(
+                        s.acsSize + summaryState.acsSizeDiff,
+                        lastTree.getOffset,
+                        synchronizerIdToRecordTime.toMap,
+                      )
+                    )
+                    .signalWaiters(lastTree.getOffset, synchronizerIdToRecordTime.toMap)
+                  val summary =
+                    summaryState.toIngestionSummary(
+                      offset = lastTree.getOffset,
+                      synchronizerIdToRecordTime = synchronizerIdToRecordTime.toMap,
+                      newAcsSize = state.get().acsSize,
+                      metrics = metrics,
+                    )
+                  logger.debug(
+                    show"Ingested transaction batch of ${batch.batch.length} elements: $summary"
                   )
-                  .signalWaiters(lastTree.getOffset, synchronizerIdToRecordTime.toMap)
-                val summary =
-                  summaryState.toIngestionSummary(
-                    offset = lastTree.getOffset,
-                    synchronizerIdToRecordTime = synchronizerIdToRecordTime.toMap,
-                    newAcsSize = state.get().acsSize,
-                    metrics = metrics,
-                  )
-                logger.debug(
-                  show"Ingested transaction batch of ${batch.batch.length} elements: $summary"
+                  handleIngestionSummary(summary)
+                }
+            case IngestReassignment(reassignment, synchronizerId) =>
+              storage
+                .queryAndUpdate(
+                  ingestReassignment(reassignment.offset, reassignment.transfer),
+                  "ingestReassignment",
                 )
-                handleIngestionSummary(summary)
-              }
-          case IngestReassignment(reassignment, synchronizerId) =>
-            storage
-              .queryAndUpdate(
-                ingestReassignment(reassignment.offset, reassignment.transfer),
-                "ingestReassignment",
-              )
-              .map { summaryState =>
-                val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
-                state
-                  .getAndUpdate(s =>
-                    s.withUpdate(
-                      s.acsSize + summaryState.acsSizeDiff,
-                      reassignment.offset,
-                      reassignmentRecordTimes,
+                .map { summaryState =>
+                  val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
+                  state
+                    .getAndUpdate(s =>
+                      s.withUpdate(
+                        s.acsSize + summaryState.acsSizeDiff,
+                        reassignment.offset,
+                        reassignmentRecordTimes,
+                      )
                     )
-                  )
-                  .signalWaiters(reassignment.offset, reassignmentRecordTimes)
-                val summary =
-                  summaryState.toIngestionSummary(
-                    synchronizerIdToRecordTime = reassignmentRecordTimes,
-                    offset = reassignment.offset,
-                    newAcsSize = state.get().acsSize,
-                    metrics = metrics,
-                  )
-                logger.debug(show"Ingested reassignment $summary")
-                handleIngestionSummary(summary)
-              }
-          case UpdateCheckpoint(checkpoint) =>
-            val offset = checkpoint.checkpoint.getOffset
-            val synchronizerIdToRecordTime =
-              checkpoint.checkpoint.getSynchronizerTimes.asScala.map { syncTime =>
-                SynchronizerId.tryFromString(syncTime.getSynchronizerId) ->
-                  CantonTimestamp.assertFromInstant(syncTime.getRecordTime)
-              }.toMap
-            storage
-              .queryAndUpdate(
-                ingestUpdateAtOffset(offset, DBIO.unit, isOffsetCheckpoint = true),
-                "ingestOffsetCheckpoint",
-              )
-              .map { _ =>
-                state
-                  .getAndUpdate(s => s.withUpdate(s.acsSize, offset, synchronizerIdToRecordTime))
-                  .signalWaiters(offset, synchronizerIdToRecordTime)
-                val summary =
-                  MutableIngestionSummary.empty.toIngestionSummary(
-                    synchronizerIdToRecordTime = synchronizerIdToRecordTime,
-                    offset = offset,
-                    newAcsSize = state.get().acsSize,
-                    metrics = metrics,
-                  )
-                logger.debug(show"Ingested offset checkpoint $offset")
-                handleIngestionSummary(summary)
-              }
-        }
-        .map(_ => ())
+                    .signalWaiters(reassignment.offset, reassignmentRecordTimes)
+                  val summary =
+                    summaryState.toIngestionSummary(
+                      synchronizerIdToRecordTime = reassignmentRecordTimes,
+                      offset = reassignment.offset,
+                      newAcsSize = state.get().acsSize,
+                      metrics = metrics,
+                    )
+                  logger.debug(show"Ingested reassignment $summary")
+                  handleIngestionSummary(summary)
+                }
+            case UpdateCheckpoint(checkpoint) =>
+              val offset = checkpoint.checkpoint.getOffset
+              val synchronizerIdToRecordTime =
+                checkpoint.checkpoint.getSynchronizerTimes.asScala.map { syncTime =>
+                  SynchronizerId.tryFromString(syncTime.getSynchronizerId) ->
+                    CantonTimestamp.assertFromInstant(syncTime.getRecordTime)
+                }.toMap
+              storage
+                .queryAndUpdate(
+                  ingestUpdateAtOffset(offset, DBIO.unit, isOffsetCheckpoint = true),
+                  "ingestOffsetCheckpoint",
+                )
+                .map { _ =>
+                  state
+                    .getAndUpdate(s => s.withUpdate(s.acsSize, offset, synchronizerIdToRecordTime))
+                    .signalWaiters(offset, synchronizerIdToRecordTime)
+                  val summary =
+                    MutableIngestionSummary.empty.toIngestionSummary(
+                      synchronizerIdToRecordTime = synchronizerIdToRecordTime,
+                      offset = offset,
+                      newAcsSize = state.get().acsSize,
+                      metrics = metrics,
+                    )
+                  logger.debug(show"Ingested offset checkpoint $offset")
+                  handleIngestionSummary(summary)
+                }
+          }
+          .map(_ => ())
+      }
     }
 
     private def ingestReassignment(

@@ -1,4 +1,4 @@
-import { rest, RestHandler } from 'msw';
+import { http, HttpHandler, HttpResponse } from 'msw';
 
 import { getAmuletRulesConfig } from '../helpers/amulet-config-helper';
 import { getDsoRulesConfig } from '../helpers/dso-config-helper';
@@ -592,8 +592,8 @@ export const dsoInfo = {
   ],
 };
 
-export function dsoInfoHandler(baseUrl: string): RestHandler {
-  return rest.get(`${baseUrl}/v0/dso`, (_, res, ctx) => {
-    return res(ctx.json(dsoInfo));
+export function dsoInfoHandler(baseUrl: string): HttpHandler {
+  return http.get(`${baseUrl}/v0/dso`, () => {
+    return HttpResponse.json(dsoInfo);
   });
 }

@@ -10,6 +10,7 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
 import com.daml.metrics.api.MetricsContext
 import com.google.protobuf.ByteString
+import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   Reassignment,
@@ -1405,6 +1406,58 @@ class UpdateHistory(
     }
   }
 
+  def getUpdateByHash(
+      hash: String
+  )(implicit tc: TraceContext): Future[Option[TreeUpdateWithMigrationId]] = {
+    val parsedExtTxnHash = HexString.parseToByteString(hash).getOrElse(ByteString.EMPTY)
+    if (parsedExtTxnHash.isEmpty) {
+      Future.successful(None)
+    } else {
+      val safeExtTxnHash = sanitizedExtTxnHash(parsedExtTxnHash)
+
+      import storage.DbStorageConverters.setParameterOptionalByteArray
+      val query =
+        sql"""
+      select
+        row_id,
+        update_id,
+        record_time,
+        participant_offset,
+        domain_id,
+        migration_id,
+        effective_at,
+        root_event_ids,
+        workflow_id,
+        command_id,
+        external_transaction_hash
+      from  update_history_transactions
+      where external_transaction_hash = $safeExtTxnHash
+      and history_id = $historyId
+        """
+
+      for {
+        rows <- storage
+          .query(
+            query.toActionBuilder.as[SelectFromTransactions],
+            "getUpdateByHash",
+          )
+        creates <- queryCreateEvents(rows.map(_.rowId))
+        exercises <- queryExerciseEvents(rows.map(_.rowId))
+      } yield {
+        rows.map { row =>
+          TreeUpdateWithMigrationId(
+            decodeTransaction(
+              row,
+              creates.getOrElse(row.rowId, Seq.empty),
+              exercises.getOrElse(row.rowId, Seq.empty),
+            ),
+            row.migrationId,
+          )
+        }.headOption
+      }
+    }
+  }
+
   private def queryCreateEvents(
       transactionRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromCreateEvents]]] = {
@@ -1426,7 +1479,8 @@ class UpdateHistory(
         create_arguments,
         signatories,
         observers,
-        contract_key
+        contract_key,
+        record_time
 
       from update_history_creates
       where """ ++ inClause("update_row_id", transactionRowIds)).toActionBuilder
@@ -1461,7 +1515,8 @@ class UpdateHistory(
               signatories,
               observers,
               contract_key,
-              history_id
+              history_id,
+              record_time
             from update_history_creates
             where contract_id = $contractId)
             select * from unfiltered_contracts where history_id = $historyId""".toActionBuilder
@@ -1571,6 +1626,7 @@ class UpdateHistory(
           /*recordTime = */ updateRow.recordTime.toInstant,
           // Import updates are not externally signed, so the transaction has no hash.
           /*externalTransactionHash = */ ByteString.EMPTY,
+          /*paidTrafficCost = */ 0L,
         )
       ),
       synchronizerId = SynchronizerId.tryFromString(updateRow.synchronizerId),
@@ -1643,6 +1699,7 @@ class UpdateHistory(
           /*traceContext = */ TraceContextOuterClass.TraceContext.getDefaultInstance,
           /*recordTime = */ updateRow.recordTime.toInstant,
           /*externalTransactionHash = */ ByteString.copyFrom(updateRow.externalTransactionHash),
+          /*paidTrafficCost = */ 0L,
         )
       ),
       synchronizerId = SynchronizerId.tryFromString(updateRow.synchronizerId),
@@ -2508,6 +2565,7 @@ object UpdateHistory {
       signatories: Option[Seq[String]],
       observers: Option[Seq[String]],
       contractKey: Option[String],
+      recordTime: CantonTimestamp,
   ) {
 
     def toContract[TCId <: ContractId[?], T <: DamlRecord[?]](
@@ -2525,6 +2583,7 @@ object UpdateHistory {
     def toCreatedEvent: SpliceCreatedEvent = {
       SpliceCreatedEvent(
         eventId,
+        recordTime,
         new CreatedEvent(
           /*witnessParties = */ java.util.Collections.emptyList(),
           /*offset = */ 0, // not populated
@@ -2571,6 +2630,7 @@ object UpdateHistory {
             <<[Option[Seq[String]]],
             <<[Option[Seq[String]]],
             <<[Option[String]],
+            <<[CantonTimestamp],
           )
         )
       }

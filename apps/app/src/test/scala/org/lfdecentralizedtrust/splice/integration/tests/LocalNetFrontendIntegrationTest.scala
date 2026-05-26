@@ -7,11 +7,13 @@ import org.apache.pekko.http.scaladsl.client.RequestBuilding.Get
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
+import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, WalletFrontendTestUtil}
-
 import com.digitalasset.canton.http.json.v2.JsStateServiceCodecs.*
+import com.digitalasset.canton.version.ProtocolVersion
 import com.daml.ledger.api.v2.state_service.GetConnectedSynchronizersResponse
+import monocle.Monocle.toAppliedFocusOps
 
 import scala.concurrent.duration.*
 import scala.sys.process.*
@@ -23,6 +25,13 @@ class LocalNetFrontendIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .fromResources(Seq("localnet-topology.conf"), this.getClass.getSimpleName)
+      .updateTestingConfig(
+        _.focus(_.participantsWithoutLapiVerification).replace(
+          Set(
+            "app-provider"
+          )
+        )
+      )
       .withManualStart
 
   // This does nothing as the wallet clients will not actually be connected to the compose setup
@@ -119,11 +128,12 @@ class LocalNetFrontendIntegrationTest
       }
     }
 
+  private val token = AuthUtil.testToken(AuthUtil.testAudience, "ledger-api-user", "unsafe")
+
   private def testTokenStandardApi(implicit env: FixtureParam): Unit =
     clue("Test token standard APIs") {
       val registryInfo = scancl("scanClient").getRegistryInfo()
       registryInfo.adminId should startWith("DSO::")
-      val token = AuthUtil.testToken(AuthUtil.testAudience, "ledger-api-user", "unsafe")
       val userRegistryInfo =
         vc("userValidatorClient").copy(token = Some(token)).scanProxy.getRegistryInfo()
       val providerRegistryInfo =
@@ -143,7 +153,7 @@ class LocalNetFrontendIntegrationTest
           registerHttpConnectionPoolsCleanup(env)
           val host = "json-ledger-api.localhost"
           val url = s"http://$host:$port"
-          val token = AuthUtil.testToken(AuthUtil.testAudience, "ledger-api-user", "unsafe")
+
           val response =
             Http()
               .singleRequest(
@@ -177,6 +187,26 @@ class LocalNetFrontendIntegrationTest
   "docker-compose based localnet works for multiple synchronizers" in { implicit env =>
     withLocalNet(Seq("-M")) { implicit env =>
       testMultiSynchronizerSupport(isMultiSync = true)
+    }
+  }
+
+  "localnet supports configurable protocol versions" in { implicit env =>
+    withLocalNet(Seq("-u", "-p", "35")) { implicit env =>
+      val appProviderParticipant =
+        env.participants.remote
+          .find(_.name == "app-provider")
+          .getOrElse(fail("app-provider participant not found"))
+
+      val participantClient = new ParticipantClientReference(
+        env,
+        appProviderParticipant.name,
+        appProviderParticipant.config.copy(token = Some(token)),
+      )
+      participantClient.synchronizers
+        .list_connected()
+        .loneElement
+        .physicalSynchronizerId
+        .protocolVersion shouldBe ProtocolVersion.v35
     }
   }
 }

@@ -27,7 +27,7 @@ Canton logs into ``canton.log``.
 
 **When the node is launched in a kubernetes cluster**, we recommend to setup a log collector so that you can capture logs of at least the last day. For now, the default log level is set to Debug.
 
-We recommend to use ``lnav`` to read the logs. A guideline is provided in `this documentation <https://github.com/hyperledger-labs/splice/blob/main/TESTING.md#setting-up-lnav-to-inspect-canton-and-cometbft-logs>`_.
+We recommend to use ``lnav`` to read the logs. A guideline is provided in `this documentation <https://github.com/canton-network/splice/blob/main/TESTING.md#setting-up-lnav-to-inspect-canton-and-cometbft-logs>`_.
 
 .. note::
     Logging in kubernetes (note that this only provides logs for a limited timeframe):
@@ -126,7 +126,7 @@ UNAUTHENTICATED errors in validator, sv and scan app
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A log of the form below in the SV, scan or validator app logs
-indicates an authenitcation error on the connection to the
+indicates an authentication error on the connection to the
 participant. Check the participant logs which will contain more
 details on why the request got rejected.
 

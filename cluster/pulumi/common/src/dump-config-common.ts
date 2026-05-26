@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
 import * as path from 'path';
-import * as sinon from 'sinon';
 import { setMocks } from '@pulumi/pulumi/runtime/mocks';
 
 import {
@@ -197,7 +196,9 @@ export const svRunbookAuth0Config = {
 };
 
 /*eslint no-process-env: "off"*/
-export async function initDumpConfig(): Promise<void> {
+export async function initDumpConfig({
+  stackOutputsProvider = infraStackOutputsProvider,
+}: MockSettings = {}): Promise<void> {
   // DO NOT ADD NON SECRET VALUES HERE, ALL THE VALUES SHOULD BE DEFINED BY THE CLUSTER ENVIRONMENT in .envrc.vars
   // THIS IS REQUIRED TO ENSURE THAT THE DEPLOYMENT OPERATOR HAS THE SAME ENV AS A LOCAL RUN
   process.env.AUTH0_CN_MANAGEMENT_API_CLIENT_ID = 'mgmt';
@@ -212,26 +213,6 @@ export async function initDumpConfig(): Promise<void> {
   process.env.PULUMI_VERSION = '0.0.0';
   // the project name in setMocks seems to be ignored and we need to load the proper config, so we override it here to ensure we  always use the same config as in prod
   process.env.CONFIG_PROJECT_NAME = path.basename(process.cwd());
-  // StackReferences cannot be mocked in tests currently
-  // (see https://github.com/pulumi/pulumi/issues/9212)
-  sinon
-    .stub(pulumi.StackReference.prototype, 'requireOutput')
-    .callsFake((name: pulumi.Input<string>) => {
-      switch (name.valueOf()) {
-        case 'ingressNs':
-          return pulumi.output('cn-namespace');
-        case 'ingressIp':
-          return pulumi.output('127.0.0.2');
-        case 'auth0':
-          return pulumi.output({
-            svRunbook: svRunbookAuth0Config,
-            cantonNetwork: cantonNetworkAuth0Config,
-            mainnet: cantonNetworkAuth0Config,
-          } as Auth0ClusterConfig);
-        default:
-          throw new Error(`unknown name for requireOutput(): ${name}`);
-      }
-    });
 
   const projectName = 'test-project';
   const stackName = 'test-stack';
@@ -246,10 +227,21 @@ export async function initDumpConfig(): Promise<void> {
         process.stdout.write(buffer);
         process.stdout.write('\n');
 
-        return {
-          id: args.inputs.name + '_id',
-          state: args.inputs,
-        };
+        if (args.type === 'pulumi:pulumi:StackReference') {
+          const [organization, project, stack] = args.name.split('/');
+          return {
+            id: args.name + '_id',
+            state: {
+              ...args.inputs,
+              outputs: pulumi.output(stackOutputsProvider(project, stack) ?? {}),
+            },
+          };
+        } else {
+          return {
+            id: args.inputs.name + '_id',
+            state: args.inputs,
+          };
+        }
       },
       call: function (args: pulumi.runtime.MockCallArgs) {
         switch (args.token) {
@@ -390,3 +382,25 @@ export async function initDumpConfig(): Promise<void> {
     stackName
   );
 }
+
+export type MockSettings = {
+  stackOutputsProvider?: StackOutputsProvider;
+};
+
+export type StackOutputsProvider = (
+  project: string,
+  stack: string
+) => Partial<Record<string, any>> | undefined;
+
+export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
+  return project === 'infra'
+    ? {
+        istioDashboardVersions: '1234',
+        auth0: {
+          svRunbook: svRunbookAuth0Config,
+          cantonNetwork: cantonNetworkAuth0Config,
+          mainnet: cantonNetworkAuth0Config,
+        } as Auth0ClusterConfig,
+      }
+    : undefined;
+};

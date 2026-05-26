@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.automation.{PollingTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
@@ -10,7 +11,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SequencerAdminConnection,
 }
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.{DomainRecordTimeRange, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
@@ -25,6 +26,7 @@ import io.opentelemetry.api.trace.Tracer
 import scala.jdk.DurationConverters.*
 import io.grpc.Status
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
@@ -32,6 +34,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   ScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.mediator.MediatorVerdictsClient
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -47,15 +50,27 @@ class SequencerPruningTrigger(
     mediatorAdminConnection: MediatorAdminConnection,
     clock: Clock,
     retentionPeriod: NonNegativeFiniteDuration,
+    pruningSafetyCheckPercentage: Double,
     participantAdminConnection: ParticipantAdminConnection,
     migrationId: Long,
+    grpcClientMetrics: GrpcClientMetrics,
 )(implicit
     override val ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
     httpClient: HttpClient,
     templateDecoder: TemplateJsonDecoder,
+    esf: ExecutionSequencerFactory,
 ) extends PollingTrigger {
+
+  private lazy val currentMediatorClient =
+    new MediatorVerdictsClient(
+      mediatorAdminConnection.config,
+      this,
+      grpcClientMetrics,
+      loggerFactory,
+    )(ec, esf)
+
   val pruningMetrics = new SequencerPruningMetrics(
     context.metricsFactory
   )
@@ -79,12 +94,18 @@ class SequencerPruningTrigger(
     for {
       synchronizerId <- sequencerAdminConnection.getStatus.map(_.trySuccess.synchronizerId)
       scanConnection <- createScanConnection()
-      recordTimeRangeO <- scanConnection
+      // while sequencer pruning status does have a `now` timestamp that one is
+      // just wallclock so doesn't work properly with backup/restore and similar stuff.
+      // Therefore we just use the last ingested update as an approximation of the latest time.
+      // TODO(DACH-NY/cn-test-failures#8065) Remove once Canton transfers safe pruning timestamps on LSU.
+      status <- sequencerAdminConnection.getSequencerPruningStatus()
+      highestRecordTimeO <- scanConnection
         .getMigrationInfo(migrationId)
-        .map(_.flatMap(_.recordTimeRange.get(synchronizerId.logical)))
-      _ <- recordTimeRangeO match {
-        case Some(DomainRecordTimeRange(earliest, latest))
-            if (latest - earliest).compareTo(retentionPeriod.asJava) > 0 =>
+        .map(_.flatMap(_.recordTimeRange.get(synchronizerId.logical).map(_.max)))
+      lowestRecordTimeO <- currentMediatorClient.earliestUnprunedRecordTime()
+      _ <- (lowestRecordTimeO, highestRecordTimeO) match {
+        case (Some(min), Some(max))
+            if (max - min).compareTo((retentionPeriod * pruningSafetyCheckPercentage).asJava) > 0 =>
           for {
             rulesAndState <- store.getDsoRulesWithSvNodeState(store.key.svParty)
             dsoRulesActiveSequencerConfig = rulesAndState.lookupActiveSequencerIdConfigFor(
@@ -108,7 +129,7 @@ class SequencerPruningTrigger(
           } yield ()
         case _ =>
           logger.debug(
-            s"Synchronizer on migration id $migrationId does not yet have $retentionPeriod of data, record time range: $recordTimeRangeO"
+            s"Synchronizer on migration id $migrationId does not yet have $retentionPeriod of data, record time range: ${lowestRecordTimeO}, ${highestRecordTimeO}"
           )
           Future.unit
       }

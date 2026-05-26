@@ -1,0 +1,4 @@
+name: ADDITIONAL_CONFIG_PARTICIPANT_PRUNING
+value: |
+  # Ignore missing ACS commitment and commitment mismatches
+  canton.participants.participant.parameters.stores.safe-to-prune-commitment-state = "all"

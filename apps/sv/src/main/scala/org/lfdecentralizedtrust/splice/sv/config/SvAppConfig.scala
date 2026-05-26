@@ -16,7 +16,6 @@ import com.digitalasset.canton.config.RequireTypes.{
   PositiveInt,
   PositiveNumeric,
 }
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.synchronizer.mediator.RemoteMediatorConfig
 import com.digitalasset.canton.synchronizer.sequencer.config.RemoteSequencerConfig
 import com.digitalasset.canton.topology.PartyId
@@ -43,6 +42,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResources,
   PackageVettingLookupService,
 }
+import org.lfdecentralizedtrust.splice.lsu.LsuRollForwardTimestamp
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.SpliceUtil
@@ -210,12 +210,6 @@ object SvOnboardingConfig {
   }
 
   // TODO(DACH-NY/canton-network-internal#498) Consider adding `JoinWithToken` based on an already signed token instead of the raw keys
-
-  case class DomainMigration(
-      name: String,
-      dumpFilePath: Path,
-  ) extends SvOnboardingConfig
-
   def hideConfidential(config: SvOnboardingConfig): SvOnboardingConfig = {
     val hidden = "****"
     config match {
@@ -226,8 +220,12 @@ object SvOnboardingConfig {
   }
 
   final case class RollForwardLsuTimestampConfig(
-      topologyExportTime: CantonTimestamp,
-      trafficExportTime: CantonTimestamp,
+      topologyExportTime: LsuRollForwardTimestamp,
+      trafficExportTime: LsuRollForwardTimestamp,
+      // If upgradeTime is not set, performManualLsu is called without a timestamp
+      // which means it uses ledger end. Only use this after confirming that your node has caught up as far as it can
+      // e.g. wait for not observing new events for several minutes.
+      upgradeTime: Option[LsuRollForwardTimestamp],
   )
 
   final case class RollForwardLsu(
@@ -365,6 +363,7 @@ case class SvAppBackendConfig(
     delegatelessAutomationFeaturedAppActivityMarkerCatchupThreshold: Int = 10_000,
     delegatelessAutomationExpiredAmuletBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletTransferInstructionBatchSize: Int = 100,
+    delegatelessAutomationExpiredAmuletAllocationBatchSize: Int = 100,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,
@@ -404,6 +403,7 @@ case class SvAppBackendConfig(
     enableFreeConfirmationResponses: Boolean = true,
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
+    useInternalSequencerApi: Boolean = false,
 ) extends SpliceBackendConfig {
 
   def shouldSkipSynchronizerInitialization: Boolean =
@@ -411,7 +411,6 @@ case class SvAppBackendConfig(
       onboarding.fold(true) {
         case _: SvOnboardingConfig.FoundDso => true
         case _: SvOnboardingConfig.JoinWithKey => true
-        case _: SvOnboardingConfig.DomainMigration => false
         case _: SvOnboardingConfig.RollForwardLsu => false
       }
   override val nodeTypeName: String = "SV"
@@ -470,6 +469,14 @@ final case class SequencerPruningConfig(
     pruningInterval: NonNegativeFiniteDuration,
     // data within the retention period preceding the current time will not be removed during the pruning process
     retentionPeriod: NonNegativeFiniteDuration,
+    // TODO(DACH-NY/cn-test-failures#8065) We currently check that the
+    // delta between the earliest and latest transaction on the current
+    // physical synchronizer is > retentionPeriod.  The earliest
+    // available timestamp is itself subject to mediator pruning so we
+    // allow a bit of slack and check that it is
+    // pruningSafetyCheckPercentage * retentionPeriod to ensure we can
+    // actually prune. For 30 days this corresponds to 8 hours slack.
+    pruningSafetyCheckPercentage: Double = 0.99,
 )
 
 final case class SvSequencerConfig(
@@ -484,6 +491,13 @@ final case class SvSequencerConfig(
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
     isBftSequencer: Boolean = false,
+    dabftPruning: Option[PruningConfig] = Some(
+      PruningConfig(
+        cron = "0 /10 * * * ?", // Run every 10min,
+        maxDuration = PositiveDurationSeconds.ofMinutes(5),
+        retention = PositiveDurationSeconds.ofDays(30),
+      )
+    ),
 ) {
   def toCantonConfig: RemoteSequencerConfig = RemoteSequencerConfig(
     adminApi,
@@ -532,7 +546,10 @@ final case class SvSynchronizerNodeConfig(
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,
     successor: Option[SvSynchronizerNodeConfig],
+    // We keep the main legacy separate as it plays a special role in things like roll-forward LSU.
     legacy: Option[SvSynchronizerNodeConfig] = None,
+    // additionalLegacy just acts as a a way to keep old synchronizers in the Daml state and therefore expose them in scan.
+    additionalLegacy: Seq[SvSynchronizerNodeConfig] = Seq.empty,
 )
 
 final case class SvCantonIdentifierConfig(

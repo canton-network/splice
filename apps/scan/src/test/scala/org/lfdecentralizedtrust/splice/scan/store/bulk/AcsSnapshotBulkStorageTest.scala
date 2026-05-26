@@ -20,7 +20,7 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.stream.scaladsl.Sink
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceMetrics}
+import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
@@ -109,7 +109,7 @@ class AcsSnapshotBulkStorageTest
         val objectKeys = s3Objects.contents.asScala.map(_.key()).sorted
         objectKeys should have length 7
         objectKeys.foreach(
-          _ should startWith("2026-01-02T00:00:00Z-Migration-0-2026-01-03T00:00:00Z/ACS_")
+          _ should startWith("2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/ACS_")
         )
         val objectCountMetrics = metricsFactory.metrics.counters.get(
           SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "object-count"
@@ -126,12 +126,29 @@ class AcsSnapshotBulkStorageTest
         val allContractsFromS3 = objectKeys.flatMap(
           readUncompressAndDecode(
             bucketConnection,
-            io.circe.parser.decode[httpApi.CreatedEvent],
+            io.circe.parser.decode[httpApi.ActiveContract],
           )
         )
-        allContractsFromS3.map(
-          new CompactJsonScanHttpEncodings(identity, identity).httpToJavaCreatedEvent
-        ) should contain theSameElementsInOrderAs allContracts.map(_.event)
+        allContracts.map(c =>
+          new CompactJsonScanHttpEncodings(identity, identity)
+            .javaToHttpActiveContract(c.eventId, c.recordTime, c.event)
+        ) should contain theSameElementsInOrderAs allContractsFromS3
+
+        /* We hard-code the expected digests to enforce that the persisted data format does not change.
+           These values must not be modified unless there is a conscious decision to change the persisted format,
+           with a migration plan for how to apply it consistently across SVs. */
+        bucketConnection
+          .getChecksums(objectKeys.toSeq)
+          .futureValue
+          .map(_.checksum) should contain theSameElementsInOrderAs Seq(
+          "n6CV6dF9zpleq66YiXmCG96hw1BBakp1I8JjC5lf5n0=",
+          "bJDalSmiVKCk9QSc6sAWdahJNZQqVn51WmkFbQI6wkA=",
+          "noZU+He8HnCM38MujtpEle4NNGwnE7wN8z96V+HTdK0=",
+          "rwak+Y4JcInTiEa2yUKf8rjO3RD7ay/D2hmQG4BAa54=",
+          "YM7SNxHrU3xYyNOjgEqowitAvgsiX1f7tq0pCaD/OhQ=",
+          "Mb3D2ZOVQclMwuYEqLuTKhGqnUHCio6K61FBTXgt5Vs=",
+          "+5iW2M9Vz5y9sCtEWyrS3m+EUqnD50dXRVIMQAMSgBY=",
+        )
       }
     }
 
@@ -187,7 +204,7 @@ class AcsSnapshotBulkStorageTest
         val getObjectsResult = bulkStorage.getAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
-            s"$expectedTs-Migration-0-${expectedTs.add(1.days)}/ACS_$i.zstd"
+            s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"
           )
         getObjectsResult.objects.map(_.checksum).foreach {
           // We test elsewhere that computed and persisted checksums are correct, so here we just check that they are present and not empty
@@ -310,8 +327,13 @@ class AcsSnapshotBulkStorageTest
                       0L,
                       BigDecimal(0.1),
                       contractId = LfContractId.assertFromString("00" + f"$idx%064x").coid,
+                      version = DarResources.amulet_0_1_17, // ensure packageid determinism
                     )
-                    SpliceCreatedEvent(s"#event_id_$idx:1", toCreatedEvent(amt))
+                    SpliceCreatedEvent(
+                      s"#event_id_$idx:1",
+                      CantonTimestamp.assertFromInstant(amt.createdAt),
+                      toCreatedEvent(amt),
+                    )
                   }),
                 if (numElems < remaining) Some(after.getOrElse(0L) + numElems) else None,
               )

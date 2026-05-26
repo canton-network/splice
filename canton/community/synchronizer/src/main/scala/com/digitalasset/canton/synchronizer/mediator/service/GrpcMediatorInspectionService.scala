@@ -18,7 +18,6 @@ import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.GrpcErrors.Aborted
 import com.digitalasset.canton.protocol.messages.InformeeMessage
 import com.digitalasset.canton.synchronizer.mediator.store.FinalizedResponseStore
 import com.digitalasset.canton.synchronizer.mediator.{FinalizedResponse, Mediator}
-import com.digitalasset.canton.time.TimeAwaiter
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
 import com.digitalasset.canton.util.FutureUtil
 import io.grpc.Status
@@ -44,9 +43,10 @@ import GrpcMediatorInspectionService.*
   */
 class GrpcMediatorInspectionService(
     finalizedResponseStore: FinalizedResponseStore,
-    watermarkTracker: TimeAwaiter,
+    getCurrentWatermark: () => CantonTimestamp,
+    awaitWatermark: CantonTimestamp => TraceContext => Option[FutureUnlessShutdown[Unit]],
     batchSize: PositiveInt,
-    getActiveLsuSuccessor: Mediator.GetActiveLsuSuccessor,
+    lsuSuccessorAfterUpgradeTime: Mediator.LsuSuccessorAfterUpgradeTime,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, esf: ExecutionSequencerFactory, materializer: Materializer)
     extends mediatorV30.MediatorInspectionServiceGrpc.MediatorInspectionService
@@ -75,7 +75,7 @@ class GrpcMediatorInspectionService(
             loadBatchesAndRespond(
               QueryRange(
                 fromRequestExclusive = startingRequestTime,
-                toRequestInclusive = watermarkTracker.getCurrentKnownTime(),
+                toRequestInclusive = getCurrentWatermark(),
               ),
               observer,
             )
@@ -133,7 +133,7 @@ class GrpcMediatorInspectionService(
                   batchSize,
                 )
 
-              successorO <- getActiveLsuSuccessor(toRequestTimeInclusive)
+              successorO <- lsuSuccessorAfterUpgradeTime(toRequestTimeInclusive)
             } yield {
               val (shouldStop, verdicts) = successorO match {
                 case Some(successor) =>
@@ -177,13 +177,12 @@ class GrpcMediatorInspectionService(
     // that there won't be any verdicts before this timestamp
     val nextFromExclusive = mostRecentTimestamp.getOrElse(currentToInclusive)
 
-    val newWatermark = watermarkTracker.getCurrentKnownTime()
+    val newWatermark = getCurrentWatermark()
     val possiblyWaitForNextObservedTimestamp = if (newWatermark <= nextFromExclusive) {
       logger.debug(
         s"Waiting to observe a time later than the current watermark $newWatermark"
       )
-      watermarkTracker
-        .awaitKnownTimestamp(newWatermark.immediateSuccessor)
+      awaitWatermark(newWatermark.immediateSuccessor)(traceContext)
         // if there is a race and in the meantime a sequenced time > `newWatermark` was observed, we just continue
         .getOrElse(FutureUnlessShutdown.unit)
     } else {
@@ -197,7 +196,7 @@ class GrpcMediatorInspectionService(
       .map(_ =>
         QueryRange(
           fromRequestExclusive = nextFromExclusive,
-          toRequestInclusive = watermarkTracker.getCurrentKnownTime(),
+          toRequestInclusive = getCurrentWatermark(),
         )
       )
 

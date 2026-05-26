@@ -57,7 +57,14 @@ export const svWeightSchema = z
 export const rewardAmountSchema = z
   .string()
   .min(1, { message: 'Amount is required' })
-  .regex(/^\d+$/, { message: 'Amount must be a valid number' });
+  .regex(/^\d+(\.\d+)?$/, { message: 'Amount must be a valid number' })
+  .refine(
+    v => {
+      const dotIndex = v.indexOf('.');
+      return dotIndex === -1 || v.length - dotIndex - 1 <= 10;
+    },
+    { message: 'Amount can have at most 10 decimal places' }
+  );
 
 export const validateWeight = (value: string): string | false => {
   const result = svWeightSchema.safeParse(value);
@@ -123,10 +130,14 @@ export const validateMintBeforeAndEffectiveDate = (value: {
       effectiveDate: z.string(),
       mintBefore: z.string(),
     })
-    .refine(({ effectiveDate, mintBefore }) => dayjs(effectiveDate).isBefore(dayjs(mintBefore)), {
-      message: 'Mint Before date must be after Effective Date',
-      path: ['mintBefore'],
-    });
+    .refine(
+      ({ effectiveDate, mintBefore }) =>
+        dayjs(mintBefore).isAfter(dayjs(effectiveDate).add(2, 'hour')),
+      {
+        message: 'Mint Before date must be at least 2 hours after Effective Date',
+        path: ['mintBefore'],
+      }
+    );
 
   const result = schema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;

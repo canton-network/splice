@@ -6,6 +6,7 @@ import {
   ErrorBoundary,
   ErrorRouterPage,
   UserProvider,
+  retryQuery,
   theme,
   SvClientProvider,
 } from '@lfdecentralizedtrust/splice-common-frontend';
@@ -49,6 +50,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
       queries: {
         refetchInterval,
         structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
     },
   });

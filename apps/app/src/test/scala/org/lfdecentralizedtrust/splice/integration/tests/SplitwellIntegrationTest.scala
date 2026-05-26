@@ -47,11 +47,13 @@ class SplitwellIntegrationTest
         createSplitwellInstalls(aliceSplitwellClient, aliceUserParty)
 
         def createGroup() = {
-          val groupRequest = aliceSplitwellClient.requestGroup("group1")
+          val groupRequest = eventually() {
+            aliceSplitwellClient.requestGroup("group1")
+          }
 
           // Wait for request to be archived and therefore either the group to be created or
           // the request to be rejected.
-          eventually() {
+          eventually(timeUntilSuccess = 40.seconds) {
             aliceSplitwellClient.ledgerApi.ledger_api_extensions.acs
               .filterJava(splitwellCodegen.GroupRequest.COMPANION)(
                 aliceUserParty,

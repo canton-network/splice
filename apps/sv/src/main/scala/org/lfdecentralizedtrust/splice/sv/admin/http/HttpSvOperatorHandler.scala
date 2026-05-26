@@ -130,13 +130,14 @@ class HttpSvOperatorHandler(
     withSpan(s"$workflowId.listVoteRequestResults") { _ => _ =>
       for {
         scanConnection <- scanConnectionF
-        voteResults <- scanConnection.listVoteRequestResults(
+        (voteResults, nextPageToken) <- scanConnection.listVoteRequestResults(
           body.actionName,
           body.accepted,
           body.requester,
           body.effectiveFrom,
           body.effectiveTo,
           body.limit.intValue,
+          body.pageToken,
         )
       } yield {
         r0.ListVoteRequestResultsResponse.OK(
@@ -153,7 +154,8 @@ class HttpSvOperatorHandler(
                     ErrorUtil.invalidState(s"Failed to convert from spray to circe: $err")
                   )
               })
-              .toVector
+              .toVector,
+            nextPageToken,
           )
         )
       }
@@ -449,6 +451,53 @@ class HttpSvOperatorHandler(
       tracer,
     )
       .map(r0.FeatureSupportResponseOK(_))
+  }
+
+  override def lookupFeaturedAppRightByContractId(
+      respond: r0.LookupFeaturedAppRightByContractIdResponse.type
+  )(contractId: String)(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.LookupFeaturedAppRightByContractIdResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.lookupFeaturedAppRightByContractId") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        featuredAppRight <- scanConnection.lookupFeaturedAppRightByContractId(contractId)
+      } yield {
+        respond.OK(
+          definitions.LookupFeaturedAppRightByContractIdResponse(
+            featuredAppRight.map(_.toHttp)
+          )
+        )
+      }
+    }
+  }
+
+  override def listFeaturedAppRightsByProvider(
+      respond: r0.ListFeaturedAppRightsByProviderResponse.type
+  )(providerPartyId: String)(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.ListFeaturedAppRightsByProviderResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.listFeaturedAppRightsByProvider") { _ => _ =>
+      for {
+        provider <- PartyId.fromProtoPrimitive(providerPartyId, "providerPartyId") match {
+          case Right(party) => Future.successful(party)
+          case Left(error) =>
+            Future.failed(
+              HttpErrorHandler.badRequest(s"Could not decode provider party ID: $error")
+            )
+        }
+        scanConnection <- scanConnectionF
+        featuredAppRights <- scanConnection.listFeaturedAppRightsByProvider(provider)
+      } yield {
+        respond.OK(
+          definitions.ListFeaturedAppRightsByProviderResponse(
+            featuredAppRights.map(_.toHttp).toVector
+          )
+        )
+      }
+    }
   }
 
   override def getCometBftNodeDebugDump(

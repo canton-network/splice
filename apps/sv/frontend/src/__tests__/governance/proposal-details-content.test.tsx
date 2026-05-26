@@ -18,7 +18,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { SvConfigProvider } from '../../utils';
 import { server, svUrl } from '../setup/setup';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
@@ -245,7 +245,7 @@ describe('Proposal Details Content', () => {
     expect(featuredAppSection).toBeInTheDocument();
 
     const provider = screen.getByTestId('proposal-details-feature-app-label');
-    expect(provider.textContent).toMatch(/Provider ID/);
+    expect(provider.textContent).toMatch(/Provider Party ID/);
 
     const providerValue = screen.getByTestId('proposal-details-feature-app-value');
     expect(providerValue.textContent).toMatch(/provider/);
@@ -279,7 +279,7 @@ describe('Proposal Details Content', () => {
     expect(unfeaturedAppSection).toBeInTheDocument();
 
     const rightContractId = screen.getByTestId('proposal-details-unfeature-app-label');
-    expect(rightContractId.textContent).toMatch(/Proposal ID/);
+    expect(rightContractId.textContent).toMatch(/Featured Application Contract ID/);
 
     const rightContractIdValue = screen.getByTestId('proposal-details-unfeature-app-value');
     expect(rightContractIdValue.textContent).toMatch(/rightContractId/);
@@ -288,7 +288,7 @@ describe('Proposal Details Content', () => {
   test('should render update sv reward weight proposal details', () => {
     const svToUpdate = 'sv2';
     const updateSvRewardWeightDetails = {
-      actionName: 'Update SV Reward Weight',
+      actionName: 'Update Super Validator Reward Weight',
       action: 'SRARC_UpdateSvRewardWeight',
       proposal: {
         svToUpdate: svToUpdate,
@@ -310,7 +310,7 @@ describe('Proposal Details Content', () => {
     );
 
     const action = screen.getByTestId('proposal-details-action-value');
-    expect(action.textContent).toMatch(/Update SV Reward Weight/);
+    expect(action.textContent).toMatch(/Update Super Validator Reward Weight/);
 
     expect(screen.getByTestId('config-change-field-label').textContent).toBe('Weight');
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('999');
@@ -867,8 +867,8 @@ describe('Proposal Details > Votes & Voting', () => {
     ];
 
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/votes`, (_, res, ctx) => {
-        return res(ctx.status(201));
+      http.post(`${svUrl}/v0/admin/sv/votes`, () => {
+        return new HttpResponse(null, { status: 201 });
       })
     );
 
@@ -930,8 +930,8 @@ describe('Proposal Details > Votes & Voting', () => {
     ];
 
     server.use(
-      rest.post(`${svUrl}/v0/admin/sv/votes`, (_, res, ctx) => {
-        return res(ctx.status(400));
+      http.post(`${svUrl}/v0/admin/sv/votes`, () => {
+        return new HttpResponse(null, { status: 400 });
       })
     );
 

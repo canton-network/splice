@@ -65,7 +65,15 @@ rateLimits:
     name: state
     type: unlimited
 
+  /api/scan/v1/state:
+    name: state
+    type: unlimited
+
   /api/scan/v0/holdings:
+    name: holdings
+    type: unlimited
+
+  /api/scan/v1/holdings:
     name: holdings
     type: unlimited
 
@@ -145,18 +153,6 @@ rateLimits:
     name: synchronizer-identities
     type: unlimited
 
-  /api/scan/v0/top-validators-by-purchased-traffic:
-    name: top-validators-by-purchased-traffic
-    type: unlimited
-
-  /api/scan/v0/top-validators-by-validator-faucets:
-    name: top-validators-by-validator-faucets
-    type: unlimited
-
-  /api/scan/v0/top-validators-by-validator-rewards:
-    name: top-validators-by-validator-rewards
-    type: unlimited
-
   /api/scan/v0/transfer-command-counter:
     name: transfer-command-counter
     type: unlimited
@@ -191,6 +187,14 @@ rateLimits:
 
   /api/scan/v0/active-synchronizer-serial:
     name: activeSynchronizerSerial
+    type: unlimited
+
+  /api/scan/v0/roll-forward-lsu:
+    name: rollForwardLsu
+    type: unlimited
+
+  /api/scan/v0/internal/reward-accounting-process:
+    name: reward-accounting-process
     type: unlimited
 
   # TODO(#3429): This currently fails with "Orphaned rate limit prefixes not matching any scan.yaml endpoint",
