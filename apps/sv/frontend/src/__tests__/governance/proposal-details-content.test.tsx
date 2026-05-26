@@ -23,7 +23,6 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
-import { SvAdminClient, SvAdminContext } from '../../contexts/SvAdminServiceContext';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -323,13 +322,13 @@ describe('Proposal Details Content', () => {
     const effectiveAt = '2024-02-02 13:00';
 
     let capturedSvParty: string | undefined;
-    const mockSvAdminClient = {
-      lookupSvRewardWeightBefore: async (svParty: string, _before: string) => {
-        capturedSvParty = svParty;
-        return 5 as number | null;
-      },
-      lookupFeaturedAppRightByContractId: async () => ({ featured_app_right: undefined }),
-    } as unknown as SvAdminClient;
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, async ({ request }) => {
+        const body = (await request.json()) as { sv_party: string };
+        capturedSvParty = body.sv_party;
+        return HttpResponse.json({ prior_weight: 5 });
+      })
+    );
 
     const completedUpdateSvRewardWeightDetails = {
       actionName: 'Update SV Reward Weight',
@@ -343,7 +342,7 @@ describe('Proposal Details Content', () => {
       } as UpdateSvRewardWeightProposal,
     } as ProposalDetails;
 
-    const completedVotingInformation = {
+    const completedVotingInformation: ProposalVotingInformation = {
       requester: 'sv1',
       requesterIsYou: true,
       votingThresholdDeadline: '2024-02-01 13:00',
@@ -353,15 +352,13 @@ describe('Proposal Details Content', () => {
 
     render(
       <Wrapper>
-        <SvAdminContext.Provider value={mockSvAdminClient}>
-          <ProposalDetailsContent
-            currentSvPartyId={voteResult.votingInformation.requester}
-            contractId={voteResult.contractId}
-            proposalDetails={completedUpdateSvRewardWeightDetails}
-            votingInformation={completedVotingInformation}
-            votes={voteResult.votes}
-          />
-        </SvAdminContext.Provider>
+        <ProposalDetailsContent
+          currentSvPartyId={voteResult.votingInformation.requester}
+          contractId={voteResult.contractId}
+          proposalDetails={completedUpdateSvRewardWeightDetails}
+          votingInformation={completedVotingInformation}
+          votes={voteResult.votes}
+        />
       </Wrapper>
     );
 

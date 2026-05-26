@@ -811,7 +811,10 @@ class BftScanConnection(
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[Long]] = bftCall(_.lookupSvRewardWeightBefore(svParty, before))
+  ): Future[Option[Long]] = bftCall(
+    _.lookupSvRewardWeightBefore(svParty, before),
+    "lookupSvRewardWeightBefore",
+  )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,

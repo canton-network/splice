@@ -36,7 +36,7 @@ import {
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
-export const SvAdminContext = React.createContext<SvAdminClient | undefined>(undefined);
+const SvAdminContext = React.createContext<SvAdminClient | undefined>(undefined);
 
 export interface SvAdminProps {
   url: string;

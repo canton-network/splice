@@ -4,15 +4,15 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 
-export function useSvRewardWeightBefore(
+export const useSvRewardWeightBefore = (
   svParty: string | undefined,
   before: string | undefined
-): UseQueryResult<number | null> {
+): UseQueryResult<number | null> => {
   const { lookupSvRewardWeightBefore } = useSvAdminClient();
   return useQuery({
     queryKey: ['lookupSvRewardWeightBefore', svParty, before],
     queryFn: () => lookupSvRewardWeightBefore(svParty!, before!),
     enabled: !!svParty && !!before,
-    staleTime: Infinity, // historical values don't change
+    staleTime: Infinity,
   });
-}
+};
