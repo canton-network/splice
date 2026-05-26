@@ -514,19 +514,44 @@ class DbScanAppRewardsStoreTest
           Seq("bob::provider"),
           Seq(500000L),
         )
-        zeroThresholdInputs = testInputs.copy(
-          appRewardCouponThreshold = RewardComputationInputs.zero
-        )
         summary <- store.computeAndStoreRewards(
           roundNumber,
           batchSize = 100,
-          zeroThresholdInputs,
+          testInputs,
         )
       } yield {
         summary.activePartiesCount shouldBe 2L
         summary.activityRecordsCount shouldBe 4L // sum of per-party counts: alice=2 + bob=2
         summary.rewardedPartiesCount shouldBe 2L
         summary.batchesCreatedCount should be >= 1L
+      }
+    }
+
+    "computeAndStoreRewards — non-zero threshold excludes low-activity parties from rewards" in {
+      for {
+        (store, historyId) <- newStore()
+        _ <- insertSentinelRecords(historyId, roundNumber)
+        // alice has high activity, bob has low activity
+        _ <- insertActivityRecord(
+          historyId,
+          roundNumber,
+          Seq("alice::provider", "bob::provider"),
+          Seq(5000000L, 50000L),
+        )
+        nonZeroThresholdInputs = testInputs.copy(
+          appRewardCouponThreshold = RewardComputationInputs.fromBigDecimal(BigDecimal("0.5"))
+        )
+        summary <- store.computeAndStoreRewards(
+          roundNumber,
+          batchSize = 100,
+          nonZeroThresholdInputs,
+        )
+        rewardPartyTotals <- store.getAppRewardPartyTotalsByRound(roundNumber)
+      } yield {
+        summary.activePartiesCount shouldBe 2L
+        summary.rewardedPartiesCount shouldBe 1L // only alice above threshold
+        rewardPartyTotals should have size 1
+        rewardPartyTotals.head.appProviderParty shouldBe "alice::provider"
       }
     }
 
