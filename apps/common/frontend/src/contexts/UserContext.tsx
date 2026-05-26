@@ -1,7 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { onAuthExpired } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { User } from 'oidc-client-ts';
-import React, { useCallback, useContext, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthState, useAuth } from 'react-oidc-context';
 
 import {
@@ -97,6 +98,23 @@ export const UserProvider: React.FC<{
     }
   };
 
+  const signoutInFlight = useRef(false);
+
+  const signoutFromIdp = useCallback(() => {
+    if (auth === undefined || !auth.isAuthenticated) return;
+    auth.removeUser().finally(() => {
+      window.location.href = window.location.origin;
+    });
+  }, [auth]);
+
+  const signoutOnExpiry = useCallback(() => {
+    if (signoutInFlight.current) return;
+    signoutInFlight.current = true;
+    signoutFromIdp();
+  }, [signoutFromIdp]);
+
+  useEffect(() => onAuthExpired(signoutOnExpiry), [signoutOnExpiry]);
+
   useEffect(() => {
     async function f(user: User) {
       const { access_token } = user;
@@ -141,8 +159,8 @@ export const UserProvider: React.FC<{
           setUserId(undefined);
           setUserAccessToken(undefined);
 
-          if (auth && authMethod === 'oidc') {
-            auth.removeUser();
+          if (authMethod === 'oidc') {
+            signoutFromIdp();
           }
           if (authMethod === 'sst' || testAuthConf) {
             window.sessionStorage.removeItem(SESSION_STORAGE_KEY);

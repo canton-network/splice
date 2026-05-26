@@ -26,7 +26,7 @@ class DockerComposeFullNetworkFrontendIntegrationTest
 
   "docker-compose based SV and validator work" in { implicit env =>
     try {
-      val ret = Seq("build-tools/splice-compose.sh", "start_network", "-w").!
+      val ret = Seq("build-tools/splice-compose.sh", "start_network", "-w", "-B").!
       if (ret != 0) {
         fail("Failed to start docker-compose SV and validator")
       }
@@ -130,7 +130,7 @@ class DockerComposeFullNetworkFrontendIntegrationTest
   ): A = {
     try {
       val command =
-        (Seq("build-tools/splice-compose.sh", "start_network", "-w") ++ startFlags).asJava
+        (Seq("build-tools/splice-compose.sh", "start_network", "-w", "-B") ++ startFlags).asJava
 
       val builder = new ProcessBuilder(command)
       if (builder.! != 0) {

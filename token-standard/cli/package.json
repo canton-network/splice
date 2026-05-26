@@ -1,5 +1,5 @@
 {
-  "name": "token-standard-cli",
+  "name": "@lfdecentralizedtrust/token-standard-cli",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {

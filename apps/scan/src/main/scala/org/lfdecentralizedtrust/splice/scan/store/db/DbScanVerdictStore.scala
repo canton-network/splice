@@ -209,7 +209,6 @@ object DbScanVerdictStore {
       updateId = verdict.updateId,
       submittingParties = verdict.submittingParties,
       transactionRootViews = transactionRootViews,
-      // TODO(#4060): log an error and fail ingestion if a trafficSummary is missing for a verdict
       trafficSummaryO = byTimestamp.get(recordTime),
     )
 
@@ -475,15 +474,11 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert multiple verdicts, their transaction views and app activity records in a single transaction.
+  /** Insert verdicts, transaction views, and activity records in a single
+    * transaction.
     *
-    * Verdicts are inserted first to obtain their generated row_ids. The placeholder
-    * verdictRowId (= DUMMY_VERDICT_ROW_ID) in each app activity record is then resolved to the
-    * actual row_id (matched by sequencingTime) before insertion.
-    *
-    * @param items verdicts with their transaction view constructors
-    * @param appActivityRecords pre-computed activity records paired with their sequencingTime;
-    *                           each record has verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder
+    * @param items verdicts with transaction view constructors
+    * @param appActivityRecords activity records with placeholder verdictRowIds
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
@@ -497,7 +492,12 @@ class DbScanVerdictStore(
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
+      _ <- insertAppActivityRecordsDBIO(
+        resolvedAppActivityRecords,
+        if (appActivityRecords.nonEmpty)
+          Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
+        else None,
+      )
     } yield ()
 
     futureUnlessShutdownToFuture(
@@ -541,13 +541,13 @@ class DbScanVerdictStore(
   }
 
   private def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
-  )(implicit tc: TraceContext): DBIO[Unit] = {
+      items: Seq[AppActivityRecordT],
+      firstRecordTimeMicros: Option[Long],
+  )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items)
+      case Some(s) => s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros)
     }
-  }
 
   private def afterFilters(
       afterO: Option[(Long, CantonTimestamp)],

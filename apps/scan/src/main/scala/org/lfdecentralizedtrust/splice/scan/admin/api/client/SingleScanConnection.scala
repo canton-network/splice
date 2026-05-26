@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.OptionT
 import cats.syntax.either.*
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
@@ -31,6 +32,8 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
@@ -64,6 +67,7 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import org.apache.pekko.stream.Materializer
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
@@ -74,6 +78,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   VoteRequest,
 }
 import io.grpc.Status
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, Uri}
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
@@ -81,7 +87,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BftSequencer
+
+import scala.util.{Failure, Success}
 
 /** Connection to the admin API of CC Scan. This is used by other apps
   * to query for the DSO party id.
@@ -92,6 +101,7 @@ class SingleScanConnection private[client] (
     protected val clock: Clock,
     retryProvider: RetryProvider,
     outerLoggerFactory: NamedLoggerFactory,
+    connectionMetrics: Option[ScanConnectionMetrics],
 )(implicit
     protected val ec: ExecutionContextExecutor,
     tc: TraceContext,
@@ -109,6 +119,44 @@ class SingleScanConnection private[client] (
     with BackfillingScanConnection
     with HasUrl {
   import ScanRoundAggregatesDecoder.*
+
+  override def runHttpCmd[Res, Result, Client](
+      url: Uri,
+      command: HttpCommand[Res, Result, Client],
+      headers: List[HttpHeader] = List.empty[HttpHeader],
+  )(implicit
+      templateDecoder: TemplateJsonDecoder,
+      httpClient: HttpClient,
+      tc: TraceContext,
+      ec: ExecutionContext,
+      mat: Materializer,
+  ): Future[Result] = {
+    connectionMetrics match {
+      case Some(metrics) =>
+        MetricsContext.withExtraMetricLabels(
+          ("scan_connection", url.authority.host.address()),
+          ("request", command.fullName),
+        ) { m =>
+          val timer = metrics.latencyPerConnection.startAsync()(m)
+          super
+            .runHttpCmd(url, command, headers)
+            .andThen {
+              case Failure(e) =>
+                MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
+                  implicit ec2 =>
+                    metrics.callPerConnection.mark()(m.merge(ec2))
+                }
+                timer.stop()(m)
+              case Success(_) =>
+                MetricsContext.withMetricLabels(("outcome", "ok")) { implicit ec2 =>
+                  metrics.callPerConnection.mark()(m.merge(ec2))
+                }
+                timer.stop()(m)
+            }
+        }
+      case None => super.runHttpCmd(url, command, headers)
+    }
+  }
 
   def url = config.adminApi.url
 
@@ -907,6 +955,24 @@ class SingleScanConnection private[client] (
       config.adminApi.url,
       HttpScanAppClient.GetActivePhysicalSynchronizerSerial(),
     )
+
+  override def getRewardAccountingRootHash(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingRootHashResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingRootHash(roundNumber),
+    )
+
+  override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[GetRewardAccountingBatchResponse]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
+    )
 }
 
 object SingleScanConnection {
@@ -916,6 +982,7 @@ object SingleScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(f: SingleScanConnection => Future[T])(implicit
       ec: ExecutionContextExecutor,
       traceContext: TraceContext,
@@ -931,6 +998,7 @@ object SingleScanConnection {
         retryProvider,
         loggerFactory,
         retryConnectionOnInitialFailure = true,
+        connectionMetrics,
       )
       r <- f(scanConnection).andThen { _ => scanConnection.close() }
     } yield r
@@ -943,13 +1011,21 @@ class CachedScanConnection private[client] (
     clock: Clock,
     retryProvider: RetryProvider,
     outerLoggerFactory: NamedLoggerFactory,
+    connectionMetrics: Option[ScanConnectionMetrics],
 )(implicit
     ec: ExecutionContextExecutor,
     tc: TraceContext,
     mat: Materializer,
     httpClient: HttpClient,
     templateDecoder: TemplateJsonDecoder,
-) extends SingleScanConnection(config, upgradesConfig, clock, retryProvider, outerLoggerFactory)
+) extends SingleScanConnection(
+      config,
+      upgradesConfig,
+      clock,
+      retryProvider,
+      outerLoggerFactory,
+      connectionMetrics,
+    )
     with CachingScanConnection {
 
   override protected val amuletRulesCacheTimeToLive: NonNegativeFiniteDuration =

@@ -9,6 +9,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   LegacySequencerConfig,
@@ -254,6 +255,12 @@ class SynchronizerNodeReconciler(
               buildNodeConfig(legacyNode)
             }
 
+          val additionalLegacyEntriesFuture =
+            MonadUtil.sequentialTraverse(synchronizerNodes.toList.flatMap(_.additionalLegacy)) {
+              legacyNode =>
+                buildNodeConfig(legacyNode)
+            }
+
           val successorEntryFuture =
             synchronizerNodes.flatMap(_.successor).flatTraverse { successorNode =>
               successorNode.sequencerAdminConnection
@@ -283,8 +290,11 @@ class SynchronizerNodeReconciler(
             currentEntry <- currentEntryFuture
             legacyEntry <- legacyEntryFuture
             successorEntry <- successorEntryFuture
+            additionalLegacyEntries <- additionalLegacyEntriesFuture
           } yield {
-            Some((legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten).toMap)
+            Some(
+              (legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
+            )
           }
         } else Future.successful(None)
       }

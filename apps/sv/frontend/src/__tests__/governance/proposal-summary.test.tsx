@@ -71,8 +71,8 @@ describe('Review Proposal Component', () => {
   });
 
   test('should render review proposal component for sv reward weight', () => {
-    const actionName = 'Update SV Reward Weight';
-    const title = 'SV Reward Weight';
+    const actionName = 'Update Super Validator Reward Weight';
+    const title = 'Super Validator Reward Weight';
     const svRewardWeightMember = 'Digital-Asset-Eng-2';
     const currentWeight = '1000';
     const svRewardWeight = '99';
