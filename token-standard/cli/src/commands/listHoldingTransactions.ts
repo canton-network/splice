@@ -4,9 +4,9 @@ import {
   createLedgerApiClient,
   filtersByParty,
 } from "../apis/ledger-api-utils";
-import { TokenStandardTransactionInterfaces } from "../constants";
+import { TokenStandardV1TransactionInterfaces } from "../constants";
 import { CommandOptions } from "../token-standard-cli";
-import { TransactionParser } from "../txparse/parser";
+import { V1TransactionParser } from "../txparse/parserv1";
 import { validateStrict } from "../txparse/strict";
 import { renderTransaction, Transaction } from "../txparse/types";
 import {
@@ -14,10 +14,12 @@ import {
   JsGetUpdatesResponse,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
 import fs from "fs";
+import { V2TransactionParser } from "../txparse/parserv2";
 
 export async function listHoldingTransactions(
   partyId: string,
   opts: CommandOptions & {
+    standardVersion: "V1" | "V2";
     afterOffset?: string;
     debugPath?: string;
     strict?: boolean;
@@ -36,7 +38,7 @@ export async function listHoldingTransactions(
           eventFormat: {
             filtersByParty: filtersByParty(
               partyId,
-              TokenStandardTransactionInterfaces,
+              TokenStandardV1TransactionInterfaces,
               true,
             ),
             verbose: false,
@@ -50,7 +52,12 @@ export async function listHoldingTransactions(
     if (opts.debugPath) {
       fs.writeFileSync(opts.debugPath, JSON.stringify(updates, null, 2));
     }
-    const result = await toPrettyTransactions(updates, partyId, ledgerClient);
+    const result = await toPrettyTransactions(
+      updates,
+      partyId,
+      opts.standardVersion,
+      ledgerClient,
+    );
     if (opts.strict) {
       validateStrict(result, opts.strictIgnore || []);
     }
@@ -64,6 +71,7 @@ export async function listHoldingTransactions(
 async function toPrettyTransactions(
   updates: JsGetUpdatesResponse[],
   partyId: string,
+  standardVersion: "V1" | "V2",
   ledgerClient: LedgerJsonApi,
 ): Promise<PrettyTransactions> {
   const offsetCheckpoints: number[] = updates
@@ -77,7 +85,15 @@ async function toPrettyTransactions(
       .filter((update) => !!update.update?.Transaction?.value)
       .map(async (update) => {
         const tx = update.update!.Transaction.value!;
-        const parser = new TransactionParser(tx, ledgerClient, partyId);
+        let parser;
+        switch (standardVersion) {
+          case "V1":
+            parser = new V1TransactionParser(tx, ledgerClient, partyId);
+            break;
+          case "V2":
+            parser = new V2TransactionParser(tx, ledgerClient, partyId);
+            break;
+        }
 
         return await parser.parseTransaction();
       }),

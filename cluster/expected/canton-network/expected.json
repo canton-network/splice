@@ -308,10 +308,34 @@
             "version": "0.3.20"
           }
         },
-        "archived": [
+        "additionalLegacy": [
           {
             "enableLogicalSynchronizerDeploymentMode": false,
             "id": 7,
+            "migrateParticipantsFromSvCantonToSv": false,
+            "releaseReference": {
+              "deploymentDir": "cluster/deployment",
+              "gitReference": "refs/heads/release-line-0.3.20",
+              "privateConfigsDir": "cluster/configs/configs-private",
+              "publicConfigsDir": "cluster/configs/configs",
+              "pulumiBaseDir": "splice/cluster/pulumi",
+              "pulumiStacksDir": "cluster/stacks/prod",
+              "repoUrl": "https://github.com/canton-network/splice",
+              "spliceRoot": "splice"
+            },
+            "sequencer": {
+              "enableBftSequencer": false
+            },
+            "version": {
+              "type": "remote",
+              "version": "0.3.20"
+            }
+          }
+        ],
+        "archived": [
+          {
+            "enableLogicalSynchronizerDeploymentMode": false,
+            "id": 5,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
@@ -331,7 +355,7 @@
           },
           {
             "enableLogicalSynchronizerDeploymentMode": false,
-            "id": 8,
+            "id": 6,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
@@ -351,6 +375,28 @@
           }
         ],
         "frozenMigrationId": 2,
+        "legacy": {
+          "enableLogicalSynchronizerDeploymentMode": false,
+          "id": 8,
+          "migrateParticipantsFromSvCantonToSv": false,
+          "releaseReference": {
+            "deploymentDir": "cluster/deployment",
+            "gitReference": "refs/heads/release-line-0.3.20",
+            "privateConfigsDir": "cluster/configs/configs-private",
+            "publicConfigsDir": "cluster/configs/configs",
+            "pulumiBaseDir": "splice/cluster/pulumi",
+            "pulumiStacksDir": "cluster/stacks/prod",
+            "repoUrl": "https://github.com/canton-network/splice",
+            "spliceRoot": "splice"
+          },
+          "sequencer": {
+            "enableBftSequencer": false
+          },
+          "version": {
+            "type": "remote",
+            "version": "0.3.20"
+          }
+        },
         "lsuEnabled": true,
         "upgrade": {
           "enableLogicalSynchronizerDeploymentMode": true,
@@ -1663,16 +1709,16 @@
           "name": "holdings",
           "type": "unlimited"
         },
+        "/api/scan/v0/internal/reward-accounting-process": {
+          "name": "reward-accounting-process",
+          "type": "unlimited"
+        },
         "/api/scan/v0/migrations": {
           "name": "migrations-schedule",
           "type": "unlimited"
         },
         "/api/scan/v0/open-and-issuing-mining-rounds": {
           "name": "open-and-issuing-mining-rounds",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/reward-accounting-process": {
-          "name": "reward-accounting-process",
           "type": "unlimited"
         },
         "/api/scan/v0/rewards-collected": {
@@ -1717,22 +1763,6 @@
         },
         "/api/scan/v0/synchronizer-identities": {
           "name": "synchronizer-identities",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-providers-by-app-rewards": {
-          "name": "top-providers",
-          "type": "banned"
-        },
-        "/api/scan/v0/top-validators-by-purchased-traffic": {
-          "name": "top-validators-by-purchased-traffic",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-faucets": {
-          "name": "top-validators-by-validator-faucets",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-rewards": {
-          "name": "top-validators-by-validator-rewards",
           "type": "unlimited"
         },
         "/api/scan/v0/transactions": {
@@ -1930,16 +1960,16 @@
           "name": "holdings",
           "type": "unlimited"
         },
+        "/api/scan/v0/internal/reward-accounting-process": {
+          "name": "reward-accounting-process",
+          "type": "unlimited"
+        },
         "/api/scan/v0/migrations": {
           "name": "migrations-schedule",
           "type": "unlimited"
         },
         "/api/scan/v0/open-and-issuing-mining-rounds": {
           "name": "open-and-issuing-mining-rounds",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/reward-accounting-process": {
-          "name": "reward-accounting-process",
           "type": "unlimited"
         },
         "/api/scan/v0/rewards-collected": {
@@ -1984,22 +2014,6 @@
         },
         "/api/scan/v0/synchronizer-identities": {
           "name": "synchronizer-identities",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-providers-by-app-rewards": {
-          "name": "top-providers",
-          "type": "banned"
-        },
-        "/api/scan/v0/top-validators-by-purchased-traffic": {
-          "name": "top-validators-by-purchased-traffic",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-faucets": {
-          "name": "top-validators-by-validator-faucets",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/top-validators-by-validator-rewards": {
-          "name": "top-validators-by-validator-rewards",
           "type": "unlimited"
         },
         "/api/scan/v0/transactions": {
@@ -2359,7 +2373,11 @@
               "migrationId": 9,
               "version": "0.3.20"
             },
-            "legacy": null,
+            "legacy": {
+              "chainIdSuffix": "4",
+              "migrationId": 8,
+              "version": "0.3.20"
+            },
             "staging": {
               "chainIdSuffix": "4",
               "migrationId": 10,
@@ -2437,6 +2455,8 @@
           "decentralizedSynchronizer": {
             "migrationIds": [
               "9",
+              "8",
+              "7",
               "10"
             ]
           }
@@ -2857,6 +2877,10 @@
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
+          "legacy": {
+            "mediator": "global-domain-8-mediator",
+            "sequencer": "global-domain-8-sequencer"
+          },
           "successor": {
             "bftSequencerConfig": {
               "p2pUrl": "https://sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com"
@@ -3091,6 +3115,22 @@
             "networkName": "Splice"
           },
           "synchronizers": {
+            "additionalLegacy": [
+              {
+                "cometBFT": {
+                  "connectionUri": "http://global-domain-7-cometbft-cometbft-rpc:26657",
+                  "enabled": true
+                },
+                "mediatorAddress": "global-domain-7-mediator",
+                "sequencerAddress": "global-domain-7-sequencer",
+                "sequencerPruningConfig": {
+                  "enabled": true,
+                  "pruningInterval": "1 hour",
+                  "retentionPeriod": "30 days"
+                },
+                "sequencerPublicUrl": "https://sequencer-7.sv-2.mock.global.canton.network.digitalasset.com"
+              }
+            ],
             "current": {
               "cometBFT": {
                 "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
@@ -3104,6 +3144,20 @@
                 "retentionPeriod": "30 days"
               },
               "sequencerPublicUrl": "https://sequencer-9.sv-2.mock.global.canton.network.digitalasset.com"
+            },
+            "legacy": {
+              "cometBFT": {
+                "connectionUri": "http://global-domain-8-cometbft-cometbft-rpc:26657",
+                "enabled": true
+              },
+              "mediatorAddress": "global-domain-8-mediator",
+              "sequencerAddress": "global-domain-8-sequencer",
+              "sequencerPruningConfig": {
+                "enabled": true,
+                "pruningInterval": "1 hour",
+                "retentionPeriod": "30 days"
+              },
+              "sequencerPublicUrl": "https://sequencer-8.sv-2.mock.global.canton.network.digitalasset.com"
             },
             "skipInitialization": true,
             "successor": {
@@ -3564,7 +3618,11 @@
               "migrationId": 9,
               "version": "0.3.20"
             },
-            "legacy": null,
+            "legacy": {
+              "chainIdSuffix": "4",
+              "migrationId": 8,
+              "version": "0.3.20"
+            },
             "staging": {
               "chainIdSuffix": "4",
               "migrationId": 10,
@@ -3642,6 +3700,8 @@
           "decentralizedSynchronizer": {
             "migrationIds": [
               "9",
+              "8",
+              "7",
               "10"
             ]
           }
@@ -3922,6 +3982,10 @@
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
+          "legacy": {
+            "mediator": "global-domain-8-mediator",
+            "sequencer": "global-domain-8-sequencer"
+          },
           "successor": {
             "bftSequencerConfig": {
               "p2pUrl": "https://sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com"
@@ -4120,6 +4184,23 @@
             "networkName": "Splice"
           },
           "synchronizers": {
+            "additionalLegacy": [
+              {
+                "cometBFT": {
+                  "connectionUri": "http://global-domain-7-cometbft-cometbft-rpc:26657",
+                  "enabled": true,
+                  "externalGovernanceKey": true
+                },
+                "mediatorAddress": "global-domain-7-mediator",
+                "sequencerAddress": "global-domain-7-sequencer",
+                "sequencerPruningConfig": {
+                  "enabled": true,
+                  "pruningInterval": "1 hour",
+                  "retentionPeriod": "30 days"
+                },
+                "sequencerPublicUrl": "https://sequencer-7.sv-1.mock.global.canton.network.digitalasset.com"
+              }
+            ],
             "current": {
               "cometBFT": {
                 "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
@@ -4134,6 +4215,21 @@
                 "retentionPeriod": "30 days"
               },
               "sequencerPublicUrl": "https://sequencer-9.sv-1.mock.global.canton.network.digitalasset.com"
+            },
+            "legacy": {
+              "cometBFT": {
+                "connectionUri": "http://global-domain-8-cometbft-cometbft-rpc:26657",
+                "enabled": true,
+                "externalGovernanceKey": true
+              },
+              "mediatorAddress": "global-domain-8-mediator",
+              "sequencerAddress": "global-domain-8-sequencer",
+              "sequencerPruningConfig": {
+                "enabled": true,
+                "pruningInterval": "1 hour",
+                "retentionPeriod": "30 days"
+              },
+              "sequencerPublicUrl": "https://sequencer-8.sv-1.mock.global.canton.network.digitalasset.com"
             },
             "skipInitialization": true,
             "successor": {

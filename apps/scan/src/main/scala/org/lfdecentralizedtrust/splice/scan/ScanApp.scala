@@ -59,6 +59,7 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   ScanAutomationService,
   ScanVerdictAutomationService,
 }
+import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
 import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanSynchronizerConfig}
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
@@ -266,6 +267,7 @@ class ScanApp(
         ),
         successor = config.synchronizerNodes.successor.map(synchronizerNode(_)),
         legacy = config.synchronizerNodes.legacy.map(synchronizerNode(_)),
+        additionalLegacy = Seq.empty,
       )
       syncService = new SynchronizerNodeService(
         syncNodes,
@@ -296,6 +298,10 @@ class ScanApp(
             new DbAppActivityRecordStore(
               storage,
               updateHistory,
+              DbAppActivityRecordStore.IngestionVersions(
+                AppActivityComputation.ActivityIngestionCodeVersion,
+                config.activityIngestionUserVersion.fold(0)(_.toInt),
+              ),
               loggerFactory,
             )
           )

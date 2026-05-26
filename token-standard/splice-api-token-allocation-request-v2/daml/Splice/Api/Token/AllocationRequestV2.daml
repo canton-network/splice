@@ -9,10 +9,8 @@
 module Splice.Api.Token.AllocationRequestV2 where
 
 import DA.Map qualified as Map
-import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
-import Splice.Api.Token.HoldingV2
 import Splice.Api.Token.AllocationV2
 
 -- | A request by an app for allocations to be created to enable the execution of a settlement.
@@ -21,7 +19,7 @@ import Splice.Api.Token.AllocationV2
 -- and confidentiality requirements.
 --
 -- Apps SHOULD have as contract observers both the owners and providers of all
--- accounts that need to create requested allocations.
+-- authorizer accounts that need to create requested allocations.
 interface AllocationRequest where
   viewtype AllocationRequestView
 
@@ -118,29 +116,6 @@ data AllocationRequestAction
           -- ^ Identifier of the action. Namespaced analogously to metadata keys.
     deriving (Show, Ord, Eq)
 
--- | An allocation of transfers of instruments maintained by the same asset admin.
-data RequestedAllocation = RequestedAllocation with
-    admin : Party
-      -- ^ Admin of the instruments being transferred when settling the allocation.
-    transferLegSides : [TransferLegSide]
-      -- ^ The transfers to include in the allocation.
-      --
-      -- MAY be empty when requesting an iterated settlement.
-    nextIterationFunding : Optional (TextMap.TextMap Decimal)
-      -- ^ Whether the allocation should allow iterated settlement, and if so,
-      -- the amount of funds to reserve for the next settlement.
-      --
-      -- The amounts are keyed by instrument id and MUST be positive.
-    committed : Bool
-      -- ^ Whether to create a committed allocation or not.
-      --
-      -- Committed allocations do not allow the authorizer to withdraw the
-      -- allocation before the settlement deadline.
-    meta : Metadata
-      -- ^ Metadata to attach to the allocation. Used for extensibility; e.g.,
-      -- to attach a reason for the allocation.
-  deriving (Show, Eq)
-
 -- | View of an `AllocationRequest`.
 data AllocationRequestView = AllocationRequestView with
     originalRequestCid : Optional (ContractId AllocationRequest)
@@ -150,16 +125,15 @@ data AllocationRequestView = AllocationRequestView with
       -- This SHOULD be used by wallets to correlate the same allocation request across
       -- updates to its state. It should not be used to correlate different allocation
       -- requests for the same settlement. That can be done using the `settlement` field.
-    authorizer : Account
-      -- ^ Account that is asked to create allocations for this request.
-      --
-      -- Wallets SHOULD use this field to determine whether a request requires
-      -- user action or is informational only.
     settlement : SettlementInfo
       -- ^ Settlement for which allocations are requested to be created.
-    allocations : [RequestedAllocation]
+    allocations : [AllocationSpecification]
       -- ^ The allocations that are requested to be authorized for execution as
       -- part of the settlement.
+      --
+      -- Wallets SHOULD check their `authorizer` to see whether this request
+      -- requires action from their users or merely serves informational
+      -- purposes.
     requestedAt : Time
       -- ^ Timestamp at which the request was created.
     settleAt : Optional Time

@@ -300,33 +300,6 @@ abstract class ScanAppReference(
     }
 
   @Help.Summary(
-    "Get a list of top-earning app providers, and the total earned app rewards for each"
-  )
-  def getTopProvidersByAppRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopProvidersByAppRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of top-earning validators, and the total earned validator rewards for each"
-  )
-  def getTopValidatorsByValidatorRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopValidatorsByValidatorRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of validators and their domain fees spends, sorted by the amount of extra traffic purchased"
-  )
-  def getTopValidatorsByPurchasedTraffic(
-      round: Long,
-      limit: Int,
-  ): Seq[HttpScanAppClient.ValidatorPurchasedTraffic] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetTopValidatorsByPurchasedTraffic(round, limit))
-    }
-
-  @Help.Summary(
     "Get a member's (participant or mediator) traffic status as reported by the sequencer"
   )
   def getMemberTrafficStatus(
@@ -387,7 +360,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 activity totals for a specific round")
   def getRewardAccountingActivityTotals(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingActivityTotalsResponse] =
+  ): definitions.GetRewardAccountingActivityTotalsResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber))
     }
@@ -395,7 +368,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 root hash for a specific round")
   def getRewardAccountingRootHash(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingRootHashResponse] =
+  ): definitions.GetRewardAccountingRootHashResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingRootHash(roundNumber))
     }

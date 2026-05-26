@@ -30,39 +30,26 @@ import Splice.Api.Token.HoldingV2 (Holding, Account)
 -- Allocation View
 ------------------
 
--- | A generic type to unambiguously refer to data defined within an app.
+-- | An unambiguous reference to a settlement, which can be used by wallets to
+-- correlate allocations to the same settlement.
 --
--- The interpretation of such a reference is app specific, but SHOULD be
--- unambiguous within the context of the app. Both fields need to be equal
--- for a `Reference` to be considered equal to another.
-data Reference = Reference with
-    id : Text
-      -- ^ The key that identifies the data. Can be set to the empty string if the contract-id is provided and is sufficient.
-    cid : Optional AnyContractId
-      -- ^ Optional contract-id to use for referring to contracts.
-      --
-      -- This field is there for technical reasons, as contract-ids cannot be converted to text from within Daml,
-      -- which is due to their full textual representation being only known after transactions have been prepared.
-  deriving (Show, Eq)
-
--- | The minimal set of information about a settlement that an app would like to execute.
+-- The `executors` MUST ensure that the triple of `(id, cid, meta)` is unique
+-- across settlements.
 data SettlementInfo = SettlementInfo
   with
     executors : [Party]
       -- ^ The parties that are responsible for executing the settlement and
       -- guarantee atomic settlement across asset admins.
-    settlementRef : Reference
-      -- ^ Reference to the settlement that the app would like to execute.
+    id : Text
+      -- ^ Textual identifier of the settlement.
+    cid : Optional AnyContractId
+      -- ^ Optional contract-id based identifier of the settlement.
       --
-      -- Executors MUST ensure that they use unique `settlementRef` values for
-      -- different settlements to avoid ambiguity or settlement errors.
-    settlementDeadline : Optional Time
-      -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
-      --
-      -- After this time, if set, the allocation can no longer be settled, and
-      -- the authorizer can withdraw the allocation to release the funds.
+      -- This field is there for technical reasons, as contract-ids cannot be
+      -- converted to text from within Daml, which is due to their full textual
+      -- representation being only known after transactions have been prepared.
     meta : Metadata
-      -- ^ Additional metadata about the settlement, used for extensibility.
+      -- ^ Additional metadata to identify the settlement, used for extensibility.
   deriving (Show, Eq)
 
 -- | A specification of a transfer of holdings between two parties for the
@@ -111,8 +98,6 @@ data TransferLegSide = TransferLegSide with
 -- | An approval by the authorizer to receive or send assets as part of
 -- settlement.
 data AllocationSpecification = AllocationSpecification with
-    settlement : SettlementInfo
-      -- ^ The settlement for which this allocation is made.
     admin : Party
       -- ^ The asset admin of the instruments that are transferred as part of
       -- the settlement.
@@ -120,6 +105,11 @@ data AllocationSpecification = AllocationSpecification with
       -- ^ The account authorizing the transfers as part of the settlement.
     transferLegSides : [TransferLegSide]
       -- ^ The sides of transfer legs authorized by this allocation.
+    settlementDeadline : Optional Time
+      -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
+      --
+      -- After this time, if set, the allocation can no longer be settled, and
+      -- the authorizer can withdraw the allocation to release the funds.
     nextIterationFunding : Optional (TextMap.TextMap Decimal)
       -- ^ Amounts reserved for funding the next settlement iteration.
       --
@@ -168,6 +158,8 @@ data AllocationView = AllocationView with
       -- This SHOULD be used by wallets to correlate the same allocation across
       -- updates to its state. It should not be used to correlate different allocations
       -- for the same settlement. That can be done using the `allocation.settlement` field.
+    settlement : SettlementInfo
+      -- ^ The settlement for which this allocation is made.
     allocation : AllocationSpecification
       -- ^ The specification of the allocation.
     holdingCids : [ContractId Holding]
@@ -415,7 +407,7 @@ interface SettlementFactory where
         -- instrument holder.
 
         -- To minimize the risk of allocations being settled in the wrong
-        -- context, implementations SHOULD ensure that:
+        -- context, implementations MUST ensure that:
         --
         --  - the allocations were created for the `settlement` being settled
         --  - the transfer legs of the allocations authorize both send and

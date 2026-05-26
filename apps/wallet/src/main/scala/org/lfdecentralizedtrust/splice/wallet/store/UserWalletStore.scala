@@ -845,8 +845,9 @@ object UserWalletStore {
           }
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
         mkFilterInterface(allocationrequestv2.AllocationRequest.INTERFACE)(co =>
-          co.payload.authorizer.owner.toScala.contains(endUser) &&
-            co.payload.allocations.asScala.exists(_.admin == dso)
+          co.payload.allocations.asScala.exists(alloc =>
+            alloc.admin == dso && alloc.authorizer.owner.toScala.contains(endUser)
+          )
         )(contract => UserWalletAcsInterfaceViewRowData(contract)),
       ),
     )

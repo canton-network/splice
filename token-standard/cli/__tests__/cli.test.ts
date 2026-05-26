@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { createProgram } from "../src/token-standard-cli";
 import expectedHoldings from "./expected/holdings.json";
 import expectedTransferInstructions from "./expected/transfer-instructions.json";
-import expectedTxs from "./expected/txs.json";
+import expectedTxsV1 from "./expected/txs-v1.json";
+import expectedTxsV2 from "./expected/txs-v2.json";
 import { mockLedgerApiServer } from "./mocks/ledger-api";
 
 const ledgerUrl = "http://localhost:6201";
@@ -69,7 +70,7 @@ test("list transfer instructions", async () => {
   );
 });
 
-test("list txs", async () => {
+test("list txs v1", async () => {
   const logSpy = vi.spyOn(console, "log");
 
   const program = createProgram();
@@ -86,7 +87,31 @@ test("list txs", async () => {
   ]);
 
   const actualOutput = logSpy.mock.lastCall?.[0] as string;
-  fs.writeFileSync("./__tests__/actual/txs.json", actualOutput);
+  fs.writeFileSync("./__tests__/actual/txs-v1.json", actualOutput);
 
-  expect(logSpy).toHaveBeenCalledWith(JSON.stringify(expectedTxs, null, 2));
+  expect(logSpy).toHaveBeenCalledWith(JSON.stringify(expectedTxsV1, null, 2));
+});
+
+test("list txs v2", async () => {
+  const logSpy = vi.spyOn(console, "log");
+
+  const program = createProgram();
+
+  await program.parseAsync([
+    "run",
+    "cli",
+    "list-holding-txs",
+    "alice::normalized",
+    "-l",
+    "http://localhost:6201",
+    "-a",
+    "valid_token",
+    "--standard-version",
+    "V2",
+  ]);
+
+  const actualOutput = logSpy.mock.lastCall?.[0] as string;
+  fs.writeFileSync("./__tests__/actual/txs-v2.json", actualOutput);
+
+  expect(logSpy).toHaveBeenCalledWith(JSON.stringify(expectedTxsV2, null, 2));
 });

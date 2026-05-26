@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   AllKnownMetaKeys,
-  HoldingInterface,
+  HoldingInterfaceV1,
   InterfaceId,
   TransferInstructionInterface,
 } from "../constants";
@@ -14,6 +14,7 @@ import {
   CreatedEvent as LedgerApiCreatedEvent,
   DeduplicationPeriod2,
   DefaultApi as LedgerJsonApi,
+  Event as LedgerApiEvent,
   ExerciseCommand,
   ExercisedEvent as LedgerApiExercisedEvent,
   HttpAuthAuthentication,
@@ -21,6 +22,7 @@ import {
   PartySignatures,
   ServerConfiguration,
   TransactionFilter,
+  JsGetEventsByContractIdResponse,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
 import { DisclosedContract } from "@lfdecentralizedtrust/transfer-instruction-openapi";
 import { randomUUID } from "node:crypto";
@@ -108,7 +110,7 @@ export function getKnownInterfaceView(
   const interfaceView = getInterfaceView(createdEvent);
   if (!interfaceView) {
     return null;
-  } else if (HoldingInterface.matches(interfaceView.interfaceId)) {
+  } else if (HoldingInterfaceV1.matches(interfaceView.interfaceId)) {
     return { type: "Holding", viewValue: interfaceView.viewValue };
   } else if (TransferInstructionInterface.matches(interfaceView.interfaceId)) {
     return { type: "TransferInstruction", viewValue: interfaceView.viewValue };
@@ -117,7 +119,6 @@ export function getKnownInterfaceView(
   }
 }
 
-// TODO (#563): handle allocations in such a way that any callers have to handle them too
 /**
  * Use this when `createdEvent` is guaranteed to have an interface view because the ledger api filters
  * include it, and thus is guaranteed to be returned by the API.
@@ -436,5 +437,73 @@ async function promiseWithTimeout<T>(
     if (timeoutPid) {
       clearTimeout(timeoutPid);
     }
+  }
+}
+
+export async function getEventsOfContract(
+  ledgerClient: LedgerJsonApi,
+  contractId: string,
+  forPartyId: string,
+  interfaceNames: InterfaceId[],
+): Promise<null | JsGetEventsByContractIdResponse> {
+  const events = await ledgerClient
+    .postV2EventsEventsByContractId({
+      contractId: contractId,
+      eventFormat: {
+        filtersByParty: filtersByParty(forPartyId, interfaceNames, true),
+        verbose: false,
+      },
+    })
+    .catch((err) => {
+      // This will happen for holdings with consuming choices
+      // where the party the script is running on is an actor on the choice
+      // but not a stakeholder.
+      if (err.code === 404) {
+        return null;
+      } else {
+        throw err;
+      }
+    });
+  if (!events) {
+    return null;
+  }
+  const created = events.created;
+  const archived = events.archived;
+  return { created, archived };
+}
+
+// a naive implementation like event.X?.nodeId || event.Y?.nodeId || event.Z?.nodeId fails when nodeId=0
+interface NodeIdAndEvent {
+  nodeId: number;
+  exercisedEvent?: LedgerApiExercisedEvent;
+  archivedEvent?: LedgerApiArchivedEvent | LedgerApiExercisedEvent;
+  createdEvent?: LedgerApiCreatedEvent;
+}
+export function getNodeIdAndEvent(event: LedgerApiEvent): NodeIdAndEvent {
+  if (event.ExercisedEvent) {
+    // ledger API's TRANSACTION_SHAPE_LEDGER_EFFECTS does not include ArchivedEvent, instead has the choice as Archive
+    if (event.ExercisedEvent.choice === "Archive") {
+      return {
+        nodeId: event.ExercisedEvent.nodeId,
+        archivedEvent: event.ExercisedEvent,
+      };
+    } else {
+      return {
+        nodeId: event.ExercisedEvent.nodeId,
+        exercisedEvent: event.ExercisedEvent,
+      };
+    }
+  } else if (event.CreatedEvent) {
+    return {
+      nodeId: event.CreatedEvent.nodeId,
+      createdEvent: event.CreatedEvent,
+    };
+  } else if (event.ArchivedEvent) {
+    return {
+      nodeId: event.ArchivedEvent.nodeId,
+      archivedEvent: event.ArchivedEvent,
+    };
+  } else {
+    throw new Error(`Impossible event type: ${event}`);
   }
 }

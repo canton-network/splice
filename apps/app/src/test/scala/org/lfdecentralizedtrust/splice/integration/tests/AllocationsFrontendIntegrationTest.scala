@@ -3,9 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg as TransferLegV1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2.{
-  AllocationSpecification,
   SettlementInfo,
-  Reference as SettlementReference,
   TransferLeg as TransferLegV2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
@@ -19,8 +17,6 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 
-import java.time.temporal.ChronoUnit
-import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Optional
 import scala.util.Random
 import scala.jdk.CollectionConverters.*
@@ -58,11 +54,6 @@ class AllocationsFrontendIntegrationTest
       webDriver: WebDriverType,
   ) = {
     val validatorPartyId = aliceValidatorBackend.getValidatorPartyId()
-    val now = LocalDateTime
-      .now()
-      .truncatedTo(ChronoUnit.MICROS)
-      .toInstant(ZoneOffset.UTC)
-    val settleBefore = now.plusSeconds(3600 * 2)
     val wantedTransferLegs = Seq(
       new TransferLegV2(
         "oneway",
@@ -82,27 +73,20 @@ class AllocationsFrontendIntegrationTest
       ),
     )
 
-    val wantedAllocation = new AllocationSpecification(
+    val wantedSettlement =
       new SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
-        new SettlementReference("some_reference", Optional.empty),
-        java.util.Optional.of(settleBefore),
+        "some_reference",
+        Optional.empty,
         new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
-      ),
-      dsoParty.toProtoPrimitive,
-      basicAccount(sender),
-      wantedTransferLegs.map(transferLegSideForAuthorizer(sender, _)).asJava,
-      Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
-      false,
-      new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
-    )
+      )
 
     browseToAllocationsPage()
 
     actAndCheck(
       "create allocation", {
         textField("create-allocation-settlement-ref-id").underlying
-          .sendKeys(wantedAllocation.settlement.settlementRef.id)
+          .sendKeys(wantedSettlement.id)
         eventuallyClickOn(id(s"create-allocation-settlement-executor-0"))
         setAnsField(
           textField(s"create-allocation-settlement-executor-0"),
@@ -144,9 +128,9 @@ class AllocationsFrontendIntegrationTest
 
         checkSettlementInfo(
           allocation,
-          wantedAllocation.settlement.settlementRef.id,
-          wantedAllocation.settlement.settlementRef.cid.map(_.contractId).toScala,
-          wantedAllocation.settlement.executors.asScala.toSeq,
+          wantedSettlement.id,
+          wantedSettlement.cid.map(_.contractId).toScala,
+          wantedSettlement.executors.asScala.toSeq,
         )
 
         checkTransferLegsV2(
@@ -424,12 +408,12 @@ class AllocationsFrontendIntegrationTest
     seleniumText(
       parent.childElement(className("settlement-id"))
     ) should be(
-      s"SettlementRef id: $id"
+      s"Settlement id: $id"
     )
     cid.foreach(cid =>
       seleniumText(
         parent.childElement(className("settlement-cid"))
-      ) should be(s"SettlementRef cid: $cid")
+      ) should be(s"Settlement cid: $cid")
     )
     val executorElements = parent.findAllChildElements(className("settlement-executor")).toSeq
     executorElements.map(seleniumText).zip(executors).foreach { case (actual, expected) =>

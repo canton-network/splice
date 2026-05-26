@@ -308,7 +308,7 @@ class HttpTokenStandardAllocationHandler(
       ](
         s"AmuletAllocationV2 '$allocationId'",
         amuletAlloc.payload.lockedAmulet.toScala,
-        amuletAlloc.payload.allocation.settlement.settlementDeadline.toScala,
+        amuletAlloc.payload.allocation.settlementDeadline.toScala,
         requireLockedAmulet,
         featuredProvider =
           None, // Not required. Featured app rights are used in bulk, and will go once CIP-104 is live

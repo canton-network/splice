@@ -1,0 +1,397 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Test that a V1 app can use accounts via metadata, when settling V2 assets;
+-- and that account providers can use their V2 wallets to interact with V1 allocation workflows,
+-- while the account owners can remain on V1 wallets.
+--
+-- Limitation: receipt into an account that requires provider approval for receiving is not possible using V1,
+-- as the wrapper for `Allocation_ExecuteTransfer` expects to be able to create the receipt allocation in one go.
+module Splice.Tests.TestSettlement_V1App where
+
+import Daml.Script
+
+import DA.Action (when)
+import DA.Assert
+import DA.Foldable (forA_, foldMap)
+import DA.Optional (isSome)
+import DA.TextMap as TextMap hiding (filter)
+import DA.Time
+import DA.Traversable qualified as Traversable
+
+import Splice.Api.Token.MetadataV1 as Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1
+import Splice.Api.Token.AllocationV1 as Api.Token.AllocationV1
+import Splice.Api.Token.AllocationRequestV1
+import Splice.Api.Token.AllocationInstructionV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Amulet.TokenApiUtils (burnedMetaKey)
+
+import Splice.Testing.Apps.TradingApp hiding (require)
+import Splice.Testing.Utils
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApi
+import Splice.Testing.TokenStandard.WalletClient qualified as WalletClient
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+data AllocatedOTCTrade = AllocatedOTCTrade
+  with
+    alice : Party
+    aliceAccount : V2.Account
+    bob : Party
+    bobProvider : Party
+    bobSendAccount : V2.Account
+    bobReceiveAccount : V2.Account
+    provider : Party
+    registries : MultiRegistry.MultiRegistry
+    registry : TestTokenV2_RegistryV2.TestTokenV2Registry
+    otcTradeCid : ContractId OTCTrade
+    otcTrade : OTCTrade
+    yId : InstrumentId
+    xId : InstrumentId
+
+setupOtcTrade : Script AllocatedOTCTrade
+setupOtcTrade  = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registry = env.testTokenV2
+  let yId = InstrumentId with admin = registry.admin; id = "Y"
+  let xId = InstrumentId with admin = registry.admin; id = "X"
+
+  alice <- allocatePartyExact "alice"
+  bob <- allocatePartyExact "bob"
+  bobProvider <- allocatePartyExact "bob-provider"
+  let aliceAccount = V2.Account with owner = Some alice; provider = None; id = "alice-account-1"
+  let bobSendAccount = V2.Account with owner = Some bob; provider = Some bobProvider; id = "bob-account-joint-control"
+  let bobReceiveAccount = V2.Account with owner = Some bob; provider = Some bobProvider; id = "bob-account-owner-control"
+  let bobReceiveAccountConfig = TestTokenV2.AccountConfig with
+        admin = registry.admin
+        account = bobReceiveAccount
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+        providerConfig  = TestTokenV2.PartyConfig with
+          canInitiate = False
+          mustApprove = False
+  let bobSendAccountConfig = TestTokenV2.AccountConfig with
+        admin = registry.admin
+        account = bobSendAccount
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+        providerConfig  = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+
+  -- app provider
+  provider <- allocatePartyExact "trading-app-provider"
+
+  -- create account configs
+  TestTokenV2_RegistryV2.makeAccountIfMissing bobReceiveAccountConfig
+  TestTokenV2_RegistryV2.makeAccountIfMissing bobSendAccountConfig
+
+  -- get some funds for alice and bob
+  TestTokenV2_RegistryV2.mint registry aliceAccount "Y" 1000.0
+  TestTokenV2_RegistryV2.mint registry bobSendAccount "X" 1000.0
+
+  let aliceLeg = Api.Token.AllocationV1.TransferLeg with
+        sender = alice
+        receiver = bob
+        amount = 100.0
+        instrumentId = yId
+        meta = Metadata $ TextMap.fromList
+          [ ("cip-112/receiver.id", "bob-account-owner-control")
+          , ("cip-112/receiver.provider", partyToText bobProvider)
+          , ("cip-112/sender.id", "alice-account-1")
+          ]
+  let bobLeg = Api.Token.AllocationV1.TransferLeg with
+        sender = bob
+        receiver = alice
+        amount = 20.0
+        instrumentId = xId
+        meta = Metadata $ TextMap.fromList
+          [ ("cip-112/sender.id", "bob-account-joint-control")
+          , ("cip-112/sender.provider", partyToText bobProvider)
+          , ("cip-112/receiver.id", "alice-account-1")
+          ]
+
+  -- alice proposes trade with bob
+  proposalCid <- submit alice $ createCmd OTCTradeProposal with
+    venue = provider
+    tradeCid = None
+    transferLegs = TextMap.fromList [("leg0", aliceLeg), ("leg1", bobLeg)]
+    approvers = [alice]
+
+  -- bob accepts
+  proposalCid <- submit bob $ exerciseCmd proposalCid OTCTradeProposal_Accept with
+    approver = bob
+
+  -- provider initiates settlement
+  now <- getTime
+  let settleBefore = now `addRelTime` hours 2
+  otcTradeCid <- submit provider $
+    exerciseCmd proposalCid OTCTradeProposal_InitiateSettlement with
+      prepareUntil = now `addRelTime` hours 1
+      settleBefore
+
+  Some otcTrade <- queryContractId provider otcTradeCid
+
+  -- Alice sees the allocation request in her wallet
+  [aliceAlloc] <- WalletClient.listRequestedAllocations alice yId
+  aliceAlloc.transferLeg.amount === 100.0
+
+  -- alice accepts allocation request directly via her wallet
+  inputHoldingCids <- WalletClient.listHoldingCids alice yId
+  now <- getTime
+
+  -- test that using the wrong admin party fails
+  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
+    expectedAdmin = alice
+    allocation = aliceAlloc
+    inputHoldingCids
+    requestedAt = now
+    extraArgs = emptyExtraArgs
+  submitWithDisclosuresMustFail' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- alice accepts allocation request directly via her wallet
+  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
+    expectedAdmin = registry.admin
+    allocation = aliceAlloc
+    inputHoldingCids
+    requestedAt = now
+    extraArgs = emptyExtraArgs
+  result <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- check metadata
+  expectNoBurn result.meta
+
+  -- check lock context
+  [(_, lockedHolding)] <- WalletClient.listLockedHoldings alice yId
+  let expectedLock = Some $ Lock with
+        expiresAt = Some settleBefore
+        expiresAfter = None
+        holders = [registry.admin, alice]
+        context = Some "allocation for settlement of OTCTradeProposal"
+  lockedHolding.lock === expectedLock
+
+  -- Bob sees the allocation request in his wallet as well
+  [bobAlloc] <- WalletClient.listRequestedAllocations bob xId
+  bobAlloc.transferLeg.amount === 20.0
+
+  -- bob accepts allocation request directly via her wallet
+  inputHoldingCids <- WalletClient.listHoldingCids bob xId
+  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
+    expectedAdmin = registry.admin
+    allocation = bobAlloc
+    inputHoldingCids
+    requestedAt = now
+    extraArgs = emptyExtraArgs
+  submitWithDisclosures' bob enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- bob's provider must also approve the allocation, and they use their V2 wallet to do so
+  [bobInstr] <- WalletClientV2.listAllocationInstructionsV2 bobSendAccount bobProvider
+  WalletClientV2.acceptAllocationInstructionV2 env.registries bobProvider bobInstr
+
+  -- check factory view
+  factoryView <- submitWithDisclosures' alice enrichedChoice.disclosures $ exerciseCmd enrichedChoice.factoryCid AllocationFactory_PublicFetch
+    with
+      expectedAdmin = registry.admin
+      actor = alice
+  factoryView === Splice.Api.Token.AllocationInstructionV1.AllocationFactoryView registry.admin emptyMetadata
+  -- trade allocated
+  pure AllocatedOTCTrade with
+    alice
+    aliceAccount
+    bob
+    bobProvider
+    bobSendAccount
+    bobReceiveAccount
+    provider
+    registry
+    registries = env.registries
+    otcTradeCid
+    otcTrade
+    yId
+    xId
+
+
+-- | Test that a DvP settlement of an OTC trade works when using Amulet via the token standard.
+testDvP : Script ()
+testDvP = script do
+  AllocatedOTCTrade{..} <- setupOtcTrade
+
+  -- assume the time given to prepare has passed
+  passTime (hours 1)
+
+  -- provider runs automation that completes the settlement
+  let otcTradeRef = (view $ toInterface @AllocationRequest otcTrade).settlement.settlementRef
+  allocations <- appBackendListAllocations provider otcTradeRef
+  TextMap.size allocations === 2
+
+  richAllocationsWithContext <- Traversable.forA allocations $ \(allocCid, _) -> do
+    context <- RegistryApi.getAllocation_TransferContext registry allocCid emptyMetadata
+    let extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+    pure (context.disclosures, (allocCid, extraArgs))
+  let disclosures = foldMap fst richAllocationsWithContext
+
+  results <- submitWithDisclosures' provider disclosures $ exerciseCmd otcTradeCid OTCTrade_Settle with
+    allocationsWithContext = fmap snd richAllocationsWithContext
+
+  -- check metadata
+  forA_ results $ \result -> expectNoBurn result.meta
+
+  -- check that the expected transfers happened
+  WalletClient.checkHoldingWithAmountExists alice xId 20.0
+  WalletClient.checkHoldingWithAmountExists bob yId 100.0
+
+  WalletClientV2.checkAccountBalance alice aliceAccount (TSU.upcast yId) 900.0
+  WalletClientV2.checkAccountBalance bob bobSendAccount (TSU.upcast yId) 0.0
+  WalletClientV2.checkAccountBalance bob bobReceiveAccount (TSU.upcast yId) 100.0
+  WalletClientV2.checkAccountBalance alice aliceAccount (TSU.upcast xId) 20.0
+  WalletClientV2.checkAccountBalance bob bobSendAccount (TSU.upcast xId) 980.0
+
+  pure ()
+
+testDvPCancel = script do
+  AllocatedOTCTrade{..} <- setupOtcTrade
+  let otcTradeRef = (view $ toInterface @AllocationRequest otcTrade).settlement.settlementRef
+  allocations <- appBackendListAllocations provider otcTradeRef
+
+  [(_, aliceLockedHolding)] <- WalletClient.listLockedHoldings alice yId
+  [(_, bobLockedHolding)] <- WalletClient.listLockedHoldings bob xId
+
+  passTime (days 1)
+
+
+  richAllocationsWithContext <- Traversable.forA allocations $ \(allocCid, _) -> do
+    context <- RegistryApi.getAllocation_CancelContext registry allocCid emptyMetadata
+    let extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+    pure (context.disclosures, (allocCid, extraArgs))
+  let disclosures = foldMap fst richAllocationsWithContext
+
+  _ <- submitWithDisclosures' provider disclosures $ exerciseCmd otcTradeCid OTCTrade_Cancel with
+    allocationsWithContext = fmap snd richAllocationsWithContext
+
+  [] <- WalletClient.listLockedHoldings alice yId
+  WalletClient.checkHoldingWithAmountExists alice yId aliceLockedHolding.amount
+  WalletClient.checkHoldingWithAmountExists bob xId bobLockedHolding.amount
+
+  [] <- queryInterface @Allocation alice
+  [] <- queryInterface @Allocation bob
+
+  pure ()
+
+-- Withdrawal tests
+-------------------
+
+testDvPWithdraw_owner_controlled : Script ()
+testDvPWithdraw_owner_controlled = script do
+  AllocatedOTCTrade{..} <- setupOtcTrade
+  [(aliceAllocationCid, _)] <- queryInterface @Allocation alice
+  context <- RegistryApi.getAllocation_WithdrawContext registry aliceAllocationCid emptyMetadata
+
+  [(_, aliceLockedHolding)] <- WalletClient.listLockedHoldings alice yId
+
+  _ <- submitWithDisclosures' alice context.disclosures $ exerciseCmd aliceAllocationCid Allocation_Withdraw with
+    extraArgs = ExtraArgs with
+      context = context.choiceContext
+      meta = emptyMetadata
+
+  [] <- WalletClient.listLockedHoldings alice yId
+  WalletClient.checkHoldingWithAmountExists alice yId aliceLockedHolding.amount
+  WalletClient.checkBalance alice yId 1000.0
+
+  -- Alice's no longer has any locked holdings or allocations
+  [] <- WalletClient.listLockedHoldings alice yId
+  [] <- queryInterface @Allocation alice
+
+  pure ()
+
+testDvPWithdraw_joint_control_owner_first : Script ()
+testDvPWithdraw_joint_control_owner_first = script do
+  -- For Bob the provider needs to go first for the withdraw to succeed.
+  AllocatedOTCTrade{..} <- setupOtcTrade
+  [(_, bobLockedHolding)] <- WalletClient.listLockedHoldings bob xId
+
+  -- Bob uses their V1 wallet to initiate the withdrawal
+  -- Note: production tokens will probably want to add some metadata to the Allocation view calling out the pending withdrawal.
+  [(bobAllocationCid, _)] <- queryInterface @Allocation bob
+  context <- RegistryApi.getAllocation_WithdrawContext registry bobAllocationCid emptyMetadata
+  submitWithDisclosures' bob context.disclosures $ exerciseCmd bobAllocationCid Allocation_Withdraw with
+    extraArgs = ExtraArgs with
+      context = context.choiceContext
+      meta = emptyMetadata
+
+  -- Bob's account provider goes first using their V2 wallet
+  [bobAlloc] <- WalletClientV2.listAllocationsV2 bobSendAccount bobProvider
+  WalletClientV2.withdrawAllocationV2 registries bobProvider bobAlloc
+
+  [] <- WalletClient.listLockedHoldings bob xId
+  WalletClient.checkHoldingWithAmountExists bob xId bobLockedHolding.amount
+  WalletClient.checkBalance bob xId 1000.0
+
+  -- Bob's no longer has any locked holdings or allocations
+  [] <- WalletClient.listLockedHoldings bob xId
+  [] <- queryInterface @Allocation bob
+
+  pure ()
+
+testDvPWithdraw_joint_control_provider_first : Script ()
+testDvPWithdraw_joint_control_provider_first = script do
+  -- For Bob the provider needs to go first for the withdraw to succeed.
+  AllocatedOTCTrade{..} <- setupOtcTrade
+  [(_, bobLockedHolding)] <- WalletClient.listLockedHoldings bob xId
+
+  -- Bob's account provider goes first using their V2 wallet
+  [bobAlloc] <- WalletClientV2.listAllocationsV2 bobSendAccount bobProvider
+  WalletClientV2.withdrawAllocationV2 registries bobProvider bobAlloc
+
+  -- Bob uses their V1 wallet to confirm the withdrawal
+  [(bobAllocationCid, _)] <- queryInterface @Allocation bob
+  context <- RegistryApi.getAllocation_WithdrawContext registry bobAllocationCid emptyMetadata
+  _ <- submitWithDisclosures' bob context.disclosures $ exerciseCmd bobAllocationCid Allocation_Withdraw with
+    extraArgs = ExtraArgs with
+      context = context.choiceContext
+      meta = emptyMetadata
+
+  [] <- WalletClient.listLockedHoldings bob xId
+  WalletClient.checkHoldingWithAmountExists bob xId bobLockedHolding.amount
+  WalletClient.checkBalance bob xId 1000.0
+
+  -- Bob's no longer has any locked holdings or allocations
+  [] <- WalletClient.listLockedHoldings bob xId
+  [] <- queryInterface @Allocation bob
+
+  pure ()
+
+
+-- utilities
+------------
+
+-- | List all allocations matching a particular settlement reference, sorted by their tradeLeg id.
+-- This function would be run on the trading app provider's backend as part of an automation loop.
+appBackendListAllocations : Party -> Reference -> Script (TextMap (ContractId Allocation, AllocationView))
+appBackendListAllocations p ref = do
+  allocs <- queryInterface @Allocation p
+  let matchingAllocs = do
+        (cid, Some fundedAllocation) <- allocs
+        guard (fundedAllocation.allocation.settlement.settlementRef == ref)
+        pure (fundedAllocation.allocation.transferLegId, (cid, fundedAllocation))
+  pure $ TextMap.fromList matchingAllocs
+
+expectNoBurn : Metadata -> Script ()
+expectNoBurn meta =
+  when (isSome $ TextMap.lookup burnedMetaKey meta.values) $
+    fail $ "Did not expect burned meta key to be present in " <> show meta

@@ -39,6 +39,7 @@ export class SynchronizerNodes {
   readonly participant: SvParticipant;
   readonly active: DecentralizedSynchronizerNode;
   readonly legacy?: DecentralizedSynchronizerNode;
+  readonly additionalLegacy: DecentralizedSynchronizerNode[];
   readonly upgrade?: DecentralizedSynchronizerNode;
 
   constructor(
@@ -77,6 +78,10 @@ export class SynchronizerNodes {
         ingressName
       );
     }
+
+    this.additionalLegacy = decentralizedSynchronizerMigrationConfig.additionalLegacy.map(info =>
+      buildDecentralizedSynchronizerNode(info, info.id, cometbftNodeConfigs, ingressName)
+    );
 
     if (decentralizedSynchronizerMigrationConfig.upgrade) {
       this.upgrade = buildDecentralizedSynchronizerNode(

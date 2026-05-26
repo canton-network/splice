@@ -112,13 +112,15 @@ class TokenStandardCliSanityCheckPlugin(
                               .map(_.getEntityName)
                           )
                       })
-                    runCommand(
-                      "list-holding-txs",
-                      party,
-                      authToken,
-                      participantHttpApiPort,
-                      holdingTxsExtraArgs,
-                    )
+                    Seq("V1", "V2").foreach { version =>
+                      runCommand(
+                        "list-holding-txs",
+                        party,
+                        authToken,
+                        participantHttpApiPort,
+                        holdingTxsExtraArgs ++ Seq("--standard-version", version),
+                      )
+                    }
                   case result =>
                     logger.info(
                       s"Not checking wallet for user $ledgerApiUser because it's not available: $result"

@@ -26,6 +26,7 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   reasonMetaKey,
   txKindMetaKey,
   senderMetaKey,
+  receiverMetaKey,
   reasonFromMeta,
   reasonToMeta,
   mkMetaTransferFrom,
@@ -265,6 +266,13 @@ txKindMetaKey = cip56Prefix <> "tx-kind"
 -- | The sender of a transfer.
 senderMetaKey : Text
 senderMetaKey = cip56Prefix <> "sender"
+
+-- | The receiver of a transfer.
+--
+-- Note: this keys is not defined in CIP-56, but matches the sender key, and is
+-- useful for transfer metadata, so we add it here for consistency.
+receiverMetaKey : Text
+receiverMetaKey = cip56Prefix <> "receiver"
 
 -- | Extra the transfer reason from the metadata. Returns an empty string if no reason is found.
 reasonFromMeta : Metadata -> Text

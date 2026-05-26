@@ -106,9 +106,7 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -216,9 +214,7 @@
       "id": 18,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -327,9 +323,7 @@
       "id": 3,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -437,9 +431,7 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -1156,9 +1148,7 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1315,12 +1305,8 @@
       },
       {
         "current": {
-          "text": [
-            "sv-1"
-          ],
-          "value": [
-            "sv-1"
-          ]
+          "text": ["sv-1"],
+          "value": ["sv-1"]
         },
         "datasource": {
           "type": "prometheus",
@@ -1363,7 +1349,7 @@
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
-        "regex": "/global-domain-(?<value>\\d)-sequencer/g",
+        "regex": "/global-domain-(?<value>\\d+)-sequencer/g",
         "regexApplyTo": "value",
         "sort": 1,
         "type": "query"

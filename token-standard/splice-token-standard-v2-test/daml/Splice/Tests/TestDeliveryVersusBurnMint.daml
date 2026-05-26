@@ -51,10 +51,8 @@ test_delivery_versus_burn_mint = do
 
   let settlement = V2.SettlementInfo with
         executors = [provider]
-        settlementRef = V2.Reference with
-          id = "deliver-vs-burn/<uuid>"
-          cid = None
-        settlementDeadline = None
+        id = "deliver-vs-burn/<uuid>"
+        cid = None
         meta = emptyMetadata
   let aliceMintLeg = V2.TransferLeg with
         transferLegId = "mint-x"
@@ -86,34 +84,34 @@ test_delivery_versus_burn_mint = do
         meta = reasonToMeta "burn 10 X" emptyMetadata
 
   let aliceAlloc = V2.AllocationSpecification with
-        settlement
         authorizer = basicAccount alice
         admin
         transferLegSides = [receiverSide aliceMintLeg, senderSide aliceBobTransferLegX, receiverSide aliceBobTransferLegY]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
   let bobAlloc = V2.AllocationSpecification with
-        settlement
         authorizer = basicAccount bob
         admin
         transferLegSides = [senderSide aliceBobTransferLegY, receiverSide aliceBobTransferLegX, senderSide bobBurnLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
   let adminMintAlloc = V2.AllocationSpecification with
-        settlement
         authorizer = mintAccount admin
         admin
         transferLegSides = [senderSide aliceMintLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
   let adminBurnAlloc = V2.AllocationSpecification with
-        settlement
         authorizer = burnAccount admin
         admin
         transferLegSides = [receiverSide bobBurnLeg]
+        settlementDeadline = None
         nextIterationFunding = None
         committed = False
         meta = emptyMetadata
@@ -123,6 +121,7 @@ test_delivery_versus_burn_mint = do
         let actor = accountPrincipal admin allocSpec.authorizer
         inputHoldingCids <- WalletClientV2.listHoldingCids actor iY
         enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+          settlement
           allocation = allocSpec
           requestedAt = now
           inputHoldingCids
@@ -141,6 +140,7 @@ test_delivery_versus_burn_mint = do
   let mkAllocMustFail actor allocSpec = do
         now <- getTime
         enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+          settlement
           allocation = allocSpec
           requestedAt = now
           inputHoldingCids = []

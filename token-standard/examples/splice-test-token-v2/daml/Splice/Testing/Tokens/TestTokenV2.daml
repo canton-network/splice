@@ -19,6 +19,8 @@ import DA.TextMap qualified as TextMap
 import DA.Time
 
 import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
@@ -37,6 +39,14 @@ template TokenRules with
     admin : Party
   where
     signatory admin
+
+    interface instance V1.TransferFactory for TokenRules where
+      view = V1.TransferFactoryView with
+        admin
+        meta = emptyMetadata
+
+      transferFactory_publicFetchImpl = publicFetchDefaultImpl this
+      transferFactory_transferImpl = transferFactory_v1_transferDefaultImplUsingV2 (toInterface this)
 
     interface instance V2.TransferFactory for TokenRules where
       view = V2.TransferFactoryView with
@@ -61,18 +71,22 @@ template TokenRules with
         admin
         meta = emptyMetadata
 
-      settlementFactory_settleBatchImpl self arg0 =
-        let arg = arg0 with
-              extraArgs = arg0.extraArgs with
-                context = ChoiceContext with
-                  values = textMapSingleton tokenRulesContextKey (AV_ContractId (coerceContractId self))
-        in
-          settlementFactoryV2_settleBatchDefaultImpl this.admin self arg
+      settlementFactory_settleBatchImpl = settlementFactoryV2_settleBatchDefaultImpl this.admin
 
       -- no extra observers to avoid leaking the settlement of different allocations to the other authorizers
       settlementFactory_settleBatchExtraObservers _arg = []
 
       settlementFactory_publicFetchImpl = publicFetchDefaultImpl this
+
+    interface instance V1.AllocationFactory for TokenRules where
+      view = V1.AllocationFactoryView with
+        admin
+        meta = emptyMetadata
+
+      allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
+      allocationFactory_allocateImpl =
+        allocationFactory_v1_allocateDefaultImplUsingV2 admin
+        (token_allocationFactoryV2_allocateImpl CalledFromV1 CreateV1Allocation this)
 
     interface instance V2.AllocationFactory for TokenRules where
       view = V2.AllocationFactoryView with
@@ -81,8 +95,9 @@ template TokenRules with
 
       allocationFactory_allocateExtraObservers = allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl
 
-      allocationFactory_allocateImpl self arg = token_allocationFactoryV2_allocateImpl this self arg
       allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
+      allocationFactory_allocateImpl =
+        token_allocationFactoryV2_allocateImpl CalledFromV2 CreateV2Allocation this None
 
     nonconsuming choice TokenRules_OfferMint : TokenRules_OfferMintResult with
         receiver : V2.Account
@@ -153,18 +168,22 @@ token_transferFactory_transferImpl admin actors transfer extraArgs = do
         originalInstructionCid = None
         transfer
 
-  applyTransferInstructionTransitions offer None actors V2.TIA_Accept extraArgs
+  applyTransferInstructionTransitions CalledFromV2 offer None actors V2.TIA_Accept extraArgs
 
 
 -- | Create a V2 allocation.
 token_allocationFactoryV2_allocateImpl
-  : TokenRules
+  : CallSource
+  -> AllocationKind
+  -> TokenRules
+  -> Optional Time
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
-token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
+token_allocationFactoryV2_allocateImpl callSource allocationKind tokenRules allocateBefore _self arg = do
   let admin = tokenRules.admin
   requireMatchExpected ("allocation.admin", arg.allocation.admin) admin
+  -- check that the holdings are owned by the right account and have the right admin
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token
     token <- fetch tokenCid
@@ -179,8 +198,11 @@ token_allocationFactoryV2_allocateImpl tokenRules _self arg = do
       actionAuthorizers = Map.empty
       availableActions = Map.empty -- Will be computed.
       inputHoldingCids = inputHoldingMap
+      settlement = arg.settlement
       allocation = arg.allocation
       admin = tokenRules.admin
       requestedAt = arg.requestedAt
+      allocateBefore
 
-  applyAllocationInstructionTransitions allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs
+  applyAllocationInstructionTransitions callSource allocationKind allocationInstruction None arg.actors V2.AIA_Accept arg.extraArgs
+

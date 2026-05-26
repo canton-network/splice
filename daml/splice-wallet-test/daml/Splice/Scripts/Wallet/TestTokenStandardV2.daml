@@ -175,12 +175,13 @@ testTokenStandardAllocateV2 = script do
 
   -- venue proposes trade
   now <- getTime
+  let settlementDeadline = Some $ now `addRelTime` hours 2
   otcTradeCid <- submit venue $ createCmd TradingAppV2.OTCTrade with
     venue = venue
     tradeLegs = [TradingAppV2.TradeLeg registry.dso aliceLeg]
     createdAt = now
     settleAt = now `addRelTime` hours 1
-    settlementDeadline = Some (now `addRelTime` hours 2)
+    settlementDeadline
 
   -- venue creates allocation requests
   submit venue $ exerciseCmd otcTradeCid TradingAppV2.OTCTrade_RequestAllocations
@@ -197,11 +198,12 @@ testTokenStandardAllocateV2 = script do
         then WalletClientV2.listUnlockedHoldingCidsFor authorizer actor amuletId
         else pure []
       enrichedChoice <- RegistryApiV2.getAllocationFactory registry Api.Token.AllocationInstructionV2.AllocationFactory_Allocate with
+        settlement = req.settlement
         allocation = Api.Token.AllocationV2.AllocationSpecification with
           authorizer
-          settlement = req.settlement
           admin = registry.dso
           transferLegSides = amuletAlloc.transferLegSides  -- no filter in this example, as the test trade affects only amulet
+          settlementDeadline
           nextIterationFunding = None
           committed = False
           meta = emptyMetadata

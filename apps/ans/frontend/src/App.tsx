@@ -5,6 +5,7 @@ import {
   theme,
   UserProvider,
   ErrorRouterPage,
+  retryQuery,
 } from '@lfdecentralizedtrust/splice-common-frontend';
 import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -33,6 +34,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
       queries: {
         refetchInterval,
         structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
     },
   });

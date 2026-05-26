@@ -389,12 +389,15 @@ class TreasuryService(
   }
 
   def enqueueAmuletAllocationOperation(
+      settlement: allocationv2.SettlementInfo,
       specification: allocationv2.AllocationSpecification,
       requestedAt: Instant,
       dedup: Option[AmuletOperationDedupConfig],
   )(implicit tc: TraceContext): Future[allocationinstructionv2.AllocationInstructionResult] = {
     val p = Promise[allocationinstructionv2.AllocationInstructionResult]()
-    enqueue(EnqueuedAmuletAllocationV2Operation(specification, requestedAt, p, tc, dedup))
+    enqueue(
+      EnqueuedAmuletAllocationV2Operation(settlement, specification, requestedAt, p, tc, dedup)
+    )
   }
 
   private def enqueue(
@@ -762,6 +765,7 @@ class TreasuryService(
         _.toInterface(holdingv2.Holding.INTERFACE),
       ) { holdings =>
         val choiceArgs = new allocationinstructionv2.AllocationFactory_Allocate(
+          operation.settlement,
           operation.specification,
           operation.requestedAt,
           holdings,
@@ -1474,6 +1478,7 @@ object TreasuryService {
   }
 
   private case class EnqueuedAmuletAllocationV2Operation(
+      settlement: allocationv2.SettlementInfo,
       specification: allocationv2.AllocationSpecification,
       requestedAt: Instant,
       outcomePromise: Promise[allocationinstructionv2.AllocationInstructionResult],
@@ -1485,6 +1490,7 @@ object TreasuryService {
     override def pretty: Pretty[EnqueuedAmuletAllocationV2Operation.this.type] =
       prettyNode(
         "AmuletAllocationOperation",
+        param("settlement", _.settlement),
         param("specification", _.specification),
       )
   }

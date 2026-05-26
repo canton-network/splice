@@ -81,9 +81,8 @@ setupOtcTrade  = do
         amount
         instrumentId = amuletId
         meta = emptyMetadata
-  -- Note: here we use Amulet as the single asset, as that is all we have available in this repository.
-  -- Given that we are using only the DvP interface, that should though be a fine stand-in for
-  -- a DvP across two assets from different registries.
+  -- Note: we use amulet for both sides here, as that's how the test was originally written.
+  -- See 'TestSettlement_V1V2Mixed.daml' for tests with different instruments.
   let aliceLeg = mkTransfer alice bob 100.0
   let bobLeg = mkTransfer bob alice 20.0
 

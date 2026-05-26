@@ -684,7 +684,7 @@ template WalletAppInstall
         forA_ allocationReqCid $ \reqCid -> do
           req <- fetchUncheckedButArchiveLater reqCid
           TokenStandard.Utils.requireMatchExpected
-            ("allocationReq.settlement", (view req).settlement) allocateArg.allocation.settlement
+            ("allocationReq.settlement", (view req).settlement) allocateArg.settlement
           exercise reqCid Splice.Api.Token.AllocationRequestV2.AllocationRequest_Accept with
             actors = [endUserParty]
             extraArgs = ExtraArgs emptyChoiceContext emptyMetadata

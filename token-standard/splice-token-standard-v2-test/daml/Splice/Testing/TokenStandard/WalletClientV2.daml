@@ -29,7 +29,8 @@ module Splice.Testing.TokenStandard.WalletClientV2
     listTransferOffers,
     listTransferOffersV2,
 
-    transfer,
+    transferV1,
+    transferV2,
     acceptTransferOffer,
     rejectTransferOffer,
     withdrawTransferOffer,
@@ -53,6 +54,7 @@ module Splice.Testing.TokenStandard.WalletClientV2
     -- * Batching utility usage
     TSABatch(..),
     executeTSABatch,
+    executeSingletonTSABatch,
 
     createBatchingUtility,
 
@@ -259,8 +261,13 @@ listTransferOffers p instrumentId = do
   pure (adjustedOffersV2 <> trimmedOffersV1)
 
 
-transfer : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
-transfer registries actor transferArg = do
+transferV1 : MultiRegistry.MultiRegistry -> Party -> V1.TransferFactory_Transfer -> Script (Optional (ContractId V1.TransferInstruction))
+transferV1 registries actor transferArg = do
+  batch <- mkTransferFactory_TransferV1 registries transferArg
+  extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
+
+transferV2 : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
+transferV2 registries actor transferArg = do
   batch <- mkTransferFactory_TransferV2 registries transferArg
   extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
@@ -307,12 +314,22 @@ withdrawTransferOffer registries actor instrCid = do
     V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
     _ -> None
 
-extractPendingTransferInstructionV2 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V2.TransferInstruction)
-extractPendingTransferInstructionV2 (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) =
+extractPendingTransferInstructionV1 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V1.TransferInstruction)
+extractPendingTransferInstructionV1 (BatchingUtilityV2.TSAR_TransferInstructionResultV1 result) =
   case result.output of
+    V1.TransferInstructionResult_Pending instrCid -> Some instrCid
+    _ -> None
+extractPendingTransferInstructionV1 result = error $ "Expected a TransferInstructionResultV1, but got: " <> show result
+
+extractTransferInstructionResultV2 : BatchingUtilityV2.TokenStandardActionResult -> V2.TransferInstructionResult
+extractTransferInstructionResultV2 (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) = result
+extractTransferInstructionResultV2 result = error $ "Expected a TransferInstructionResultV2, but got: " <> show result
+
+extractPendingTransferInstructionV2 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V2.TransferInstruction)
+extractPendingTransferInstructionV2 result =
+  case (extractTransferInstructionResultV2 result).output of
     V2.TransferInstructionResult_Pending instrCid -> Some instrCid
     _ -> None
-extractPendingTransferInstructionV2 result = error $ "Expected a TransferInstructionResultV2, but got: " <> show result
 
 
 -- Allocations
@@ -324,10 +341,9 @@ listRequestedAllocationsForAdmin admin tradingAccount actor = do
   reqs <- queryInterface @V2.AllocationRequest actor
   let allocSpecs = do
         (_reqCid, Some req) <- reqs
-        guard (req.authorizer == tradingAccount)
         alloc <- req.allocations
-        guard (alloc.admin == admin)
-        pure $ TSU.requestedAllocationToSpecification req.settlement req.authorizer alloc
+        guard (alloc.admin == admin && alloc.authorizer == tradingAccount)
+        pure alloc
   pure allocSpecs
 
 listAllocationsV2 : V2.Account -> Party -> Script [(ContractId V2.Allocation, V2.AllocationView)]
@@ -348,7 +364,7 @@ listAllocationRequestsV1 actor = do
 listAllocationRequestsV2 : V2.Account -> Party -> Script [(ContractId V2.AllocationRequest, V2.AllocationRequestView)]
 listAllocationRequestsV2 tradingAccount actor = do
   reqs <- queryInterface @V2.AllocationRequest actor
-  return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, tradingAccount == reqView.authorizer ]
+  return [ (reqCid, reqView) | (reqCid, Some reqView) <- reqs, any (\alloc -> tradingAccount == alloc.authorizer) reqView.allocations ]
 
 extractNextIterationAllocationCid : V2.AllocationResult -> Optional (ContractId V2.Allocation)
 extractNextIterationAllocationCid allocResult =
@@ -510,7 +526,7 @@ mkTransferFactory_TransferV1 registries arg = do
       ]
     disclosures = enrichedChoice.disclosures
     accountsAndInstruments = Set.singleton
-      ( TSU.basicAccount arg.transfer.sender
+      ( TSU.accountFromMeta arg.transfer.sender "sender" arg.transfer.meta
       , TSU.upcast arg.transfer.instrumentId
       )
 
@@ -567,8 +583,8 @@ mkTransferInstruction_AcceptV2 registries actor cid = do
     accountsAndInstruments = Set.empty
 
 mkAllocationFactory_AllocateV1
-  : V1.RegistryApi api => api -> Party -> V1.AllocationSpecification -> Script TSABatch
-mkAllocationFactory_AllocateV1 registry actor allocation = do
+  : V1.RegistryApi api => api -> V1.AllocationSpecification -> Script TSABatch
+mkAllocationFactory_AllocateV1 registry allocation = do
     now <- getTime
     enrichedChoice <- V1.getAllocationFactory registry V1.AllocationFactory_Allocate with
       expectedAdmin = admin
@@ -586,13 +602,14 @@ mkAllocationFactory_AllocateV1 registry actor allocation = do
   where
     instrumentId = TSU.upcast allocation.transferLeg.instrumentId
     admin = instrumentId.admin
-    senderAccount = TSU.basicAccount actor
+    senderAccount = TSU.accountFromMeta allocation.transferLeg.sender "sender" allocation.transferLeg.meta
 
 mkAllocationFactory_AllocateV2
-  : V2.RegistryApi api => api -> Party -> V2.AllocationSpecification -> Script TSABatch
-mkAllocationFactory_AllocateV2 registryV2 actor allocation = do
+  : V2.RegistryApi api => api -> Party -> V2.SettlementInfo -> V2.AllocationSpecification -> Script TSABatch
+mkAllocationFactory_AllocateV2 registryV2 actor settlement allocation = do
   now <- getTime
   enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
+    settlement
     allocation
     inputHoldingCids = []
     requestedAt = now
@@ -632,7 +649,7 @@ mkAcceptAllocationRequestV1 registries actor req = do
     if actor == leg.sender
       then do
         registry <- MultiRegistry.getRegistryApiV1 registries admin
-        mkAllocationFactory_AllocateV1 registry actor V1.AllocationSpecification with
+        mkAllocationFactory_AllocateV1 registry V1.AllocationSpecification with
           settlement = req.settlement
           transferLegId = legId
           transferLeg = leg
@@ -650,14 +667,7 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
     case (apis.v2Api, apis.v1Api) of
       (Some registryV2, _) -> do
         -- when possible use the V2 factory
-        mkAllocationFactory_AllocateV2 registryV2 actor V2.AllocationSpecification with
-          admin = alloc.admin
-          authorizer = req.authorizer
-          settlement = req.settlement
-          transferLegSides = alloc.transferLegSides
-          nextIterationFunding = alloc.nextIterationFunding
-          committed = alloc.committed
-          meta = alloc.meta
+        mkAllocationFactory_AllocateV2 registryV2 actor req.settlement alloc
 
       (None, Some _) -> do
         -- allocate legs for V1-only admins via their V1 factory
@@ -665,7 +675,7 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
               -- overwrite the transfer legs to only include the legs relevant for this admin
               transferLegs = TextMap.fromList $ do
                 leg <- alloc.transferLegSides
-                let legV2 = TSU.transferLegFromSide req.authorizer leg
+                let legV2 = TSU.transferLegFromSide alloc.authorizer leg
                 pure (leg.transferLegId, TSU.downcast_v2_v1_TransferLeg alloc.admin legV2)
         mkAcceptAllocationRequestV1 registries actor reqV1
 

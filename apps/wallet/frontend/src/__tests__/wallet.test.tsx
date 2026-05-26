@@ -265,15 +265,18 @@ describe('Wallet user can', () => {
           screen.getByRole('heading', { name: `Allocations ${allocations.length}` })
         ).toBeDefined();
 
-        const settlementRefIds = await screen.findAllByText(/SettlementRef id.*/);
+        const settlementRefIds = await screen.findAllByText(/Settlement id.*/);
         expect(settlementRefIds.map(e => e.textContent)).toStrictEqual(
-          allocations.map(a => `SettlementRef id: ${a.allocation.settlement.settlementRef.id}`)
+          allocations.map(a => `Settlement id: ${a.settlement.id}`)
         );
       });
 
       test('see allocation requests v1, and accept them', async () => {
         const allocationRequest = getAllocationRequestV1();
         const allocationRequests = [allocationRequest];
+        const allocationRequestContracts = allocationRequests.map(payload => ({
+          contract: mkContract(AllocationRequestV1, payload),
+        }));
         let calledCreate: (body: AllocateAmuletV1Request) => void;
         const createPromise: Promise<AllocateAmuletV1Request> = new Promise(
           resolve => (calledCreate = resolve)
@@ -281,9 +284,7 @@ describe('Wallet user can', () => {
         server.use(
           http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, () => {
             return HttpResponse.json<ListAllocationRequestsResponse>({
-              allocation_requests: allocationRequests.map(contract => {
-                return { contract: mkContract(AllocationRequestV1, contract) };
-              }),
+              allocation_requests: allocationRequestContracts,
             });
           }),
           http.get(`${walletUrl}/v0/allocations`, () => {
@@ -308,9 +309,7 @@ describe('Wallet user can', () => {
         ).toBeDefined();
 
         expect(
-          await screen.findByText(
-            `SettlementRef id: ${allocationRequest.settlement.settlementRef.id}`
-          )
+          await screen.findByText(`Settlement id: ${allocationRequest.settlement.settlementRef.id}`)
         ).toBeDefined();
 
         const acceptButtons = await screen.findAllByRole('button', { name: 'Accept' });
@@ -384,9 +383,7 @@ describe('Wallet user can', () => {
         ).toBeDefined();
 
         expect(
-          await screen.findByText(
-            `SettlementRef id: ${allocationRequest.settlement.settlementRef.id}`
-          )
+          await screen.findByText(`Settlement id: ${allocationRequest.settlement.id}`)
         ).toBeDefined();
 
         const acceptButtons = await screen.findAllByRole('button', { name: 'Accept' });
@@ -420,7 +417,8 @@ describe('Wallet user can', () => {
           .filter(side => side.transferLegId === 'acceptable');
         const expected = openApiV2RequestFromAllocationRequest(
           allocationRequest.settlement,
-          acceptableSides
+          acceptableSides,
+          allocationRequest.allocations[0].settlementDeadline
         );
         expect(calledWithBody).toStrictEqual(expected);
       });
@@ -501,7 +499,7 @@ describe('Wallet user can', () => {
         const allocation = mkContract(
           AmuletAllocationV2,
           getAllocationV2(
-            allocationRequestPayload.settlement.settlementRef.id,
+            allocationRequestPayload.settlement.id,
             'acceptable',
             bobPartyId,
             '3',
@@ -1414,16 +1412,15 @@ function getAllocationRequestV2() {
     authorizer: { owner: alicePartyId, provider: null, id: '' },
     settlement: {
       executors: ['executor'],
-      settlementRef: {
-        id: 'the_id',
-        cid: null as damlTypes.Optional<ContractId<AnyContract>>,
-      },
-      settlementDeadline: null as damlTypes.Optional<string>,
+      id: 'the_id',
+      cid: null as damlTypes.Optional<ContractId<AnyContract>>,
       meta: { values: {} },
     },
     allocations: [
       {
         admin: dsoPartyId,
+        authorizer: { owner: alicePartyId, provider: null, id: '' },
+        settlementDeadline: null as damlTypes.Optional<string>,
         meta: { values: {} },
         committed: false,
         nextIterationFunding: null,
@@ -1465,7 +1462,14 @@ function getAllocationV2(
     createdAt: new Date().toISOString(),
     expiresAt: new Date().toISOString(),
     numIterations: '0',
+    settlement: {
+      executors: [executor],
+      id: settlementId,
+      cid: null,
+      meta: { values: {} },
+    },
     allocation: {
+      settlementDeadline: null,
       admin: dsoPartyId,
       meta: { values: {} },
       committed: false,
@@ -1480,15 +1484,6 @@ function getAllocationV2(
           amount,
         },
       ],
-      settlement: {
-        executors: [executor],
-        settlementRef: {
-          id: settlementId,
-          cid: null,
-        },
-        settlementDeadline: null,
-        meta: { values: {} },
-      },
       authorizer: { owner: alicePartyId, provider: null, id: '' },
     },
   };

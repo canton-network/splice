@@ -36,6 +36,10 @@ function usage() {
   echo "  -w: Wait for the validator to be fully up and running before returning."
   echo "  -l: Connect participant and validator also to docker network compose-sv_splice-sv-public, to use an SV deployed locally on docker compose"
   echo "      Also implies -s, -c and -C to be the defaults for such a deployment."
+  echo "  -B: Enable bft-custom mode for scan and sequencer connections."
+  echo "  -u <comma_separated_urls>: Comma-separated list of Scan URLs for bft-custom mode (no spaces)."
+  echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
+  echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
 
   echo ""
   echo "Testing flags:"
@@ -64,8 +68,12 @@ restore_identities_dump=""
 local_compose_sv=0
 wait=0
 HOST_BIND_IP="127.0.0.1"
+bft_custom=0
+bft_custom_urls=""
+bft_custom_svs=""
+bft_custom_threshold=""
 
-while getopts 'has:c:C:t:o:n:bq:m:Mp:P:i:wlE' arg; do
+while getopts 'has:c:C:t:o:n:bq:m:Mp:P:i:wlEBu:S:T:' arg; do
   case ${arg} in
     h)
       usage
@@ -119,6 +127,18 @@ while getopts 'has:c:C:t:o:n:bq:m:Mp:P:i:wlE' arg; do
     E)
       HOST_BIND_IP="0.0.0.0"
       ;;
+    B)
+      bft_custom=1
+      ;;
+    u)
+      bft_custom_urls="${OPTARG}"
+      ;;
+    S)
+      bft_custom_svs="${OPTARG}"
+      ;;
+    T)
+      bft_custom_threshold="${OPTARG}"
+      ;;
     ?)
       usage
       exit 1
@@ -139,6 +159,25 @@ if [ "${local_compose_sv}" -eq 1 ]; then
   if [ -z "${SPONSOR_SV_ADDRESS}" ]; then
     SPONSOR_SV_ADDRESS="http://sv-app:5014"
     _info "Using default sponsor SV address for local docker-compose based SV: ${SPONSOR_SV_ADDRESS}"
+  fi
+fi
+
+if [ $trust_single -eq 1 ] && [ $bft_custom -eq 1 ]; then
+  _error_msg "Cannot use -b (trust-single) and -B (bft-custom) together. Please choose one."
+  usage
+  exit 1
+fi
+
+if [ $bft_custom -eq 1 ]; then
+  if [ -z "${bft_custom_urls}" ] || [ -z "${bft_custom_svs}" ] || [ -z "${bft_custom_threshold}" ]; then
+    _error_msg "When using -B (bft-custom), you must provide -u (urls), -S (sv names), and -T (threshold)"
+    usage
+    exit 1
+  fi
+  if [[ ! "${bft_custom_threshold}" =~ ^[0-9]+$ ]]; then
+    _error_msg "BFT custom threshold (-T) must be a non-negative integer"
+    usage
+    exit 1
   fi
 fi
 
@@ -199,6 +238,11 @@ if [ -n "${participant_id}" ]; then
   export PARTICIPANT_IDENTIFIER=${participant_id}
 else
   export PARTICIPANT_IDENTIFIER=${party_hint}
+fi
+if [ $bft_custom -eq 1 ]; then
+  export BFT_CUSTOM_SEED_URLS="[ \"${bft_custom_urls//,/\", \"}\" ]"
+  export BFT_CUSTOM_SV_NAMES="[ \"${bft_custom_svs//,/\", \"}\" ]"
+  export BFT_CUSTOM_THRESHOLD="${bft_custom_threshold}"
 fi
 
 if [ -z "${IMAGE_TAG:-}" ]; then
@@ -266,6 +310,9 @@ if [ "${local_compose_sv}" -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-local-compose-sv.yaml")
 fi
 extra_compose_files+=("-f" "${script_dir}/compose-traffic-topups.yaml")
+if [ $bft_custom -eq 1 ]; then
+  extra_compose_files+=("-f" "${script_dir}/compose-bft-custom.yaml")
+fi
 extra_args=()
 if [ $wait -eq 1 ]; then
   extra_args+=("--wait" "--wait-timeout" "600")

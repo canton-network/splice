@@ -43,9 +43,6 @@ class TokenStandardV2AllocationIntegrationTest
     with WalletTxLogTestUtil
     with TriggerTestUtil {
 
-  // TODO (#5499): restore once tx log parsing works for v2
-  override protected def runTokenStandardCliSanityCheck: Boolean = false
-
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -89,11 +86,8 @@ class TokenStandardV2AllocationIntegrationTest
     // equivalent to mkOtcTradeSettlementInfo in Daml
     val settlementInfo = new allocationv2.SettlementInfo(
       java.util.List.of(venueParty.toProtoPrimitive),
-      new allocationv2.Reference(
-        "OTCTrade",
-        java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
-      ),
-      otcTrade.data.settlementDeadline,
+      "OTCTrade",
+      java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
       emptyMetadata,
     )
     val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
@@ -313,15 +307,8 @@ class TokenStandardV2AllocationIntegrationTest
       val allocateResponse = clue(s"${walletClient.name} accepts the Allocation Request") {
         val requestedAllocation = allocationRequestView.allocations.asScala.loneElement
         walletClient.allocateAmulet(
-          new allocationv2.AllocationSpecification(
-            allocationRequestView.settlement,
-            requestedAllocation.admin,
-            allocationRequestView.authorizer,
-            requestedAllocation.transferLegSides,
-            requestedAllocation.nextIterationFunding,
-            requestedAllocation.committed,
-            requestedAllocation.meta,
-          )
+          allocationRequestView.settlement,
+          requestedAllocation,
         )
       }
       allocateResponse.output match {

@@ -2,26 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   ensureInterfaceViewIsPresent,
-  filtersByParty,
+  getEventsOfContract,
   getInterfaceView,
   getKnownInterfaceView,
   getMetaKeyValue,
+  getNodeIdAndEvent,
   hasInterface,
   mergeMetas,
   removeParsedMetaKeys,
 } from "../apis/ledger-api-utils";
 import {
-  BurnedMetaKey,
-  HoldingInterface,
+  HoldingInterfaceV1,
   ReasonMetaKey,
   SenderMetaKey,
   TransferInstructionInterface,
   TxKindMetaKey,
 } from "../constants";
 import {
-  Holding,
   HoldingsChangeSummary,
-  HoldingLock,
   HoldingsChange,
   Label,
   TokenStandardEvent,
@@ -40,8 +38,13 @@ import {
   JsGetEventsByContractIdResponse,
   JsTransaction,
 } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
+import {
+  computeAmountChanges,
+  computeSummary,
+  holdingChangesNonEmpty,
+} from "./summary";
 
-export class TransactionParser {
+export class V1TransactionParser {
   private readonly ledgerClient: LedgerJsonApi;
   private readonly partyId: string;
   private readonly transaction: JsTransaction;
@@ -348,6 +351,12 @@ export class TransactionParser {
         return await this.buildBasic(exercisedEvent, "Unlock", null);
       case "expire-dust":
         return await this.buildBasic(exercisedEvent, "ExpireDust", null);
+      case "settle-V2-allocation":
+        return await this.buildBasic(
+          exercisedEvent,
+          "SettleV2Allocation",
+          null,
+        );
       default:
         throw new Error(
           `Unknown tx-kind '${txKind}' in ${JSON.stringify(exercisedEvent)}`,
@@ -527,7 +536,7 @@ export class TransactionParser {
 
   private async buildBasic(
     exercisedEvent: LedgerApiExercisedEvent,
-    type: "Unlock" | "ExpireDust",
+    type: "Unlock" | "ExpireDust" | "SettleV2Allocation",
     tokenStandardChoice: TokenStandardChoice | null,
   ): Promise<ParsedKnownExercisedEvent> {
     const children = await this.getChildren(exercisedEvent);
@@ -561,13 +570,13 @@ export class TransactionParser {
 
     if (
       exercisedEvent.consuming &&
-      hasInterface(HoldingInterface, exercisedEvent)
+      hasInterface(HoldingInterfaceV1, exercisedEvent)
     ) {
       const selfEvent = await this.getEventsForArchive(exercisedEvent);
       if (selfEvent) {
         const holdingView = ensureInterfaceViewIsPresent(
           selfEvent.created.createdEvent,
-          HoldingInterface,
+          HoldingInterfaceV1,
         ).viewValue;
         mutatingResult.archives.push({
           amount: holdingView.amount,
@@ -589,7 +598,7 @@ export class TransactionParser {
         const interfaceView = getInterfaceView(createdEvent);
         if (
           interfaceView &&
-          HoldingInterface.matches(interfaceView.interfaceId)
+          HoldingInterfaceV1.matches(interfaceView.interfaceId)
         ) {
           const holdingView = interfaceView.viewValue;
           mutatingResult.creates.push({
@@ -602,10 +611,10 @@ export class TransactionParser {
           });
         }
       } else if (
-        (archivedEvent && hasInterface(HoldingInterface, archivedEvent)) ||
+        (archivedEvent && hasInterface(HoldingInterfaceV1, archivedEvent)) ||
         (exercisedEvent &&
           exercisedEvent.consuming &&
-          hasInterface(HoldingInterface, exercisedEvent))
+          hasInterface(HoldingInterfaceV1, exercisedEvent))
       ) {
         const contractEvents = await this.getEventsForArchive(
           archivedEvent || exercisedEvent!,
@@ -613,7 +622,7 @@ export class TransactionParser {
         if (contractEvents) {
           const holdingView = ensureInterfaceViewIsPresent(
             contractEvents.created?.createdEvent,
-            HoldingInterface,
+            HoldingInterfaceV1,
           ).viewValue;
           mutatingResult.archives.push({
             amount: holdingView.amount,
@@ -650,34 +659,16 @@ export class TransactionParser {
     if (!(archivedEvent.witnessParties || []).includes(this.partyId)) {
       return null;
     }
-    const events = await this.ledgerClient
-      .postV2EventsEventsByContractId({
-        contractId: archivedEvent.contractId,
-        eventFormat: {
-          filtersByParty: filtersByParty(
-            this.partyId,
-            [HoldingInterface, TransferInstructionInterface],
-            true,
-          ),
-          verbose: false,
-        },
-      })
-      .catch((err) => {
-        // This will happen for holdings with consuming choices
-        // where the party the script is running on is an actor on the choice
-        // but not a stakeholder.
-        if (err.code === 404) {
-          return null;
-        } else {
-          throw err;
-        }
-      });
+    const events = await getEventsOfContract(
+      this.ledgerClient,
+      archivedEvent.contractId,
+      this.partyId,
+      [HoldingInterfaceV1, TransferInstructionInterface],
+    );
     if (!events) {
       return null;
     }
-    const created = events.created;
-    const archived = events.archived;
-    if (!created || !archived) {
+    if (!events.created || !events.archived) {
       throw new Error(
         `Archival of ${
           archivedEvent.contractId
@@ -686,7 +677,10 @@ export class TransactionParser {
         )}`,
       );
     }
-    return { created, archived };
+    return {
+      created: events.created,
+      archived: events.archived,
+    };
   }
 }
 
@@ -707,107 +701,4 @@ interface ParsedKnownExercisedEvent {
   label: Label;
   children: HoldingsChange;
   transferInstruction: TransferInstructionView | null;
-}
-
-// a naive implementation like event.X?.nodeId || event.Y?.nodeId || event.Z?.nodeId fails when nodeId=0
-interface NodeIdAndEvent {
-  nodeId: number;
-  exercisedEvent?: LedgerApiExercisedEvent;
-  archivedEvent?: LedgerApiArchivedEvent | LedgerApiExercisedEvent;
-  createdEvent?: LedgerApiCreatedEvent;
-}
-function getNodeIdAndEvent(event: LedgerApiEvent): NodeIdAndEvent {
-  if (event.ExercisedEvent) {
-    // ledger API's TRANSACTION_SHAPE_LEDGER_EFFECTS does not include ArchivedEvent, instead has the choice as Archive
-    if (event.ExercisedEvent.choice === "Archive") {
-      return {
-        nodeId: event.ExercisedEvent.nodeId,
-        archivedEvent: event.ExercisedEvent,
-      };
-    } else {
-      return {
-        nodeId: event.ExercisedEvent.nodeId,
-        exercisedEvent: event.ExercisedEvent,
-      };
-    }
-  } else if (event.CreatedEvent) {
-    return {
-      nodeId: event.CreatedEvent.nodeId,
-      createdEvent: event.CreatedEvent,
-    };
-  } else if (event.ArchivedEvent) {
-    return {
-      nodeId: event.ArchivedEvent.nodeId,
-      archivedEvent: event.ArchivedEvent,
-    };
-  } else {
-    throw new Error(`Impossible event type: ${event}`);
-  }
-}
-
-function sumHoldingsChange(
-  change: HoldingsChange,
-  filter: (owner: string, lock: HoldingLock | null) => boolean,
-): BigNumber {
-  return sumHoldings(
-    change.creates.filter((create) => filter(create.owner, create.lock)),
-  ).minus(
-    sumHoldings(
-      change.archives.filter((archive) => filter(archive.owner, archive.lock)),
-    ),
-  );
-}
-
-function sumHoldings(holdings: Holding[]): BigNumber {
-  return BigNumber.sum(
-    ...holdings.map((h) => h.amount).concat(["0"]), // avoid NaN
-  );
-}
-
-function computeAmountChanges(
-  children: HoldingsChange,
-  meta: any,
-  partyId: string,
-) {
-  const burnAmount = BigNumber(getMetaKeyValue(BurnedMetaKey, meta) || "0");
-  const partyHoldingAmountChange = sumHoldingsChange(
-    children,
-    (owner) => owner === partyId,
-  );
-  const otherPartiesHoldingAmountChange = sumHoldingsChange(
-    children,
-    (owner) => owner !== partyId,
-  );
-  const mintAmount = partyHoldingAmountChange
-    .plus(burnAmount)
-    .plus(otherPartiesHoldingAmountChange);
-  return {
-    burnAmount: burnAmount.toString(),
-    mintAmount: mintAmount.toString(),
-  };
-}
-
-function computeSummary(
-  changes: HoldingsChange,
-  partyId: string,
-): HoldingsChangeSummary {
-  const amountChange = sumHoldingsChange(changes, (owner) => owner === partyId);
-  const outputAmount = sumHoldings(changes.creates);
-  const inputAmount = sumHoldings(changes.archives);
-  return {
-    amountChange: amountChange.toString(),
-    numOutputs: changes.creates.length,
-    outputAmount: outputAmount.toString(),
-    numInputs: changes.archives.length,
-    inputAmount: inputAmount.toString(),
-  };
-}
-
-function holdingChangesNonEmpty(event: TokenStandardEvent): boolean {
-  return (
-    event.unlockedHoldingsChange.creates.length > 0 ||
-    event.unlockedHoldingsChange.archives.length > 0 ||
-    event.lockedHoldingsChange.creates.length > 0 ||
-    event.lockedHoldingsChange.archives.length > 0
-  );
 }

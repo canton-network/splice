@@ -1359,8 +1359,10 @@ object HttpWalletAppClient {
       }
     }
 
-    final case class AllocateAmuletV2(spec: allocationv2.AllocationSpecification)
-        extends InternalBaseCommand[
+    final case class AllocateAmuletV2(
+        settlement: allocationv2.SettlementInfo,
+        spec: allocationv2.AllocationSpecification,
+    ) extends InternalBaseCommand[
           http.AllocateAmuletV2Response,
           definitions.AllocateAmuletV2Response,
         ] {
@@ -1374,15 +1376,15 @@ object HttpWalletAppClient {
         client.allocateAmuletV2(
           definitions.AllocateAmuletV2Request(
             definitions.AllocateAmuletV2Request.Settlement(
-              executors = spec.settlement.executors.asScala.toVector,
+              executors = settlement.executors.asScala.toVector,
               settlementRef = definitions.AllocateAmuletV2Request.Settlement.SettlementRef(
-                spec.settlement.settlementRef.id,
-                spec.settlement.settlementRef.cid.map(_.contractId).toScala,
+                settlement.id,
+                settlement.cid.map(_.contractId).toScala,
               ),
-              settlementDeadline = spec.settlement.settlementDeadline
+              settlementDeadline = spec.settlementDeadline
                 .map(deadline => Codec.encode(CantonTimestamp.assertFromInstant(deadline)))
                 .toScala,
-              meta = Some(spec.settlement.meta.values.asScala.toMap),
+              meta = Some(settlement.meta.values.asScala.toMap),
             ),
             spec.transferLegSides.asScala.map { transferLegSide =>
               definitions.TransferLegSide(

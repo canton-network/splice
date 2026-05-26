@@ -68,13 +68,14 @@ class AmuletAllocationsIntegrationTest
     val now = CantonTimestamp.now()
     val settlementDeadline = now.plusSeconds(3600 * 2)
 
-    def wantedAllocationV2() = new allocationv2.AllocationSpecification(
+    def wantedSettlementV2() =
       new allocationv2.SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
-        new allocationv2.Reference("some_reference", Optional.empty),
-        java.util.Optional.of(settlementDeadline.toInstant),
+        "some_reference",
+        Optional.empty,
         new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
-      ),
+      )
+    def wantedAllocationV2() = new allocationv2.AllocationSpecification(
       dsoParty.toProtoPrimitive,
       basicAccount(sender),
       java.util.List.of(
@@ -90,13 +91,15 @@ class AmuletAllocationsIntegrationTest
           ),
         )
       ),
+      java.util.Optional.of(settlementDeadline.toInstant),
       java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
       false,
       new Metadata(java.util.Map.of("k4", "v4")),
     )
 
+    val settlement = wantedSettlementV2()
     val specification = wantedAllocationV2()
-    specification -> aliceWalletClient.allocateAmulet(specification)
+    specification -> aliceWalletClient.allocateAmulet(settlement, specification)
   }
 
   "A wallet" should {

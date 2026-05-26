@@ -24,21 +24,23 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 
 import Splice.TokenStandard.Utils
 
+affectedAccountParties : OTCTradeAllocationRequest -> [Party]
+affectedAccountParties req = concatMap (regularAccountParties . (.authorizer)) req.allocations
+
 -- | A request to a single trading account to authorize their legs to the trade.
 template OTCTradeAllocationRequest with
-    authorizer : V2.Account
     settlement : V2.SettlementInfo
     requestedAt : Time
     settleAt : Time
-    allocations : [V2.RequestedAllocation]
+    allocations : [V2.AllocationSpecification]
   where
     signatory settlement.executors
-    observer regularAccountParties authorizer
+    observer affectedAccountParties this
 
     interface instance V1.AllocationRequest for OTCTradeAllocationRequest where
       view = downcast (view @V2.AllocationRequest (toInterface this))
 
-      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (regularAccountParties authorizer)
+      allocationRequest_RejectImpl = allocationRequestV1_rejectDefaultImpl (affectedAccountParties this)
       allocationRequest_WithdrawImpl = allocationRequestV1_withdrawDefaultImpl (toInterface this)
 
     interface instance V2.AllocationRequest for OTCTradeAllocationRequest where
@@ -48,9 +50,8 @@ template OTCTradeAllocationRequest with
         requestedAt
         settleAt = Some settleAt
         allocations
-        authorizer
         availableActions =
-          let possibleActors = [ [p] | p <- regularAccountParties authorizer] in
+          let possibleActors = [ [p] | p <- affectedAccountParties this] in
           Map.fromList [ (action, possibleActors) | action <- [V2.ARA_Accept, V2.ARA_Reject]]
         meta = emptyMetadata
 
@@ -58,8 +59,8 @@ template OTCTradeAllocationRequest with
       allocationRequest_rejectExtraObservers = allocationRequestV2_rejectDefaultExtraObservers this
       allocationRequest_withdrawExtraObservers = allocationRequestV2_withdrawDefaultExtraObservers this
 
-      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- regularAccountParties authorizer]
-      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- regularAccountParties authorizer]
+      allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- affectedAccountParties this]
+      allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- affectedAccountParties this]
       allocationRequest_withdrawImpl = allocationRequestV2_withdrawDefaultImplUsingV1 (toInterface this)
 
 -- | A V1 allocation with enough context to settle or cancel it.
@@ -131,15 +132,16 @@ template OTCTrade with
         let settlement = mkOtcTradeSettlementInfoV2 self this
         forA (Map.toList $ splitTradeLegsByAuthorizer tradeLegs) $ \(authorizer, authorizerLegs) -> do
           create OTCTradeAllocationRequest with
-            authorizer
             settlement
             settleAt = settleAt
             requestedAt = createdAt
             allocations = do
               (admin, legs) <- Map.toList $ splitLegsBy (._1) authorizerLegs
-              pure V2.RequestedAllocation with
+              pure V2.AllocationSpecification with
                 admin
+                authorizer
                 transferLegSides = map (._2) legs
+                settlementDeadline
                 nextIterationFunding = None -- Note: this trading app does not make use of iterated settlement
                 committed = False
                 meta = emptyMetadata
@@ -156,8 +158,8 @@ template OTCTrade with
           assertWithinDeadline "settlementDeadline" deadline
 
         -- compute reference data
+        let settlementV1 = mkOtcTradeSettlementInfoV1 self this
         let settlementV2 = mkOtcTradeSettlementInfoV2 self this
-        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementV2
             transferLegsByAdmin = splitLegsBy (.admin) tradeLegs
 
         -- Archive requests known to be active at this point, so that trader
@@ -239,7 +241,7 @@ template OTCTrade with
       controller venue
       do
         let settlementV2 = mkOtcTradeSettlementInfoV2 self this
-        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt settleAt settlementV2
+        let settlementV1 = downcast_v2_v1_SettlementInfo createdAt (Some settleAt) settlementDeadline settlementV2
         forA_ allocationRequestCids $ \reqCid -> do
             req <- fetch reqCid
             archive reqCid
@@ -257,7 +259,7 @@ template OTCTrade with
         resultsV2 <- forA allocationsWithContextV2 $ \(allocCid, extraArgs) -> do
             alloc <- fetch allocCid
             let allocView = view alloc
-            requireMatchExpected ("Allocation.settlement", allocView.allocation.settlement) settlementV2
+            requireMatchExpected ("Allocation.settlement", allocView.settlement) settlementV2
             result <- exercise allocCid $ V2.Allocation_Cancel with
               actors = [venue]
               extraArgs
@@ -277,21 +279,21 @@ data OTCTrade_CancelResult = OTCTrade_CancelResult with
     -- ^ Results for V1 allocation cancellations keyed by transferLegId
   resultsV2 : [(V2.Account, V2.AllocationResult)]
 
-makeTradeRef : ContractId OTCTrade -> V2.Reference
-makeTradeRef tradeCid = V2.Reference with
-  id = "OTCTradeProposal" -- set to the name of the template to simplify debugging
-  cid = Some (coerceContractId tradeCid)
-
 mkOtcTradeSettlementInfoV2 : ContractId OTCTrade -> OTCTrade -> V2.SettlementInfo
 mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade = V2.SettlementInfo with
   executors = [otcTrade.venue]
-  settlementRef = makeTradeRef otcTradeCid
+  id = "OTCTradeProposal" -- set to the name of the template to simplify debugging
+  cid = Some (coerceContractId otcTradeCid)
   meta = emptyMetadata
-  settlementDeadline = otcTrade.settlementDeadline
+
+mkOtcTradeSettlementInfoV1 : ContractId OTCTrade -> OTCTrade -> V1.SettlementInfo
+mkOtcTradeSettlementInfoV1 otcTradeCid otcTrade =
+  downcast_v2_v1_SettlementInfo otcTrade.createdAt (Some otcTrade.settleAt) otcTrade.settlementDeadline $
+  mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade
 
 -- | The expected allocations for a trade that involves an asset implementing
 -- the V1 token standard only. There we expect exactly one allocation per transfer leg.
--- That allocation is created by the sender, and settleed with the authority of sender
+-- That allocation is created by the sender, and settled with the authority of sender
 -- and receiver
 expectedTradeAllocationsV1
   : V1.SettlementInfo -> [TradeLeg] -> TextMap.TextMap V1.AllocationSpecification

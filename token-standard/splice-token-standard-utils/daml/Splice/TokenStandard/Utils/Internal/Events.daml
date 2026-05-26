@@ -135,7 +135,6 @@ logAllocationSettlement
   -> [ContractId V2.Holding] -- ^ Output holdings
   -> Update ()
 logAllocationSettlement eventLogCid inputHoldingCids allocation outputHoldingCids = do
-  let settlementId = allocation.settlement.settlementRef.id
   logHoldingsChange eventLogCid TransferEventsV2.EventLog_HoldingsChange with
     admin = allocation.admin
     account = allocation.authorizer

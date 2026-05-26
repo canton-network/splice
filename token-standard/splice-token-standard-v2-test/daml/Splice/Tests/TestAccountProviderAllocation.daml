@@ -13,12 +13,10 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
-import Splice.Api.Token.AllocationRequestV2 qualified as V2
 import Splice.TokenStandard.Utils as TSU
 
 
 import Splice.Testing.Utils
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as AccountConfig
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
@@ -37,35 +35,14 @@ import DA.Optional (fromSome, fromSomeNote)
 -- Shared test setup
 --------------------
 
-make_account_if_missing : TestRegistries.Env -> AccountConfig -> Script ()
-make_account_if_missing env config = do
+makeAndFundAccount : TestRegistries.Env -> AccountConfig -> Script ()
+makeAndFundAccount env config = do
+  TestTokenRegistryV2.makeAccountIfMissing config
   let owner = fromSomeNote ("Unexpected special account: " <> show config.account) config.account.owner
-  -- Make sure the account is funded.
   let instrX = V2.InstrumentId with
         id = "X"
         admin = env.testTokenV2.admin
-
   cids <- WalletClientV2.listUnlockedHoldingCidsFor config.account owner instrX
-
-  -- Create an AccountConfig contract as needed.
-  case config.account.provider of
-    None -> return ()
-    Some provider -> do
-      oAccount <- queryFilter @AccountConfig owner (\ac -> ac.account == config.account)
-      case oAccount of
-        [(_, config')] -> assertMsg ("Account already exists with different config: " <> show config) (config' == config)
-        [] -> do
-          accountProposalCid <- submit provider do
-            createCmd AccountConfig.AccountProposal with
-              config
-
-          submit owner do
-            exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
-
-          return ()
-        _ -> abort ("Multiple accounts found for config: " <> show config)
-
-  -- mint funds
   when (null cids) (void $ TestTokenRegistryV2.mint env.testTokenV2 config.account instrX.id 100.0)
 
 test_allocation_flows : Script ()
@@ -163,7 +140,7 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
 
   debug ("Test Case: " <> show (accountConfig, instr_actions, alloc_actions))
 
-  make_account_if_missing env accountConfig
+  makeAndFundAccount env accountConfig
 
   balanceXBefore <- WalletClientV2.getAccountBalance authorizer accountConfig.account instrX
   balanceYBefore <- WalletClientV2.getAccountBalance authorizer accountConfig.account instrY
@@ -198,18 +175,19 @@ test_allocation_flow env authorizer provider executors mkac initiator instr_acti
       pure legSide
     settlement = V2.SettlementInfo with
       executors
-      settlementDeadline = None
-      settlementRef = V2.Reference "foo" None
+      id = "Foo"
+      cid = None
       meta = emptyMetadata
     request = TradingAppV2.OTCTradeAllocationRequest with
-      authorizer = accountConfig.account
       requestedAt
       settleAt
       settlement
-      allocations = pure $ V2.RequestedAllocation with
+      allocations = pure $ V2.AllocationSpecification with
+        authorizer = accountConfig.account
         admin = instrX.admin
         transferLegSides
         nextIterationFunding = None
+        settlementDeadline = None
         committed = False
         meta = emptyMetadata
 

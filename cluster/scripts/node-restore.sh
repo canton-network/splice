@@ -435,7 +435,7 @@ function main() {
   local hyperdisk_enabled
   hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
   local logical_synchronizer_mode
-  logical_synchronizer_mode=$(echo "$config" | yq ".synchronizerMigration[]? | select(.id == ${migration_id}) | .enableLogicalSynchronizerDeploymentMode // false")
+  logical_synchronizer_mode=$(echo "$config" | yq ".synchronizerMigration | .archived + [.active] + [.upgrade] + [.legacy] | .[] | select(.id == ${migration_id}) | .enableLogicalSynchronizerDeploymentMode // false")
   if [ -z "$logical_synchronizer_mode" ]; then
     logical_synchronizer_mode="false"
   fi

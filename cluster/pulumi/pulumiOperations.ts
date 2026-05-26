@@ -73,7 +73,12 @@ export async function upStack(
   abortController: PulumiAbortController
 ): Promise<void> {
   const name = stack.name;
-  return abortableStackOperation(stack, abortController, stack.up(pulumiOptsWithPrefix(`[${name}]`, abortController.signal)), result => result.summary);
+  return abortableStackOperation(
+    stack,
+    abortController,
+    stack.up(pulumiOptsWithPrefix(`[${name}]`, abortController.signal)),
+    result => result.summary
+  );
 }
 
 export async function previewStack(
@@ -81,28 +86,35 @@ export async function previewStack(
   abortController: PulumiAbortController
 ): Promise<void> {
   const name = stack.name;
-  return abortableStackOperation(stack, abortController, stack.preview(pulumiOptsWithPrefix(`[${name}]`, abortController.signal)), result => result.changeSummary);
+  return abortableStackOperation(
+    stack,
+    abortController,
+    stack.preview(pulumiOptsWithPrefix(`[${name}]`, abortController.signal)),
+    result => result.changeSummary
+  );
 }
 
-function abortableStackOperation<T>(stack: automation.Stack, abortController: PulumiAbortController, op: Promise<T>, resultToSummary: (t: T) => unknown): Promise<void> {
+async function abortableStackOperation<T>(
+  stack: automation.Stack,
+  abortController: PulumiAbortController,
+  op: Promise<T>,
+  resultToSummary: (t: T) => unknown
+): Promise<void> {
   const name = stack.name;
-  return op.then(
-    result => {
-      console.log(
-        `${name} success - ${util.inspect(resultToSummary(result), {
-          colors: true,
-          depth: null,
-          maxStringLength: null,
-        })}
+  try {
+    const result = await op;
+    console.log(
+      `${name} success - ${util.inspect(resultToSummary(result), {
+        colors: true,
+        depth: null,
+        maxStringLength: null,
+      })}
         `
-      );
-      return;
-    },
-    e => {
-      abortController.abort(`${name} - Aborting because of caught exception`);
-      throw e;
-    }
-  );
+    );
+  } catch (e) {
+    abortController.abort(`${name} - Aborting because of caught exception`);
+    throw e;
+  }
 }
 
 export function previewOperation(

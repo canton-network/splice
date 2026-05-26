@@ -1021,36 +1021,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/LookupFeaturedAppRightResponse"
 
-  /v0/top-validators-by-validator-faucets:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorFaucets"
-      description: |
-        Get a list of top validators by number of rounds in which they collected
-        faucets, and basis statistics on their round collection history
-      parameters:
-        - in: query
-          name: limit
-          description: |
-            Maximum number of validator records that may be returned in the
-            response
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorFaucetsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/transfer-preapprovals/by-party/{party}:
     get:
       tags: [internal, scan]
@@ -1523,108 +1493,6 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/top-providers-by-app-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopProvidersByAppRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning app providers, and the total earned app
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopProvidersByAppRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-validator-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning validators, and the total earned validator
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-purchased-traffic:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByPurchasedTraffic"
-      description: |
-        **Deprecated**. Get a list of validators and their domain fees spends, sorted by the
-        amount of extra traffic purchased
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByPurchasedTrafficResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/activities:
     post:
       deprecated: true
@@ -1859,7 +1727,7 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/reward-accounting-process/rounds/earliest-available:
+  /v0/internal/reward-accounting-process/rounds/earliest-available:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1878,7 +1746,7 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/activity-totals:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1901,10 +1769,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingActivityTotalsResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/root-hash:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/root-hash:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1926,10 +1792,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingRootHashResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -2246,49 +2110,6 @@ components:
       properties:
         approved:
           type: boolean
-    GetTopProvidersByAppRewardsResponse:
-      type: object
-      required: ["providersAndRewards"]
-      properties:
-        providersAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    GetTopValidatorsByValidatorRewardsResponse:
-      type: object
-      required: ["validatorsAndRewards"]
-      properties:
-        validatorsAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    PartyAndRewards:
-      type: object
-      required: ["provider", "rewards"]
-      properties:
-        provider:
-          type: string
-        rewards:
-          type: string
-    GetTopValidatorsByValidatorFaucetsResponse:
-      type: object
-      required: ["validatorsByReceivedFaucets"]
-      properties:
-        validatorsByReceivedFaucets:
-          description: |
-            Up to `limit` validators, sorted greatest number of rounds
-            collected first
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorReceivedFaucets"
-    GetTopValidatorsByPurchasedTrafficResponse:
-      type: object
-      required: ["validatorsByPurchasedTraffic"]
-      properties:
-        validatorsByPurchasedTraffic:
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorPurchasedTraffic"
     ValidatorPurchasedTraffic:
       type: object
       required:
@@ -4701,12 +4522,28 @@ components:
 
     GetRewardAccountingActivityTotalsResponse:
       type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsOk"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingActivityTotalsOk"
+          Undetermined: "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+
+    RewardAccountingActivityTotalsOk:
+      type: object
       required:
+        - status
         - round_number
         - total_app_activity_weight
         - active_parties_count
         - activity_records_count
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
@@ -4720,18 +4557,66 @@ components:
           type: integer
           format: int64
 
-    GetRewardAccountingRootHashResponse:
+    RewardAccountingActivityTotalsUndetermined:
       type: object
       required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingActivityTotalsCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    GetRewardAccountingRootHashResponse:
+      type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingRootHashOk"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingRootHashOk"
+          Undetermined: "#/components/schemas/RewardAccountingRootHashUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingRootHashCannotProvide"
+
+    RewardAccountingRootHashOk:
+      type: object
+      required:
+        - status
         - round_number
         - root_hash
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
         root_hash:
           type: string
           description: Hex-encoded root hash
+
+    RewardAccountingRootHashUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingRootHashCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
 
     GetRewardAccountingBatchResponse:
       type: object

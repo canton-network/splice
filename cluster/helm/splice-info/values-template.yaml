@@ -1,8 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-nginxImage: nginx:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
-updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest  # Replace `:latest` with `@sha256:digest` of a chosen image for security reasons
+nginxImage: nginx:1.31.0@sha256:06aa3d7be10bc6307990c81bdca075793132e9163391abc370c015e344e23128
+updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:4.0.3@sha256:bd2cc4f9c880d277f8a42d87102d46e67ebce0f1d3a19b21b0125da9a4a44aa0
 contentType: "application/json"
 
 # runtimeDetails:  # Optional, exposes the runtime configuration under path /runtime/

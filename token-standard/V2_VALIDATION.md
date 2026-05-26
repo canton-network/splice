@@ -42,9 +42,9 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 
 ---
 
-## Appendix: Planned Cleanup (Non-blocking)
+## Appendix: Cleanup applied
 
-Cleanup and improvements applied so far:
+### API Changes (no more changes expected)
 
 * Replace `ChoiceExecutionMetadata` with concrete result types for `AllocationRequest_Reject`
   and `AllocationRequest_Withdraw` choices to prepare for an eventual future where interface definitions
@@ -197,3 +197,24 @@ Cleanup and improvements applied so far:
   of reference data.
 - Split the `TestTokenV2` implementation into separate util, holding, transfer, and allocation modules
   to improve maintainability and readability of the code.
+- Support different `settlementDeadline`s on different allocations settled in the same batch
+  - motivation: iterated allocations and top-up allocations are unlikely to have the same settlement deadline
+  - implementation: move `settlementDeadline` out of `SettlementInfo` to `AllocationSpecification`, and
+    inline `Reference` into `SettlementInfo` to make it more clear that the `SettlementInfo` is the
+    way to link allocations to a settlement.
+- Remove the `RequestedAllocation` type in favor of directly using `AllocationSpecification`
+  to specify the requested allocations in an allocation requestd.
+  - enables: creating a single allocation request for different `authorizer`s whose account parties
+    are the same
+  - required moving `AllocationSpecification.settlement` up to the `AllocationView` level
+
+### Utility and test library changes
+
+- Implement the full V1 API for `TestTokenV2` in a reusable way; add the shared parts as compatibility tooling
+  to `splice-token-standard-utils` to allow other token registries to reuse it
+- Fix bug in `BatchingUtilityV2`, which was selecting the right holding contract-ids for non-basic accounts
+  when batching V1 choices.
+- Add `allocationSettlementTxHistoryV1ToMeta` utility function to `splice-token-standard-utils` to
+  aid in creating metadata for V1 transaction history parsing for `V2.Allocation_Settle` choices.
+- Add `transferAcceptanceTxHistoryV1ToMeta` utility function to `splice-token-standard-utils` to
+  aid in creating metadata for V1 transaction history parsing for `V2.TransferInstruction_Accept` choices.

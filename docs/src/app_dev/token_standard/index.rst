@@ -278,10 +278,10 @@ The ``beginExclusive`` field is the offset from which to start reading transacti
 To paginate, you can start with the ``participantPrunedUpToInclusive`` from ``GET ${PARTICIPANT_URL}/v2/state/latest-pruned-offsets``
 and continue by passing the offset of the last transaction from the previous response.
 
-Parsing the history
-^^^^^^^^^^^^^^^^^^^
+Parsing the history (V1)
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parser.ts>`_.
+Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv1.ts>`_.
 It extracts a user-readable wallet history by parsing transactions involving the ``Holding`` and ``TransferInstruction`` interfaces.
 
 The endpoint returns transaction trees as an array.
@@ -322,6 +322,91 @@ In each Token Standard exercise node, one can find:
     * event.choiceArgument.extraArgs.meta,
     * event.choiceArgument.meta,
     * event.exerciseResult.meta,
+
+Parsing the history (V2)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv2.ts>`_.
+
+As of Token Standard V2, the new ``EventLog`` interface significantly simplifies the implementation of a tx parser.
+It has the choice ``EventLog_HoldingsChange`` whose arguments contain all input and output holdings,
+all transfers that happened, together with metadata about the change.
+For example, one exercise of this choice could look like:
+
+.. code-block:: json
+
+    {
+      "ExercisedEvent": {
+        "acsDelta": false,
+        "actingParties": [
+          "dso::normalized"
+        ],
+        "choice": "EventLog_HoldingsChange",
+        "choiceArgument": {
+          "account": {
+            "id": "",
+            "owner": "aliceValidator::normalized",
+            "provider": null
+          },
+          "admin": "dso::normalized",
+          "extraArgs": {
+            "context": {
+              "values": {
+              }
+            },
+            "meta": {
+              "values": {
+              }
+            }
+          },
+          "inputHoldingCids": [
+            "17"
+          ],
+          "observers": [
+            "aliceValidator::normalized"
+          ],
+          "outputHoldingCids": [
+            "19"
+          ],
+          "transferLegSides": [
+            {
+              "amount": "200.0000000000",
+              "instrumentId": "Amulet",
+              "meta": {
+                "values": {
+                  "splice.lfdecentralizedtrust.org/reason": "token-standard-transfer-description"
+                }
+              },
+              "otherside": {
+                "id": "",
+                "owner": "alice::normalized",
+                "provider": null
+              },
+              "side": "SenderSide",
+              "transferLegId": "leg0"
+            }
+          ]
+        },
+        "consuming": false,
+        "contractId": "16",
+        "exerciseResult": {
+        },
+        "implementedInterfaces": [
+        ],
+        "interfaceId": "#package-name:Splice.Api.Token.TransferEventsV2:EventLog",
+        "lastDescendantNodeId": 10,
+        "nodeId": 10,
+        "offset": 4,
+        "packageName": "splice-amulet",
+        "templateId": "#package-name:Splice.ExternalPartyConfigState:ExternalPartyConfigState",
+        "witnessParties": [
+          "alice::normalized"
+        ]
+      }
+    }
+
+A parser only needs to resolve the holdings in ``inputHoldingCids`` and ``outputHoldingCids``,
+everything else is present in the exercise's ``choiceArgument``.
 
 
 .. _token_standard_usage_executing_factory_choice:
