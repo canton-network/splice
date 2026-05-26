@@ -10,6 +10,13 @@ enum Algorithm {
 const tokenRequestSchema = z.object({
   token_audience: z.string(), // Request an access token from IAM provider with this audience
   token_scope: z.string().optional(), // Request an access token from IAM provider with this scope
+  // Opt-in: include the OIDC `offline_access` scope in the authorization
+  // request. Most providers (e.g. Keycloak) issue a regular, session-bound
+  // refresh token without this scope and silent renew works against that.
+  // Some providers (notably some Auth0 configurations) only return a refresh
+  // token when `offline_access` is explicitly requested. Default false to
+  // avoid issuing long-lived offline tokens by accident.
+  request_offline_scope: z.boolean().optional(),
 });
 
 const rs256Schema = tokenRequestSchema
