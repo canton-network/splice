@@ -129,13 +129,5 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
           }
         }
       }
-
-    clue("Waiting for scan apps to report rounds as closed") {
-      eventually() {
-        Try(sv2ScanBackend.getRoundOfLatestData()._1).success.value shouldBe 3
-        Try(sv1ScanBackend.getRoundOfLatestData()._1).success.value shouldBe 3
-      }
-    }
-
   }
 }

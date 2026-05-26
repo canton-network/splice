@@ -87,7 +87,9 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
           .filter(r => r.payload.round.number == round.payload.round.number) should be(
           empty
         ) withClue s"ClosedRound $round"
-        val (lastRound, _) = sv1ScanBackend.getRoundOfLatestData()
+        val lastRound = sv1ScanBackend.getClosedRounds().map(_.payload.round.number).maxOption.getOrElse(
+          fail(s"No closed rounds found, expected at least round ${round.payload.round.number}")
+        )
         sv1WalletClient
           .listSvRewardCoupons()
           .filter(_.payload.round.number <= lastRound) should be(
