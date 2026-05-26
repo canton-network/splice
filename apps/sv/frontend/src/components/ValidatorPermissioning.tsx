@@ -11,7 +11,7 @@ import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useSvConfig } from '../utils';
 
 const VALID_PARTY_ID_REGEX = /^[A-Za-z0-9:\-_]+::[A-Za-z0-9]+$/;
-const VALID_PARTICIPANT_ID_REGEX = /^PAR:[A-Za-z0-9:\-_]+::[A-Za-z0-9]+$/;
+const VALID_PARTICIPANT_ID_REGEX = /^PAR::[A-Za-z0-9:\-_]+::[A-Za-z0-9]+$/;
 
 const ValidatorPermissioning: React.FC = () => {
   const { grantValidatorPermission } = useSvAdminClient();
