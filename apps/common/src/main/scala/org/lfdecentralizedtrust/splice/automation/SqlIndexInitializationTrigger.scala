@@ -272,7 +272,7 @@ object SqlIndexInitializationTrigger {
         createAction = sqlu"""
           create index concurrently if not exists scan_txlog_store_sv_onboarding_idx
           on scan_txlog_store (store_id, sv_onboarding_party, sv_onboarding_effective_at desc)
-          where entry_type = 'asv'
+          where entry_type = 'svo'
         """,
       ),
   )
