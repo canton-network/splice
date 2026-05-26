@@ -448,128 +448,132 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    // -- roundsWithComputedRewards ------
+    "roundsWithComputedRewards" should {
 
-    "roundsWithComputedRewards returns empty set for empty input" in {
-      for {
-        (store, _) <- newStore()
-        result <- store.roundsWithComputedRewards(Seq.empty)
-      } yield {
-        result shouldBe Set.empty
+      "returns empty set for empty input" in {
+        for {
+          (store, _) <- newStore()
+          result <- store.roundsWithComputedRewards(Seq.empty)
+        } yield {
+          result shouldBe Set.empty
+        }
       }
-    }
 
-    "roundsWithComputedRewards returns correct subset" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- store.insertAppRewardRootHashes(
-          Seq(
-            AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4))),
-            AppRewardRootHashT(historyId, 20L, RewardHash(Array[Byte](5, 6, 7, 8))),
-            AppRewardRootHashT(historyId, 30L, RewardHash(Array[Byte](9, 10, 11, 12))),
+      "returns correct subset" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- store.insertAppRewardRootHashes(
+            Seq(
+              AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4))),
+              AppRewardRootHashT(historyId, 20L, RewardHash(Array[Byte](5, 6, 7, 8))),
+              AppRewardRootHashT(historyId, 30L, RewardHash(Array[Byte](9, 10, 11, 12))),
+            )
           )
-        )
-        result <- store.roundsWithComputedRewards(Seq(10L, 15L, 20L, 25L))
-      } yield {
-        result shouldBe Set(10L, 20L)
+          result <- store.roundsWithComputedRewards(Seq(10L, 15L, 20L, 25L))
+        } yield {
+          result shouldBe Set(10L, 20L)
+        }
       }
-    }
 
-    "roundsWithComputedRewards returns empty set when no matches" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- store.insertAppRewardRootHashes(
-          Seq(
-            AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4)))
+      "returns empty set when no matches" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- store.insertAppRewardRootHashes(
+            Seq(
+              AppRewardRootHashT(historyId, 10L, RewardHash(Array[Byte](1, 2, 3, 4)))
+            )
           )
-        )
-        result <- store.roundsWithComputedRewards(Seq(20L, 30L))
-      } yield {
-        result shouldBe Set.empty
+          result <- store.roundsWithComputedRewards(Seq(20L, 30L))
+        } yield {
+          result shouldBe Set.empty
+        }
       }
+
     }
 
-    // -- computeAndStoreRewards summary tests ----------------------------------
+    "computeAndStoreRewards" should {
 
-    "computeAndStoreRewards — returns correct summary counts" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
-        // 3 activity records, 2 parties (alice in 2 records, bob in 2)
-        _ <- insertActivityRecord(
-          historyId,
-          roundNumber,
-          Seq("alice::provider", "bob::provider"),
-          Seq(3000000L, 2000000L),
-        )
-        _ <- insertActivityRecord(
-          historyId,
-          roundNumber,
-          Seq("alice::provider"),
-          Seq(1000000L),
-        )
-        _ <- insertActivityRecord(
-          historyId,
-          roundNumber,
-          Seq("bob::provider"),
-          Seq(500000L),
-        )
-        summary <- store.computeAndStoreRewards(
-          roundNumber,
-          batchSize = 100,
-          testInputs,
-        )
-      } yield {
-        summary.activePartiesCount shouldBe 2L
-        summary.activityRecordsCount shouldBe 4L // sum of per-party counts: alice=2 + bob=2
-        summary.rewardedPartiesCount shouldBe 2L
-        summary.batchesCreatedCount should be >= 1L
+      "returns correct summary counts" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertSentinelRecords(historyId, roundNumber)
+          // 3 activity records, 2 parties (alice in 2 records, bob in 2)
+          _ <- insertActivityRecord(
+            historyId,
+            roundNumber,
+            Seq("alice::provider", "bob::provider"),
+            Seq(3000000L, 2000000L),
+          )
+          _ <- insertActivityRecord(
+            historyId,
+            roundNumber,
+            Seq("alice::provider"),
+            Seq(1000000L),
+          )
+          _ <- insertActivityRecord(
+            historyId,
+            roundNumber,
+            Seq("bob::provider"),
+            Seq(500000L),
+          )
+          summary <- store.computeAndStoreRewards(
+            roundNumber,
+            batchSize = 100,
+            testInputs,
+          )
+        } yield {
+          summary.activePartiesCount shouldBe 2L
+          summary.activityRecordsCount shouldBe 4L // sum of per-party counts: alice=2 + bob=2
+          summary.rewardedPartiesCount shouldBe 2L
+          summary.batchesCreatedCount should be >= 1L
+        }
       }
-    }
 
-    "computeAndStoreRewards — non-zero threshold excludes low-activity parties from rewards" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
-        // alice has high activity, bob has low activity
-        _ <- insertActivityRecord(
-          historyId,
-          roundNumber,
-          Seq("alice::provider", "bob::provider"),
-          Seq(5000000L, 50000L),
-        )
-        nonZeroThresholdInputs = testInputs.copy(
-          appRewardCouponThreshold = RewardComputationInputs.fromBigDecimal(BigDecimal("0.5"))
-        )
-        summary <- store.computeAndStoreRewards(
-          roundNumber,
-          batchSize = 100,
-          nonZeroThresholdInputs,
-        )
-        rewardPartyTotals <- store.getAppRewardPartyTotalsByRound(roundNumber)
-      } yield {
-        summary.activePartiesCount shouldBe 2L
-        summary.rewardedPartiesCount shouldBe 1L // only alice above threshold
-        rewardPartyTotals should have size 1
-        rewardPartyTotals.head.appProviderParty shouldBe "alice::provider"
+      "non-zero threshold excludes low-activity parties from rewards" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertSentinelRecords(historyId, roundNumber)
+          // alice has high activity, bob has low activity
+          _ <- insertActivityRecord(
+            historyId,
+            roundNumber,
+            Seq("alice::provider", "bob::provider"),
+            Seq(5000000L, 50000L),
+          )
+          nonZeroThresholdInputs = testInputs.copy(
+            appRewardCouponThreshold = RewardComputationInputs.fromBigDecimal(BigDecimal("0.5"))
+          )
+          summary <- store.computeAndStoreRewards(
+            roundNumber,
+            batchSize = 100,
+            nonZeroThresholdInputs,
+          )
+          rewardPartyTotals <- store.getAppRewardPartyTotalsByRound(roundNumber)
+        } yield {
+          summary.activePartiesCount shouldBe 2L
+          summary.rewardedPartiesCount shouldBe 1L // only alice above threshold
+          rewardPartyTotals should have size 1
+          rewardPartyTotals.head.appProviderParty shouldBe "alice::provider"
+        }
       }
-    }
 
-    "computeAndStoreRewards — empty round returns zero counts" in {
-      for {
-        (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
-        summary <- store.computeAndStoreRewards(
-          roundNumber,
-          batchSize = 100,
-          testInputs,
-        )
-      } yield {
-        summary.activePartiesCount shouldBe 0L
-        summary.activityRecordsCount shouldBe 0L
-        summary.rewardedPartiesCount shouldBe 0L
-        summary.batchesCreatedCount shouldBe 1L // empty root batch
+      "empty round returns zero counts" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertSentinelRecords(historyId, roundNumber)
+          summary <- store.computeAndStoreRewards(
+            roundNumber,
+            batchSize = 100,
+            testInputs,
+          )
+        } yield {
+          summary.activePartiesCount shouldBe 0L
+          summary.activityRecordsCount shouldBe 0L
+          summary.rewardedPartiesCount shouldBe 0L
+          summary.batchesCreatedCount shouldBe 1L // empty root batch
+        }
       }
+
     }
 
     // -- computeRewardTotals tests -------------------------------------------
