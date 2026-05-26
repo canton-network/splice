@@ -858,23 +858,25 @@ class DbScanStore(
     val beforeIso = before.toString
     val beforeMicros = before.getEpochSecond * 1_000_000L + before.getNano / 1_000L
     for {
-      voteHit <- storage
-        .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-              entry_type = ${EntryType.VoteRequestTxLogEntry}
-              and vote_action_name = 'SRARC_UpdateSvRewardWeight'
-              and vote_accepted = true
-              and vote_sv_party = ${svParty.toProtoPrimitive}
-              and vote_effective_at::timestamptz < $beforeIso::timestamptz
-            """,
-            orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
-          ).headOption,
-          "lookupSvRewardWeightBefore.vote",
-        )
-        .value
+      voteHit <- futureUnlessShutdownToFuture(
+        storage
+          .querySingle(
+            selectFromTxLogTable(
+              txLogTableName,
+              txLogStoreId,
+              where = sql"""
+                entry_type = ${EntryType.VoteRequestTxLogEntry}
+                and vote_action_name = 'SRARC_UpdateSvRewardWeight'
+                and vote_accepted = true
+                and vote_sv_party = ${svParty.toProtoPrimitive}
+                and vote_effective_at::timestamptz < $beforeIso::timestamptz
+              """,
+              orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
+            ).headOption,
+            "lookupSvRewardWeightBefore.vote",
+          )
+          .value
+      )
       addSvHit <- voteHit match {
         case Some(_) =>
           Future.successful(Option.empty[TxLogQueries.SelectFromTxLogTableResult])

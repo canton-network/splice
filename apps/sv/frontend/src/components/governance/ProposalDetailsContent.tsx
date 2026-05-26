@@ -35,6 +35,7 @@ import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '..
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useSvRewardWeightBefore } from '../../hooks/useSvRewardWeightBefore';
+import { formatBasisPoints } from '../../utils/governance';
 
 dayjs.extend(relativeTime);
 
@@ -668,7 +669,7 @@ const UpdateSvRewardWeightSection = ({
 
   const beforeValue =
     before && priorWeight !== null && priorWeight !== undefined
-      ? String(priorWeight)
+      ? formatBasisPoints(priorWeight.toString())
       : currentWeight;
 
   return (
