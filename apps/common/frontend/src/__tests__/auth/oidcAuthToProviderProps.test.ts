@@ -21,13 +21,13 @@ describe('oidcAuthToProviderProps scope handling', () => {
     expect(scopes(props.scope!)).toEqual(['openid', 'wallet']);
   });
 
-  test('omits offline_access when request_offline_scope is false', () => {
-    const props = oidcAuthToProviderProps({ ...baseConfig, request_offline_scope: false });
+  test('omits offline_access when enable_offline_scope is false', () => {
+    const props = oidcAuthToProviderProps({ ...baseConfig, enable_offline_scope: false });
     expect(scopes(props.scope!)).toEqual(['openid', 'wallet']);
   });
 
-  test('includes offline_access when request_offline_scope is true', () => {
-    const props = oidcAuthToProviderProps({ ...baseConfig, request_offline_scope: true });
+  test('includes offline_access when enable_offline_scope is true', () => {
+    const props = oidcAuthToProviderProps({ ...baseConfig, enable_offline_scope: true });
     expect(scopes(props.scope!)).toEqual(['offline_access', 'openid', 'wallet']);
   });
 
@@ -41,8 +41,8 @@ describe('oidcAuthToProviderProps scope handling', () => {
     expect(props.extraQueryParams).toEqual({ audience: 'test-aud' });
   });
 
-  test('does not leak the request_offline_scope field into the OidcAuthProvider props', () => {
-    const props = oidcAuthToProviderProps({ ...baseConfig, request_offline_scope: true });
-    expect((props as Record<string, unknown>).request_offline_scope).toBeUndefined();
+  test('does not leak the enable_offline_scope field into the OidcAuthProvider props', () => {
+    const props = oidcAuthToProviderProps({ ...baseConfig, enable_offline_scope: true });
+    expect((props as Record<string, unknown>).enable_offline_scope).toBeUndefined();
   });
 });

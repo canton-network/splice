@@ -38,11 +38,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({
 
   return (
     <OidcAuthProvider
-      // Use the refresh_token grant before the access token expires so users
-      // are not forced to re-authenticate every few minutes when their IdP
-      // (e.g. Keycloak with default 5-minute access-token lifespan) returns a
-      // short-lived access token. oidc-client-ts uses the refresh token when
-      // one is present; this does NOT require the `offline_access` scope.
+      // Use refresh_token silent renew so users are not forced to re-login
+      // when the IdP returns a short-lived access token (Keycloak default
+      // is 5 minutes).
       automaticSilentRenew
       userStore={new WebStorageStateStore({ store: window.localStorage })}
       onSigninCallback={user => {
