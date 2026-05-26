@@ -346,7 +346,7 @@ testMintingDelegation_AssignAndMint = do
 
   -- Assign reward coupons to beneficiary and the rewardCouponExtraBeneficiary, and mint beneficiary's share
   let weights = [(beneficiary, 0.6), (rewardCouponExtraBeneficiary, 0.4)]
-  submitMulti [delegate] [beneficiary, rewardCouponExtraBeneficiary, app.dso] $ exerciseCmd mintingDelegationCid MintingDelegation_AssignAndMint with
+  submit (actAs delegate <> readAs beneficiary <> readAs rewardCouponExtraBeneficiary <> readAs app.dso) $ exerciseCmd mintingDelegationCid MintingDelegation_AssignAndMint with
     couponCid = toInterfaceContractId coupon1Cid
     assignBeneficiaries = Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
       additionalCoupons = [toInterfaceContractId coupon2Cid]
