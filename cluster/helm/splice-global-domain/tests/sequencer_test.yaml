@@ -256,7 +256,7 @@ tests:
       enablePostgresMetrics: true
     asserts:
       - hasDocuments:
-          count: 5
+          count: 6
   - it: "cantonbft driver uses custom driver persistence when set"
     set:
       sequencer:

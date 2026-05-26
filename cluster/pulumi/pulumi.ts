@@ -14,6 +14,13 @@ import path from 'path';
 
 const PULUMI_OUTPUT_DIR = path.join(__dirname, '.pulumi');
 
+type CommandErrorWithResult = {
+  commandResult?: {
+    stdout?: string;
+    stderr?: string;
+  };
+};
+
 function cleanOutputDir(): void {
   if (fs.existsSync(PULUMI_OUTPUT_DIR)) {
     fs.rmSync(PULUMI_OUTPUT_DIR, { recursive: true, force: true });
@@ -230,10 +237,10 @@ export async function awaitAllOrThrowAllExceptions(operations: Operation[]): Pro
           const errorDivider = '─'.repeat(60);
           if (err instanceof automation.CommandError) {
             console.error(`Operation ${op.name} failed`);
-            const cmdResult = (err as any).commandResult;
+            const cmdResult = (err as unknown as CommandErrorWithResult).commandResult;
             const output =
               cmdResult !== undefined
-                ? (cmdResult.stdout as string) + (cmdResult.stderr as string)
+                ? (cmdResult.stdout ?? '') + (cmdResult.stderr ?? '')
                 : err.message;
             writeOperationErrorOutput(op.name, output);
           } else {

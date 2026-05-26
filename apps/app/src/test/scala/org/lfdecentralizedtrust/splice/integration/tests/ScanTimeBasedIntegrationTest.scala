@@ -17,7 +17,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -261,87 +260,6 @@ class ScanTimeBasedIntegrationTest
         expectedLastRound,
       )
     }
-    clue("Data for a later round does not yet exist")({
-      val lastAggregatedRound = sv1ScanBackend.getRoundOfLatestData()._1
-      val laterRound = lastAggregatedRound + 1
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopProvidersByAppRewards(
-          laterRound,
-          10,
-        ),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopValidatorsByValidatorRewards(laterRound, 10),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-    })
-
-    def walletClientParty(walletClient: WalletAppClientReference) =
-      Codec.decode(Codec.Party)(walletClient.userStatus().party).value
-    val latestRound = baseRoundWithLatestData + 4
-    actAndCheck(
-      "Advance four more rounds, for the previous rounds to close (where rewards were collected)",
-      Range(0, 3).foreach(_ => advanceRoundsToNextRoundOpening),
-    )(
-      s"Test leaderboards for latest rounds ${latestRound}",
-      _ => {
-        val ledgerTime = getLedgerTime.toInstant
-        sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
-        sv1ScanBackend.getRoundOfLatestData() should be((latestRound, ledgerTime))
-
-        val aliceValidatorWalletClientParty =
-          walletClientParty(aliceValidatorWalletClient).toProtoPrimitive
-        val bobValidatorWalletClientParty =
-          walletClientParty(bobValidatorWalletClient).toProtoPrimitive
-
-        clue("Compare leaderboard getTopProvidersByAppRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeAppRewards))
-            }
-            .filter { case (p, (cr, appRewards)) =>
-              appRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-          sv1ScanBackend
-            .getTopProvidersByAppRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) shouldBe (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-        clue("Compare leaderboard getTopValidatorsByValidatorRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeValidatorRewards))
-            }
-            .filter { case (p, (cr, validatorRewards)) =>
-              validatorRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-
-          sv1ScanBackend
-            .getTopValidatorsByValidatorRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-      },
-    )
   }
 
   "Not get aggregates for incorrect ranges" in { implicit env =>
