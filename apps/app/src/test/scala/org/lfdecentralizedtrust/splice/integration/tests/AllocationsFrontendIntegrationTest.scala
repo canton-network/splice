@@ -588,7 +588,7 @@ class AllocationsFrontendIntegrationTest
             )
         },
       )(
-        "the provider allocation is gone, Alice has the next iteration one",
+        "only the next iteration allocation is left",
         _ => {
           splitwellValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
             .of_party(
