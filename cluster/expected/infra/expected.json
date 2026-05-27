@@ -498,6 +498,31 @@
         "version": "1.18.2"
       },
       "installCRDs": true,
+      "startupapicheck": {
+        "affinity": {
+          "nodeAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+              "nodeSelectorTerms": [
+                {
+                  "matchExpressions": [
+                    {
+                      "key": "cn_infra",
+                      "operator": "Exists"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "tolerations": [
+          {
+            "effect": "NoSchedule",
+            "key": "cn_infra",
+            "operator": "Exists"
+          }
+        ]
+      },
       "tolerations": [
         {
           "effect": "NoSchedule",
@@ -1885,7 +1910,7 @@
           "accessLogFormat": "{\"trace_id\":\"%REQ(traceparent)%\",\"authority\":\"%REQ(:AUTHORITY)%\",\"bytes_received\":\"%BYTES_RECEIVED%\",\"bytes_sent\":\"%BYTES_SENT%\",\"downstream_local_address\":\"%DOWNSTREAM_LOCAL_ADDRESS%\",\"downstream_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS%\",\"duration\":\"%DURATION%\",\"method\":\"%REQ(:METHOD)%\",\"path\":\"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%\",\"protocol\":\"%PROTOCOL%\",\"request_id\":\"%REQ(X-REQUEST-ID)%\",\"requested_server_name\":\"%REQUESTED_SERVER_NAME%\",\"response_code\":\"%RESPONSE_CODE%\",\"response_code_details\":\"%RESPONSE_CODE_DETAILS%\",\"response_flags\":\"%RESPONSE_FLAGS%\",\"start_time\":\"%START_TIME%\",\"upstream_cluster\":\"%UPSTREAM_CLUSTER%\",\"upstream_host\":\"%UPSTREAM_HOST%\",\"upstream_local_address\":\"%UPSTREAM_LOCAL_ADDRESS%\",\"upstream_service_time\":\"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%\",\"user_agent\":\"%REQ(USER-AGENT)%\",\"x_forwarded_for\":\"%REQ(X-FORWARDED-FOR)%\"}",
           "defaultConfig": {
             "gatewayTopology": {
-              "numTrustedProxies": 1
+              "numTrustedProxies": 0
             },
             "holdApplicationUntilProxyStarts": true
           },
@@ -2185,6 +2210,83 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "networking.istio.io/v1alpha3",
+      "kind": "EnvoyFilter",
+      "metadata": {
+        "name": "sequencer-flow-control",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                }
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "http2_protocol_options": {
+                    "connection_keepalive": {
+                      "interval": "30s",
+                      "timeout": "5s"
+                    },
+                    "initial_connection_window_size": 52428800,
+                    "initial_stream_window_size": 524288
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 52428800,
+                        "initial_stream_window_size": 524288
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "name": "sequencer-flow-control",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1alpha3:EnvoyFilter"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "security.istio.io/v1",
       "kind": "AuthorizationPolicy",
       "metadata": {
@@ -2248,6 +2350,74 @@
       }
     },
     "name": "sv-1-global-domain-10-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "sv-1-global-domain-7-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-7-sequencer.sv-1.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-1-global-domain-7-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "sv-1-global-domain-8-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-8-sequencer.sv-1.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-1-global-domain-8-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },
@@ -2362,6 +2532,74 @@
       "apiVersion": "networking.istio.io/v1beta1",
       "kind": "DestinationRule",
       "metadata": {
+        "name": "sv-da-1-global-domain-7-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-7-sequencer.sv-da-1.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-da-1-global-domain-7-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "sv-da-1-global-domain-8-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-8-sequencer.sv-da-1.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-da-1-global-domain-8-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
         "name": "sv-da-1-global-domain-9-sequencer-high-perf-grpc-rule",
         "namespace": "cluster-ingress"
       },
@@ -2420,6 +2658,74 @@
       }
     },
     "name": "sv-global-domain-10-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "sv-global-domain-7-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-7-sequencer.sv.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-global-domain-7-sequencer-high-perf-grpc-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "sv-global-domain-8-sequencer-high-perf-grpc-rule",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "host": "global-domain-8-sequencer.sv.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "http1MaxPendingRequests": 10000,
+              "http2MaxRequests": 10000,
+              "maxConcurrentStreams": 10000,
+              "maxRequestsPerConnection": 0
+            },
+            "tcp": {
+              "maxConnections": 10000
+            }
+          },
+          "loadBalancer": {
+            "simple": "LEAST_REQUEST"
+          }
+        }
+      }
+    },
+    "name": "sv-global-domain-8-sequencer-high-perf-grpc-rule",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
   },

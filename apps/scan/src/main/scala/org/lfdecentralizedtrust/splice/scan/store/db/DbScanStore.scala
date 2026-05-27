@@ -38,7 +38,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -638,108 +637,6 @@ class DbScanStore(
         )
       }
     } yield result.getOrElse(0)
-  }
-
-  override def getTopProvidersByAppRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as provider,
-                       rpt.cumulative_app_rewards as cumulative_app_rewards
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_app_rewards > 0
-              order by cumulative_app_rewards desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, BigDecimal)],
-            "getTopProvidersByAppRewards",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows
-  }
-
-  override def getTopValidatorsByValidatorRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as validator,
-                       rpt.cumulative_validator_rewards as cumulative_validator_rewards
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_validator_rewards > 0
-              order by cumulative_validator_rewards desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, BigDecimal)],
-            "getTopValidatorsByValidatorRewards",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows
-  }
-
-  override def getTopValidatorsByPurchasedTraffic(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[HttpScanAppClient.ValidatorPurchasedTraffic]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as validator,
-                       rpt.cumulative_traffic_num_purchases,
-                       rpt.cumulative_traffic_purchased,
-                       rpt.cumulative_traffic_purchased_cc_spent,
-                       coalesce(
-                         (
-                           select   closed_round as last_purchased_in_round
-                           from     round_party_totals
-                           where    store_id = rpt.store_id
-                           and      store_id = $roundTotalsStoreId
-                           and      party = rpt.party
-                           and      traffic_purchased > 0
-                           order by closed_round desc
-                           limit 1
-                         ),
-                         0
-                       ) as last_purchased_in_round
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_traffic_purchased > 0
-              order by cumulative_traffic_purchased desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, Long, Long, BigDecimal, Long)],
-            "getTopValidatorsByPurchasedTraffic",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows.map((HttpScanAppClient.ValidatorPurchasedTraffic.apply _).tupled)
   }
 
   override def getTopValidatorLicenses(limit: Limit)(implicit

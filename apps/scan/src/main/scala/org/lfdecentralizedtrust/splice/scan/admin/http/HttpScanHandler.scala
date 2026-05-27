@@ -567,136 +567,6 @@ class HttpScanHandler(
     }
   }
 
-  def getTopProvidersByAppRewards(
-      response: v0.ScanResource.GetTopProvidersByAppRewardsResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[v0.ScanResource.GetTopProvidersByAppRewardsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopProvidersByAppRewards") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopProvidersByAppRewards(asOfEndOfRound, limit)
-        .map(res =>
-          if (res.isEmpty) {
-            v0.ScanResource.GetTopProvidersByAppRewardsResponse.NotFound(
-              ErrorResponse(s"No top providers by app rewards found for round $asOfEndOfRound")
-            )
-          } else {
-            v0.ScanResource.GetTopProvidersByAppRewardsResponse.OK(
-              definitions
-                .GetTopProvidersByAppRewardsResponse(
-                  res
-                    .map(p => definitions.PartyAndRewards(Codec.encode(p._1), Codec.encode(p._2)))
-                    .toVector
-                )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
-  def getTopValidatorsByValidatorRewards(
-      response: v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByValidatorRewards") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopValidatorsByValidatorRewards(asOfEndOfRound, limit)
-        .map(res =>
-          if (res.isEmpty) {
-            v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.NotFound(
-              ErrorResponse(
-                s"No top validators by validator rewards found for round $asOfEndOfRound"
-              )
-            )
-          } else {
-            v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.OK(
-              definitions
-                .GetTopValidatorsByValidatorRewardsResponse(
-                  res
-                    .map(p => definitions.PartyAndRewards(Codec.encode(p._1), Codec.encode(p._2)))
-                    .toVector
-                )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
-  override def getTopValidatorsByValidatorFaucets(
-      respond: v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse.type
-  )(limit: Int)(
-      extracted: TraceContext
-  ): Future[v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByValidatorRewards") { _ => _ =>
-      store
-        .getTopValidatorLicenses(PageLimit.tryCreate(limit))
-        .map(licenses =>
-          v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse.OK(
-            definitions
-              .GetTopValidatorsByValidatorFaucetsResponse(
-                FaucetProcessor.process(licenses)
-              )
-          )
-        )
-    }
-  }
-
-  override def getTopValidatorsByPurchasedTraffic(
-      response: ScanResource.GetTopValidatorsByPurchasedTrafficResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[ScanResource.GetTopValidatorsByPurchasedTrafficResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByPurchasedTraffic") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopValidatorsByPurchasedTraffic(asOfEndOfRound, limit)
-        .map(validatorTraffic =>
-          if (validatorTraffic.isEmpty) {
-            v0.ScanResource.GetTopValidatorsByPurchasedTrafficResponse.NotFound(
-              ErrorResponse(
-                s"No top validators by purchased traffic found for round $asOfEndOfRound"
-              )
-            )
-          } else {
-            v0.ScanResource.GetTopValidatorsByPurchasedTrafficResponse.OK(
-              definitions.GetTopValidatorsByPurchasedTrafficResponse(
-                validatorTraffic
-                  .map(t =>
-                    definitions.ValidatorPurchasedTraffic(
-                      Codec.encode(t.validator),
-                      t.numPurchases,
-                      t.totalTrafficPurchased,
-                      Codec.encode(t.totalCcSpent),
-                      t.lastPurchasedInRound,
-                    )
-                  )
-                  .toVector
-              )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(
@@ -2998,31 +2868,53 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingActivityTotals") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
+            case Some(roundTotal) =>
+              Future.successful(
+                ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                  definitions.GetRewardAccountingActivityTotalsResponse(
+                    definitions.RewardAccountingActivityTotalsOk(
+                      status = "Ok",
+                      roundNumber = roundTotal.roundNumber,
+                      totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
+                      activePartiesCount = roundTotal.activeAppProviderPartiesCount,
+                      activityRecordsCount = roundTotal.activityRecordsCount,
+                    )
+                  )
+                )
+              )
+            case None =>
+              appActivityStore.earliestRoundWithCompleteAppActivity().map {
+                case Some(earliest) if roundNumber < earliest =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsCannotProvide(
+                        status = "CannotProvide"
+                      )
+                    )
+                  )
+                case _ =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsUndetermined(
+                        status = "Undetermined"
+                      )
+                    )
+                  )
+              }
+          }
+        case _ =>
           Future.successful(
-            ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
+            ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+              definitions.GetRewardAccountingActivityTotalsResponse(
+                definitions.RewardAccountingActivityTotalsCannotProvide(
+                  status = "CannotProvide"
+                )
+              )
             )
           )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).map {
-            case None =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-                ErrorResponse(
-                  s"Activity totals not (yet) computed for round $roundNumber"
-                )
-              )
-            case Some(roundTotal) =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                definitions.GetRewardAccountingActivityTotalsResponse(
-                  roundNumber = roundTotal.roundNumber,
-                  totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
-                  activePartiesCount = roundTotal.activeAppProviderPartiesCount,
-                  activityRecordsCount = roundTotal.activityRecordsCount,
-                )
-              )
-          }
       }
     }
   }
@@ -3034,29 +2926,51 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingRootHash") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppRewardRootHashByRound(roundNumber).flatMap {
+            case Some(rootHash) =>
+              Future.successful(
+                ScanResource.GetRewardAccountingRootHashResponse.OK(
+                  definitions.GetRewardAccountingRootHashResponse(
+                    definitions.RewardAccountingRootHashOk(
+                      status = "Ok",
+                      roundNumber = rootHash.roundNumber,
+                      rootHash = rootHash.rootHash.toHex,
+                    )
+                  )
+                )
+              )
+            case None =>
+              appActivityStore.earliestRoundWithCompleteAppActivity().map {
+                case Some(earliest) if roundNumber < earliest =>
+                  ScanResource.GetRewardAccountingRootHashResponse.OK(
+                    definitions.GetRewardAccountingRootHashResponse(
+                      definitions.RewardAccountingRootHashCannotProvide(
+                        status = "CannotProvide"
+                      )
+                    )
+                  )
+                case _ =>
+                  ScanResource.GetRewardAccountingRootHashResponse.OK(
+                    definitions.GetRewardAccountingRootHashResponse(
+                      definitions.RewardAccountingRootHashUndetermined(
+                        status = "Undetermined"
+                      )
+                    )
+                  )
+              }
+          }
+        case _ =>
           Future.successful(
-            ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
+            ScanResource.GetRewardAccountingRootHashResponse.OK(
+              definitions.GetRewardAccountingRootHashResponse(
+                definitions.RewardAccountingRootHashCannotProvide(
+                  status = "CannotProvide"
+                )
+              )
             )
           )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppRewardRootHashByRound(roundNumber).map {
-            case None =>
-              ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-                ErrorResponse(
-                  s"Root hash not (yet) computed for round $roundNumber"
-                )
-              )
-            case Some(rootHash) =>
-              ScanResource.GetRewardAccountingRootHashResponse.OK(
-                definitions.GetRewardAccountingRootHashResponse(
-                  roundNumber = rootHash.roundNumber,
-                  rootHash = rootHash.rootHash.toHex,
-                )
-              )
-          }
       }
     }
   }

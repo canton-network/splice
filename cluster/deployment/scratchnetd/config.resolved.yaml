@@ -27,6 +27,9 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
+    sequencerFlowControl:
+      initialConnectionWindowSize: 52428800
+      initialStreamWindowSize: 524288
   prometheus:
     retentionDuration: '30d'
     retentionSize: '200GB'
@@ -260,14 +263,14 @@ sv:
         /api/scan/v0/holdings:
           name: 'holdings'
           type: 'unlimited'
+        /api/scan/v0/internal/reward-accounting-process:
+          name: 'reward-accounting-process'
+          type: 'unlimited'
         /api/scan/v0/migrations:
           name: 'migrations-schedule'
           type: 'unlimited'
         /api/scan/v0/open-and-issuing-mining-rounds:
           name: 'open-and-issuing-mining-rounds'
-          type: 'unlimited'
-        /api/scan/v0/reward-accounting-process:
-          name: 'reward-accounting-process'
           type: 'unlimited'
         /api/scan/v0/rewards-collected:
           name: 'rewards-collected'
@@ -301,18 +304,6 @@ sv:
           type: 'unlimited'
         /api/scan/v0/synchronizer-identities:
           name: 'synchronizer-identities'
-          type: 'unlimited'
-        /api/scan/v0/top-providers-by-app-rewards:
-          name: 'top-providers'
-          type: 'banned'
-        /api/scan/v0/top-validators-by-purchased-traffic:
-          name: 'top-validators-by-purchased-traffic'
-          type: 'unlimited'
-        /api/scan/v0/top-validators-by-validator-faucets:
-          name: 'top-validators-by-validator-faucets'
-          type: 'unlimited'
-        /api/scan/v0/top-validators-by-validator-rewards:
-          name: 'top-validators-by-validator-rewards'
           type: 'unlimited'
         /api/scan/v0/transactions:
           name: 'transactions'

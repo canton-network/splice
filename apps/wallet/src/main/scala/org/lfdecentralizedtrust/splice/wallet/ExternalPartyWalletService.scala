@@ -10,8 +10,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
-  HistoryMetrics,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{HasHealth, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService
@@ -23,7 +21,6 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.ParticipantId
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 
 import scala.concurrent.ExecutionContext
 
@@ -65,22 +62,8 @@ class ExternalPartyWalletService(
       params.defaultLimit,
     )
 
-  val updateHistory = new UpdateHistory(
-    storage,
-    domainMigrationInfo,
-    store.storeName,
-    participantId,
-    store.acsContractFilter.ingestionFilter.primaryParty,
-    BackfillingRequirement.BackfillingNotRequired,
-    loggerFactory,
-    enableissue12777Workaround = false,
-    enableImportUpdateBackfill = false,
-    HistoryMetrics(retryProvider.metricsFactory, domainMigrationInfo.currentMigrationId),
-  )
-
   val automation = new ExternalPartyWalletAutomationService(
     store,
-    updateHistory,
     ledgerClient,
     automationConfig,
     clock,
@@ -97,7 +80,6 @@ class ExternalPartyWalletService(
 
   override def onClosed(): Unit = {
     automation.close()
-    updateHistory.close()
     store.close()
     super.onClosed()
   }

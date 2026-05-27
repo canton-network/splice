@@ -76,7 +76,7 @@ define DEFINE_PHONY_CHART_RULES =
 prefix := cluster/helm/$(1)
 
 .PHONY: $$(prefix)/helm-build
-$$(prefix)/helm-build: $$(prefix)/values.yaml $$(prefix)/Chart.yaml $$(prefix)/LICENSE
+$$(prefix)/helm-build: $$(prefix)/values.yaml $$(prefix)/Chart.yaml $$(prefix)/LICENSE $$(prefix)/files/logback.xml
 	helm package $$(@D) --dependency-update --destination cluster/helm/target
 
 .PHONY: $$(prefix)/helm-clean
@@ -89,6 +89,13 @@ $$(prefix)/helm-test:
 
 $$(prefix)/LICENSE: LICENSE
 	cp LICENSE $$(@D)/LICENSE
+
+.PHONY: $$(prefix)/files/logback.xml
+$$(prefix)/files/logback.xml:
+	@if [ -d "$$(@D)" ]; then \
+		cp "${SPLICE_ROOT}/scripts/canton-logback.xml" "$$@"; \
+		echo "coppied scripts/canton-logback.xml to $$@"; \
+	fi
 
 endef # end DEFINE_PHONY_CHART_RULES
 

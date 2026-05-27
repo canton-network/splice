@@ -192,7 +192,9 @@ class LsuTrigger(
       .listLsuAnnouncements(synchronizerId.logical)
       .map(_.filter { announcement =>
         announcement.base.validFrom
-          .isBefore(now.toInstant) && announcement.mapping.successorSynchronizerId != synchronizerId
+          .isBefore(
+            now.toInstant
+          ) && announcement.mapping.successorSynchronizerId.serial > synchronizerId.serial
       })
   }
 
