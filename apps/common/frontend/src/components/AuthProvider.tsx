@@ -38,16 +38,13 @@ const AuthProvider: React.FC<AuthProviderProps> = ({
 
   return (
     <OidcAuthProvider
-      // Enable proactive refresh_token silent renew. `oidc-client-ts` uses
-      // the refresh_token grant when one is present in the stored User and
-      // throws "No silent_redirect_uri configured" otherwise — we
-      // intentionally do not pass `silent_redirect_uri`, so the iframe
-      // fallback is structurally disabled (cookie-based silent auth is
-      // broken-by-default on Safari ITP and Firefox Total Cookie
-      // Protection). When the silent renew throws or never fires (suspended
-      // tab, clock skew), `UserProvider`'s `renewOrSignout` handler tries
-      // one more `signinSilent()` on the next 401 before signing out.
-      automaticSilentRenew
+      // The library's proactive timer-based silent renew is disabled. The
+      // 401-driven `renewOrSignout` handler in `UserProvider` is the only
+      // renewal path, so we get a single, single-flighted refresh per
+      // expiry rather than racing the library's timer against the handler
+      // (which can cause concurrent refresh-token grants and a spurious
+      // logout against IdPs that rotate refresh tokens).
+      automaticSilentRenew={false}
       userStore={new WebStorageStateStore({ store: window.localStorage })}
       onSigninCallback={user => {
         const redirectTo = extractRedirectToFromUser(user);

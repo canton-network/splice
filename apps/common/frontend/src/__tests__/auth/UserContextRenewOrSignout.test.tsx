@@ -45,20 +45,22 @@ const fakeJwt = (sub: string): string => {
   return `${header}.${payload}.fakesig`;
 };
 
-const Harness: React.FC = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
-    <QueryClientProvider client={queryClient}>
-      <UserProvider authConf={rs256Config}>
-        <div data-testid="children" />
-      </UserProvider>
-    </QueryClientProvider>
-  );
-};
+let queryClient: QueryClient;
+let invalidateSpy: ReturnType<typeof vi.spyOn>;
+
+const Harness: React.FC = () => (
+  <QueryClientProvider client={queryClient}>
+    <UserProvider authConf={rs256Config}>
+      <div data-testid="children" />
+    </UserProvider>
+  </QueryClientProvider>
+);
 
 beforeEach(() => {
   signinSilent.mockReset();
   removeUser.mockReset();
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined);
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: { ...window.location, origin: 'http://localhost:3000', href: 'http://localhost:3000/' },
@@ -67,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   mockUser = undefined;
+  invalidateSpy.mockRestore();
 });
 
 describe('renewOrSignout on splice:auth-expired', () => {
@@ -82,6 +85,25 @@ describe('renewOrSignout on splice:auth-expired', () => {
     expect(removeUser).not.toHaveBeenCalled();
   });
 
+  test('invalidates queries after a successful refresh (deferred until token state updates)', async () => {
+    mockUser = { access_token: fakeJwt('alice'), refresh_token: 'rt-1' };
+    // Simulate the library updating the stored User on successful renewal —
+    // this is what triggers the userAccessToken state update that the
+    // deferred-invalidation effect waits on.
+    signinSilent.mockImplementation(async () => {
+      mockUser = { access_token: fakeJwt('alice-renewed'), refresh_token: 'rt-2' };
+    });
+    const { rerender } = render(<Harness />);
+
+    fireAuthExpired();
+    await waitFor(() => expect(signinSilent).toHaveBeenCalledOnce());
+    // Force a re-render so the test mock's updated mockUser flows into the
+    // useAuth() return value picked up by UserProvider's effect.
+    rerender(<Harness />);
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalled());
+  });
+
   test('signs out when there is no refresh_token in the stored user', async () => {
     mockUser = { access_token: fakeJwt('alice') };
     removeUser.mockResolvedValue(undefined);
@@ -91,6 +113,7 @@ describe('renewOrSignout on splice:auth-expired', () => {
 
     await waitFor(() => expect(removeUser).toHaveBeenCalledOnce());
     expect(signinSilent).not.toHaveBeenCalled();
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
   test('signs out when signinSilent rejects (refresh token revoked or IdP unreachable)', async () => {
@@ -103,6 +126,7 @@ describe('renewOrSignout on splice:auth-expired', () => {
 
     await waitFor(() => expect(signinSilent).toHaveBeenCalledOnce());
     await waitFor(() => expect(removeUser).toHaveBeenCalledOnce());
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
   test('single-flights: concurrent expired events trigger one signinSilent call', async () => {
@@ -122,5 +146,18 @@ describe('renewOrSignout on splice:auth-expired', () => {
     fireAuthExpired();
     await waitFor(() => expect(signinSilent).toHaveBeenCalledOnce());
     resolveSilent?.();
+  });
+
+  test('listener is removed on unmount', async () => {
+    mockUser = { access_token: fakeJwt('alice'), refresh_token: 'rt-1' };
+    signinSilent.mockResolvedValue(undefined);
+    const { unmount } = render(<Harness />);
+    unmount();
+
+    fireAuthExpired();
+
+    // Give the event loop a tick to ensure no async handler runs
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(signinSilent).not.toHaveBeenCalled();
   });
 });

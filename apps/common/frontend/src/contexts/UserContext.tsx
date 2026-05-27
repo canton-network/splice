@@ -102,6 +102,7 @@ export const UserProvider: React.FC<{
 
   const signoutInFlight = useRef(false);
   const renewInFlight = useRef(false);
+  const pendingInvalidation = useRef(false);
 
   const signoutFromIdp = useCallback(() => {
     if (auth === undefined || !auth.isAuthenticated) return;
@@ -110,19 +111,13 @@ export const UserProvider: React.FC<{
     });
   }, [auth]);
 
-  // On a 401 (which fires `splice:auth-expired` from BaseApiMiddleware /
-  // LedgerApiContext), attempt one refresh_token grant before giving up and
-  // signing the user out. Recovers two scenarios:
-  //   1. The proactive `automaticSilentRenew` timer never fired (suspended
-  //      tab, clock skew, or the access token expired before the
-  //      `accessTokenExpiring` notification window).
-  //   2. A request was sent with a valid token but reached the server after
-  //      the token expired, producing a 401 concurrent with an in-flight
-  //      silent renew.
-  // Single-flighted via `renewInFlight` so concurrent 401s from a fan-out
-  // collapse into one signinSilent call. On successful refresh we
-  // `invalidateQueries` to retry queries that already failed (react-query's
-  // retryQuery short-circuits on 401, so they will not retry themselves).
+  // On a 401 (`splice:auth-expired`, fired from BaseApiMiddleware /
+  // LedgerApiContext), try one `signinSilent` before signing out. Single-
+  // flighted via `renewInFlight` so concurrent 401s collapse into one
+  // grant. Invalidation of the react-query cache is deferred until the
+  // refreshed access token has propagated into `userAccessToken` (see
+  // effect below); invalidating immediately would refetch through clients
+  // still holding the stale token and produce a second 401.
   const renewOrSignout = useCallback(async () => {
     if (signoutInFlight.current) return;
     if (renewInFlight.current) return;
@@ -132,7 +127,7 @@ export const UserProvider: React.FC<{
       renewInFlight.current = true;
       try {
         await auth.signinSilent();
-        await queryClient.invalidateQueries();
+        pendingInvalidation.current = true;
         return;
       } catch (err) {
         console.debug('renewOrSignout: silent renew failed, signing out', err);
@@ -143,7 +138,7 @@ export const UserProvider: React.FC<{
 
     signoutInFlight.current = true;
     signoutFromIdp();
-  }, [auth, queryClient, signoutFromIdp]);
+  }, [auth, signoutFromIdp]);
 
   useEffect(() => onAuthExpired(renewOrSignout), [renewOrSignout]);
 
@@ -176,6 +171,18 @@ export const UserProvider: React.FC<{
       }
     }
   }, [auth, authConf, authMethod, loginWithSst, testAuthConf]);
+
+  // After a successful renewOrSignout, the access-token state above
+  // updates on a subsequent render. Once it does, invalidate the
+  // react-query cache so failed-with-401 queries refetch with the new
+  // token (`retryQuery` returns false on 401, so they will not retry
+  // themselves).
+  useEffect(() => {
+    if (pendingInvalidation.current && userAccessToken) {
+      pendingInvalidation.current = false;
+      void queryClient.invalidateQueries();
+    }
+  }, [userAccessToken, queryClient]);
 
   return (
     <UserContext.Provider

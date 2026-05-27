@@ -28,7 +28,7 @@ const rs256Config: AuthConfig = {
 };
 
 describe('AuthProvider', () => {
-  test('passes automaticSilentRenew=true to the OIDC provider', () => {
+  test('disables the library timer-based silent renew (UserProvider handles it on 401 instead)', () => {
     mockOidcAuthProvider.mockClear();
     render(
       <AuthProvider authConf={rs256Config}>
@@ -37,18 +37,7 @@ describe('AuthProvider', () => {
     );
     expect(mockOidcAuthProvider).toHaveBeenCalled();
     const props = mockOidcAuthProvider.mock.calls[0][0] as Record<string, unknown>;
-    expect(props.automaticSilentRenew).toBe(true);
-  });
-
-  test('does not pass silent_redirect_uri (iframe fallback intentionally disabled)', () => {
-    mockOidcAuthProvider.mockClear();
-    render(
-      <AuthProvider authConf={rs256Config}>
-        <div />
-      </AuthProvider>
-    );
-    const props = mockOidcAuthProvider.mock.calls[0][0] as Record<string, unknown>;
-    expect(props.silent_redirect_uri).toBeUndefined();
+    expect(props.automaticSilentRenew).toBe(false);
   });
 
   test('hs256-unsafe config short-circuits without rendering the OIDC provider', () => {

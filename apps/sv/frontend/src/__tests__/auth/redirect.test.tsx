@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Algorithm, AuthConfig, UserProvider } from '@lfdecentralizedtrust/splice-common-frontend';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React, { useEffect } from 'react';
@@ -74,14 +75,18 @@ afterEach(() => {
   removeUser.mockClear();
 });
 
-const renderWithProviders = () =>
-  render(
-    <UserProvider authConf={rs256Config}>
-      <SvAdminClientProvider url={svUrl}>
-        <Caller />
-      </SvAdminClientProvider>
-    </UserProvider>
+const renderWithProviders = () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <UserProvider authConf={rs256Config}>
+        <SvAdminClientProvider url={svUrl}>
+          <Caller />
+        </SvAdminClientProvider>
+      </UserProvider>
+    </QueryClientProvider>
   );
+};
 
 describe('401 from SV API logs the user out', () => {
   test('on 401: clears the local user and navigates to origin', async () => {
