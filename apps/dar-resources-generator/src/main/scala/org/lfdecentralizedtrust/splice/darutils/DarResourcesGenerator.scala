@@ -40,6 +40,7 @@ object DarResourcesGenerator {
     "splice-api-token-allocation-instruction-v2" -> "1.0.0",
     "splice-token-test-trading-app" -> "1.0.0",
     "splice-token-test-trading-app-v2" -> "1.0.0",
+    "splice-util-token-standard-wallet" -> "1.1.0",
   )
 
   // fix the order to reduce the diff to the existing status quo
@@ -66,6 +67,7 @@ object DarResourcesGenerator {
     "splice-api-token-allocation-v2",
     "splice-api-token-allocation-request-v2",
     "splice-api-token-allocation-instruction-v2",
+    "splice-util-token-standard-wallet",
   )
   private val tokenStandardTestPackage: String = "splice-token-test-trading-app"
   private val tokenStandardTestPackageV2: String = "splice-token-test-trading-app-v2"
