@@ -37,7 +37,7 @@ spec:
         image: "{{ .Values.imageRepo }}/scan-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_app) }}"
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+          value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         {{- with .Values.persistence }}
         - name: ADDITIONAL_CONFIG_PERSISTENCE
           value: |
@@ -244,6 +244,12 @@ spec:
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
+        volumeMounts:
+          - name: logback-config
+            # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+            # would not receive configmap updates.
+            # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+            mountPath: /app/logback
       initContainers:
         - name: {{ .Release.Name }}-init
           image: postgres:14
@@ -278,6 +284,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-scan-app-logback-config
 ---
 apiVersion: v1
 kind: Service
@@ -388,6 +398,15 @@ spec:
     targetPort: scan-ui
     port: {{ .Values.service.ui.port }}
     protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-scan-app-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence  "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}

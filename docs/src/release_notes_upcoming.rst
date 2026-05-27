@@ -16,6 +16,10 @@
           - ``/v0/top-validators-by-validator-rewards``
           - ``/v0/top-validators-by-purchased-traffic``
 
+    - Deployment
+
+        - Switch docker base images to https://github.com/canton-network/canton-base-images to reduce attack surface.
+
     - Token Standard V2 (CIP-112)
 
       - Notable callouts for Amulet changes:
