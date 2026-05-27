@@ -58,8 +58,6 @@ class TokenStandardV2AllocationIntegrationTest
       })
   }
 
-  val emptyMetadata = new metadatav1.Metadata(java.util.Map.of())
-  val emptyChoiceContext = new metadatav1.ChoiceContext(java.util.Map.of())
   val emptyExtraArgs = new metadatav1.ExtraArgs(
     emptyChoiceContext,
     emptyMetadata,
