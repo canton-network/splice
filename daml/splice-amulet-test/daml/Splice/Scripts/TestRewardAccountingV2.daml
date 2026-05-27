@@ -340,6 +340,7 @@ testCouponAssignment hideCoupon = do
       extraArgs = emptyExtraArgs
 
   -- original coupons are archived after assignment
+  None <- queryContractId alice (fromInterfaceContractId @RewardCouponV2 couponCid)
   None <- queryContractId alice extraCouponCid
 
   -- both coupons are split by the same percentages, preserving their original round and expiresAt
