@@ -702,7 +702,8 @@ class DbScanStore(
               and template_id_entity_name = ${lengthLimited(entityName)}
               and package_name = ${lengthLimited(packageName)}
               and record_time < $before""",
-            orderLimit = sql"""order by record_time desc limit 1""",
+            // TODO(#934): Order by row_id is suspicious
+            orderLimit = sql"""order by row_id desc limit 1""",
           ).headOption,
           s"lookupBefore[$pqn]",
         )
