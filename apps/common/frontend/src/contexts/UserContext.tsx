@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { onAuthExpired } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { useQueryClient } from '@tanstack/react-query';
 import { User } from 'oidc-client-ts';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthState, useAuth } from 'react-oidc-context';
@@ -55,6 +56,7 @@ export const UserProvider: React.FC<{
   const [userAccessToken, setUserAccessToken] = useState<string>();
 
   const auth = useAuthSafe();
+  const queryClient = useQueryClient();
 
   const isAuthenticated =
     userId !== undefined &&
@@ -99,6 +101,7 @@ export const UserProvider: React.FC<{
   };
 
   const signoutInFlight = useRef(false);
+  const renewInFlight = useRef(false);
 
   const signoutFromIdp = useCallback(() => {
     if (auth === undefined || !auth.isAuthenticated) return;
@@ -107,13 +110,42 @@ export const UserProvider: React.FC<{
     });
   }, [auth]);
 
-  const signoutOnExpiry = useCallback(() => {
+  // On a 401 (which fires `splice:auth-expired` from BaseApiMiddleware /
+  // LedgerApiContext), attempt one refresh_token grant before giving up and
+  // signing the user out. Recovers two scenarios:
+  //   1. The proactive `automaticSilentRenew` timer never fired (suspended
+  //      tab, clock skew, or the access token expired before the
+  //      `accessTokenExpiring` notification window).
+  //   2. A request was sent with a valid token but reached the server after
+  //      the token expired, producing a 401 concurrent with an in-flight
+  //      silent renew.
+  // Single-flighted via `renewInFlight` so concurrent 401s from a fan-out
+  // collapse into one signinSilent call. On successful refresh we
+  // `invalidateQueries` to retry queries that already failed (react-query's
+  // retryQuery short-circuits on 401, so they will not retry themselves).
+  const renewOrSignout = useCallback(async () => {
     if (signoutInFlight.current) return;
+    if (renewInFlight.current) return;
+    if (auth === undefined || !auth.isAuthenticated) return;
+
+    if (auth.user?.refresh_token) {
+      renewInFlight.current = true;
+      try {
+        await auth.signinSilent();
+        await queryClient.invalidateQueries();
+        return;
+      } catch (err) {
+        console.debug('renewOrSignout: silent renew failed, signing out', err);
+      } finally {
+        renewInFlight.current = false;
+      }
+    }
+
     signoutInFlight.current = true;
     signoutFromIdp();
-  }, [signoutFromIdp]);
+  }, [auth, queryClient, signoutFromIdp]);
 
-  useEffect(() => onAuthExpired(signoutOnExpiry), [signoutOnExpiry]);
+  useEffect(() => onAuthExpired(renewOrSignout), [renewOrSignout]);
 
   useEffect(() => {
     async function f(user: User) {
