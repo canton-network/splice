@@ -4457,5 +4457,5 @@ components:
           nullable: true
           description: |
             Null when neither a prior accepted weight-change vote nor an
-            SV onboarding event has been recorded — caller should fall
-            back to the current weight from DsoRules in that case.
+            SV onboarding event has been recorded. This should generally
+            never happen for the standard Vote History usage.

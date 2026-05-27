@@ -116,3 +116,5 @@
         participants that have not yet vetted the latest amulet package and avoid repeated failures.
 
       - Unresponsive parties are now also skipped by the amulet-based expiry triggers and added to the in-memory ignore list.
+      
+      - Fixed "Set SV Weight" base weight display in Vote History.
