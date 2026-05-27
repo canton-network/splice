@@ -28,6 +28,7 @@ const rs256Config: AuthConfig = {
   client_id: 'test-client',
   token_audience: 'https://api.example.com',
   token_scope: 'wallet',
+  enable_offline_scope: false,
 };
 
 describe('AuthProvider', () => {

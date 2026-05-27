@@ -10,12 +10,15 @@ const rs256Base = {
   client_id: 'test-client',
   token_audience: 'test-aud',
   token_scope: 'wallet',
+  enable_offline_scope: false,
 };
 
 describe('authSchema rs256 enable_offline_scope', () => {
-  test('omitted field parses', () => {
-    const r = authSchema.safeParse(rs256Base);
-    expect(r.success).toBe(true);
+  test('omitted field is rejected (mandatory, forces explicit choice per IdP)', () => {
+    const { enable_offline_scope: _omit, ...withoutField } = rs256Base;
+    void _omit;
+    const r = authSchema.safeParse(withoutField);
+    expect(r.success).toBe(false);
   });
 
   test('explicit true parses', () => {

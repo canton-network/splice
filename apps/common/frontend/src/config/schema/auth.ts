@@ -17,13 +17,19 @@ const rs256Schema = tokenRequestSchema
     algorithm: z.literal(Algorithm.RS256),
     authority: z.string().url(),
     client_id: z.string(),
-    // Opt-in: include the OIDC `offline_access` scope. Required by some Auth0
-    // configurations to obtain a refresh token; unnecessary for Keycloak.
-    // Default false because the session-bound refresh token returned without
-    // this scope is sufficient for silent renew, and `offline_access` would
-    // request a long-lived offline refresh token (XSS-exfiltratable for as
-    // long as the user keeps the SPA loaded).
-    enable_offline_scope: z.boolean().optional(),
+    // Whether to include the OIDC `offline_access` scope in the authorization
+    // request. Required (no default) so each deployment makes an explicit
+    // choice — silently defaulting either way produces broken behavior on
+    // one of the two common IdPs.
+    //   - Set `true` for Auth0. Auth0 only returns a refresh token when
+    //     `offline_access` is requested; without it, silent renew has
+    //     nothing to use and the session expires at the access-token TTL.
+    //   - Set `false` for Keycloak. Keycloak returns a session-bound
+    //     refresh token without this scope, which is what silent renew
+    //     should use. Requesting `offline_access` on Keycloak instead
+    //     produces a long-lived offline refresh token (a larger XSS
+    //     surface in a browser-based SPA).
+    enable_offline_scope: z.boolean(),
   })
   .strict();
 

@@ -11,18 +11,14 @@ const baseConfig: AuthConfig = {
   token_scope: 'wallet',
   authority: 'https://idp.example.com/',
   client_id: 'test-client',
+  enable_offline_scope: false,
 };
 
 const scopes = (s: string) => s.split(' ').filter(Boolean).sort();
 
 describe('oidcAuthToProviderProps scope handling', () => {
-  test('omits offline_access by default', () => {
-    const props = oidcAuthToProviderProps(baseConfig);
-    expect(scopes(props.scope!)).toEqual(['openid', 'wallet']);
-  });
-
   test('omits offline_access when enable_offline_scope is false', () => {
-    const props = oidcAuthToProviderProps({ ...baseConfig, enable_offline_scope: false });
+    const props = oidcAuthToProviderProps(baseConfig);
     expect(scopes(props.scope!)).toEqual(['openid', 'wallet']);
   });
 
