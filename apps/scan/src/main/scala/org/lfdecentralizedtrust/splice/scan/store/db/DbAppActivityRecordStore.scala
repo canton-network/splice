@@ -235,7 +235,7 @@ class DbAppActivityRecordStore(
             throw Status.FAILED_PRECONDITION
               .withDescription(
                 s"Incomplete app activity for round $roundNumber: " +
-                  s"round ${roundNumber - 1} exists=$hasPrev, round ${roundNumber + 1} exists=$hasNext"
+                  s"prior round exists=$hasPrev, later round exists=$hasNext"
               )
               .asRuntimeException()
         } yield (),

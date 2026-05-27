@@ -8,6 +8,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.store.{Limit, MultiDomainAcsStore, SynchronizerStore}
 import org.lfdecentralizedtrust.splice.util.Contract
@@ -70,6 +71,16 @@ class CachingScanRewardsReferenceStore private[splice] (
       tc: TraceContext
   ): Future[Option[Contract[OpenMiningRound.ContractId, OpenMiningRound]]] =
     store.lookupOpenMiningRoundByNumber(roundNumber)
+
+  override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    store.listActiveCalculateRewardsV2(limit)
+
+  override def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    store.listActiveCalculateRewardsV2ForRound(roundNumber)
 
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit

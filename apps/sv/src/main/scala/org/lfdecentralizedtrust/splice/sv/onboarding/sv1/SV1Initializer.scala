@@ -686,6 +686,7 @@ class SV1Initializer(
                   initialExternalPartyConfigStateTickDuration =
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
+                  initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

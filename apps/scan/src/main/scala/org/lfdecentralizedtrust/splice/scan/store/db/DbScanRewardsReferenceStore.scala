@@ -11,13 +11,14 @@ import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{Limit, TcsStore}
+import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsArchiveConfig,
   AcsQueries,
@@ -56,7 +57,7 @@ class DbScanRewardsReferenceStore(
       acsTableName = ScanRewardsReferenceTables.acsTableName,
       interfaceViewsTableNameOpt = None,
       acsStoreDescriptor = StoreDescriptor(
-        version = 2,
+        version = 3,
         name = "DbScanRewardsReferenceStore",
         party = key.dsoParty,
         participant = participantId,
@@ -76,7 +77,8 @@ class DbScanRewardsReferenceStore(
     )
     with ScanRewardsReferenceStore
     with AcsTables
-    with AcsQueries {
+    with AcsQueries
+    with LimitHelpers {
 
   override def waitUntilInitialized: Future[Unit] = multiDomainAcsStore.waitUntilAcsIngested()
 
@@ -215,4 +217,43 @@ class DbScanRewardsReferenceStore(
       )
     } yield result.headOption.map(contractFromRow(OpenMiningRound.COMPANION)(_))
   }
+
+  override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    for {
+      _ <- waitUntilInitialized
+      result <- futureUnlessShutdownToFuture(
+        storage.query(
+          selectFromAcsTable(
+            ScanRewardsReferenceTables.acsTableName,
+            multiDomainAcsStore.acsStoreId,
+            multiDomainAcsStore.domainMigrationId,
+            CalculateRewardsV2.COMPANION,
+            orderLimit = sql"""order by acs.round asc limit ${sqlLimit(limit)}""",
+          ),
+          "listActiveCalculateRewardsV2",
+        )
+      )
+      limited = applyLimit("listActiveCalculateRewardsV2", limit, result)
+    } yield limited.map(contractFromRow(CalculateRewardsV2.COMPANION)(_))
+
+  override def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
+    for {
+      _ <- waitUntilInitialized
+      result <- futureUnlessShutdownToFuture(
+        storage.query(
+          selectFromAcsTable(
+            ScanRewardsReferenceTables.acsTableName,
+            multiDomainAcsStore.acsStoreId,
+            multiDomainAcsStore.domainMigrationId,
+            CalculateRewardsV2.COMPANION,
+            where = sql"""acs.round = $roundNumber""",
+          ),
+          "listActiveCalculateRewardsV2ForRound",
+        )
+      )
+    } yield result.map(contractFromRow(CalculateRewardsV2.COMPANION)(_))
 }
