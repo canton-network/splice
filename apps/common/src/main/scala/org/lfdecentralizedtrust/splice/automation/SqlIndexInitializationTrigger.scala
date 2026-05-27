@@ -263,26 +263,6 @@ object SqlIndexInitializationTrigger {
           where entry_type = 'vot'
         """,
       ),
-    IndexAction
-      .Create(
-        indexName = "scan_txlog_store_sv_weight_vote_idx",
-        createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sv_weight_vote_idx
-          on scan_txlog_store (store_id, vote_sv_party, vote_effective_at desc)
-          where entry_type = 'vot'
-            and vote_action_name = 'SRARC_UpdateSvRewardWeight'
-            and vote_accepted = true
-        """,
-      ),
-    IndexAction
-      .Create(
-        indexName = "scan_txlog_store_sv_onboarding_idx",
-        createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sv_onboarding_idx
-          on scan_txlog_store (store_id, sv_onboarding_party, sv_onboarding_effective_at desc)
-          where entry_type = 'svo'
-        """,
-      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting

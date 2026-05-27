@@ -278,11 +278,12 @@ class CachingScanStore(
   override def lookupSvRewardWeightBefore(
       svParty: PartyId,
       before: Instant,
+      updateHistory: UpdateHistory,
   )(implicit tc: TraceContext): Future[Option[Long]] =
-    getCache(
+    getCache[(PartyId, Instant), Option[Long]](
       "lookupSvRewardWeightBefore",
       cacheConfig.voteRequests,
-      store.lookupSvRewardWeightBefore _ tupled,
+      { case (party, t) => store.lookupSvRewardWeightBefore(party, t, updateHistory) },
     ).get((svParty, before))
 
   override def listVoteRequestResults(
