@@ -355,7 +355,7 @@ function emptyForm(): PartialAllocateAmuletV2Request {
       settlement_deadline: undefined,
       settlement_ref: { id: '', cid: undefined },
     },
-    transfer_legs: [emptyTransferLeg()],
+    transfer_legs: [],
     committed: false,
     meta: {},
     next_iteration_funding: {},
@@ -397,7 +397,9 @@ function validatedForm(
       amount: leg.amount,
     });
   }
-  if (validLegSides.length === 0) return null;
+  // You must specify either transfger legs, or the next iteration funding
+  if (validLegSides.length === 0 && Object.keys(partial.next_iteration_funding).length === 0)
+    return null;
   return {
     settlement: {
       executors: partial.settlement.executors,

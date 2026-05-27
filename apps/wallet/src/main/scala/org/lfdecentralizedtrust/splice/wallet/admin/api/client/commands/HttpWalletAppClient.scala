@@ -1470,7 +1470,9 @@ object HttpWalletAppClient {
       }
     }
 
-    sealed trait AmuletAllocationContract
+    sealed trait AmuletAllocationContract {
+      def contract: Contract[?, ?]
+    }
     case class V1AmuletAllocation(
         contract: Contract[
           amuletallocationv1.AmuletAllocation.ContractId,

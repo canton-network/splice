@@ -1,6 +1,5 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg as TransferLegV1
@@ -17,6 +16,7 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletFrontendTestUtil,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.TokenStandard
 
 import java.time.Instant
 import java.util.Optional
@@ -200,8 +200,6 @@ class AllocationsFrontendIntegrationTest
             .listAmuletAllocations() shouldBe empty withClue "alice AmuletAllocations"
         }
 
-        Threading.sleep(60_000L)
-
         actAndCheck(
           "click on accepting the allocation request", {
             eventuallyClickOn(
@@ -231,8 +229,6 @@ class AllocationsFrontendIntegrationTest
             findAll(className("allocation-request")).toSeq.loneElement
           }
         }
-
-        Threading.sleep(60_000L)
 
         actAndCheck(
           "click on withdrawing the allocation", {
@@ -430,24 +426,7 @@ class AllocationsFrontendIntegrationTest
               providerParty.toProtoPrimitive,
             )
 
-            // Add a self-transfer leg (alice -> alice) to fund the allocation
-            textField("create-allocation-transfer-leg-id-0").underlying
-              .sendKeys("funding-leg-0")
-            eventuallyClickOn(id("create-allocation-transfer-leg-sender-0"))
-            setAnsField(
-              textField("create-allocation-transfer-leg-sender-0"),
-              aliceParty.toProtoPrimitive,
-              aliceParty.toProtoPrimitive,
-            )
-            eventuallyClickOn(id("create-allocation-transfer-leg-receiver-0"))
-            setAnsField(
-              textField("create-allocation-transfer-leg-receiver-0"),
-              aliceParty.toProtoPrimitive,
-              aliceParty.toProtoPrimitive,
-            )
-            eventuallyClickOn(id("create-allocation-0-amulet-amount"))
-            numberField("create-allocation-0-amulet-amount").value = ""
-            numberField("create-allocation-0-amulet-amount").underlying.sendKeys("100")
+            // No transfer legs
 
             // Check the committed checkbox
             inside(find(id("create-allocation-committed"))) { case Some(element) =>
@@ -486,20 +465,30 @@ class AllocationsFrontendIntegrationTest
           },
         )
       }
-      val _ = aliceWalletClient.listAmuletAllocations().loneElement
 
-      val (_, _) = actAndCheck(
+      val aliceAllocation = aliceWalletClient.listAmuletAllocations().loneElement
+
+      val billingLeg = new TransferLegV2(
+        "billing-leg",
+        /*sender=*/ basicAccount(aliceParty),
+        /*receiver=*/ basicAccount(providerParty),
+        BigDecimal(0.5).bigDecimal,
+        amuletInstrumentIdName,
+        new Metadata(
+          java.util.Map.of("splice.lfdecentralizedtrust.org/reason", "daily license fee")
+        ),
+      )
+      val billingLegSide = new allocationv2.TransferLegSide(
+        billingLeg.transferLegId,
+        allocationv2.TransferSide.SENDERSIDE,
+        billingLeg.receiver,
+        billingLeg.amount,
+        billingLeg.instrumentId,
+        billingLeg.meta,
+      )
+
+      val (_, providerAllocation) = actAndCheck(
         "provider creates allocation to accept license fee payment", {
-          val billingLeg = new TransferLegV2(
-            "billing-leg",
-            /*sender=*/ basicAccount(aliceParty),
-            /*receiver=*/ basicAccount(providerParty),
-            BigDecimal(0.5).bigDecimal,
-            amuletInstrumentIdName,
-            new Metadata(
-              java.util.Map.of("splice.lfdecentralizedtrust.org/reason", "daily license fee")
-            ),
-          )
           val choice = new allocationinstructionv2.AllocationFactory_Allocate(
             wantedSettlement,
             new allocationv2.AllocationSpecification(
@@ -552,17 +541,78 @@ class AllocationsFrontendIntegrationTest
                   )
                 ),
               )
+              .filter(_.contractId != aliceAllocation.contract.contractId.contractId)
 
-          providerAllocations should have size 2
-
-          providerAllocations
+          providerAllocations.loneElement
         },
       )
 
-      actAndCheck("provider settles billing against prefunded allocation", {})(
-        "the provider allocation is gone, alice has the next iteration one",
-        _ => {},
+      val nextIteration =
+        Map(amuletInstrumentIdName -> BigDecimal(99).bigDecimal.setScale(10)).asJava
+
+      val (_, aliceAllocationAfter) = actAndCheck(
+        "provider settles billing against prefunded allocation", {
+          val enrichedChoice = sv1ScanBackend.getSettlementFactoryV2(
+            new allocationv2.SettlementFactory_SettleBatch(
+              wantedSettlement,
+              java.util.List.of(
+                billingLeg
+              ),
+              java.util.List.of(
+                new allocationv2.FinalizedAllocation(
+                  new allocationv2.Allocation.ContractId(providerAllocation.contractId),
+                  java.util.List.of(),
+                  java.util.Optional.empty(),
+                ),
+                new allocationv2.FinalizedAllocation(
+                  new allocationv2.Allocation.ContractId(
+                    aliceAllocation.contract.contractId.contractId
+                  ),
+                  java.util.List.of(billingLegSide),
+                  java.util.Optional.of(nextIteration),
+                ),
+              ),
+              java.util.List.of(providerParty.toProtoPrimitive),
+              emptyExtraArgs,
+            )
+          )
+          splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(providerParty),
+              commands = enrichedChoice.factoryId
+                .exerciseSettlementFactory_SettleBatch(enrichedChoice.args)
+                .commands()
+                .asScala
+                .toSeq,
+              disclosedContracts = enrichedChoice.disclosedContracts,
+            )
+        },
+      )(
+        "the provider allocation is gone, Alice has the next iteration one",
+        _ => {
+          splitwellValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+            .of_party(
+              party = providerParty,
+              filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+                TemplateId(
+                  templateId.getPackageId,
+                  templateId.getModuleName,
+                  templateId.getEntityName,
+                )
+              ),
+            ) should have size 1 withClue "Provider Allocations after settlement"
+
+          aliceWalletClient.listAmuletAllocations().loneElement
+        },
       )
+
+      aliceAllocationAfter match {
+        case TokenStandard.V1AmuletAllocation(_) => fail("Expected a V2 allocation")
+        case TokenStandard.V2AmuletAllocation(contract) =>
+          contract.payload.numIterations should be(1)
+          contract.payload.allocation.nextIterationFunding.toScala
+            .valueOrFail("Missing nextIterationFunding") should be(nextIteration)
+      }
     }
 
   }
@@ -585,7 +635,7 @@ class AllocationsFrontendIntegrationTest
       id: String,
       cid: Option[String],
       executors: Seq[String],
-  ) = {
+  ): Unit = {
     seleniumText(
       parent.childElement(className("settlement-id"))
     ) should be(
