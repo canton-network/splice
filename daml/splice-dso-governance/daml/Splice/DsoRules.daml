@@ -594,6 +594,19 @@ data SetSvRewardBeneficiariesAction
   deriving (Eq, Show)
 
 
+-- This template distinguishes between three kinds of parties:
+--
+-- * SV node operators: parties that operate an SV node. These are tracked in
+--   `svs` and contain node/operator metadata. An SV node operator does not
+--   itself define the reward weight.
+--
+-- * Hosted SVs: first-class SVs that have an on-ledger SV reward weight. These
+--   are tracked in `hostedSvs`. If an SV node operator party is also a hosted
+--   SV, it is also included in `hostedSvs` with the corresponding weight.
+--
+-- * Beneficiaries: parties that receive a portion of an SV's rewards. These are
+--   configured separately through `SvRewardBeneficiaries` and are not managed as
+--   part of SV governance.
 template DsoRules with
     dso : Party
     epoch : Int
