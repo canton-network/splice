@@ -572,8 +572,8 @@ template SvRewardBeneficiaries
         && all (> 0) (map snd beneficiaries)
         && notElem sv (map fst beneficiaries)
 
-    signatory dso, sv
-    observer svOperator
+    signatory dso
+    observer sv
 
 -- | Action to apply to the SV reward beneficiary distribution.
 data SetSvRewardBeneficiariesAction
