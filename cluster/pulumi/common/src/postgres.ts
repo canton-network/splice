@@ -5,7 +5,6 @@ import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import * as _ from 'lodash';
 import { Resource } from '@pulumi/pulumi';
-import { th } from 'zod/v4/locales';
 
 import { CnChartVersion } from './artifacts';
 import { clusterSmallDisk, CloudSqlConfig, config } from './config';
