@@ -334,7 +334,7 @@ testCouponAssignment hideCoupon = do
   -- assign both coupons to bob, alice, and charlie
   let percentages = [(bob, 0.3), (alice, 0.5), (charlie, 0.2)]
   Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult{..} <-
-    submitMulti [alice] [app.dso] $ exerciseCmd couponCid Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
+    submit (actAs alice <> readAs app.dso) $ exerciseCmd couponCid Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
       additionalCoupons = [toInterfaceContractId extraCouponCid]
       newBeneficiaries = map (uncurry Api.RewardAssignmentV1.RewardBeneficiary) percentages
       extraArgs = emptyExtraArgs
