@@ -116,7 +116,7 @@ test_SvWeightsFullyOnledger = do
   -- Check hosted SVs SvRewardState contracts
   checkSvRewardStateExists app sv1AsHostedSvName
   checkSvRewardStateExists app hostedSvName
-  checkSvRewardStateExists app hostedSvName
+  checkSvRewardStateExists app ghostSvName
 
   -- Migrate beneficaries weights
   void $ submit (actAs sv1 <> readAs dso) $ exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
