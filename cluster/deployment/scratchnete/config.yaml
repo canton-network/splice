@@ -21,7 +21,6 @@ svs:
   sv-13: !include(sv.yaml) {}
   sv-14: !include(sv.yaml) {}
   sv-15: !include(sv.yaml) {}
-  sv-16: !include(sv.yaml) {}
   sv: !include(sv.yaml) {}
   sv-da-1: !include(sv.yaml) {}
 persistentHeapDumps: true
