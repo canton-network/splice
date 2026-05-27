@@ -46,7 +46,7 @@ test_SvWeightsFullyOnledger = do
   -- Onboarding an SV node
   -------------------------
 
-  [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
+  [(_, round), _, _] <- getActiveOpenRoundsSorted app.dso
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
     ARC_DsoRules with
       dsoAction = SRARC_AddSvNode DsoRules_AddSvNode with
@@ -54,7 +54,7 @@ test_SvWeightsFullyOnledger = do
         newSvNodeName
         newSvNodeParticipantId
 
-  checkDsoRulesSv app newSvOperator (mkSvInfo newSvNodeName round 0 newSvNodeParticipantId newSvOperator)
+  checkDsoRulesSv app newSvOperator (mkSvInfo newSvNodeName round 0 newSvNodeParticipantId)
 
 
   -- Onboarding a hosted SV
@@ -474,8 +474,8 @@ mkHostedSvInfo : Text -> OpenMiningRound -> Int -> Text -> Party -> HostedSvInfo
 mkHostedSvInfo name joinedAsOfRound svRewardWeight participantId svOperator =
   HostedSvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> Party -> SvInfo
-mkSvInfo name joinedAsOfRound svRewardWeight participantId svOperator =
+mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
+mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
 mkSvMigrationData : Party -> Text -> Text -> Int -> SvMigrationData
