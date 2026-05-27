@@ -107,6 +107,16 @@ do
     shift
 done
 
+# Resolve binaries in the parent shell so the panes execute the binary from
+# the active environment's PATH. Without this, if tmux is launched from one
+# nix env and start-canton.sh is then re-run from another, the panes pick up
+# the binary from the tmux server's inherited PATH (the first env), which is
+# silent and confusing. See https://github.com/canton-network/splice/issues/458.
+# Assumes the binaries are real executables on PATH; aliases and shell
+# functions would resolve to strings that are not usable as a tmux command.
+canton_input=$CANTON
+CANTON=$(command -v "$canton_input") || { echo "start-canton.sh: '$canton_input' not found on PATH" >&2; exit 1; }
+
 tmux_session="canton"
 tmux_window=0
 
@@ -217,7 +227,7 @@ tmux_cmd_canton() {
     "EXTRA_CLASSPATH=$COMETBFT_DRIVER/driver.jar \
      COMETBFT_DOCKER_IP=${COMETBFT_DOCKER_IP-} \
      LOG_LEVEL_API_REQUEST=DEBUG \
-     CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
+     CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" \"$CANTON\" \
       -c $baseConfig $confOverrides \
       --log-level-canton=DEBUG \
       --log-encoder json \
@@ -254,7 +264,8 @@ else
   echo "-D specified, not waiting for canton to start "
 fi
 
-tmux_cmd toxiproxy "toxiproxy-server 2>&1 | tee -a log/toxi.log"
+TOXIPROXY_SERVER=$(command -v toxiproxy-server) || { echo "start-canton.sh: 'toxiproxy-server' not found on PATH" >&2; exit 1; }
+tmux_cmd toxiproxy "\"$TOXIPROXY_SERVER\" 2>&1 | tee -a log/toxi.log"
 
 if [ $daemon -eq 0 ]; then
   if [ -z "${TMUX-}" ]; then
