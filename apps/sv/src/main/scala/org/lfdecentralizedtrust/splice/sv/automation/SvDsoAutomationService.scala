@@ -146,6 +146,13 @@ class SvDsoAutomationService(
   // Triggers that require namespace permissions and the existence of the DsoRules and AmuletRules contracts
   def registerPostOnboardingTriggers(): Unit = {
     registerTrigger(
+      new GrantValidatorPermissionTrigger(
+        triggerContext,
+        store,
+        participantAdminConnection,
+      )
+    )
+    registerTrigger(
       new SvOnboardingRequestTrigger(
         triggerContext,
         dsoStore,
@@ -550,6 +557,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
   // registerPostOnboardingTriggers
   override protected[this] def expectedTriggerClasses: Seq[TriggerClass] =
     SpliceAppAutomationService.expectedTriggerClasses ++ Seq(
+      aTrigger[GrantValidatorPermissionTrigger],
       aTrigger[SummarizingMiningRoundTrigger],
       aTrigger[SvOnboardingRequestTrigger],
       aTrigger[ReceiveSvRewardCouponTrigger],

@@ -61,6 +61,7 @@ function start_frontend() {
     --tla-str clusterAddress="localhost" \
     --tla-str authAlgorithm="rs-256" \
     --tla-str enableTestAuth="$test_auth" \
+    --tla-str permissioned="$permissioned" \
     --tla-code auth0Config="$auth0Config" \
     --tla-str validatorNode="$node_name" \
     --tla-str app="$app" \
@@ -98,6 +99,7 @@ function usage() {
   echo "  -v        run frontends with a shared validator for all users"
   echo "  -s        run frontends with two super validators for Sv*IntegrationTest in CI"
   echo "  -t        start interactive/live vitest suites for frontends"
+  echo "  -p        run frontends with permissioned mode enabled"
 }
 
 # default values
@@ -106,8 +108,9 @@ enable_test_auth="true"
 shared_validator_for_users=0
 two_svs=0
 run_tests=0
+permissioned="false"
 
-while getopts "hdapvsmtl" arg; do
+while getopts "hdavstp" arg; do
   case ${arg} in
     h)
       usage
@@ -127,6 +130,10 @@ while getopts "hdapvsmtl" arg; do
       ;;
     t)
       run_tests=1
+      ;;
+    p)
+      permissioned="true"
+      echo "Enabled permissioned mode."
       ;;
     ?)
       usage
