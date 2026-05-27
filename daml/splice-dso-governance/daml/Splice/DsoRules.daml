@@ -163,6 +163,12 @@ data DsoSummary = DsoSummary with
       -- ^ The number of votes required for considering a confirmation, or a request for a vote
   deriving (Eq, Show)
 
+-- | Migration data for one SV whose reward weight is being moved from the
+-- legacy SV operator weight model into `hostedSvs`.
+--
+-- Each value represents one SV operated by the SV operator performing the
+-- migration. The corresponding `svRewardWeight` becomes the on-ledger hosted SV
+-- weight for that SV under the migrating SV operator.
 data SvMigrationData = SvMigrationData with
     svParty : Party -- ^ The SV party.
     svName : Text -- ^ Human-readable name; must be unique.
