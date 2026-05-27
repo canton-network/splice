@@ -409,7 +409,7 @@ template RewardCouponV2
         meta = Api.Token.MetadataV1.emptyMetadata
         maxNumNewBeneficiaries = maxNumNewCouponV2Beneficiaries
 
-      rewardCoupon_assignBeneficiariesImpl _self arg = rewardCouponV2_assignBeneficiariesImpl this arg
+      rewardCoupon_assignBeneficiariesImpl self arg = rewardCouponV2_assignBeneficiariesImpl this self arg
 
 
 -- | A coupon for receiving validator rewards proportional to the usage fee paid by a user
@@ -597,9 +597,10 @@ maxNumNewCouponV2Beneficiaries = 20
 -- | Implementation of the 'RewardCoupon_AssignBeneficiaries' choice for 'RewardCouponV2'.
 rewardCouponV2_assignBeneficiariesImpl
   : RewardCouponV2
+  -> ContractId Api.RewardAssignmentV1.RewardCoupon
   -> Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries
   -> Update Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult
-rewardCouponV2_assignBeneficiariesImpl coupon arg = do
+rewardCouponV2_assignBeneficiariesImpl coupon _self arg = do
   let newBeneficiaries = arg.newBeneficiaries
   require "Beneficiary has not been assigned yet" (isNone coupon.beneficiary)
   require "Beneficaries are unique" (unique (map (.beneficiary) newBeneficiaries))
