@@ -2193,7 +2193,7 @@ class HttpScanHandler(
       val svParty = PartyId.tryFromProtoPrimitive(body.svParty)
       val before = body.before.toInstant
       for {
-        priorWeight <- store.lookupSvRewardWeightBefore(svParty, before)
+        priorWeight <- store.lookupSvRewardWeightBefore(svParty, before, updateHistory)
       } yield ScanResource.LookupSvRewardWeightBeforeResponse.OK(
         definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
       )

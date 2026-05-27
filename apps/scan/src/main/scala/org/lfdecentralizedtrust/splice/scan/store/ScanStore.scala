@@ -237,6 +237,7 @@ trait ScanStore
   def lookupSvRewardWeightBefore(
       svParty: PartyId,
       before: Instant,
+      updateHistory: UpdateHistory,
   )(implicit tc: TraceContext): Future[Option[Long]]
 }
 

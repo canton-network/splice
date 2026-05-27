@@ -24,15 +24,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
-  DsoRules_AddSv,
-  DsoRules_AddSvResult,
-  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -47,7 +42,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMe
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.events.{DsoRulesAddSv, DsoRulesCloseVoteRequest}
+import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.damlDecimal
 import org.lfdecentralizedtrust.splice.util.*
@@ -67,8 +62,6 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.I
   UpdateHistoryInitAtLatestPrunedOffset,
   ResumeAtOffset,
 }
-import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
-import slick.jdbc.GetResult
 
 abstract class ScanStoreTest
     extends StoreTestBase
@@ -523,47 +516,74 @@ abstract class ScanStoreTest
       }
     }
 
-    "sv onboarding" should {
+    "lookupSvRewardWeightBefore" should {
 
-      "ingestion writes an SvOnboardingTxLogEntry for DsoRules_AddSv" in {
+      def ingestDsoRulesWithSvWeight(
+          updateHistory: UpdateHistory,
+          sv: PartyId,
+          weight: Long,
+          recordTime: CantonTimestamp,
+      ): Future[?] =
+        dummyDomain.create(
+          dsoRules(
+            dsoParty,
+            svs = Collections.singletonMap(
+              sv.toProtoPrimitive,
+              new dsorulesCodegen.SvInfo("sv-name", new Round(0L), weight, "participantId"),
+            ),
+          ),
+          recordTime = recordTime.toInstant,
+        )(updateHistory)
+
+      "returns None when no DsoRules exists before the given time" in {
         val sv = providerParty(7)
         for {
           store <- mkStore()
-          _ <- ingestAddSv(store, sv, initialWeight = 5L)
-          entries <- listAllSvOnboardings(store)
-        } yield {
-          entries should have length 1
-          entries.head.svParty shouldBe sv
-          entries.head.initialWeight shouldBe 5L
-        }
-      }
-
-      "lookupSvRewardWeightBefore returns None when no events exist" in {
-        val sv = providerParty(7)
-        for {
-          store <- mkStore()
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
         } yield result shouldBe None
       }
 
-      "lookupSvRewardWeightBefore falls back to AddSv when no prior vote exists" in {
+      "returns the onboarding weight when no weight change happened" in {
         val sv = providerParty(7)
         for {
           store <- mkStore()
-          _ <- ingestAddSv(store, sv, initialWeight = 5L)
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
         } yield result shouldBe Some(5L)
       }
 
-      "lookupSvRewardWeightBefore returns most recent accepted vote when one exists before T" in {
+      "returns the weight from the most recent DsoRules before the given time" in {
         val sv = providerParty(7)
         for {
           store <- mkStore()
-          _ <- ingestAddSv(store, sv, initialWeight = 5L)
-          _ <- ingestUpdateSvRewardWeightVote(store, sv, newWeight = 10L, effectiveAt = time(75))
-          _ <- ingestUpdateSvRewardWeightVote(store, sv, newWeight = 15L, effectiveAt = time(125))
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant)
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 10L, recordTime = time(75))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 15L, recordTime = time(125))
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
         } yield result shouldBe Some(10L)
+      }
+
+      "returns None for an SV absent from the DsoRules svs map" in {
+        val sv = providerParty(7)
+        val otherSv = providerParty(8)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(
+            updateHistory,
+            otherSv,
+            weight = 5L,
+            recordTime = time(50),
+          )
+          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
+        } yield result shouldBe None
       }
     }
 
@@ -1236,54 +1256,6 @@ abstract class ScanStoreTest
       migrationId: Long
   ): Future[UpdateHistory]
 
-  protected def listAllSvOnboardings(store: ScanStore): Future[Seq[SvOnboardingTxLogEntry]]
-
-  private def ingestAddSv(
-      store: ScanStore,
-      sv: PartyId,
-      initialWeight: Long,
-      effectiveAt: CantonTimestamp = time(50),
-  ): Future[?] = {
-    val addSvArg = new DsoRules_AddSv(
-      sv.toProtoPrimitive,
-      "sv-name",
-      initialWeight,
-      "svParticipantId",
-      new Round(1L),
-    )
-    val addSvResult = new DsoRules_AddSvResult(new DsoRules.ContractId(nextCid()))
-    dummyDomain.exercise(
-      contract = dsoRules(dsoParty),
-      interfaceId = None,
-      choiceName = DsoRulesAddSv.choice.name,
-      addSvArg.toValue,
-      addSvResult.toValue,
-      txEffectiveAt = effectiveAt.toInstant,
-    )(store.multiDomainAcsStore)
-  }
-
-  private def ingestUpdateSvRewardWeightVote(
-      store: ScanStore,
-      sv: PartyId,
-      newWeight: Long,
-      effectiveAt: CantonTimestamp,
-  ): Future[?] = {
-    val action = new ARC_DsoRules(
-      new SRARC_UpdateSvRewardWeight(
-        new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, newWeight)
-      )
-    )
-    val voteReq = voteRequest(requester = userParty(1), votes = Seq.empty, action = action)
-    val result = mkVoteRequestResult(voteReq, effectiveAt = effectiveAt.toInstant)
-    dummyDomain.exercise(
-      contract = dsoRules(dsoParty),
-      interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-      choiceName = DsoRulesCloseVoteRequest.choice.name,
-      mkCloseVoteRequest(voteReq.contractId),
-      result.toValue,
-    )(store.multiDomainAcsStore)
-  }
-
   private lazy val user1 = userParty(1)
   private lazy val user2 = userParty(2)
 
@@ -1932,37 +1904,5 @@ class DbScanStoreTest
         storeReingest.listVoteRequests().futureValue.toList should contain(activeVoteRequest)
       }
     }
-  }
-
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  override protected def listAllSvOnboardings(
-      store: ScanStore
-  ): Future[Seq[SvOnboardingTxLogEntry]] = {
-    implicit val GetResultRow: GetResult[(String, String)] =
-      GetResult(prs => (prs.<<[String], prs.<<[String]))
-    val dbStore = store.asInstanceOf[DbScanStore]
-    val storeId = dbStore.txLogStoreId
-    val entryType = TxLogEntry.EntryType.SvOnboardingTxLogEntry.str
-    storage
-      .query(
-        sql"""
-          select entry_type, entry_data
-          from scan_txlog_store
-          where store_id = $storeId
-            and entry_type = $entryType
-        """.as[(String, String)],
-        "listAllSvOnboardings",
-      )
-      .failOnShutdown
-      .map { rows =>
-        rows.map { case (entryTypeStr, entryData) =>
-          TxLogEntry
-            .decode(
-              com.digitalasset.canton.config.CantonRequireTypes.String3.tryCreate(entryTypeStr),
-              entryData,
-            )
-            .asInstanceOf[SvOnboardingTxLogEntry]
-        }
-      }
   }
 }

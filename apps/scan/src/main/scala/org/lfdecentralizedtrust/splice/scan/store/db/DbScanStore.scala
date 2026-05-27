@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -37,13 +38,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.scan.store.{
   OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
-  SvOnboardingTxLogEntry,
   TransferCommandTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
@@ -673,70 +671,43 @@ class DbScanStore(
   override def lookupSvRewardWeightBefore(
       svParty: PartyId,
       before: Instant,
-  )(implicit tc: TraceContext): Future[Option[Long]] = {
-    val beforeIso = before.toString
-    val beforeMicros = CantonTimestamp.assertFromInstant(before).toMicros
+      updateHistory: UpdateHistory,
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    lookupContractByRecordTimeBefore(
+      DsoRules.COMPANION,
+      updateHistory,
+      CantonTimestamp.assertFromInstant(before),
+    ).map(
+      _.flatMap(dsoRules =>
+        Option(dsoRules.payload.svs.get(svParty.toProtoPrimitive)).map(_.svRewardWeight.toLong)
+      )
+    )
 
-    val voteWeight: Future[Option[Long]] = futureUnlessShutdownToFuture(
-      storage
+  private def lookupContractByRecordTimeBefore[C, TCId <: ContractId[?], T](
+      companion: C,
+      updateHistory: UpdateHistory,
+      before: CantonTimestamp,
+  )(implicit
+      companionClass: ContractCompanion[C, TCId, T],
+      tc: TraceContext,
+  ): Future[Option[Contract[TCId, T]]] = {
+    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
+      companionClass.packageQualifiedName(companion)
+    for {
+      row <- storage
         .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-              entry_type = ${EntryType.VoteRequestTxLogEntry}
-              and vote_action_name = 'SRARC_UpdateSvRewardWeight'
-              and vote_accepted = true
-              and vote_sv_party = ${svParty.toProtoPrimitive}
-              and vote_effective_at::timestamptz < $beforeIso::timestamptz
-            """,
-            orderLimit = sql"order by vote_effective_at::timestamptz desc limit 1",
+          selectFromUpdateCreatesTableResult(
+            updateHistory.historyId,
+            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
+              and template_id_entity_name = ${lengthLimited(entityName)}
+              and package_name = ${lengthLimited(packageName)}
+              and record_time < $before""",
+            orderLimit = sql"""order by record_time desc limit 1""",
           ).headOption,
-          "lookupSvRewardWeightBefore.vote",
+          s"lookupBefore[$pqn]",
         )
         .value
-    ).map(_.map(newRewardWeightFromVoteRow))
-
-    val onboardingWeight: Future[Option[Long]] = futureUnlessShutdownToFuture(
-      storage
-        .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-              entry_type = ${EntryType.SvOnboardingTxLogEntry}
-              and sv_onboarding_party = ${svParty.toProtoPrimitive}
-              and sv_onboarding_effective_at < $beforeMicros
-            """,
-            orderLimit = sql"order by sv_onboarding_effective_at desc limit 1",
-          ).headOption,
-          "lookupSvRewardWeightBefore.addSv",
-        )
-        .value
-    ).map(_.map(row => txLogEntryFromRow[SvOnboardingTxLogEntry](txLogConfig)(row).initialWeight))
-
-    voteWeight.flatMap {
-      case some @ Some(_) => Future.successful(some)
-      case None => onboardingWeight
-    }
-  }
-
-  private def newRewardWeightFromVoteRow(
-      row: TxLogQueries.SelectFromTxLogTableResult
-  ): Long = {
-    val vr = txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig)(row)
-    val result = vr.result.getOrElse(throw txMissingField())
-    result.request.action match {
-      case arc: ARC_DsoRules =>
-        arc.dsoAction match {
-          case u: SRARC_UpdateSvRewardWeight =>
-            u.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.toLong
-          case other =>
-            sys.error(s"vote_sv_party set but action is not weight update: $other")
-        }
-      case other =>
-        sys.error(s"vote_sv_party set but action is not ARC_DsoRules: $other")
-    }
+    } yield row.map(contractFromEvent(companion)(_))
   }
 
   override def listVoteRequestsByTrackingCid(
