@@ -17,6 +17,8 @@ window.splice_config = {
     },
   },
 
+  permissioned: false,
+
   spliceInstanceNames: {
     networkName: 'Splice',
     networkFaviconUrl: 'https://www.hyperledger.org/hubfs/hyperledgerfavicon.png',
