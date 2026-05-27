@@ -1179,6 +1179,26 @@ class DbSvDsoStore(
     )).getOrRaise(offsetExpectedError())
   }
 
+  override def listSponsoredValidatorPermissions(sponsor: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[
+    splice.validatorpermission.ValidatorPermission.ContractId,
+    splice.validatorpermission.ValidatorPermission,
+  ]]] = {
+    storage
+      .query(
+        selectFromAcsTable(
+          DsoTables.acsTableName,
+          acsStoreId,
+          domainMigrationId,
+          splice.validatorpermission.ValidatorPermission.COMPANION,
+          where = sql"""sv_party = $sponsor""",
+        ),
+        "listSponsoredValidatorPermissions",
+      )
+      .map(_.map(contractFromRow(splice.validatorpermission.ValidatorPermission.COMPANION)(_)))
+  }
+
   override def lookupValidatorPermissionWithOffset(
       validator: PartyId
   )(implicit tc: TraceContext): Future[

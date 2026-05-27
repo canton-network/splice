@@ -809,6 +809,13 @@ trait SvDsoStore
     QueryResult[Option[Contract[so.SvOnboardingRequest.ContractId, so.SvOnboardingRequest]]]
   ]
 
+  def listSponsoredValidatorPermissions(sponsor: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[
+    splice.validatorpermission.ValidatorPermission.ContractId,
+    splice.validatorpermission.ValidatorPermission,
+  ]]]
+
   def lookupValidatorPermissionWithOffset(validator: PartyId)(implicit
       tc: TraceContext
   ): Future[QueryResult[Option[Contract[
