@@ -527,6 +527,7 @@ class SvApp(
         timeouts,
         loggerFactory,
         amuletAppParameters.upgradesConfig,
+        participantAdminConnection,
       )
 
       adminHandler = new HttpSvAdminHandler(
@@ -809,6 +810,32 @@ object SvApp {
         SyncCloseable("storage", storage.close()),
         SyncCloseable("http rate limiter", httpRateLimiter.close()),
       )
+  }
+
+  def listValidatorPermissions(
+      svParty: PartyId,
+      synchronizerId: SynchronizerId,
+      dsoStore: SvDsoStore,
+      participantAdminConnection: ParticipantAdminConnection,
+  )(implicit
+      ec: ExecutionContext,
+      traceContext: TraceContext,
+  ): Future[Seq[(String, String)]] = {
+    for {
+      validatorPermissions <- dsoStore.listSponsoredValidatorPermissions(svParty)
+      topologyPermissions <- participantAdminConnection.listParticipantSynchronizerPermission(
+        synchronizerId,
+        "",
+      )
+    } yield {
+      val activeParticipantIds =
+        topologyPermissions.map(_.mapping.participantId.toProtoPrimitive).toSet
+
+      validatorPermissions
+        .map(_.payload)
+        .filter(p => activeParticipantIds.contains(p.validatorParticipantId))
+        .map(p => (p.validator, p.validatorParticipantId))
+    }
   }
 
   def grantValidatorPermission(
