@@ -603,9 +603,9 @@ rewardCouponV2_assignBeneficiariesImpl coupon arg = do
   let newBeneficiaries = arg.newBeneficiaries
   require "Beneficiary has not been assigned yet" (isNone coupon.beneficiary)
   require "Beneficaries are unique" (unique (map (.beneficiary) newBeneficiaries))
-  require "Beneficiary weights are between 0.0 and 1.0"
-    (all (\b -> 0.0 < b.weight && b.weight <= 1.0) newBeneficiaries)
-  require "Beneficiary weights add up to 1.0" (sum (map (.weight) newBeneficiaries) == 1.0)
+  require "Beneficiary percentages are between 0.0 and 1.0"
+    (all (\b -> 0.0 < b.percentage && b.percentage <= 1.0) newBeneficiaries)
+  require "Beneficiary percentages add up to 1.0" (sum (map (.percentage) newBeneficiaries) == 1.0)
   require ("No more than " <> show maxNumNewCouponV2Beneficiaries <> " beneficiaries assigned")
     (length newBeneficiaries <= maxNumNewCouponV2Beneficiaries)
 
@@ -621,7 +621,7 @@ rewardCouponV2_assignBeneficiariesImpl coupon arg = do
   perBeneficiaryCids <- forA newBeneficiaries $ \newBeneficiary -> do
     cids <- forA allCoupons $ \c ->
       toInterfaceContractId <$> create c with
-        amount = c.amount * newBeneficiary.weight
+        amount = c.amount * newBeneficiary.percentage
         beneficiary = Some newBeneficiary.beneficiary
         providerIsObserver = True
     pure (newBeneficiary.beneficiary, cids)
