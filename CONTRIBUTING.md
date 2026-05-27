@@ -291,17 +291,17 @@ grant write permissions to the main Splice repo.
 - A canton-network org admin creates the fork in canton-network org via GitHub UI or CLI (the convention is to use `splice-<feature>`).
   - It usually suffices to fork main only, then manually add also the latest release line (see "Maintaining the feature fork" below)
   - Add initial permissions to the fork:
-    - Add admins ad asmins of the fork
-    - Add splice-admins as admins of the fork
-    - Add splice-maintainers as maintainers of the fork
+    - Add `admins` team as admins of the fork
+    - Add `splice-admins` team as admins of the fork
+    - Add `splice-maintainers` as maintainers of the fork
 - A Splice contributor adds the fork to the list of repos in the splice
   [cluster config file in canton-network-internal repo](https://github.com/DACH-NY/canton-network-internal/blob/main/cluster/deployment/splice/config.yaml).
   Once merged to main, the Pulumi operator will configure runners for the fork.
-- A splice admin configures the repo (currently manually):
+- A splice admin configures the fork repo (currently manually):
   - Add maintainers that will develop the feature
   - Add branch protection rules to main:
     - Require PRs and approvals for merge
-    - Require status checks before merge (`ci / final_result`)
+    - Require status checks before merge: `ci / final_result` (you will need to wait for a first CI run on this repo for that to be an option)
     - Enable "Do not allow bypassing the above settings"
   - Under Actions -> General, select "Require approval for all external contributors"
   - Under Environments, create a new environment `ci-forks`, with the maintainers of this repo as required reviewers.
@@ -318,3 +318,4 @@ grant write permissions to the main Splice repo.
     on how to opt-in to full CI,  run static checks only, etc. The same instructions should work on the feature fork.
     Please do not make any non-trivial changes to the workflows in `.github` (adding tests etc. is of course allowed, just avoid any
     change that might have security implications on CI).
+
