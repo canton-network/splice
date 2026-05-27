@@ -20,12 +20,14 @@ if [ "$unsafe" == "true" ] || [ "$unsafe" == "1" ]; then
   # shellcheck disable=SC2016
   sed -i 's/client_id: .*/secret: "${SPLICE_APP_UI_UNSAFE_SECRET}",/' /tmpl/config.js.tmpl
   sed -i 's/authority: .*//' /tmpl/config.js.tmpl
+  # `enable_offline_scope` is rs256-only; hs256-unsafe schema is strict.
+  sed -i '/enable_offline_scope/d' /tmpl/config.js.tmpl
   # shellcheck disable=SC2016
   envsubst '$SPLICE_APP_UI_AUTH_AUDIENCE,$SPLICE_APP_UI_UNSAFE_SECRET,$SPLICE_APP_UI_NETWORK_NAME,$SPLICE_APP_UI_AMULET_NAME,$SPLICE_APP_UI_AMULET_NAME_ACRONYM,$SPLICE_APP_UI_NAME_SERVICE_NAME,$SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM,$SPLICE_APP_UI_NETWORK_FAVICON_URL,$SPLICE_APP_UI_POLL_INTERVAL' < /tmpl/config.js.tmpl > /usr/share/nginx/html/config.js
 
 else
   # shellcheck disable=SC2016
-  envsubst '$SPLICE_APP_UI_AUTH_CLIENT_ID,$SPLICE_APP_UI_AUTH_URL,$SPLICE_APP_UI_AUTH_AUDIENCE,$SPLICE_APP_UI_AUTH_SCOPE,$SPLICE_APP_UI_NETWORK_NAME,$SPLICE_APP_UI_AMULET_NAME,$SPLICE_APP_UI_AMULET_NAME_ACRONYM,$SPLICE_APP_UI_NAME_SERVICE_NAME,$SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM,$SPLICE_APP_UI_NETWORK_FAVICON_URL,$SPLICE_APP_UI_POLL_INTERVAL' < /tmpl/config.js.tmpl > /usr/share/nginx/html/config.js
+  envsubst '$SPLICE_APP_UI_AUTH_CLIENT_ID,$SPLICE_APP_UI_AUTH_URL,$SPLICE_APP_UI_AUTH_AUDIENCE,$SPLICE_APP_UI_AUTH_SCOPE,$SPLICE_APP_UI_AUTH_ENABLE_OFFLINE_SCOPE,$SPLICE_APP_UI_NETWORK_NAME,$SPLICE_APP_UI_AMULET_NAME,$SPLICE_APP_UI_AMULET_NAME_ACRONYM,$SPLICE_APP_UI_NAME_SERVICE_NAME,$SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM,$SPLICE_APP_UI_NETWORK_FAVICON_URL,$SPLICE_APP_UI_POLL_INTERVAL' < /tmpl/config.js.tmpl > /usr/share/nginx/html/config.js
 fi
 
 echo "Starting nginx"
