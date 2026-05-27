@@ -97,6 +97,7 @@ class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -172,7 +173,12 @@ class DbAppActivityRecordStore(
               )
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
-    )
+    ).map {
+      // The first SV needs no prior-round proof for round 0, but still needs
+      // the query to confirm round 1 exists as the next-round sentinel.
+      case Some(1L) if isFirstSv => Some(0L)
+      case other => other
+    }
   }
 
   /** Find the latest round with complete app activity.
@@ -222,7 +228,13 @@ class DbAppActivityRecordStore(
     futureUnlessShutdownToFuture(
       storage.queryAndUpdate(
         for {
-          hasPrev <- sql"""select exists(
+          hasPrev <-
+            if (roundNumber == 0L && isFirstSv)
+              // The first SV has complete history from genesis, so round 0
+              // needs no round -1 proof.
+              DBIO.successful(true)
+            else
+              sql"""select exists(
                              select 1 from #${Tables.appActivityRecords} a
                              where a.history_id = $historyId
                                and a.round_number = ${roundNumber - 1}

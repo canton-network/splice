@@ -449,6 +449,31 @@ class DbScanAppRewardsStoreTest
       }
     }
 
+    "aggregateActivityTotals — succeeds for round 0 when isFirstSv" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))
+        // Next-round sentinel only — no prior round needed for isFirstSv
+        _ <- insertActivityRecord(historyId, 1L, Seq("sentinel::provider"), Seq(1L))
+        _ <- store.aggregateActivityTotals(0L)
+        totals <- store.getAppActivityPartyTotalsByRound(0L)
+      } yield {
+        totals should have size 1
+        totals.head.appProviderParty shouldBe "alice::provider"
+      }
+    }
+
+    "aggregateActivityTotals — rejects round 0 when not isFirstSv" in {
+      for {
+        (store, historyId) <- newStore()
+        _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))
+        _ <- insertActivityRecord(historyId, 1L, Seq("sentinel::provider"), Seq(1L))
+        result <- store.aggregateActivityTotals(0L).failed
+      } yield {
+        result.getMessage should include("Incomplete app activity for round 0")
+      }
+    }
+
     // -- lookupLatestRoundWithRewardComputation ------
 
     "lookupLatestRoundWithRewardComputation returns None when no root hashes" in {
@@ -1054,7 +1079,9 @@ class DbScanAppRewardsStoreTest
 
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
-  private def newStore(): Future[(DbScanAppRewardsStore, Long)] = {
+  private def newStore(
+      isFirstSv: Boolean = false
+  ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
@@ -1074,6 +1101,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(
