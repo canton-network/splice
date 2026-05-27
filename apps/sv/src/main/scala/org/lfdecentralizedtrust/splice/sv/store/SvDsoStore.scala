@@ -1261,6 +1261,7 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+          svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sponsor)),
         )
       },
       mkFilter(splice.validatorlicense.ValidatorLivenessActivityRecord.COMPANION)(co =>
