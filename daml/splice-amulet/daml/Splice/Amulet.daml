@@ -403,7 +403,7 @@ template RewardCouponV2
       view = Api.RewardAssignmentV1.RewardCouponView with
         dso
         provider
-        beneficiary = fromOptional provider beneficiary
+        beneficiary
         amount
         expiresAt
         meta = Api.Token.MetadataV1.emptyMetadata
