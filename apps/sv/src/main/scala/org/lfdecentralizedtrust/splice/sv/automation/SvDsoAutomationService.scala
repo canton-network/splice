@@ -121,7 +121,10 @@ class SvDsoAutomationService(
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+ AsyncCloseable(
       "scan-connection",
-      scanConnectionF.map(_.close()),
+      scanConnectionF.transform {
+        case scala.util.Success(c) => scala.util.Try(c.close())
+        case scala.util.Failure(_) => scala.util.Success(())
+      },
       NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
     )
 
