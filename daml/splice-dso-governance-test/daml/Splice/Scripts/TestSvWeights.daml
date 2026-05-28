@@ -60,6 +60,7 @@ test_SvWeightsFullyOnledger = do
   -- Onboarding a hosted SV
   --------------------------
   -- Add hostedSv with newSvOperator as SV operator
+  -- Note: The onboarding flow creates a SvRewardBeneficiaries contract with no beneficiaries
 
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
     ARC_DsoRules with
@@ -73,26 +74,30 @@ test_SvWeightsFullyOnledger = do
   checkDsoRulesHostedSv app hostedSv
     (mkHostedSvInfo hostedSvName round hostedSvWeight newSvOperator)
 
+  checkSvRewardBeneficiaries app hostedSv newSvOperator
+    SvRewardBeneficiaries with
+      dso
+      sv = hostedSv
+      svOperator = newSvOperator
+      beneficiaries = []
 
-  -- Creating beneficiary's weight
-  ---------------------------------
 
+  -- Replace the default beneficiaries
   let hostedSvExtraBeneficiaries = [(hostedSv_b, unsafeLookup hostedSv_b hostedSvBeneficiariesMap)]
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
   [(rulesCid, _)] <- query @DsoRules app.dso
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      action = SetBeneficiaries with
-        optCid = None
-        beneficiaries = hostedSvExtraBeneficiaries
+      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+      newBeneficiaries = hostedSvExtraBeneficiaries
       svParty = hostedSv
 
-  [(hostedSvSvRewardBeneficiariesCid, hostedSvSvRewardBeneficiaries)] <-
-    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == newSvOperator)
-  hostedSvSvRewardBeneficiaries === SvRewardBeneficiaries with
-    dso
-    sv = hostedSv
-    svOperator = newSvOperator
-    beneficiaries = hostedSvExtraBeneficiaries
+  checkSvRewardBeneficiaries app hostedSv newSvOperator
+    SvRewardBeneficiaries with
+      dso
+      sv = hostedSv
+      svOperator = newSvOperator
+      beneficiaries = hostedSvExtraBeneficiaries
 
 
   -- Creating SV coupons
@@ -156,21 +161,20 @@ test_SvWeightsFullyOnledger = do
     (mkHostedSvInfo hostedSvName round updatedHostedSvWeight newSvOperator)
 
   -- Update hostedSv_b's beneficaries weight
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
   [(rulesCid, _)] <- query @DsoRules app.dso
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      action = SetBeneficiaries with
-        optCid = Some hostedSvSvRewardBeneficiariesCid
-        beneficiaries = updatedHostedSvExtraBeneficiaries
+      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+      newBeneficiaries = updatedHostedSvExtraBeneficiaries
       svParty = hostedSv
 
-  [(hostedSvSvRewardBeneficiariesCid, hostedSvSvRewardBeneficiaries)] <-
-    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == newSvOperator)
-  hostedSvSvRewardBeneficiaries === SvRewardBeneficiaries with
-    dso
-    sv = hostedSv
-    svOperator = newSvOperator
-    beneficiaries = updatedHostedSvExtraBeneficiaries
+  checkSvRewardBeneficiaries app hostedSv newSvOperator
+    SvRewardBeneficiaries with
+      dso
+      sv = hostedSv
+      svOperator = newSvOperator
+      beneficiaries = updatedHostedSvExtraBeneficiaries
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
@@ -184,19 +188,20 @@ test_SvWeightsFullyOnledger = do
   checkSvCouponBeneficariesBySv hostedSv round updatedHostedSvBeneficiaries
 
 
-  -- Removing SV beneficiaries
+  -- Clearing SV beneficiaries
   -----------------------------
-  -- Remove hostedSv_b's weight, so hostedSv receives all the SV coupons
+  -- Remove hostedSv_b from beneficiaries, so hostedSv receives all the SV coupons
 
   runNextIssuance app
 
   let hostedSvBeneficiariesAfterClear = [(hostedSv, updatedHostedSvWeight)]
 
   -- Remove hostedSv_b's weight
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      action = ClearBeneficiaries with
-        cid = hostedSvSvRewardBeneficiariesCid
+      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+      newBeneficiaries = []
       svParty = hostedSv
 
   -- Create SV coupons
@@ -211,10 +216,12 @@ test_SvWeightsFullyOnledger = do
   checkSvCouponBeneficariesBySv hostedSv round hostedSvBeneficiariesAfterClear
 
 
-  -- Updating the SV operator of a hosted SV
-  -------------------------------------------
-  -- Migrate hostedSv from snewSvOperatorv1 to sv1
+  -- Updating the SV operator of a hosted SV (Offboarding/Onboarding)
+  --------------------------------------------------------------------
+  -- Migrate hostedSv from newSvOperator to sv1
   -- To do that, we need to offboard hostedSv and then onboard it again under the new SV operator
+
+  -- Offboarding --
 
   hostedSvSvInfo <- getHostedSvInfoByParty app hostedSv
   runNextIssuance app
@@ -231,6 +238,15 @@ test_SvWeightsFullyOnledger = do
   Map.lookup hostedSv (getOffboardedHostedSvsMap rules) === Some
     OffboardedHostedSvInfo with name = hostedSvSvInfo.name
 
+  -- Archive the SvRewardBeneficiaries contract as part of the offboarding flow.
+  -- The archival will be run by an automation in the SV backend.
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
+  void $ submit (actAs dso) $
+    archiveCmd hostedSvSvRewardBeneficiariesCid
+
+
+  -- Onboarding --
+
   -- Add hostedSv with sv1 as SV operator
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
     ARC_DsoRules with
@@ -243,10 +259,12 @@ test_SvWeightsFullyOnledger = do
 
   checkDsoRulesHostedSv app hostedSv
     (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv1)
-
-  -- hostedSv removes (ClearBeneficiaries) SvRewardBeneficiaries contract where newSvOperator is the SV operator
-  -- Note: it's not needed as they were cleared in the one step above.
-  -- In case there were beneficaries, they would need to be recreated with the new SV operator
+  checkSvRewardBeneficiaries app hostedSv sv1
+    SvRewardBeneficiaries with
+      dso
+      sv = hostedSv
+      svOperator = sv1
+      beneficiaries = []
 
   -- newSvOperator cannot create coupons for the migrated hosted SV
   [(rulesCid, _)] <- query @DsoRules app.dso
@@ -389,15 +407,15 @@ test_SvWeightsMigration = do
   checkSvRewardStateExists app ghostSvName
 
   -- Migrate beneficaries weights
+  sv1SvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app sv1 sv1
   void $ submit (actAs sv1 <> readAs dso) $ exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-    action = SetBeneficiaries with
-      optCid = None
-      beneficiaries = [(sv1_b, unsafeLookup sv1_b sv1LegacyBeneficiariesMap)]
+    svRewardBeneficiariesCid = sv1SvRewardBeneficiariesCid
+    newBeneficiaries = [(sv1_b, unsafeLookup sv1_b sv1LegacyBeneficiariesMap)]
     svParty = sv1
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv1
   void $ submit (actAs hostedSv <> readAs dso) $ exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-    action = SetBeneficiaries with
-      optCid = None
-      beneficiaries = [(hostedSv_b, unsafeLookup hostedSv_b sv1LegacyBeneficiariesMap)]
+    svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+    newBeneficiaries = [(hostedSv_b, unsafeLookup hostedSv_b sv1LegacyBeneficiariesMap)]
     svParty = hostedSv
 
 
@@ -490,7 +508,7 @@ checkSvRewardStateExists app svName = do
 getRewardStatesWithBeneficiariesBySvOperator
   : AmuletApp
   -> Party
-  -> Script [(ContractId SvRewardState, Optional (ContractId SvRewardBeneficiaries))]
+  -> Script [(ContractId SvRewardState, ContractId SvRewardBeneficiaries)]
 getRewardStatesWithBeneficiariesBySvOperator app svOperator = do
   [(_, rules)] <- query @DsoRules app.dso
   let hostedSvsMap = getHostedSvsMap rules
@@ -500,15 +518,21 @@ getRewardStatesWithBeneficiariesBySvOperator app svOperator = do
 
   forA hostedSvsOperatedBySvOperator $ \(hostedSvParty, hostedSvInfo) -> do
     [(rewardStateCid, _)] <- queryFilter @SvRewardState app.dso (\s -> s.svName == hostedSvInfo.name)
-    svRewardBeneficiariesCids <- map fst <$>
+    [svRewardBeneficiariesCid] <- map fst <$>
       queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSvParty && b.svOperator == svOperator)
-    pure
-      ( rewardStateCid
-      , case svRewardBeneficiariesCids of
-          [] -> None
-          [cid] -> Some cid
-          _ -> fail "Expected at most one SvRewardBeneficiaries contract"
-      )
+    pure (rewardStateCid, svRewardBeneficiariesCid)
 
 totalWeight : [(Party, Int)] -> Int
 totalWeight beneficiaries = sum (map snd beneficiaries)
+
+getSvRewardBeneficiariesCid : AmuletApp -> Party -> Party -> Script (ContractId SvRewardBeneficiaries)
+getSvRewardBeneficiariesCid app hostedSv svOperator = do
+  [(hostedSvSvRewardBeneficiariesCid, _)] <-
+    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
+  pure hostedSvSvRewardBeneficiariesCid
+
+checkSvRewardBeneficiaries : AmuletApp -> Party -> Party -> SvRewardBeneficiaries -> Script ()
+checkSvRewardBeneficiaries app hostedSv svOperator expected = do
+  [(_, hostedSvSvRewardBeneficiaries)] <-
+    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
+  hostedSvSvRewardBeneficiaries === expected
