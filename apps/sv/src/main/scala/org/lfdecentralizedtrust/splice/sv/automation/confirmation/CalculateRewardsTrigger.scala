@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
+  TaskNoop,
   TaskOutcome,
   TaskSuccess,
   TriggerContext,
@@ -67,7 +68,7 @@ abstract class CalculateRewardsTriggerBase(
       case None =>
         throw Status.FAILED_PRECONDITION
           .withDescription(
-            s"waiting for scan to compute root hash for CalculateRewardsV2 round $round, will retry"
+            s"Scan has not yet computed the root hash for CalculateRewardsV2 round $round."
           )
           .asRuntimeException()
       case Some(rootHash) =>
@@ -79,11 +80,7 @@ abstract class CalculateRewardsTriggerBase(
           queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
           taskOutcome <- queryResult match {
             case QueryResult(_, Some(_)) =>
-              Future.successful(
-                TaskSuccess(
-                  s"skipping as confirmation from $svParty is already created for CalculateRewardsV2 round $round"
-                )
-              )
+              Future.successful(TaskNoop)
             case QueryResult(offset, None) =>
               for {
                 dsoRules <- store.getDsoRules()

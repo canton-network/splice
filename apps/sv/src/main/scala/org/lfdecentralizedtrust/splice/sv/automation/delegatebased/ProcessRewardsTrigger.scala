@@ -81,6 +81,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       damlBatch = convertBatch(batch)
       choiceArg = new ProcessRewardsV2_ProcessBatch(
         damlBatch,
+        // TODO (#5715) determine 'providersWithWrongVettingState'
         new DamlSet(java.util.Collections.emptyMap()),
       )
       cmd = dsoRules.exercise(
