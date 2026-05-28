@@ -57,6 +57,7 @@ class HttpSvOperatorHandler(
     override protected val timeouts: ProcessingTimeout,
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
+    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -197,6 +198,41 @@ class HttpSvOperatorHandler(
             )
           }.toVector
         )
+      }
+    }
+  }
+
+  override def listValidatorPermissions(
+      respond: r0.ListValidatorPermissionsResponse.type
+  )()(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.ListValidatorPermissionsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.listValidatorPermissions") { _ => _ =>
+      if (!config.permissionedSynchronizer) {
+        Future.failed(
+          HttpErrorHandler.notFound(
+            "Validator permissioning is disabled. The permissionedSynchronizer flag must be enabled to call this end point."
+          )
+        )
+      } else {
+        val svParty = dsoStoreWithIngestion.store.key.svParty
+
+        for {
+          dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+          permissions <- SvApp.listValidatorPermissions(
+            svParty,
+            dsoRules.domain,
+            dsoStoreWithIngestion.store,
+            participantAdminConnection,
+          )
+        } yield {
+          r0.ListValidatorPermissionsResponseOK(
+            permissions.map { case (party, participant) =>
+              definitions.ValidatorPermissionsResponse(party, participant)
+            }.toVector
+          )
+        }
       }
     }
   }

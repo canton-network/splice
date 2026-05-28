@@ -47,6 +47,24 @@ paths:
                 "$ref": "#/components/schemas/PrepareValidatorOnboardingResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v0/admin/validator/validatorpermissions:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "listValidatorPermissions"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ValidatorPermissionsResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
   /v0/admin/validator/onboarding/permission:
     post:
       tags: [sv]
@@ -763,6 +781,17 @@ components:
         party_hint:
           description: |
             Human-readable alias of the validator party decoded from the stored secret.
+          type: string
+
+    ValidatorPermissionsResponse:
+      type: object
+      required:
+        - validator_party_id
+        - validator_participant_id
+      properties:
+        validator_party_id:
+          type: string
+        validator_participant_id:
           type: string
 
     GrantValidatorPermissionRequest:
