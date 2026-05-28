@@ -145,6 +145,8 @@ class ValidatorAutomationService(
         walletManager,
         transferPreapprovalConfig,
         clock,
+        participantAdminConnection,
+        globalSynchronizerAlias,
       )
     )
 
