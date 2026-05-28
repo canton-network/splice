@@ -4,14 +4,13 @@ import vitest_common_conf from '@lfdecentralizedtrust/splice-common-test-vite-ut
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv, mergeConfig } from 'vite';
-import viteTsconfigPaths from 'vite-tsconfig-paths';
 
 // https://vitejs.dev/config/
 /** @type {import('vite').UserConfig} */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return mergeConfig(vitest_common_conf, {
-    plugins: [react(), viteTsconfigPaths()],
+    plugins: [react()],
     server: {
       port: parseInt(env.PORT),
     },
@@ -25,6 +24,9 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       preserveSymlinks: true,
+      // Vite 8 resolves tsconfig `paths` natively; this replaces the
+      // legacy `vite-tsconfig-paths` plugin (which causes the PLUGIN_TIMINGS warning).
+      tsconfigPaths: true,
     },
     test: {
       globalSetup: path.resolve(__dirname, 'vitest.global-setup.ts'),
