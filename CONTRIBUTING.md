@@ -319,6 +319,7 @@ grant write permissions to the main Splice repo.
     on how to opt-in to full CI,  run static checks only, etc. The same instructions should work on the feature fork.
     Please do not make any non-trivial changes to the workflows in `.github` (adding tests etc. is of course allowed, just avoid any
     change that might have security implications on CI).
+  - The fork is kept up-to-date with Splice main, to avoid painful merges into Splice later on.
 - CI assumes the branch for the latest release line, so after every Splice release (assuming you rebase/merge the fork's main to Splice main),
   you will need to pull the corresponding release-line from splice and push it to the fork. In the future we might change CI to pull the release
   line from main Splice rather than look for it in the fork, but as of now, it assumes it exists in the same repo on which it is running.
