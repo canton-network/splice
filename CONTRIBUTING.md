@@ -288,7 +288,8 @@ grant write permissions to the main Splice repo.
 
 ### Setting up a feature fork
 
-- A canton-network org admin creates the fork in canton-network org via GitHub UI or CLI (the convention is to use `splice-<feature>`).
+- A canton-network org admin (currently: Amanda Martin, Stas German, Oleksii Maiko and Itai Segall) creates the fork in
+  canton-network org via GitHub UI or CLI (the convention is to use `splice-<feature>`).
   - It usually suffices to fork main only, then manually add also the latest release line (see "Maintaining the feature fork" below)
   - Add initial permissions to the fork:
     - Add `admins` team as admins of the fork
