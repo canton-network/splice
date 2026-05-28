@@ -17,6 +17,13 @@ const rs256Schema = tokenRequestSchema
     algorithm: z.literal(Algorithm.RS256),
     authority: z.string().url(),
     client_id: z.string(),
+    // Opt-in: include the OIDC `offline_access` scope in the authorization
+    // request. Required by some Auth0 configurations to obtain a refresh
+    // token at all; unnecessary for Keycloak (which issues a session-bound
+    // refresh token without it). Default false because Keycloak treats
+    // `offline_access` as a request for a long-lived offline refresh token,
+    // a larger XSS surface for browser-based clients.
+    enable_offline_scope: z.boolean().optional(),
   })
   .strict();
 
