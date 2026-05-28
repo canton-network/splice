@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.store
 import cats.data.NonEmptyList
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.config.CantonRequireTypes.String3
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequest
@@ -34,15 +35,18 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionName: Option[String],
       accepted: Option[Boolean],
       requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      effectiveFrom: Option[CantonTimestamp],
+      effectiveTo: Option[CantonTimestamp],
       limit: Limit,
       after: Option[Long] = None,
   ): SqlStreamingAction[Vector[
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
     val afterCondition = after match {
-      case Some(a) => Some(sql"""entry_number < $a""")
+      case Some(a) =>
+        Some(
+          sql"""(coalesce(#$effectiveAtColumnName, record_time), entry_number) < ((select coalesce(#$effectiveAtColumnName, record_time) from #$txLogTableName where entry_number = $a), $a)"""
+        )
       case None => None
     }
     val actionNameCondition = actionName match {
@@ -57,16 +61,12 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       case None => None
     }
     val effectivenessCondition = (effectiveFrom, effectiveTo) match {
-      case (Some(effectiveFrom), Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName between ${lengthLimited(
-            effectiveFrom
-          )} and ${lengthLimited(
-            effectiveTo
-          )}""")
-      case (Some(effectiveFrom), None) =>
-        Some(sql"""#$effectiveAtColumnName > ${lengthLimited(effectiveFrom)}""")
-      case (None, Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName < ${lengthLimited(effectiveTo)}""")
+      case (Some(from), Some(to)) =>
+        Some(sql"""#$effectiveAtColumnName between $from and $to""")
+      case (Some(from), None) =>
+        Some(sql"""#$effectiveAtColumnName > $from""")
+      case (None, Some(to)) =>
+        Some(sql"""#$effectiveAtColumnName < $to""")
       case (None, None) => None
     }
     val requesterCondition = requester match {
@@ -92,7 +92,10 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       txLogTableName,
       txLogStoreId,
       where = whereClause.toActionBuilder,
-      orderLimit = sql"""order by entry_number desc limit ${sqlLimit(limit)}""",
+      orderLimit =
+        sql"""order by coalesce(#$effectiveAtColumnName, record_time) desc, entry_number desc limit ${sqlLimit(
+            limit
+          )}""",
     )
   }
 }

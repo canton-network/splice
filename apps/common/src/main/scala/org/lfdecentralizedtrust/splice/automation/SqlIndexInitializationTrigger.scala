@@ -226,7 +226,7 @@ object SqlIndexInitializationTrigger {
   }
 
   /** Indexes managed by this trigger class */
-  val defaultIndexActions: List[IndexAction] = List(
+  val defaultIndexActions: List[IndexAction] = List[IndexAction](
     IndexAction
       .Create(
         indexName = "updt_hist_crea_hi_mi_ci_import_updates",
@@ -256,13 +256,14 @@ object SqlIndexInitializationTrigger {
       ),
     IndexAction
       .Create(
-        indexName = "scan_txlog_store_sid_en_vot",
+        indexName = "scan_txlog_store_sid_eff_en_vot",
         createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sid_en_vot
-          on scan_txlog_store (store_id, entry_number desc)
+          create index concurrently if not exists scan_txlog_store_sid_eff_en_vot
+          on scan_txlog_store (store_id, coalesce(vote_effective_at, record_time) desc, entry_number desc)
           where entry_type = 'vot'
         """,
       ),
+    IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting

@@ -634,6 +634,96 @@ abstract class ScanStoreTest
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
         }
+        "order results by COALESCE(effectiveAt, recordTime) desc and paginate consistently" in {
+          val store = mkStore().futureValue
+          val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          val requests = (1 to 4).map(n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          )
+
+          val outcomes: Seq[Option[Instant]] = Seq(
+            Some(now.plus(7, ChronoUnit.DAYS)),
+            Some(now.plus(1, ChronoUnit.DAYS)),
+            Some(now.plus(3, ChronoUnit.DAYS)),
+            None, // rejected
+          )
+          (for {
+            _ <- MonadUtil.sequentialTraverse(requests.zip(outcomes)) {
+              case (request, outcomeOpt) =>
+                val result = outcomeOpt match {
+                  case Some(eff) => mkVoteRequestResult(request, effectiveAt = eff)
+                  case None =>
+                    new dsorulesCodegen.DsoRules_CloseVoteRequestResult(
+                      request.payload,
+                      Instant.now().truncatedTo(ChronoUnit.MICROS),
+                      Collections.emptyList[String](),
+                      Collections.emptyList[String](),
+                      new dsorulesCodegen.voterequestoutcome.VRO_Rejected(damlUnit.getInstance()),
+                    )
+                }
+                for {
+                  _ <- dummyDomain.create(request)(store.multiDomainAcsStore)
+                  _ <- dummyDomain.exercise(
+                    contract = dsoRules(dsoParty),
+                    interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+                    choiceName = DsoRulesCloseVoteRequest.choice.name,
+                    mkCloseVoteRequest(request.contractId),
+                    result.toValue,
+                  )(store.multiDomainAcsStore)
+                } yield ()
+            }
+            fullPage <- store
+              .listVoteRequestResults(None, None, None, None, None, PageLimit.tryCreate(10))
+            page1 <- store
+              .listVoteRequestResults(None, None, None, None, None, PageLimit.tryCreate(1))
+            page2 <- store
+              .listVoteRequestResults(
+                None,
+                None,
+                None,
+                None,
+                None,
+                PageLimit.tryCreate(1),
+                after = page1.nextPageToken,
+              )
+            page3 <- store
+              .listVoteRequestResults(
+                None,
+                None,
+                None,
+                None,
+                None,
+                PageLimit.tryCreate(1),
+                after = page2.nextPageToken,
+              )
+            page4 <- store
+              .listVoteRequestResults(
+                None,
+                None,
+                None,
+                None,
+                None,
+                PageLimit.tryCreate(1),
+                after = page3.nextPageToken,
+              )
+          } yield {
+            val expectedRequesters = Seq(
+              userParty(1).toProtoPrimitive, // +7d, accepted
+              userParty(3).toProtoPrimitive, // +3d, accepted
+              userParty(2).toProtoPrimitive, // +1d, accepted
+              userParty(4).toProtoPrimitive, // rejected → record_time ≈ now
+            )
+            fullPage.resultsInPage.map(_.request.requester) shouldBe expectedRequesters
+            Seq(page1, page2, page3, page4).map(
+              _.resultsInPage.loneElement.request.requester
+            ) shouldBe expectedRequesters
+          }).futureValue
+        }
       }
 
       "listVoteRequestsByTrackingCid" should {

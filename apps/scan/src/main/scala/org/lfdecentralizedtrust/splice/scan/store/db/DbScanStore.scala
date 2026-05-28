@@ -831,8 +831,8 @@ class DbScanStore(
       actionName = actionName,
       accepted = accepted,
       requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      effectiveFrom = effectiveFrom.map(s => CantonTimestamp.assertFromInstant(Instant.parse(s))),
+      effectiveTo = effectiveTo.map(s => CantonTimestamp.assertFromInstant(Instant.parse(s))),
       limit = limit,
       after = after,
     )

@@ -146,7 +146,7 @@ object ScanTables extends AcsTables {
       voteActionName: Option[String] = None,
       voteAccepted: Option[Boolean] = None,
       voteRequesterName: Option[String] = None,
-      voteEffectiveAt: Option[String] = None,
+      voteEffectiveAt: Option[CantonTimestamp] = None,
       transferCommandContractId: Option[TransferCommand.ContractId] = None,
       transferCommandSender: Option[PartyId] = None,
       transferCommandNonce: Option[Long] = None,
@@ -166,7 +166,7 @@ object ScanTables extends AcsTables {
       "vote_action_name" -> voteActionName.map(lengthLimited),
       "vote_accepted" -> voteAccepted,
       "vote_requester_name" -> voteRequesterName.map(lengthLimited),
-      "vote_effective_at" -> voteEffectiveAt.map(lengthLimited),
+      "vote_effective_at" -> voteEffectiveAt,
       "transfer_command_contract_id" -> transferCommandContractId,
       "transfer_command_sender" -> transferCommandSender,
       "transfer_command_nonce" -> transferCommandNonce,
@@ -248,10 +248,7 @@ object ScanTables extends AcsTables {
                 case _ => false
               }),
               voteRequesterName = Some(result.request.requester),
-              voteEffectiveAt = parsedOutcome.effectiveAt match {
-                case Some(effectiveAt) => Some(effectiveAt.toString)
-                case None => None
-              },
+              voteEffectiveAt = parsedOutcome.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
           case entry: TransferCommandTxLogEntry =>
             ScanTxLogRowData(

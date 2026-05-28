@@ -60,8 +60,9 @@ class SqlIndexInitializationTriggerStoreTest
           "updt_hist_crea_hi_mi_ci_import_updates",
           "round_party_totals_sid_pid_cr",
           "updt_hist_tran_hi_eth",
-          "scan_txlog_store_sid_en_vot",
+          "scan_txlog_store_sid_eff_en_vot",
         )
+        indexNames should not contain ("scan_txlog_store_sid_en_vot")
       }
     }
 
