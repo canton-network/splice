@@ -61,19 +61,17 @@ test_SvWeightsFullyOnledger = do
   --------------------------
   -- Add hostedSv with newSvOperator as SV operator
 
-  newSvOperatorSvInfo <- getSvInfoByParty app newSvOperator
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
     ARC_DsoRules with
       dsoAction = SRARC_AddHostedSv DsoRules_AddHostedSv with
         newSvParty = hostedSv
         newSvName = hostedSvName
         newSvRewardWeight = hostedSvWeight
-        newSvParticipantId = newSvOperatorSvInfo.participantId
         joinedAsOfRound = round.round
         svOperator = newSvOperator
 
   checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round hostedSvWeight newSvOperatorSvInfo.participantId newSvOperator)
+    (mkHostedSvInfo hostedSvName round hostedSvWeight newSvOperator)
 
 
   -- Creating beneficiary's weight
@@ -155,7 +153,7 @@ test_SvWeightsFullyOnledger = do
         newRewardWeight = updatedHostedSvWeight
 
   checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight newSvOperatorSvInfo.participantId newSvOperator)
+    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight newSvOperator)
 
   -- Update hostedSv_b's beneficaries weight
   [(rulesCid, _)] <- query @DsoRules app.dso
@@ -231,24 +229,20 @@ test_SvWeightsFullyOnledger = do
   [(_, rules)] <- query @DsoRules app.dso
   Map.lookup hostedSv (getHostedSvsMap rules) === None
   Map.lookup hostedSv (getOffboardedHostedSvsMap rules) === Some
-    OffboardedSvInfo with
-      name = hostedSvSvInfo.name
-      participantId = hostedSvSvInfo.participantId
+    OffboardedHostedSvInfo with name = hostedSvSvInfo.name
 
   -- Add hostedSv with sv1 as SV operator
-  sv1SvInfo <- getSvInfoByParty app sv1
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
     ARC_DsoRules with
       dsoAction = SRARC_AddHostedSv DsoRules_AddHostedSv with
         newSvParty = hostedSv
         newSvName = hostedSvName
         newSvRewardWeight = updatedHostedSvWeight
-        newSvParticipantId = sv1SvInfo.participantId
         joinedAsOfRound = round.round
         svOperator = sv1
 
   checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv1SvInfo.participantId sv1)
+    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv1)
 
   -- hostedSv removes (ClearBeneficiaries) SvRewardBeneficiaries contract where newSvOperator is the SV operator
   -- Note: it's not needed as they were cleared in the one step above.
@@ -365,9 +359,9 @@ test_SvWeightsMigration = do
 
       sv1AsHostedSvName = sv1SvInfo.name <> "-hostedSV"
       svsMigrationData =
-        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1SvInfo.participantId sv1Weight -- sv1 itself is migrated as hosted SV
-        , mkSvMigrationData hostedSv hostedSvName sv1SvInfo.participantId hostedSvWeight
-        , mkSvMigrationData ghostSv ghostSvName sv1SvInfo.participantId ghostSvWeight
+        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1Weight -- sv1 itself is migrated as hosted SV
+        , mkSvMigrationData hostedSv hostedSvName hostedSvWeight
+        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight
         ]
 
   -- Migrate sv1, hostedSv and ghostSv
@@ -386,9 +380,9 @@ test_SvWeightsMigration = do
   -- Check hosted SVs
   [(rulesCid, rules)] <- query @DsoRules app.dso
   Map.size (getHostedSvsMap rules) === 3
-  checkDsoRulesHostedSv app sv1 (mkHostedSvInfo sv1AsHostedSvName round sv1Weight sv1SvInfo.participantId sv1)
-  checkDsoRulesHostedSv app hostedSv (mkHostedSvInfo hostedSvName round hostedSvWeight sv1SvInfo.participantId sv1)
-  checkDsoRulesHostedSv app ghostSv (mkHostedSvInfo ghostSvName round ghostSvWeight sv1SvInfo.participantId sv1)
+  checkDsoRulesHostedSv app sv1 (mkHostedSvInfo sv1AsHostedSvName round sv1Weight sv1)
+  checkDsoRulesHostedSv app hostedSv (mkHostedSvInfo hostedSvName round hostedSvWeight sv1)
+  checkDsoRulesHostedSv app ghostSv (mkHostedSvInfo ghostSvName round ghostSvWeight sv1)
   -- Check hosted SVs SvRewardState contracts
   checkSvRewardStateExists app sv1AsHostedSvName
   checkSvRewardStateExists app hostedSvName
@@ -440,7 +434,7 @@ test_SvWeightsMigration = do
 getHostedSvsMap : DsoRules -> Map.Map Party HostedSvInfo
 getHostedSvsMap rules = fromOptional Map.empty rules.hostedSvs
 
-getOffboardedHostedSvsMap : DsoRules -> Map.Map Party OffboardedSvInfo
+getOffboardedHostedSvsMap : DsoRules -> Map.Map Party OffboardedHostedSvInfo
 getOffboardedHostedSvsMap rules = fromOptional Map.empty rules.offboardedHostedSvs
 
 checkSvCouponBeneficariesBySv : Party -> OpenMiningRound -> [(Party, Int)] -> Script ()
@@ -470,16 +464,16 @@ checkDsoRulesSv app sv expected = do
   svInfo <- getSvInfoByParty app sv
   svInfo === expected
 
-mkHostedSvInfo : Text -> OpenMiningRound -> Int -> Text -> Party -> HostedSvInfo
-mkHostedSvInfo name joinedAsOfRound svRewardWeight participantId svOperator =
+mkHostedSvInfo : Text -> OpenMiningRound -> Int -> Party -> HostedSvInfo
+mkHostedSvInfo name joinedAsOfRound svRewardWeight svOperator =
   HostedSvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
 mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
 mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvMigrationData : Party -> Text -> Text -> Int -> SvMigrationData
-mkSvMigrationData svParty svName svParticipantId svRewardWeight =
+mkSvMigrationData : Party -> Text -> Int -> SvMigrationData
+mkSvMigrationData svParty svName svRewardWeight =
   SvMigrationData with ..
 
 unsafeLookup : (Ord k, Show k) => k -> Map.Map k v -> v

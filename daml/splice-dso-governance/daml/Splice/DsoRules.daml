@@ -145,7 +145,6 @@ data HostedSvInfo = HostedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.
     joinedAsOfRound : Round -- ^ Round in which the SV joined
     svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
-    participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
     svOperator : Party -- ^ The SV operator party responsible for creating reward coupons for the SV.
   deriving (Eq, Show)
 
@@ -153,6 +152,11 @@ data HostedSvInfo = HostedSvInfo with
 data OffboardedSvInfo = OffboardedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.
     participantId : Text -- ^ Participant ID of the offboarded SV.
+  deriving (Eq, Show)
+
+-- | Information about offboarded hosted svs
+data OffboardedHostedSvInfo = OffboardedHostedSvInfo with
+    name : Text -- ^ Human-readable name; must be unique.
   deriving (Eq, Show)
 
 data DsoSummary = DsoSummary with
@@ -172,7 +176,6 @@ data DsoSummary = DsoSummary with
 data SvMigrationData = SvMigrationData with
     svParty : Party -- ^ The SV party.
     svName : Text -- ^ Human-readable name; must be unique.
-    svParticipantId : Text -- ^ Participant ID of the SV.
     svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
   deriving (Eq, Show)
 
@@ -618,7 +621,7 @@ template DsoRules with
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
     hostedSvs : Optional (Map.Map Party HostedSvInfo) -- ^ List of hosted SVs.
-    offboardedHostedSvs : Optional (Map.Map Party OffboardedSvInfo)
+    offboardedHostedSvs : Optional (Map.Map Party OffboardedHostedSvInfo)
   where
     ensure
       config.numUnclaimedRewardsThreshold > 0
@@ -693,7 +696,6 @@ template DsoRules with
         newSvParty : Party
         newSvName : Text
         newSvRewardWeight : Int
-        newSvParticipantId : Text
         joinedAsOfRound : Round
         svOperator : Party
       controller dso
@@ -717,7 +719,6 @@ template DsoRules with
               name = newSvName
               joinedAsOfRound
               svRewardWeight = newSvRewardWeight
-              participantId = newSvParticipantId
               svOperator
             updatedHostedSvs = Map.insert newSvParty hostedSvInfo (fromOptional Map.empty hostedSvs)
 
@@ -1179,12 +1180,10 @@ template DsoRules with
           None -> fail "SV party is not registered"
           Some hostedSvInfo -> do
             let newHostedSvs = Map.delete svParty hostedSvsMap
-                offboardedSvInfo = OffboardedSvInfo with
-                  name = hostedSvInfo.name
-                  participantId = hostedSvInfo.participantId
+                offboardedHostedSvInfo = OffboardedHostedSvInfo with name = hostedSvInfo.name
             newDsoRules <- create this with
               hostedSvs = Some newHostedSvs
-              offboardedHostedSvs = Some $ Map.insert svParty offboardedSvInfo offboardedHostedSvsMap
+              offboardedHostedSvs = Some $ Map.insert svParty offboardedHostedSvInfo offboardedHostedSvsMap
             pure DsoRules_RemoveHostedSvResult with newDsoRules
 
     -- | Sets or clears the SV reward beneficiary distribution for an SV.
@@ -1288,7 +1287,6 @@ template DsoRules with
                     newSvParty = svMigrationData.svParty
                     newSvName = svMigrationData.svName
                     newSvRewardWeight = svMigrationData.svRewardWeight
-                    newSvParticipantId = svMigrationData.svParticipantId
                     joinedAsOfRound = openRound.round
                     svOperator = sv
                   pure newDsoRules
