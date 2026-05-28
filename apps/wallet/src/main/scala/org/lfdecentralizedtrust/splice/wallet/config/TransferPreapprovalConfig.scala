@@ -17,7 +17,6 @@ final case class TransferPreapprovalConfig(
     proposalAcceptanceDeduplication: Boolean = true,
     // If set to true, your validator will accept
     // `TransferPreapprovalProposal`s from parties not hosted on your
-    // node. This also implies that you will pay the fee for the
-    // lifetime of the transfer preapproval.
+    // node.
     acceptNonHostedPreapprovalProposals: Boolean = false,
 )
