@@ -15,4 +15,9 @@ final case class TransferPreapprovalConfig(
     // break anything but you will pay extra fees and extra traffic for renewals.
     // In return, it allows the validator to batch acceptance of preapprovals which can improve throughput.
     proposalAcceptanceDeduplication: Boolean = true,
+    // If set to true, your validator will accept
+    // `TransferPreapprovalProposal`s from parties not hosted on your
+    // node. This also implies that you will pay the fee for the
+    // lifetime of the transfer preapproval.
+    acceptNonHostedPreapprovalProposals: Boolean = false,
 )
