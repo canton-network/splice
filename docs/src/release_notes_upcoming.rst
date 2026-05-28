@@ -9,5 +9,5 @@
 
 - Validator app
 
-  - ``TransferPreapprovalProposal``s are now only accepted for parties on your node.
+  - ``TransferPreapprovalProposal``s are now only accepted for parties hosted on your node.
     To recover the prior behavior you can enable ``canton.validator-apps.validator_backend.transfer-preapproval.accept-non-hosted-preapproval-proposals = true``.
