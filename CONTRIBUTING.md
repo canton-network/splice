@@ -294,7 +294,7 @@ grant write permissions to the main Splice repo.
     - Add `admins` team as admins of the fork
     - Add `splice-admins` team as admins of the fork
     - Add `splice-maintainers` as maintainers of the fork
-- A Splice contributor adds the fork to the list of repos in the splice
+- A Splice maintainer adds the fork to the list of repos in the splice
   [cluster config file in canton-network-internal repo](https://github.com/DACH-NY/canton-network-internal/blob/main/cluster/deployment/splice/config.yaml).
   Once merged to main, the Pulumi operator will configure runners for the fork.
 - A splice admin configures the fork repo (currently manually):
