@@ -195,6 +195,8 @@ data DsoRules_AddSvOperatorResult = DsoRules_AddSvOperatorResult with
 
 data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
     newDsoRules : ContractId DsoRules
+    svRewardStateCid : Optional (ContractId SvRewardState)
+    svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
 
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
     newDsoRules : ContractId DsoRules
@@ -685,15 +687,18 @@ template DsoRules with
         let isSvOperator = flip Map.member svs
         require "svOperator is an SV operator" $ isSvOperator svOperator
 
-        unless (hostedSvHasBeenOnboardedBefore newSvName this) $
-          void $ create SvRewardState with
-            dso
-            svName = newSvName
-            state = RewardState with
-              lastRoundCollected = Round (joinedAsOfRound.number - 1)
-              numRoundsMissed = 0
-              numRoundsCollected = 0
-              numCouponsIssued = 0
+        svRewardStateCid <-
+          if hostedSvHasBeenOnboardedBefore newSvName this
+            then pure None
+            else Some <$>
+              create SvRewardState with
+                dso
+                svName = newSvName
+                state = RewardState with
+                  lastRoundCollected = Round (joinedAsOfRound.number - 1)
+                  numRoundsMissed = 0
+                  numRoundsCollected = 0
+                  numCouponsIssued = 0
 
         -- register the new SV in the DsoRules
         let hostedSvInfo = HostedSvInfo with
@@ -704,15 +709,16 @@ template DsoRules with
             updatedHostedSvs = Map.insert newSvParty hostedSvInfo (fromOptional Map.empty hostedSvs)
 
         -- create a default SvRewardBeneficiaries contract with no beneficiaries
-        void $ create SvRewardBeneficiaries with
-          dso
-          sv = newSvParty
-          svOperator
-          beneficiaries = []
+        svRewardBeneficiariesCid <-
+          create SvRewardBeneficiaries with
+            dso
+            sv = newSvParty
+            svOperator
+            beneficiaries = []
 
         newDsoRules <- create this with hostedSvs = Some updatedHostedSvs
 
-        pure DsoRules_AddHostedSvResult with newDsoRules
+        pure DsoRules_AddHostedSvResult with newDsoRules; svRewardStateCid; svRewardBeneficiariesCid
 
     -- Update an SV's Status report
     nonconsuming choice DsoRules_SubmitStatusReport : DsoRules_SubmitStatusReportResult
