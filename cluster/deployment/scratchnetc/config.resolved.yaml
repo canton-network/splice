@@ -1711,6 +1711,7 @@ synchronizerMigration:
       repoUrl: 'https://github.com/canton-network/splice'
       spliceRoot: 'splice'
     version: 'local'
+  frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'
   logging:
