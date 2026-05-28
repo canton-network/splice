@@ -170,13 +170,14 @@ data DsoSummary = DsoSummary with
 -- | Migration data for one SV whose reward weight is being moved from the
 -- legacy SV operator weight model into `hostedSvs`.
 --
--- Each value represents one SV operated by the SV operator performing the
+-- Each value represents one hosted SV operated by the SV operator performing the
 -- migration. The corresponding `svRewardWeight` becomes the on-ledger hosted SV
 -- weight for that SV under the migrating SV operator.
 data SvMigrationData = SvMigrationData with
     svParty : Party -- ^ The SV party.
     svName : Text -- ^ Human-readable name; must be unique.
     svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
+    beneficaries : [(Party, Int)]
   deriving (Eq, Show)
 
 
@@ -1274,16 +1275,32 @@ template DsoRules with
             -- Archive SvRewardState
             _ <- fetchAndArchive (ForSv with dso; svName = svInfo.name) rewardStateCid
 
-            -- Add hosted SVs
-            let addHostedSv self' svMigrationData = do
-                  DsoRules_AddHostedSvResult {newDsoRules} <- exercise self' DsoRules_AddHostedSv with
-                    newSvParty = svMigrationData.svParty
-                    newSvName = svMigrationData.svName
-                    newSvRewardWeight = svMigrationData.svRewardWeight
-                    joinedAsOfRound = openRound.round
-                    svOperator = sv
-                  pure newDsoRules
-            newDsoRules <- foldlA addHostedSv updatedDsoRulesWithLegacyWeightInvalidated svsMigrationData
+            -- Add hosted SVs and beneficiaries
+            let addHostedSvAndBeneficiaries self' svMigrationData = do
+                  -- onboard hosted SV
+                  DsoRules_AddHostedSvResult { newDsoRules = newDsoRulesCid; svRewardBeneficiariesCid } <-
+                    exercise self' DsoRules_AddHostedSv with
+                      newSvParty = svMigrationData.svParty
+                      newSvName = svMigrationData.svName
+                      newSvRewardWeight = svMigrationData.svRewardWeight
+                      joinedAsOfRound = openRound.round
+                      svOperator = sv
+
+                  -- replace the default SvRewardBeneficiaries if beneficiaries are provided
+                  unless (null svMigrationData.beneficaries) do
+                    -- Note: `DsoRules_SetSvRewardBeneficiaries` cannot be exercised here because
+                    -- it is controlled by the hosted SV, while this choice is controlled by the
+                    -- SV operator.
+                    _ <- fetchAndArchive (ForDso with dso) svRewardBeneficiariesCid
+                    void $ create SvRewardBeneficiaries with
+                      dso
+                      sv = svMigrationData.svParty
+                      svOperator = sv
+                      beneficiaries = svMigrationData.beneficaries
+
+                  pure newDsoRulesCid
+
+            newDsoRules <- foldlA addHostedSvAndBeneficiaries updatedDsoRulesWithLegacyWeightInvalidated svsMigrationData
 
             pure DsoRules_MigrateHostedSvsResult with newDsoRules
 

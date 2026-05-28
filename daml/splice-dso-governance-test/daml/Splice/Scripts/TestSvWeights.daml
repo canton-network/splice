@@ -377,9 +377,9 @@ test_SvWeightsMigration = do
 
       sv1AsHostedSvName = sv1SvInfo.name <> "-hostedSV"
       svsMigrationData =
-        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1Weight -- sv1 itself is migrated as hosted SV
-        , mkSvMigrationData hostedSv hostedSvName hostedSvWeight
-        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight
+        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1Weight [(sv1_b, unsafeLookup sv1_b sv1LegacyBeneficiariesMap)] -- sv1 itself is migrated as hosted SV
+        , mkSvMigrationData hostedSv hostedSvName hostedSvWeight [(hostedSv_b, unsafeLookup hostedSv_b sv1LegacyBeneficiariesMap)]
+        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight []
         ]
 
   -- Migrate sv1, hostedSv and ghostSv
@@ -405,18 +405,6 @@ test_SvWeightsMigration = do
   checkSvRewardStateExists app sv1AsHostedSvName
   checkSvRewardStateExists app hostedSvName
   checkSvRewardStateExists app ghostSvName
-
-  -- Migrate beneficaries weights
-  sv1SvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app sv1 sv1
-  void $ submit (actAs sv1 <> readAs dso) $ exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-    svRewardBeneficiariesCid = sv1SvRewardBeneficiariesCid
-    newBeneficiaries = [(sv1_b, unsafeLookup sv1_b sv1LegacyBeneficiariesMap)]
-    svParty = sv1
-  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv1
-  void $ submit (actAs hostedSv <> readAs dso) $ exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-    svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
-    newBeneficiaries = [(hostedSv_b, unsafeLookup hostedSv_b sv1LegacyBeneficiariesMap)]
-    svParty = hostedSv
 
 
   -- Creating SV coupons
@@ -490,9 +478,8 @@ mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
 mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvMigrationData : Party -> Text -> Int -> SvMigrationData
-mkSvMigrationData svParty svName svRewardWeight =
-  SvMigrationData with ..
+mkSvMigrationData : Party -> Text -> Int -> [(Party, Int)] -> SvMigrationData
+mkSvMigrationData svParty svName svRewardWeight beneficaries = SvMigrationData with ..
 
 unsafeLookup : (Ord k, Show k) => k -> Map.Map k v -> v
 unsafeLookup key' m =
