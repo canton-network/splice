@@ -130,14 +130,16 @@ function configureIstiod(
       // https://istio.io/latest/docs/ops/integrations/prometheus/#option-1-metrics-merging  disable as we don't use annotations
       enablePrometheusMerge: false,
       defaultConfig: {
-        // It is expected that a single load balancer (GCP NLB) is used in front of K8s.
-        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#http-https
-        // Also see:
+        // The GCP NLB with externalTrafficPolicy: Local preserves the client's
+        // source IP without adding X-Forwarded-For hops, so there are no trusted
+        // proxies to account for. This ensures remoteIpBlocks in AuthorizationPolicy
+        // uses the direct connection IP rather than the X-Forwarded-For header.
+        // https://istio.io/latest/docs/tasks/security/authorization/authz-ingress/#network
+        // By contrast, the GKE L7 Gateway path overrides this to 2 via pod annotation,
+        // the minimum value per testing (as that gateway adds more Envoy hops).
         // https://istio.io/latest/docs/ops/configuration/traffic-management/network-topologies/#configuring-x-forwarded-for-headers
-        // This controls the value populated by the ingress gateway in the X-Envoy-External-Address header which can be reliably used
-        // by the upstream services to access client’s original IP address.
         gatewayTopology: {
-          numTrustedProxies: 1,
+          numTrustedProxies: 0,
         },
         // wait for the istio container to start before starting apps to avoid network errors
         holdApplicationUntilProxyStarts: true,
@@ -811,6 +813,100 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
   });
 }
 
+// Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
+// (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
+// to the sequencer and trigger netty flow control. This surfaces as requests that send back response headers but then nothing else until the client times out.
+// To mitigate that we set the connection window size meaningfully higher than the stream window size. To fully mitigate it it likely needs to be
+// connection window size >= stream window size * maxConcurrentStreams but that would increase istio memory significantly so for now the values are usually just high enough that it
+// doesn't happen in practice but not enough to fully prevent it.
+// We also enable http2 pings to ensure that connections get closed when clients go away and the istio buffers are cleared again.
+// Note that we deliberately do not set stream idle timeouts as this doesn't work with long running requests.
+// See https://github.com/DACH-NY/canton-network-internal/issues/4901#issuecomment-4461257908 for more details.
+function configureSequencerFlowControl(
+  ingressNs: k8s.core.v1.Namespace
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource('sequencer-flow-control', {
+    apiVersion: 'networking.istio.io/v1alpha3',
+    kind: 'EnvoyFilter',
+    metadata: {
+      name: 'sequencer-flow-control',
+      namespace: ingressNs.metadata.name,
+    },
+    spec: {
+      configPatches: [
+        {
+          // downstream (aka participant) -> istio
+          applyTo: 'NETWORK_FILTER',
+          match: {
+            context: 'SIDECAR_INBOUND',
+            listener: {
+              filterChain: {
+                filter: {
+                  name: 'envoy.filters.network.http_connection_manager',
+                },
+              },
+            },
+          },
+          patch: {
+            operation: 'MERGE',
+            value: {
+              typed_config: {
+                '@type':
+                  'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+                http2_protocol_options: {
+                  initial_stream_window_size:
+                    infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+                  initial_connection_window_size:
+                    infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+                  connection_keepalive: {
+                    interval: '30s',
+                    timeout: '5s',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          // istio -> upstream (aka sequencer)
+          applyTo: 'CLUSTER',
+          match: {
+            cluster: {
+              portNumber: 5008,
+              // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
+              // So for now we just apply it to the sequencer which is the only externally exposed http2 server so the only thing where this really should matter in practice.
+            },
+          },
+          patch: {
+            operation: 'MERGE',
+            value: {
+              typed_extension_protocol_options: {
+                'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
+                  '@type':
+                    'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
+                  use_downstream_protocol_config: {
+                    http_protocol_options: {},
+                    http2_protocol_options: {
+                      initial_stream_window_size:
+                        infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+                      initial_connection_window_size:
+                        infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+                      connection_keepalive: {
+                        interval: '30s',
+                        timeout: '5s',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
 export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
@@ -837,12 +933,14 @@ export function configureIstio(
   const sequencerHighPerformanceGrpcRules = configureSequencerHighPerformanceGrpcDestinationRules(
     ingressNs.ns
   );
+  const sequencerFlowControl = configureSequencerFlowControl(ingressNs.ns);
   return {
     allResources: [
       ...gateways,
       ...docsAndReleases,
       ...publicInfo,
       ...sequencerHighPerformanceGrpcRules,
+      ...[sequencerFlowControl],
     ],
     httpServiceName: 'istio-ingress',
     istioResource: gwSvc,

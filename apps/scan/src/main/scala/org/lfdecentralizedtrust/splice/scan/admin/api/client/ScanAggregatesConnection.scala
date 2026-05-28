@@ -4,12 +4,8 @@
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BftScanConnection,
-  SingleScanConnection,
-}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
-import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerClient, RetryProvider}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.logging.NamedLogging
@@ -137,10 +133,10 @@ class ScanAggregatesConnection(
       scan
         .getRoundAggregate(round)
         .flatMap {
-          _.map(Future.successful).getOrElse(
+          _.map(Future.successful).getOrElse {
             Future
               .failed(ScanAggregator.CannotAdvance(s"No RoundAggregate found for round $round"))
-          )
+          }
         }
         .recoverWith { case e: Throwable =>
           logger.info(

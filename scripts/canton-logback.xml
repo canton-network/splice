@@ -2,7 +2,7 @@
 <!DOCTYPE configuration [
         <!ENTITY entityCorrelationIdTrailingSpaceReplace "&#x0025;replace(tid:&#x0025;mdc{trace-id} ){'tid: ', ''}- &#x0025;msg&#x0025;replace(, context: &#x0025;marker){', context: $', ''}&#x0025;replace( err-context:&#x0025;mdc{err-context} ){' err-context: ', ''}&#x0025;n">
         ]>
-<configuration debug="false">
+<configuration debug="false" scan="true" scanPeriod="30 seconds">
   <!-- propagate logback changes to jul handlers -->
   <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">
     <resetJUL>true</resetJUL>
