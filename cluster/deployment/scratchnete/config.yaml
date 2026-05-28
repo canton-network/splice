@@ -4,7 +4,7 @@ multiValidator:
   requiresOnboardingSecret: true
 loadTester:
   enable: true
-  iterationsPerMinute: 1200
+  iterationsPerMinute: 1800
 svs:
   sv-1: !include(sv.yaml) {}
   sv-2: !include(sv.yaml) {}
