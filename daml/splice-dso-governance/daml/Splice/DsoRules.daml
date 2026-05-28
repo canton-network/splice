@@ -140,7 +140,7 @@ data SvInfo = SvInfo with
     participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
   deriving (Eq, Show)
 
--- | Information about SVs relevant to DSO governance.
+-- | Information about hosted SVs relevant to DSO governance.
 data HostedSvInfo = HostedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.
     joinedAsOfRound : Round -- ^ Round in which the SV joined
