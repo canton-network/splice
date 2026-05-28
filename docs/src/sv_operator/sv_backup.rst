@@ -18,9 +18,11 @@ access to your Canton Coin holdings), so must be backed up outside of the cluste
 
 Your identites may be fetched from your node through the following endpoint:
 
+.. CF_DOCS_SPLICE_SNIPPET_031_START
 .. code-block:: bash
 
     curl "https://sv.sv.YOUR_HOSTNAME/api/sv/v0/admin/domain/identities-dump" -H "authorization: Bearer <token>"
+.. CF_DOCS_SPLICE_SNIPPET_031_END
 
 where `<token>` is an OAuth2 Bearer Token obtained from your OAuth provider. For context, see the Authentication section :ref:`here <app-auth>`.
 

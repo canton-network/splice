@@ -70,26 +70,32 @@ To complete the reset, go through the following steps:
     a. Confirm that the reset did not change the dso rules
        by repeating step 1.a and comparing the result:
 
+       .. CF_DOCS_SPLICE_SNIPPET_069_START
        .. code-block:: bash
 
            curl -sSL --fail-with-body https://YOUR_SCAN_URL/api/scan/v0/dso > current_state.json
+       .. CF_DOCS_SPLICE_SNIPPET_069_END
 
        The reset should preserve SV reward weights, i.e., the following diff should be empty:
 
+       .. CF_DOCS_SPLICE_SNIPPET_070_START
        .. code-block:: bash
 
            jq '.dso_rules.contract.payload.svs.[] | [.[1].name, .[1].svRewardWeight]' backup.json > weights_backup.json
            jq '.dso_rules.contract.payload.svs.[] | [.[1].name, .[1].svRewardWeight]' current_state.json > weights_current.json
            diff -C2 weights_backup.json weights_current.json
+       .. CF_DOCS_SPLICE_SNIPPET_070_END
 
        The reset should also preserve the amulet rules modulo cryptographic keys, i.e., the following diff should
        only show changes to the dso and synchronizer namespaces:
 
+       .. CF_DOCS_SPLICE_SNIPPET_071_START
        .. code-block:: bash
 
            jq '.amulet_rules.contract.payload' backup.json > amulet_backup.json
            jq '.amulet_rules.contract.payload' current_state.json > amulet_current.json
            diff amulet_backup.json amulet_current.json
+       .. CF_DOCS_SPLICE_SNIPPET_071_END
 
     b. Check your desired coin price in the SV UI, and verify that it matches
        the value from before the reset (see step 1.b.)

@@ -35,6 +35,7 @@ Participant console
 1. Obtain an authentication token as specified in `the Canton authentication docs <https://docs.digitalasset.com/operate/3.4/howtos/secure/apis/jwt.html>`_
 2. Ensure you can access the participant's ports 5001 and 5002
 3. Add the configuration to a local file `console.conf`
+    .. CF_DOCS_SPLICE_SNIPPET_015_START
     .. code-block::
 
         canton {
@@ -55,17 +56,21 @@ Participant console
           features.enable-testing-commands = yes
           features.enable-repair-commands = yes
         }
+    .. CF_DOCS_SPLICE_SNIPPET_015_END
 
 4. Run the docker command
 
+    .. CF_DOCS_SPLICE_SNIPPET_019_START
     .. parsed-literal::
 
         docker run -it --rm --network host -v $(pwd)/console.conf:/app/app.conf |docker_repo_prefix|/canton:|version_literal| --console
+    .. CF_DOCS_SPLICE_SNIPPET_019_END
 
     .. important::
         If you run the participant using the docker compose setup the docker command must be run with the docker network used by the participant.
         Adjust the configuration to connect to the participant container:
 
+            .. CF_DOCS_SPLICE_SNIPPET_016_START
             .. code-block::
 
                 canton {
@@ -86,12 +91,15 @@ Participant console
                   features.enable-testing-commands = yes
                   features.enable-repair-commands = yes
                 }
+            .. CF_DOCS_SPLICE_SNIPPET_016_END
 
         Running docker with the default network (`splice-validator`):
 
+        .. CF_DOCS_SPLICE_SNIPPET_020_START
         .. parsed-literal::
 
             docker run -it --rm --network splice-validator -v $(pwd)/console.conf:/app/app.conf |docker_repo_prefix|/canton:|version_literal| --console
+        .. CF_DOCS_SPLICE_SNIPPET_020_END
 
 Sequencer console
 +++++++++++++++++
@@ -99,6 +107,7 @@ Sequencer console
 1. Ensure you can access the sequencer's ports 5008 and 5009
 2. Add the configuration to a local file `console.conf`
 
+    .. CF_DOCS_SPLICE_SNIPPET_013_START
     .. code-block::
 
         canton {
@@ -118,12 +127,15 @@ Sequencer console
           features.enable-testing-commands = yes
           features.enable-repair-commands = yes
         }
+    .. CF_DOCS_SPLICE_SNIPPET_013_END
 
 3. Run the docker command
 
+    .. CF_DOCS_SPLICE_SNIPPET_017_START
     .. parsed-literal::
 
         docker run -it --rm --network host -v $(pwd)/console.conf:/app/app.conf |docker_repo_prefix|/canton:|version_literal| --console
+    .. CF_DOCS_SPLICE_SNIPPET_017_END
 
 Mediator console
 +++++++++++++++++
@@ -131,6 +143,7 @@ Mediator console
 1. Ensure you can access the mediator's port 5007
 2. Add the configuration to a local file `console.conf`
 
+    .. CF_DOCS_SPLICE_SNIPPET_014_START
     .. code-block::
 
         canton {
@@ -146,12 +159,15 @@ Mediator console
           features.enable-testing-commands = yes
           features.enable-repair-commands = yes
         }
+    .. CF_DOCS_SPLICE_SNIPPET_014_END
 
 3. Run the docker command
 
+    .. CF_DOCS_SPLICE_SNIPPET_018_START
     .. parsed-literal::
 
         docker run -it --rm --network host -v $(pwd)/console.conf:/app/app.conf |docker_repo_prefix|/canton:|version_literal| --console
+    .. CF_DOCS_SPLICE_SNIPPET_018_END
 
 
 Access in a K8s cluster
@@ -161,17 +177,21 @@ In a K8s cluster you can use a debug pod to access the console directly from the
 
 First you can create a pod running the right canton version using:
 
+.. CF_DOCS_SPLICE_SNIPPET_011_START
 .. code-block:: bash
 
     kubectl debug "${POD_NAME}" --image "$(kubectl get pod "${POD_NAME}" -o json | jq -re '.spec.containers[0].image')" -i -t -- bash
+.. CF_DOCS_SPLICE_SNIPPET_011_END
 
 where `POD_NAME` is the name of the participant/sequencer/mediator pod.
 
 Once you are inside the running pod you can install a text editor and create the config file `console.conf` that is described above.
 
+.. CF_DOCS_SPLICE_SNIPPET_012_START
 .. code-block:: bash
 
     $ apt-get update
     $ apt-get install -y vim
     $ vim console.conf # paste in the config from above
     $ /app/bin/canton -v -c console.conf
+.. CF_DOCS_SPLICE_SNIPPET_012_END

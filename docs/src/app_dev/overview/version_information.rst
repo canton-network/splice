@@ -37,11 +37,11 @@ Follow these steps to install a recent, compatible OSS Daml SDK version:
 #. Select the most recent stable release with the same major and minor version as above.
 #. Install that release using
 
+   .. CF_DOCS_SPLICE_SNIPPET_001_START
    .. code-block:: bash
 
       curl -sSL https://get.digitalasset.com/ | sh
+   .. CF_DOCS_SPLICE_SNIPPET_001_END
 
 For more information about installing the Daml SDK, see the
 `DPM installation guide <https://docs.digitalasset.com/build/3.4/dpm/dpm.html?>`__.
-
-

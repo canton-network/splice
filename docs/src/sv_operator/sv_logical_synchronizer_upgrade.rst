@@ -82,11 +82,13 @@ Concretely, the procedure is as follows:
 1. The old physical synchronizer is deemed broken and the last sequenced message was at record time R.
 2. Super validators configure this as the max sequencing time on the old sequencer to guarantee that nothing accidentally gets sequenced after that time. This is done by applying the following environment variable to the existing sequencer:
 
+.. CF_DOCS_SPLICE_SNIPPET_068_START
 .. code::
 
     - name: ADDITIONAL_CONFIG_SEQUENCER_LSU_MAX_SEQUENCING_TIME
       value: |
         canton.sequencers.sequencer.parameters.lsu-repair.global-max-sequencing-time-exclusive=MAX_SEQUENCING_TIME
+.. CF_DOCS_SPLICE_SNIPPET_068_END
 
 2. Super validators deploy successor nodes. Depending on the issue,
    the successor nodes may be configured with older image and protocol
@@ -113,6 +115,7 @@ Concretely, the procedure is as follows:
 4. Super validators configure their SV app app to transfer the topology and traffic state from the old physical synchronizer to the successor nodes.
    To do so, add the following helm values to the SV app:
 
+.. CF_DOCS_SPLICE_SNIPPET_066_START
 .. code::
 
    rollForwardLsu:
@@ -122,6 +125,7 @@ Concretely, the procedure is as follows:
        topologyExportTime: TOPOLOGY_EXPORT_TIME # Must be agreed between SVs
        trafficExportTime: TRAFFIC_EXPORT_TIME # Must be agreed between SVs
        upgradeTime: UPGRADE_TIME # Must be agreed between SVs
+.. CF_DOCS_SPLICE_SNIPPET_066_END
 
 5. Validators initiate the :ref:`procedure <validator_roll_forward_lsu>` on their side.
 
@@ -137,11 +141,13 @@ To do so, use the following steps:
 
 1. Super validators configure the manual LSU in their scan.
 
+.. CF_DOCS_SPLICE_SNIPPET_067_START
 .. code::
 
   rollForwardLsu:
      enabled: true
      upgradeTime: UPGRADE_TIME # Must be agreed between SVs, optional, if not specified it is taken from an existing LSU announcement which should usually be sufficient.
+.. CF_DOCS_SPLICE_SNIPPET_067_END
 
 2. Validator app automation picks up that configuration and initiates a manual roll-forward LSU to the new synchronizer.
 
@@ -167,6 +173,6 @@ LSU requires deployment changes for super validators. Concretely:
    should be configured to the successor physical synchronizer when that is deployed. After the upgrade, ``synchronizers.current`` becomes ``synchronizers.legacy`` and ``synchronizers.successor`` becomes ``synchronizers.current``. The legacy configuration should be removed together with removing the old physical synchronizer after 30 days. If you already have a node in ``legacy`` and it should not yet be
    decomissioned move it to ``additionalLegacy`` which accepts an array of synchronizers.
    The CometBFT configuration also moves under ``synchronizers.(current|successor|legacy)``.
-3. The ``sequencerAddress`` and ``mediatorAddress``values in scan should be replaced by ``synchronizers.current.sequencer`` and ``synchronizers.current.mediator``. The corresponding values under ``synchronizers.successor`` should be set together with
+3. The ``sequencerAddress`` and ``mediatorAddress`` values in scan should be replaced by ``synchronizers.current.sequencer`` and ``synchronizers.current.mediator``. The corresponding values under ``synchronizers.successor`` should be set together with
    the deployment of the successor physical synchronizer. After the upgrade ``successor`` becomes ``current`` and ``current`` is removed.
 4. When using DABFT as the successor node, further changes will be required. Most notably the cometbft node goes away as DABFT runs as part of the sequencer pod. The sequencer pod and SV app will require some additional configuration. Details of this will be added later.

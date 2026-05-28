@@ -121,10 +121,12 @@ In most scenarios, the ``*.localhost`` domains (e.g., ``http://scan.localhost``)
 There are some situations where the resolution does not occur and the solution is to add entries to your ``/etc/hosts`` file.  For example,
 to resolve ``http://scan.localhost`` and ``http://wallet.localhost`` add these entry to the file:
 
+.. CF_DOCS_SPLICE_SNIPPET_007_START
 .. code-block::
 
    127.0.0.1   scan.localhost
    127.0.0.1   wallet.localhost
+.. CF_DOCS_SPLICE_SNIPPET_007_END
 
 
 Default Wallet Users
@@ -142,9 +144,11 @@ Swagger UI
 When the ``swagger-ui`` profile is enabled, the Swagger UI for the ``JSON Ledger API HTTP Endpoints`` across all running participants is available at `http://localhost:9090 <http://localhost:9090>`_.
 Note: Some endpoints require a JWT token when using the **Try it out** feature. One method to obtain this token is via the Canton Console. Start the Canton Console `make canton-console` and execute the following command:
 
+.. CF_DOCS_SPLICE_SNIPPET_008_START
 .. code-block:: none
 
      `app-provider`.adminToken
+.. CF_DOCS_SPLICE_SNIPPET_008_END
 
 For proper functionality, Swagger UI relies on a localhost nginx proxy for ``canton.localhost`` configured for each participant. For example, the ``JSON Ledger API HTTP Endpoints`` for the app-provider can be accessed at the nginx proxy URL ``http://canton.localhost:${APP_PROVIDER_UI_PORT}`` via Swagger UI, which corresponds to accessing ``localhost:3${PARTICIPANT_JSON_API_PORT}`` directly. The nginx proxy only adds additional headers to resolve CORS issues within Swagger UI.
 
@@ -157,6 +161,7 @@ Use LocalNet
 Start LocalNet nodes
 ^^^^^^^^^^^^^^^^^^^^
 
+.. CF_DOCS_SPLICE_SNIPPET_002_START
 .. code-block:: bash
 
    docker compose --env-file $LOCALNET_DIR/compose.env \
@@ -166,10 +171,12 @@ Start LocalNet nodes
                   --profile sv \
                   --profile app-provider \
                   --profile app-user up -d
+.. CF_DOCS_SPLICE_SNIPPET_002_END
 
 Stop LocalNet nodes
 ^^^^^^^^^^^^^^^^^^^
 
+.. CF_DOCS_SPLICE_SNIPPET_003_START
 .. code-block:: bash
 
    docker compose --env-file $LOCALNET_DIR/compose.env \
@@ -179,12 +186,14 @@ Stop LocalNet nodes
                   --profile sv \
                   --profile app-provider \
                   --profile app-user down -v
+.. CF_DOCS_SPLICE_SNIPPET_003_END
 
 Start nodes including a swagger-ui
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 See :ref:`swagger-ui` for more information.
 
+.. CF_DOCS_SPLICE_SNIPPET_004_START
 .. code-block:: bash
 
    docker compose --env-file $LOCALNET_DIR/compose.env \
@@ -195,12 +204,14 @@ See :ref:`swagger-ui` for more information.
                   --profile app-provider \
                   --profile app-user \
                   --profile swagger-ui up -d
+.. CF_DOCS_SPLICE_SNIPPET_004_END
 
 Stop nodes including a swagger-ui
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 See :ref:`swagger-ui` for more information.
 
+.. CF_DOCS_SPLICE_SNIPPET_005_START
 .. code-block:: bash
 
    docker compose --env-file $LOCALNET_DIR/compose.env \
@@ -211,6 +222,7 @@ See :ref:`swagger-ui` for more information.
                   --profile app-provider \
                   --profile app-user \
                   --profile swagger-ui down -v
+.. CF_DOCS_SPLICE_SNIPPET_005_END
 
 Access the Canton Admin Console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -223,6 +235,7 @@ of the Canton sequencer, mediator, and participant nodes in your LocalNet deploy
 * `Canton Console commands <https://docs.digitalasset.com/operate/3.4/reference/console.html>`__
 
 
+.. CF_DOCS_SPLICE_SNIPPET_006_START
 .. code-block:: bash
 
    docker compose --env-file $LOCALNET_DIR/compose.env \
@@ -230,6 +243,7 @@ of the Canton sequencer, mediator, and participant nodes in your LocalNet deploy
                   -f $LOCALNET_DIR/compose.yaml \
                   -f $LOCALNET_DIR/resource-constraints.yaml \
                   run --rm console
+.. CF_DOCS_SPLICE_SNIPPET_006_END
 
 .. _multi-sync-localnet:
 

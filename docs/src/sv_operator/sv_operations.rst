@@ -166,6 +166,7 @@ The suggested specific steps are as follows:
    (b) had a single coin input.
    You can confirm both of these conditions by looking at the matching log entry of the form:
 
+   .. CF_DOCS_SPLICE_SNIPPET_077_START
    .. parsed-literal::
 
      executing batch AmuletOperationBatch(
@@ -176,6 +177,7 @@ The suggested specific steps are as follows:
        ),
        priority = Low
      ) with inputs Vector(InputAmulet(ContractId(002ace5687dc7f82cb0ca80d2b349a39b1127ffd01db2cd7172053fef88308e6faca1012202646cd3cbb31c78314c3ef22657d4ba6f7f096e90167dcd0d71eba565fa35844)))
+   .. CF_DOCS_SPLICE_SNIPPET_077_END
 
    Use  the ``trace-id`` from this log enty's metadata
    (**not** the ``tid`` in view here but from the dedicated ``trace-id`` field on the log entry JSON)
@@ -188,9 +190,11 @@ The suggested specific steps are as follows:
    The goal is to tie the action here to a ``trace-id`` on the Canton side.
    Search for a log entry of the following form:
 
+   .. CF_DOCS_SPLICE_SNIPPET_078_START
    .. parsed-literal::
 
      Request (tid:43fd8ad332ca637b0c7c1509b2bdf715) com.daml.ledger.api.v2.CommandService/SubmitAndWaitForTransactionTree to participant-1:5001: sending request
+   .. CF_DOCS_SPLICE_SNIPPET_078_END
 
    The ``tid`` in this log entry is the ``trace-id`` that you're looking for.
    It will be different from the ``trace-id`` in the log entry metadata
@@ -199,11 +203,13 @@ The suggested specific steps are as follows:
 5. Search your SV's `sequencer` logs for the ``trace-id`` from the previous step.
    You want to use a log filter along the lines of (all rules here should be concatenated with logical "AND"s):
 
+   .. CF_DOCS_SPLICE_SNIPPET_079_START
    .. parsed-literal::
 
      resource.labels.container_name="sequencer"
      jsonPayload.logger_name="c.d.c.s.t.TrafficConsumedManager:sequencer=sequencer"
      jsonPayload."trace-id"="43fd8ad332ca637b0c7c1509b2bdf715"
+   .. CF_DOCS_SPLICE_SNIPPET_079_END
 
 
 6. The resulting log lines contain traffic consumption information about the sender and receiver participants,
@@ -217,11 +223,13 @@ The suggested specific steps are as follows:
    Filtering the resulting log lines for the participant IDs corresponding to the sender and receiver,
    you should get log lines similar to the following:
 
+   .. CF_DOCS_SPLICE_SNIPPET_080_START
    .. parsed-literal::
 
      Consumed 16147 for PAR::sender::...
      Consumed 711 for PAR::receiver::...
      Consumed 1450 for PAR::sender::...
+   .. CF_DOCS_SPLICE_SNIPPET_080_END
 
 7. Sum up the numbers in the log lines to get the total traffic consumed for the last leg of a CC transfer.
    In this example, the total traffic consumed would be 17597 bytes for the sender and 711 bytes for the receiver.
@@ -291,12 +299,14 @@ To resolve this issue, **each** SV operator is currently asked to follow the fol
 1. Shortly before the Daml upgrade becomes effective:
    Each SV pauses their ``ExpireRewardCouponsTrigger`` trigger by extending ``.additionalEnvVars`` in ``sv-values.yaml`` in the following way:
 
+   .. CF_DOCS_SPLICE_SNIPPET_083_START
    .. code-block:: yaml
 
       additionalEnvVars:
         - name: ADDITIONAL_CONFIG_PAUSED_EXPIRY_TRIGGER
           value: |
             canton.sv-apps.sv.automation.paused-triggers += "org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireRewardCouponsTrigger"
+   .. CF_DOCS_SPLICE_SNIPPET_083_END
 
 2. Shortly after the Daml upgrade becomes effective:
    One SV operator :ref:`constructs a party exclusion config <sv_ops_ignored_rewards_party_ids_determine>`,
@@ -304,6 +314,7 @@ To resolve this issue, **each** SV operator is currently asked to follow the fol
 3. Each SV operator adopts the party exclusion config and resume the ``ExpireRewardCouponsTrigger`` trigger by reverting the change from step 1.
    If ``.additionalEnvVars`` in ``sv-values.yaml`` was empty before step 1, it is now expected to look similar to the following:
 
+   .. CF_DOCS_SPLICE_SNIPPET_084_START
    .. code-block:: yaml
 
       additionalEnvVars:
@@ -312,6 +323,7 @@ To resolve this issue, **each** SV operator is currently asked to follow the fol
             canton.sv-apps.sv {
               automation.ignored-expired-rewards-party-ids = [ "party1::12345", "party2:57890" ]
             }
+   .. CF_DOCS_SPLICE_SNIPPET_084_END
 
 Updates to the party exclusion config are possible at future points in time,
 e.g., in case validators that were previously outdated eventually upgrade to a sufficiently recent Splice version.
@@ -339,9 +351,11 @@ Based on that:
 - For a more quick feedback loop, you can attempt queries against the SV app (postgres) database.
   For example, you can list receivers of rewards that were not expired since the Daml upgrade:
 
+  .. CF_DOCS_SPLICE_SNIPPET_081_START
   .. code-block:: sql
 
       select distinct(reward_party) from dso_acs_store where reward_round < UPGRADE_ROUND;
+  .. CF_DOCS_SPLICE_SNIPPET_081_END
 
   Note however that this query overapproximates the set of parties to ignore, so you might need to remove some parties again later.
 
@@ -354,6 +368,7 @@ Based on that:
   The following database query shows expired rewards that were generated *after* the Daml upgrade,
   which is an indicator that the hosting validator has upgraded and so these parties should not be ignored anymore:
 
+  .. CF_DOCS_SPLICE_SNIPPET_082_START
   .. code-block:: sql
 
      select m.template_id_qualified_name, m.reward_party, min(m.reward_round) from (
@@ -363,6 +378,7 @@ Based on that:
        and r.mining_round > UPGRADE_ROUND
        and r.template_id_qualified_name = 'Splice.Round:ClosedMiningRound'
      ) as m group by (template_id_qualified_name, reward_party);
+  .. CF_DOCS_SPLICE_SNIPPET_082_END
 
 .. _sv_unclaimed_sv_rewards_script:
 
@@ -477,6 +493,7 @@ The ``unclaimed_sv_rewards.py`` script is executed as a standalone Python progra
 
 Example using default optional parameters:
 
+.. CF_DOCS_SPLICE_SNIPPET_072_START
 .. code-block:: bash
 
   python3 unclaimed_sv_rewards.py \
@@ -499,9 +516,11 @@ Example using default optional parameters:
       --begin-migration-id 3 \
       --weight 5000 \
       --already-minted-weight 0
+.. CF_DOCS_SPLICE_SNIPPET_072_END
 
 Example with optional parameters:
 
+.. CF_DOCS_SPLICE_SNIPPET_073_START
 .. code-block:: bash
 
   python3 unclaimed_sv_rewards.py \
@@ -530,9 +549,11 @@ Example with optional parameters:
       --begin-migration-id 3 \
       --weight 5000 \
       --already-minted-weight 0
+.. CF_DOCS_SPLICE_SNIPPET_073_END
 
 Using a cache:
 
+.. CF_DOCS_SPLICE_SNIPPET_074_START
 .. code-block:: bash
 
   python3 unclaimed_sv_rewards.py \
@@ -556,9 +577,11 @@ Using a cache:
       --begin-migration-id 3 \
       --weight 5000 \
       --already-minted-weight 0
+.. CF_DOCS_SPLICE_SNIPPET_074_END
 
 To rebuild the cache:
 
+.. CF_DOCS_SPLICE_SNIPPET_075_START
 .. code-block:: bash
 
   python3 unclaimed_sv_rewards.py \
@@ -583,6 +606,7 @@ To rebuild the cache:
       --weight 5000 \
       --already-minted-weight 0 \
       --rebuild-cache
+.. CF_DOCS_SPLICE_SNIPPET_075_END
 
 
 For operational details regarding cache behavior, see
@@ -678,10 +702,12 @@ The beneficiary’s escrowed reward weight evolves as follows:
   - GSF sets weight = 30K.
   - GSF runs the script once for ``(t0, t1]``:
 
+  .. CF_DOCS_SPLICE_SNIPPET_076_START
   .. code-block:: bash
 
      --begin-record-time=t0 --end-record-time=t1 \
      --weight=10000 --already-minted-weight=0
+  .. CF_DOCS_SPLICE_SNIPPET_076_END
 
   - A vote is initiated for **m₁**.
 
@@ -816,36 +842,44 @@ The `ScanAppBackendConfig` has a field for both the ACS store and the TxLog stor
 The helm chart value `acsStoreDescriptorUserVersion` sets the `user version` of the
 ACS store, which is shown in the example below:
 
+   .. CF_DOCS_SPLICE_SNIPPET_085_START
    .. code-block:: yaml
 
       # Example to trigger re-ingestion of the ACS store for the first time
       persistence:
         acsStoreDescriptorUserVersion: 1
+   .. CF_DOCS_SPLICE_SNIPPET_085_END
 
 A subsequent re-ingestion can be triggered by incrementing the value, as shown in the example below:
 
+   .. CF_DOCS_SPLICE_SNIPPET_086_START
    .. code-block:: yaml
 
       # Example to trigger re-ingestion of the ACS store for the second time
       persistence:
         acsStoreDescriptorUserVersion: 2
+   .. CF_DOCS_SPLICE_SNIPPET_086_END
 
 The helm chart value `txLogStoreDescriptorUserVersion` sets the `user version` of the
 TxLog store, which is shown in the example below:
 
+   .. CF_DOCS_SPLICE_SNIPPET_087_START
    .. code-block:: yaml
 
       # Example to trigger re-ingestion of the TxLog store for the first time
       persistence:
         txLogStoreDescriptorUserVersion: 1
+   .. CF_DOCS_SPLICE_SNIPPET_087_END
 
 A subsequent re-ingestion can be triggered by incrementing the value, as shown in the example below:
 
+   .. CF_DOCS_SPLICE_SNIPPET_088_START
    .. code-block:: yaml
 
       # Example to trigger re-ingestion of the TxLog store for the second time
       persistence:
         txLogStoreDescriptorUserVersion: 2
+   .. CF_DOCS_SPLICE_SNIPPET_088_END
 
 The ``activityIngestionUserVersion`` field controls the activity record ingestion version. Incrementing this value causes the scan app to record a new app activity record completeness lower bound. Reward accounting excludes rounds before this boundary, even though their activity records are retained. Thus bumping the user version has the same effect as reinitializing the app activity record computation from the time of the bump onwards.
 
@@ -860,12 +894,14 @@ The user version must never decrease. A lower value than previously stored will 
 
 The HOCON configuration key is ``canton.scan-apps.scan-app.activity-ingestion-user-version``. It can be set via an ``ADDITIONAL_CONFIG`` environment variable:
 
+   .. CF_DOCS_SPLICE_SNIPPET_089_START
    .. code-block:: yaml
 
       # Example to reset the activity ingestion completeness boundary
       additionalEnvVars:
         - name: ADDITIONAL_CONFIG_ACTIVITY_INGESTION_USER_VERSION
           value: canton.scan-apps.scan-app.activity-ingestion-user-version = 1
+   .. CF_DOCS_SPLICE_SNIPPET_089_END
 
 .. _sv-unvet_insecure_package_versions:
 
@@ -884,6 +920,7 @@ To unvet supported packages, SVs (but not regular validators) must set the follo
 
 Here an example of how to unvet specific versions of a package:
 
+  .. CF_DOCS_SPLICE_SNIPPET_090_START
   .. code-block:: yaml
 
      additionalEnvVars:
@@ -891,6 +928,7 @@ Here an example of how to unvet specific versions of a package:
          value: |
            canton.sv-apps.sv.additional-packages-to-unvet.splice-wallet = ["0.1.16"]
            canton.sv-apps.sv.additional-packages-to-unvet.splice-amulet = ["0.1.16", "0.1.17"]
+  .. CF_DOCS_SPLICE_SNIPPET_090_END
 
 .. note::
 

@@ -57,9 +57,11 @@ You also need to tell the participant to continue pruning even if it has not rec
 in the last 30 days. Without this pruning will essentially never run on mainnet as validators get shut down relatively frequently:
 To do so, set the following through the ``additionalEnvVars`` on your participant:
 
+.. CF_DOCS_SPLICE_SNIPPET_091_START
 .. code-block:: yaml
 
     additionalEnvVars:
         - name: ADDITIONAL_CONFIG_PRUNING_ACS_COMMITMENTS
           value: |
             canton.participants.participant.parameters.stores.safe-to-prune-commitment-state = "all"
+.. CF_DOCS_SPLICE_SNIPPET_091_END

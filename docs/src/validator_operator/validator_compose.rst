@@ -53,6 +53,7 @@ following commands. All commands should succeed and print out the
 version. Note that the exact versions you see may be different from
 the example here. As long as you have docker-compose 2.26.0 or newer you should be fine.
 
+.. CF_DOCS_SPLICE_SNIPPET_104_START
 .. code-block:: bash
 
    > docker compose version
@@ -64,6 +65,7 @@ the example here. As long as you have docker-compose 2.26.0 or newer you should 
    Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd
    > jq --version
    jq-1.7.1
+.. CF_DOCS_SPLICE_SNIPPET_104_END
 
 2) Your machine should either be connected to a VPN that is whitelisted on the network
    (contact your sponsor SV to obtain access), or have a static egress IP address.
@@ -91,6 +93,7 @@ If you need to use an HTTP forward proxy for egress in your environment, you nee
 in `JAVA_TOOL_OPTIONS` in ``splice-node/docker-compose/validator/compose.yaml`` to use the HTTP proxy for outgoing connections.
 You need to do this for both the validator and the participant services:
 
+.. CF_DOCS_SPLICE_SNIPPET_108_START
 .. code-block:: yaml
 
   services:
@@ -99,7 +102,9 @@ You need to do this for both the validator and the participant services:
         JAVA_TOOL_OPTIONS: >-
           -Dhttps.proxyHost=your.proxy.host
           -Dhttps.proxyPort=your_proxy_port
+.. CF_DOCS_SPLICE_SNIPPET_108_END
 
+.. CF_DOCS_SPLICE_SNIPPET_105_START
 .. code-block:: yaml
 
   services:
@@ -108,6 +113,7 @@ You need to do this for both the validator and the participant services:
         JAVA_TOOL_OPTIONS: >-
           -Dhttps.proxyHost=your.proxy.host
           -Dhttps.proxyPort=your_proxy_port
+.. CF_DOCS_SPLICE_SNIPPET_105_END
 
 Replace ``your.proxy.host`` and ``your_proxy_port`` with the actual host and port of your HTTP proxy.
 Proxy authentication is currently not supported.
@@ -147,6 +153,7 @@ Example that proxies external traffic from the ``validator`` service but bypasse
 ``localhost`` / ``127.0.0.1``, any host in the ``.internal`` domain, and any IPv4 address whose
 literal string representation starts with ``10.``:
 
+.. CF_DOCS_SPLICE_SNIPPET_106_START
 .. code-block:: yaml
 
   services:
@@ -156,23 +163,28 @@ literal string representation starts with ``10.``:
           -Dhttps.proxyHost=your.proxy.host
           -Dhttps.proxyPort=your_proxy_port
           -Dhttp.nonProxyHosts=localhost|127.0.0.1|*.internal|10.*
+.. CF_DOCS_SPLICE_SNIPPET_106_END
 
 Deployment
 ++++++++++
 
 1) Change to the `docker-compose` directory inside the extracted bundle:
 
+.. CF_DOCS_SPLICE_SNIPPET_100_START
 .. code-block:: bash
 
    cd splice-node/docker-compose/validator
+.. CF_DOCS_SPLICE_SNIPPET_100_END
 
 2) Export the current version to an environment variable: |image_tag_set|
 
 3) Run the following command to start the validator node, and wait for it to become ready (could take a few minutes):
 
+  .. CF_DOCS_SPLICE_SNIPPET_101_START
   .. code-block:: bash
 
     ./start.sh -s "<SPONSOR_SV_URL>" -o "<ONBOARDING_SECRET>" -p "<party_hint>" -m "<MIGRATION_ID>" -w
+  .. CF_DOCS_SPLICE_SNIPPET_101_END
 
   Where:
 
@@ -276,9 +288,11 @@ CONTACT_POINT                 The contact point for your validator node that can
 In order to enable auth in the deployment, add the `-a` flag to the `start.sh`
 command, as follows:
 
+.. CF_DOCS_SPLICE_SNIPPET_102_START
 .. code-block:: bash
 
     ./start.sh -s "<SPONSOR_SV_URL>" -o "<ONBOARDING_SECRET>" -p "<party_hint>" -m "<MIGRATION_ID>" -w -a
+.. CF_DOCS_SPLICE_SNIPPET_102_END
 
 If you have already deployed a non-authenticated validator on your machine, you can migrate it to an
 authenticated one by stopping the validator with `./stop.sh` and restarting it with the `-a` flag
@@ -301,10 +315,12 @@ Your node is configured to automatically purchase :ref:`traffic <traffic>` on a 
 (see :ref:`automatically purchase traffic <traffic_topup>`).
 To tune to your needs, you can set environment variables, for example:
 
+.. CF_DOCS_SPLICE_SNIPPET_103_START
 .. code-block:: bash
 
    export TARGET_TRAFFIC_THROUGHPUT=20000 # target throughput in bytes/second
    export MIN_TRAFFIC_TOPUP_INTERVAL="1m" # minimum interval between top-ups
+.. CF_DOCS_SPLICE_SNIPPET_103_END
 
 .. include:: ../common/traffic_topups.rst
 
@@ -342,6 +358,7 @@ To do so, fill the following section and add the following additional config to 
 Similarly, you can configure the validator to automatically accept transfer offers
 from certain parties on the network. To do so, add the following additional config:
 
+.. CF_DOCS_SPLICE_SNIPPET_107_START
 .. code-block:: yaml
 
    services:
@@ -354,6 +371,7 @@ from certain parties on the network. To do so, add the following additional conf
                    from-parties = ["<senderPartyId1>", "<senderPartyId2>"]
                  }
                }
+.. CF_DOCS_SPLICE_SNIPPET_107_END
 
 Integration with systemd and other init systems
 +++++++++++++++++++++++++++++++++++++++++++++++

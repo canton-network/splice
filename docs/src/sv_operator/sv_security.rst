@@ -68,7 +68,10 @@ This involves the following steps:
 Generating a CometBFT governance key
 ====================================
 
-Use the following shell commands to generate a keypair in the expected format: ::
+Use the following shell commands to generate a keypair in the expected format:
+
+.. CF_DOCS_SPLICE_SNIPPET_096_START
+.. code-block:: bash
 
   # Generate the private key
   openssl genpkey -algorithm ed25519 -out cometbft-governance-keys.pem
@@ -85,16 +88,21 @@ Use the following shell commands to generate a keypair in the expected format: :
 
   # Clean up
   rm cometbft-governance-keys.pem
+.. CF_DOCS_SPLICE_SNIPPET_096_END
 
 ..
   Based on `scripts/generate-cometbft-governance-keys.sh`
 
-These commands should result in an output similar to ::
+These commands should result in an output similar to:
+
+.. CF_DOCS_SPLICE_SNIPPET_097_START
+.. code-block:: json
 
   {
     "public": "A9tWyYq/HIJ3B73ym1eIUV8yqnDBligGJUE8463CBUM=",
     "private": "FDG16PaSh9hGLu2fXzEHmTECMjSyQuZnEg+w5HKCEtg="
   }
+.. CF_DOCS_SPLICE_SNIPPET_097_END
 
 Save this output to a file, e.g., ``cometbft-governance-keys.json``.
 
@@ -105,11 +113,15 @@ You inject the externally generated CometBFT governance key into the SV app via
 storing it in a k8s secret named ``splice-app-sv-cometbft-governance-key``.
 
 Assuming that your SV deployment resides in the ``sv`` namespace,
-use the following command to create the secret from the JSON file generated above: ::
+use the following command to create the secret from the JSON file generated above:
+
+.. CF_DOCS_SPLICE_SNIPPET_095_START
+.. code-block:: bash
 
   kubectl create secret --namespace sv generic splice-app-sv-cometbft-governance-key \
     --from-literal=publicKey="$(jq -r .public cometbft-governance-keys.json)" \
     --from-literal=privateKey="$(jq -r .private cometbft-governance-keys.json)"
+.. CF_DOCS_SPLICE_SNIPPET_095_END
 
 To instruct the SV app to use the externally managed CometBFT governance key instead of generating a fresh one itself,
 set the ``cometBFT.externalGovernanceKey`` value in the ``splice-sv-node`` Helm chart to ``true``.

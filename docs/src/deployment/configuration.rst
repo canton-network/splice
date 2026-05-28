@@ -46,11 +46,13 @@ it can be useful. To do so, you need to set the
 ``OVERRIDE_BOOTSTRAP_SCRIPT`` environment variable to the content of your bootstrap script.
 Note that the script must be wrapped in a ``main`` function, e.g.,
 
+.. CF_DOCS_SPLICE_SNIPPET_009_START
 .. code::
 
    def main() {
      logger.info(s"Participant id from bootstrap script: ${participant.id}")
    }
+.. CF_DOCS_SPLICE_SNIPPET_009_END
 
 You can set this environment variable through ``additionalEnvVars`` as described below.
 
@@ -65,8 +67,10 @@ Helm charts support
 
 The helm charts can be configured through the value ``additionalEnvVars``, which passes the values as environment variables to the apps.
 
+.. CF_DOCS_SPLICE_SNIPPET_010_START
 .. code-block:: yaml
 
     additionalEnvVars:
         - name: ADDITIONAL_CONFIG_EXAMPLE
           value: canton.example.key=value
+.. CF_DOCS_SPLICE_SNIPPET_010_END
