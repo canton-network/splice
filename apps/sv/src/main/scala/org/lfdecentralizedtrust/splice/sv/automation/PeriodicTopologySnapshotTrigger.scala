@@ -146,13 +146,13 @@ class PeriodicTopologySnapshotTrigger(
         "Write authorized store and metadata into GCP bucket",
         Future {
           blocking {
-            BackupDump.writeBytes(
+            val _ = BackupDump.writeBytes(
               config.location,
               Paths.get(s"$folderName/authorized"),
               authorizedStore.toByteArray,
               loggerFactory,
             )
-            BackupDump.write(
+            val _ = BackupDump.write(
               config.location,
               Paths.get(s"$folderName/metadata"),
               metadataJson,
