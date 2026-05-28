@@ -1157,6 +1157,12 @@ template DsoRules with
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
             pure DsoRules_UpdateSvRewardWeight_V2Result with newDsoRules
 
+    -- | Offboards a hosted SV.
+    --
+    -- Note: This choice does not archive the corresponding `SvRewardBeneficiaries`
+    -- contract. The offboarding process performs that as a separate step through
+    -- automation in the SV backend, which collects and archives
+    -- `SvRewardBeneficiaries` contracts whose `sv` appears in the `offboardedHostedSvs` map.
     choice DsoRules_OffboardHostedSv : DsoRules_RemoveHostedSvResult
       with
         svParty : Party
