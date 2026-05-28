@@ -10,11 +10,12 @@ import {
 } from '@lfdecentralizedtrust/splice-pulumi-common';
 import {
   configForSv,
-  installParticipant,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
 } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+
+import { installParticipant } from './participant';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
   const staticConfig = findStaticConfigOrFail(sv);

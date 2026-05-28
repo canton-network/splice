@@ -2,6 +2,7 @@
 
 subcommand_whitelist[enable_logical_synchronizer_deployment]='Enable logical synchronizer deployment mode'
 
+# TODO(#5708): remove this after all usage is gone
 function subcmd_enable_logical_synchronizer_deployment() {
   local migration_type="${1:-active}"
   if [ "$#" -gt 1 ]; then
@@ -12,6 +13,7 @@ function subcmd_enable_logical_synchronizer_deployment() {
 
 subcommand_whitelist[freeze_migration]='Freeze migration with the given ID and enable LSU'
 
+# TODO(#5708): remove this after all usage is gone
 function subcmd_freeze_migration() {
   local migration_id="${1:-0}"
   if [ "$#" -gt 1 ]; then

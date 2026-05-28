@@ -102,7 +102,6 @@ export async function installCantonComponents(
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
-  const { chart: participant, db: participantDb } = { chart: undefined, db: undefined };
   if (migrationStillRunning) {
     const decentralizedSynchronizerNode = migrationInfo.sequencer.enableBftSequencer
       ? new InStackCantonBftDecentralizedSynchronizerNode(
