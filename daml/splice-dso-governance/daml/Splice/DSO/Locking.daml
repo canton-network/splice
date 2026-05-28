@@ -5,6 +5,7 @@
 module Splice.DSO.Locking where
 
 import Splice.Types
+import Splice.Util
 
 -- | A declared locking position by an SV.
 -- Created when an SV informs the DSO that they have locked CC in a disclosed wallet.
@@ -82,3 +83,16 @@ template DelegatedLockingPosition with
 
     signatory dso
     observer lender
+
+
+-- instances
+------------
+
+instance HasCheckedFetch LockingDeclaration ForDso where
+  contractGroupId LockingDeclaration {..} = ForDso with dso
+
+instance HasCheckedFetch DelegatedLockProposal ForDso where
+  contractGroupId DelegatedLockProposal {..} = ForDso with dso
+
+instance HasCheckedFetch DelegatedLockingPosition ForDso where
+  contractGroupId DelegatedLockingPosition {..} = ForDso with dso

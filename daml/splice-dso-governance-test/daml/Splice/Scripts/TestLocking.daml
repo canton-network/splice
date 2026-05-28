@@ -25,6 +25,16 @@ assertArchivedContractError submitError =
     ("Unexpected submit error: " <> show submitError)
     (or (map (\fragment -> Text.isInfixOf fragment (show submitError)) expectedArchivedContractErrorText))
 
+expectSome : Text -> Optional a -> Script a
+expectSome message value = case value of
+  Some x -> pure x
+  None -> fail message
+
+expectNone : Text -> Optional a -> Script ()
+expectNone message value = case value of
+  None -> pure ()
+  Some _ -> fail message
+
 
 -- | Test that an SV can declare a locking position.
 testDeclareLocking : Script ()
@@ -32,14 +42,14 @@ testDeclareLocking = do
   (_, dso, (sv1, _, _, _)) <- initMainNet
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
-  result <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  result <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = sv1
     lockedAmount = 1000.0
     walletPartyId = "wallet-1"
     currentRound = Round 0
 
   -- Verify the declaration was created
-  Some declaration <- queryContractId dso result.lockingDeclaration
+  declaration <- expectSome "Expected locking declaration to exist" =<< queryContractId dso result.lockingDeclaration
   declaration.info.svParty === sv1
   declaration.info.svName === "sv1"
   declaration.info.lockedAmount === 1000.0
@@ -53,21 +63,21 @@ testUpdateLockingDeclaration = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   -- Create initial declaration
-  result <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  result <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = sv1
     lockedAmount = 1000.0
     walletPartyId = "wallet-1"
     currentRound = Round 0
 
   -- Update the declaration
-  updateResult <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_UpdateLockingDeclaration with
+  updateResult <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_UpdateLockingDeclaration with
     sv = sv1
     existingDeclarationCid = result.lockingDeclaration
     newLockedAmount = 2000.0
     currentRound = Round 1
 
   -- Verify the updated declaration
-  Some updated <- queryContractId dso updateResult.lockingDeclaration
+  updated <- expectSome "Expected updated locking declaration to exist" =<< queryContractId dso updateResult.lockingDeclaration
   updated.info.lockedAmount === 2000.0
   updated.info.declaredRound === Round 1
   -- wallet and SV info should be preserved
@@ -81,20 +91,19 @@ testRevokeLockingDeclaration = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   -- Create initial declaration
-  result <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  result <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = sv1
     lockedAmount = 1000.0
     walletPartyId = "wallet-1"
     currentRound = Round 0
 
   -- Revoke
-  submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_RevokeLockingDeclaration with
+  submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_RevokeLockingDeclaration with
     sv = sv1
     declarationCid = result.lockingDeclaration
 
   -- Verify the declaration is gone
-  None <- queryContractId @LockingDeclaration dso result.lockingDeclaration
-  pure ()
+  expectNone "Expected locking declaration to be archived" =<< queryContractId @LockingDeclaration dso result.lockingDeclaration
 
 -- | Test that a lender can create a delegated lock proposal.
 testLenderCreatesProposal : Script ()
@@ -110,7 +119,7 @@ testLenderCreatesProposal = do
     lockedAmount = 500.0
     walletPartyId = "lender-wallet"
 
-  Some proposal <- queryContractId lender proposalCid
+  proposal <- expectSome "Expected delegated lock proposal to exist" =<< queryContractId lender proposalCid
   proposal.lender === lender
   proposal.svParty === sv1
   proposal.lockedAmount === 500.0
@@ -132,13 +141,13 @@ testAcceptDelegatedLock = do
     walletPartyId = "lender-wallet"
 
   -- SV accepts via DsoRules
-  result <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
+  result <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
     sv = sv1
     proposalCid
     currentRound = Round 0
 
   -- Verify the position was created
-  Some position <- queryContractId dso result.delegatedLockingPosition
+  position <- expectSome "Expected delegated locking position to exist" =<< queryContractId dso result.delegatedLockingPosition
   position.lender === lender
   position.svParty === sv1
   position.svName === "sv1"
@@ -147,8 +156,7 @@ testAcceptDelegatedLock = do
   position.acceptedRound === Round 0
 
   -- Verify the proposal was consumed
-  None <- queryContractId @DelegatedLockProposal lender proposalCid
-  pure ()
+  expectNone "Expected delegated lock proposal to be archived" =<< queryContractId @DelegatedLockProposal lender proposalCid
 
 -- | Test that an SV can release a delegated locking position.
 testReleaseDelegatedLock : Script ()
@@ -166,19 +174,18 @@ testReleaseDelegatedLock = do
     lockedAmount = 500.0
     walletPartyId = "lender-wallet"
 
-  result <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
+  result <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
     sv = sv1
     proposalCid
     currentRound = Round 0
 
   -- Release the position
-  submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_ReleaseDelegatedLock with
+  submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_ReleaseDelegatedLock with
     sv = sv1
     positionCid = result.delegatedLockingPosition
 
   -- Verify the position is gone
-  None <- queryContractId @DelegatedLockingPosition dso result.delegatedLockingPosition
-  pure ()
+  expectNone "Expected delegated locking position to be archived" =<< queryContractId @DelegatedLockingPosition dso result.delegatedLockingPosition
 
 -- | Test that a non-SV party cannot declare a lock (getSvInfo fails).
 testNonSvCannotDeclareLock : Script ()
@@ -187,7 +194,7 @@ testNonSvCannotDeclareLock = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   nonSv <- allocateParty "nonSv"
 
-  submitMultiMustFail [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  submitMustFail (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = nonSv
     lockedAmount = 1000.0
     walletPartyId = "wallet-1"
@@ -210,7 +217,7 @@ testProposalForWrongSvRejected = do
     walletPartyId = "lender-wallet"
 
   -- Try to accept as sv2 — should fail
-  submitMultiMustFail [dso] [] $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
+  submitMustFail (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
     sv = sv2
     proposalCid
     currentRound = Round 0
@@ -221,7 +228,7 @@ testConcurrentUpdateLockingDeclarationRace = do
   (_, dso, (sv1, _, _, _)) <- initMainNet
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
-  declaration <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  declaration <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = sv1
     lockedAmount = 1000.0
     walletPartyId = "wallet-1"
@@ -272,7 +279,7 @@ testRevokeDeclarationWhileDelegatedPositionActive = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   lender <- allocateParty "lender"
 
-  declaration <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
+  declaration <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_DeclareLocking with
     sv = sv1
     lockedAmount = 1000.0
     walletPartyId = "shared-wallet"
@@ -286,17 +293,17 @@ testRevokeDeclarationWhileDelegatedPositionActive = do
     lockedAmount = 500.0
     walletPartyId = "shared-wallet"
 
-  position <- submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
+  position <- submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_AcceptDelegatedLock with
     sv = sv1
     proposalCid
     currentRound = Round 1
 
-  submitMulti [dso] [] $ exerciseCmd dsoRulesCid DsoRules_RevokeLockingDeclaration with
+  submit (actAs dso) $ exerciseCmd dsoRulesCid DsoRules_RevokeLockingDeclaration with
     sv = sv1
     declarationCid = declaration.lockingDeclaration
 
-  None <- queryContractId @LockingDeclaration dso declaration.lockingDeclaration
-  Some activePosition <- queryContractId dso position.delegatedLockingPosition
+  expectNone "Expected locking declaration to be archived" =<< queryContractId @LockingDeclaration dso declaration.lockingDeclaration
+  activePosition <- expectSome "Expected delegated locking position to remain active" =<< queryContractId dso position.delegatedLockingPosition
   activePosition.svParty === sv1
   activePosition.walletPartyId === "shared-wallet"
   pure ()

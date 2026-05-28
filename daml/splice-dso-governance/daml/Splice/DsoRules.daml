@@ -1677,7 +1677,7 @@ template DsoRules with
     -- Capabilities #1 and #4
     ------------------------
 
-    -- | Capability #1: SV declares a locked position.
+    -- Capability #1: SV declares a locked position.
     -- The SV informs the DSO that they have locked CC in a disclosed wallet.
     nonconsuming choice DsoRules_DeclareLocking : DsoRules_DeclareLockingResult
       with
@@ -1700,7 +1700,7 @@ template DsoRules with
         return DsoRules_DeclareLockingResult with
           lockingDeclaration = declarationCid
 
-    -- | Capability #1: Update an existing locking declaration.
+    -- Capability #1: Update an existing locking declaration.
     nonconsuming choice DsoRules_UpdateLockingDeclaration : DsoRules_UpdateLockingDeclarationResult
       with
         sv : Party
@@ -1709,10 +1709,9 @@ template DsoRules with
         currentRound : Round
       controller dso
       do
-        existing <- fetch existingDeclarationCid
+        existing <- fetchAndArchive (ForDso with dso) existingDeclarationCid
         require "Only the declaring SV can update" (existing.info.svParty == sv)
         require "New locked amount must be positive" (newLockedAmount > 0.0)
-        archive existingDeclarationCid
         newCid <- create LockingDeclaration with
           dso
           info = existing.info with
@@ -1721,19 +1720,18 @@ template DsoRules with
         return DsoRules_UpdateLockingDeclarationResult with
           lockingDeclaration = newCid
 
-    -- | Capability #1: Revoke a locking declaration.
+    -- Capability #1: Revoke a locking declaration.
     nonconsuming choice DsoRules_RevokeLockingDeclaration : DsoRules_RevokeLockingDeclarationResult
       with
         sv : Party
         declarationCid : ContractId LockingDeclaration
       controller dso
       do
-        existing <- fetch declarationCid
+        existing <- fetchAndArchive (ForDso with dso) declarationCid
         require "Only the declaring SV can revoke" (existing.info.svParty == sv)
-        archive declarationCid
         return DsoRules_RevokeLockingDeclarationResult
 
-    -- | Capability #4: SV accepts a delegated lock proposal from a non-SV lender.
+    -- Capability #4: SV accepts a delegated lock proposal from a non-SV lender.
     -- Consumes the lender's proposal and creates an active delegated position.
     nonconsuming choice DsoRules_AcceptDelegatedLock : DsoRules_AcceptDelegatedLockResult
       with
@@ -1743,7 +1741,7 @@ template DsoRules with
       controller dso
       do
         info <- getSvInfo sv this
-        proposal <- fetch proposalCid
+        proposal <- fetchButArchiveLater (ForDso with dso) proposalCid
         require "Proposal must be for this SV" (proposal.svParty == sv)
         require "Proposal must target this DSO" (proposal.dso == dso)
         require "Locked amount must be positive" (proposal.lockedAmount > 0.0)
@@ -1759,7 +1757,7 @@ template DsoRules with
         return DsoRules_AcceptDelegatedLockResult with
           delegatedLockingPosition = positionCid
 
-    -- | Release an active delegated locking position.
+    -- Release an active delegated locking position.
     -- Removes the position from the DSO state.
     nonconsuming choice DsoRules_ReleaseDelegatedLock : DsoRules_ReleaseDelegatedLockResult
       with
@@ -1767,9 +1765,8 @@ template DsoRules with
         positionCid : ContractId DelegatedLockingPosition
       controller dso
       do
-        position <- fetch positionCid
+        position <- fetchAndArchive (ForDso with dso) positionCid
         require "Only the benefiting SV can release" (position.svParty == sv)
-        archive positionCid
         return DsoRules_ReleaseDelegatedLockResult
 
 
