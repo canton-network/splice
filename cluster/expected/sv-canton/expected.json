@@ -1709,8 +1709,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -1772,6 +1775,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -1824,8 +1839,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -1887,6 +1905,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -1939,8 +1969,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2002,6 +2035,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2054,8 +2099,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2117,6 +2165,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2169,8 +2229,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2232,6 +2295,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2284,8 +2359,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2347,6 +2425,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2399,8 +2489,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2462,6 +2555,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2618,8 +2723,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2681,6 +2789,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2733,8 +2853,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2796,6 +2919,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2848,8 +2983,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2911,6 +3049,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -2963,8 +3113,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -3026,6 +3179,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4090,8 +4255,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4153,6 +4321,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4205,8 +4385,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4268,6 +4451,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4320,8 +4515,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4383,6 +4581,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4435,8 +4645,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4498,6 +4711,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4550,8 +4775,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4613,6 +4841,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4665,8 +4905,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4728,6 +4971,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -4780,8 +5035,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -4843,6 +5101,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -5024,8 +5294,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -5087,6 +5360,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -5139,8 +5424,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -5202,6 +5490,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -5254,8 +5554,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -5317,6 +5620,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -5369,8 +5684,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -5432,6 +5750,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6107,8 +6437,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6171,6 +6504,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6223,8 +6568,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6287,6 +6635,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6339,8 +6699,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6403,6 +6766,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6455,8 +6830,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6519,6 +6897,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6571,8 +6961,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6635,6 +7028,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6687,8 +7092,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6751,6 +7159,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -6803,8 +7223,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -6867,6 +7290,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -7023,8 +7458,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -7087,6 +7525,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -7139,8 +7589,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -7203,6 +7656,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -7255,8 +7720,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -7319,6 +7787,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -7371,8 +7851,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -7435,6 +7918,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": false,
