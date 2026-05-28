@@ -89,8 +89,8 @@ splitwell:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
-        # initial round used only on fresh initialization or resets
-      # first SV bootstraps the network with it, other SVs learn it via their sponsors
+# initial round used only on fresh initialization or resets
+# first SV bootstraps the network with it, other SVs learn it via their sponsors
 initialRound: 0
 ## in the form <pulumi-project>:
 ##                <settings>
