@@ -76,7 +76,7 @@ class PeriodicTopologySnapshotTrigger(
     for {
       res <- Future {
         blocking {
-          BackupDump.bucketExists(config.location, startOffset, loggerFactory)
+          BackupDump.bucketExists(config.location, s"$startOffset", loggerFactory)
         }
       }
     } yield res
@@ -158,6 +158,13 @@ class PeriodicTopologySnapshotTrigger(
               metadataJson,
               loggerFactory,
             )
+            if (!BackupDump.bucketExists(config.location, s"$folderName", loggerFactory)) {
+              throw Status.NOT_FOUND
+                .withDescription(
+                  s"Verification failed: '$folderName' not found in bucket after write"
+                )
+                .asRuntimeException
+            }
           }
         },
         logger,

@@ -88,6 +88,7 @@ object BackupDump {
       config: BackupDumpConfig,
       offset: String,
       loggerFactory: NamedLoggerFactory,
+      numberOfContents: Int = 3,
   ): Boolean = {
     config match {
       case BackupDumpConfig.Gcp(bucketConfig, prefix) =>
@@ -97,7 +98,7 @@ object BackupDump {
           case None => ""
         }
         val blobs = gcpBucket.listBlobsByPrefix(prefix = s"$pref$offset")
-        blobs.nonEmpty
+        blobs.size == numberOfContents
       case _ =>
         throw Status.UNIMPLEMENTED
           .withDescription("Topology snapshot works only with GCP buckets")
