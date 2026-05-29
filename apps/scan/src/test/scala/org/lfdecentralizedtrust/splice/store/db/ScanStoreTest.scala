@@ -583,6 +583,18 @@ abstract class ScanStoreTest
         } yield result shouldBe Some(10L)
       }
 
+      "returns the latest by record time even when ingested out of record-time order" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 10L, recordTime = time(75))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe Some(10L)
+      }
+
       "returns None for an SV absent from the DsoRules svs map" in {
         val sv = providerParty(7)
         val otherSv = providerParty(8)
