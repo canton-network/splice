@@ -326,7 +326,7 @@ describe('Proposal Details Content', () => {
     dsoRulesContract.payload.svs = [[svToUpdate, { ...templateSvInfo, svRewardWeight: '5' }]];
 
     server.use(
-      http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, () => {
+      http.post(`${svUrl}/v0/admin/dso-rules-before`, () => {
         return HttpResponse.json({ dso_rules: dsoRulesContract });
       })
     );

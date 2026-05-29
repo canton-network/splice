@@ -65,7 +65,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
     return HttpResponse.json<ListVoteRequestByTrackingCidResponse>(voteRequest);
   }),
 
-  http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, () => {
+  http.post(`${svUrl}/v0/admin/dso-rules-before`, () => {
     return HttpResponse.json({});
   }),
 
