@@ -52,6 +52,12 @@ pulumiProjectConfig:
       tier: 'db-custom-2-7680'
       # enable enterprise plus for better performance and faster maintenance
       enterprisePlus: false
+      flags:
+        random_page_cost: '1.1'
+        temp_file_limit: '2147483647'
+        max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
+        maintenance_work_mem: '2000000' # 2Gi, but GCP doesn't allow to write it that way and must be a number indicating KB,
+        work_mem: '16384' # 16MB, raised from the default of 4MB to better support large queries, but still low enough to avoid OOMs in case of many concurrent queries, can be increased for instances with high memory
     skipSynchronizerInitialization: true
     # default not allowing version downgrades in our apps
     allowDowngrade: true
@@ -166,7 +172,7 @@ monitoring:
         # Quota metric names to exclude only from the "approaching limit" (>90%) alerts.
         # These metrics will still trigger the "quota exceeded" alert.
         # GCP is more forgiving of larger sets in this value.
-        excludedApproachingMetrics: []
+        excludedApproachingMetrics: [ ]
         # Smoothing window for quota usage checks. Used as the avg_over_time
         # range in PromQL queries and as the alignmentPeriod for the exceeded
         # threshold alert.
@@ -191,7 +197,7 @@ monitoring:
         jsonPayload.message=~"eyJhbGc[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}" OR
         jsonPayload.message=~"Bearer\s+eyJ[A-Za-z0-9_-]{2,}"
       )
-    muteTimeIntervals: []
+    muteTimeIntervals: [ ]
 cloudArmor:
   enabled: false
   allRulesPreviewOnly: true

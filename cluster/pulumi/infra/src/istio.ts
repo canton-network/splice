@@ -926,7 +926,9 @@ export function configureIstio(
     expectGKEL7Gateway ? { viaGKEL7: true } : { viaGKEL7: false, ip: ingressIp },
     istiod
   );
-  const cometBftSvc = DecentralizedSynchronizerUpgradeConfig.usesCometbft() ? configureCometBFTGatewayService(ingressNs.ns, cometBftIngressIp, istiod) : undefined;
+  const cometBftSvc = DecentralizedSynchronizerUpgradeConfig.usesCometbft()
+    ? configureCometBFTGatewayService(ingressNs.ns, cometBftIngressIp, istiod)
+    : undefined;
   const gateways = configureGateway(ingressNs, gwSvc, cometBftSvc, expectGKEL7Gateway);
   const docsAndReleases = configureDocsAndReleases(true, gateways);
   const publicInfo = configurePublicInfo(ingressNs.ns);
