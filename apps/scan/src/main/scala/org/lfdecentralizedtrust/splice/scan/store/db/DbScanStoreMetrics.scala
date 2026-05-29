@@ -27,28 +27,6 @@ class DbScanStoreMetrics(
 
   val prefix: MetricName = SpliceMetrics.MetricsPrefix :+ "scan_store"
 
-  val earliestAggregatedRound: Gauge[Long] =
-    metricsFactory.gauge(
-      MetricInfo(
-        name = prefix :+ "earliest-aggregated-round",
-        summary = "Earliest aggregated round",
-        description = "The earliest aggregated round.",
-        qualification = Latency,
-      ),
-      -1L,
-    )(MetricsContext.Empty)
-
-  val latestAggregatedRound: Gauge[Long] =
-    metricsFactory.gauge(
-      MetricInfo(
-        name = prefix :+ "latest-aggregated-round",
-        summary = "Latest aggregated round",
-        description = "The latest aggregated round.",
-        qualification = Latency,
-      ),
-      -1L,
-    )(MetricsContext.Empty)
-
   def registerNewCacheMetrics(
       cacheName: String
   )(implicit tc: TraceContext): UnlessShutdown[CacheMetrics] =
@@ -64,14 +42,6 @@ class DbScanStoreMetrics(
   val history = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
 
   override protected def onClosed(): Unit = {
-    LifeCycle.close(
-      Seq(earliestAggregatedRound, latestAggregatedRound, history)
-        .map(cache =>
-          new AutoCloseable {
-            def close(): Unit = cache.close()
-          }
-        )*
-    )(logger)
     cacheOfMetrics.clear()
   }
 
