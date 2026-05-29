@@ -1,8 +1,10 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.topology.PartyId
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
@@ -38,6 +40,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 
+import scala.concurrent.{blocking, Future}
 import scala.util.{Success, Try}
 
 // this test sets fees to zero, and that only works from 0.1.14 onwards
@@ -82,7 +85,7 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("getAggregatedRounds" -> SpliceRateLimitConfig(
+                  config.parameters.rateLimiting.rateLimiters + ("getDsoInfo" -> SpliceRateLimitConfig(
                     ratePerSecond = 5
                   ))
               ),
@@ -701,49 +704,48 @@ class ScanIntegrationTest
     legacySequencer.id shouldBe expectedSequencerId
   }
 
-  // FIXME: revive using a different endpoint
-//  "respect rate limit" in { implicit env =>
-//    import env.{actorSystem, executionContext}
-//
-//    def doCall() = {
-//      sv1ScanBackend.getAggregatedRounds()
-//    }
-//
-//    loggerFactory.assertLoggedWarningsAndErrorsSeq(
-//      {
-//        Try {
-//          doCall()
-//        }.discard
-//
-//        Threading.sleep(1000) // wait for the rate limiter to start
-//
-//        val results = SpliceRateLimiterTest
-//          .runRateLimited(
-//            10,
-//            50,
-//          ) {
-//            Future {
-//              blocking {
-//                doCall()
-//              }
-//            }
-//          } futureValue
-//
-//        // 5 is the limit from where the rate limiter starts to kick in
-//        // then 5 every second
-//        // first second is 5 (full capacity) + 5 (capacity added after consumption)
-//        // then 5 every second
-//        val maxAccepted = 30
-//        // account for bursts in the stream used to rate limit the calls in `runRateLimited`
-//        val minAccepted = 10
-//        results.count(identity) should (be >= minAccepted and be <= maxAccepted)
-//
-//      },
-//      forAll(_) {
-//        _.message should include("Too Many Requests")
-//      },
-//    )
-//  }
+  "respect rate limit" in { implicit env =>
+    import env.{actorSystem, executionContext}
+
+    def doCall() = {
+      sv1ScanBackend.getDsoInfo()
+    }
+
+    loggerFactory.assertLoggedWarningsAndErrorsSeq(
+      {
+        Try {
+          doCall()
+        }.discard
+
+        Threading.sleep(1000) // wait for the rate limiter to start
+
+        val results = SpliceRateLimiterTest
+          .runRateLimited(
+            10,
+            50,
+          ) {
+            Future {
+              blocking {
+                doCall()
+              }
+            }
+          } futureValue
+
+        // 5 is the limit from where the rate limiter starts to kick in
+        // then 5 every second
+        // first second is 5 (full capacity) + 5 (capacity added after consumption)
+        // then 5 every second
+        val maxAccepted = 30
+        // account for bursts in the stream used to rate limit the calls in `runRateLimited`
+        val minAccepted = 10
+        results.count(identity) should (be >= minAccepted and be <= maxAccepted)
+
+      },
+      forAll(_) {
+        _.message should include("Too Many Requests")
+      },
+    )
+  }
 
   "accept invalid headers" in { implicit env =>
     import org.apache.pekko.http.scaladsl.model.headers as h

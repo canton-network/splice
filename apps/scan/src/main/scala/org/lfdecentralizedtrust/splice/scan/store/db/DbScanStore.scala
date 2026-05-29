@@ -163,14 +163,7 @@ class DbScanStore(
   ] = new DbScanTxLogStoreConfig(loggerFactory)
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-//    implicit def traceContext: TraceContext = TraceContext.empty
     Seq(
-//      FIXME: do we need this? The name db_scan_store suggests it's more than the aggregator, but it seems to only close the aggregator.
-//      AsyncCloseable(
-//        "db_scan_store",
-//        aggregator.map(_.close()),
-//        NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
-//      ),
       SyncCloseable("db_scan_store_metrics", storeMetrics.close()),
       SyncCloseable("db_scan_acs_store", multiDomainAcsStore.close()),
     )
