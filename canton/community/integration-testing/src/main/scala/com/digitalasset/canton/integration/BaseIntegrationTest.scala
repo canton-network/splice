@@ -8,10 +8,10 @@ import com.digitalasset.canton.console.{BufferedProcessLogger, CommandFailure, P
 import com.digitalasset.canton.logging.LogEntry
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.{
-  config,
   BaseTest,
   RepeatableTestSuiteTest,
   TestPredicateFiltersFixtureAnyWordSpec,
+  config,
 }
 import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.environment.Environment
@@ -63,7 +63,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     with TestPredicateFiltersFixtureAnyWordSpec {
   this: EnvironmentSetup[C, E] =>
 
-  type FixtureParam = TestConsoleEnvironment[C, E]
+  type FixtureParam = BaseTestConsoleEnvironment[C, E]
 
   override protected def withFixture(test: OneArgTest): Outcome = {
     super[RepeatableTestSuiteTest].withFixture(new TestWithSetup(test))

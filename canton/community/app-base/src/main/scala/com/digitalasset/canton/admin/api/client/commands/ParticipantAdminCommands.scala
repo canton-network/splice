@@ -3,8 +3,8 @@
 
 package com.digitalasset.canton.admin.api.client.commands
 
-import cats.syntax.option.*
 import cats.syntax.either.*
+import cats.syntax.option.*
 import cats.syntax.traverse.*
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   DefaultUnboundedTimeout,

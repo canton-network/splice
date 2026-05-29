@@ -2,13 +2,11 @@ package org.lfdecentralizedtrust.splice.integration.plugins
 
 import com.daml.ledger.javaapi.data.Identifier
 import com.digitalasset.canton.ScalaFuturesWithPatience
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.logging.SuppressingLogger
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
-import org.lfdecentralizedtrust.splice.config.SpliceConfig
-import org.lfdecentralizedtrust.splice.environment.{DarResources, SpliceEnvironment}
+import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.CommonAppInstanceReferences
@@ -39,7 +37,7 @@ import org.scalatest.OptionValues
 class TokenStandardCliSanityCheckPlugin(
     rawBehavior: OutputCreateArchiveBehavior,
     protected val loggerFactory: SuppressingLogger,
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with Matchers
     with Eventually
     with Inspectors
@@ -50,8 +48,7 @@ class TokenStandardCliSanityCheckPlugin(
     with OptionValues {
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     try {
       TraceContext.withNewTraceContext("beforeEnvironmentDestroyed") { implicit tc =>
