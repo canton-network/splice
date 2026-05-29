@@ -37,6 +37,11 @@ export const MigrationInfoSchema = z
       })
       .strict()
       .prefault({}),
+    cometbft: z
+      .object({
+        volumeSize: z.string().optional(),
+      })
+      .optional(),
   })
   .strict();
 
