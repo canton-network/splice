@@ -29,7 +29,7 @@ seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds
 part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.participantDelaySeconds // 30")
 med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.mediatorDelaySeconds // 30")
 
-PROM="http://prometheus-prometheus.observability.svc.cluster.local:9090"
+PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
 
 timeout_secs=$(( timeout_hours * 3600 ))
 poll_interval=60
@@ -42,10 +42,28 @@ _info "Caught-up when: seq<=${seq_delay_ok}s, participant<=${part_delay_ok}s, me
 _info "Timeout: ${timeout_hours}h"
 
 function query_prom() {
-  curl -sf "${PROM}/api/v1/query" \
+  curl -ksf "${PROM}/api/v1/query" \
     --data-urlencode "query=${1}" \
- | jq -r '.data.result[0].value[1] // "0"'
+ | jq -r '.data.result[0].value[1] // "999999"'
 }
+
+function query_seq_delay() {
+  query_prom "min by (namespace, job) (daml_sequencer_block_delay{namespace=\"${namespace}\", component=\"sequencer\", job=~\"global-domain-.*-sequencer\"}) / 1000"
+}
+
+function query_part_delay() {
+  query_prom "max by (namespace) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"}) - ((daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"} > 0) / 1e6))"
+}
+
+function query_med_delay() {
+  query_prom "max by (namespace, job) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"}) - ((daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"} > 0) / 1e6))"
+}
+
+# Capture initial delays for catchup ratio computation
+initial_part_delay=$(query_part_delay)
+initial_med_delay=$(query_med_delay)
+
+_info "Initial delays — participant: ${initial_part_delay}s, mediator: ${initial_med_delay}s"
 
 while true; do
   elapsed=$(( $(date +%s) - start ))
@@ -54,9 +72,9 @@ while true; do
     break
   fi
 
-  seq_delay=$(query_prom "canton_sequencer_block_delay_seconds{namespace=\"${namespace}\"}")
-  part_delay=$(query_prom "canton_participant_ledger_api_delay_seconds{namespace=\"${namespace}\"}")
-  med_delay=$(query_prom "canton_mediator_delay_seconds{namespace=\"${namespace}\"}")
+  seq_delay=$(query_seq_delay)
+  part_delay=$(query_part_delay)
+  med_delay=$(query_med_delay)
 
   _info "Delays — seq: ${seq_delay}s, participant: ${part_delay}s, mediator: ${med_delay}s (elapsed: ${elapsed}s)"
 
@@ -75,11 +93,24 @@ done
 
 elapsed=$(( $(date +%s) - start ))
 elapsed_mins=$(( elapsed / 60 ))
-window="${elapsed_mins}m"
 
-seq_rate=$(query_prom "rate(canton_sequencer_events_processed_total{namespace=\"${namespace}\"}[${window}])")
-part_rate=$(query_prom "rate(canton_participant_ledger_events_total{namespace=\"${namespace}\"}[${window}])")
-med_rate=$(query_prom "rate(canton_mediator_requests_processed_total{namespace=\"${namespace}\"}[${window}])")
+# Sequencer: average events/second over the catchup window
+window="${elapsed_mins}m"
+if [ "$elapsed_mins" -gt 0 ]; then
+  seq_rate=$(query_prom "sum(rate(daml_sequencer_block_events_total{namespace=\"${namespace}\", job=~\"global-domain-.*-sequencer\"}[${window}]))")
+else
+  seq_rate="0"
+fi
+
+# Participant/Mediator: catchup ratio = (initial_delay - final_delay + elapsed) / elapsed
+# e.g., delay went from 3600s to 0 in 360s → ratio = (3600 + 360) / 360 ≈ 11x
+if [ "$elapsed" -gt 0 ]; then
+  part_rate=$(echo "scale=1; ($initial_part_delay - $part_delay + $elapsed) / $elapsed" | bc)
+  med_rate=$(echo "scale=1; ($initial_med_delay - $med_delay + $elapsed) / $elapsed" | bc)
+else
+  part_rate="0"
+  med_rate="0"
+fi
 
 seq_ok=$(echo  "$seq_rate  >= $seq_min_eps"| bc)
 part_ok=$(echo "$part_rate >= $part_min_ratio" | bc)
