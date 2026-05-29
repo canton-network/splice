@@ -15,7 +15,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanRewardsReferenceTables.ScanRewardsReferenceStoreRowData
 import org.lfdecentralizedtrust.splice.store.{AppStore, Limit, MultiDomainAcsStore}
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
@@ -105,7 +104,7 @@ object ScanRewardsReferenceStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -119,7 +118,7 @@ object ScanRewardsReferenceStore {
       storage = storage,
       loggerFactory = loggerFactory,
       retryProvider = retryProvider,
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = migrationId,
       participantId = participantId,
       ingestionConfig = ingestionConfig,
       defaultLimit = defaultLimit,

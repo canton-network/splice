@@ -4,7 +4,6 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatoronboarding as vo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatoronboarding.UsedSecret
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, StoreTestBase}
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvSvStore
@@ -184,10 +183,7 @@ class DbSvSvStoreTest
       storage,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(
-        0,
-        None,
-      ),
+      0,
       participantId = mkParticipantId("SvSvStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

@@ -27,7 +27,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.*
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
@@ -573,7 +572,7 @@ object UserWalletStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -587,7 +586,7 @@ object UserWalletStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       defaultLimit,

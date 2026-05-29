@@ -8,10 +8,7 @@ import cats.instances.seq.*
 import cats.instances.set.*
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.HasHealth
 import com.digitalasset.canton.lifecycle.*
 import com.digitalasset.canton.logging.NamedLogging
@@ -26,7 +23,6 @@ abstract class AutomationService(
     protected val automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     override protected[this] val retryProvider: RetryProvider,
 ) extends HasHealth
     with FlagCloseableAsync
@@ -50,9 +46,8 @@ abstract class AutomationService(
       automationConfig,
       clock = clock,
       pollingClock = new WallClock(timeouts, loggerFactory),
-      triggerEnabledSync = TriggerEnabledSynchronization.fromDomainTimeAndParams(
-        domainTimeSync,
-        domainUnpausedSync,
+      triggerEnabledSync = TriggerEnabledSynchronization.fromDomainTime(
+        domainTimeSync
       ),
       retryProvider,
       loggerFactory,
