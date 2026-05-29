@@ -56,7 +56,7 @@ class PeriodicTopologySnapshotTrigger(
         case Success(physicalSynchronizerId) =>
           val now = clock.now
           val utcDate = now.toInstant.toString.split("T").head
-          val folderName = s"topology_snapshot_${now.toInstant}"
+          val folderName = s"topology_snapshot_$utcDate"
           for {
             snapshotExists <- validTopologySnapshotExists(startOffset =
               s"topology_snapshot_$utcDate"
