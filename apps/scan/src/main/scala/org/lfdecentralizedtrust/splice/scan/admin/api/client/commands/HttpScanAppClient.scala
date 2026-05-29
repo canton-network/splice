@@ -686,23 +686,6 @@ object HttpScanAppClient {
     }
   }
 
-  case class GetRoundOfLatestData()
-      extends InternalBaseCommand[http.GetRoundOfLatestDataResponse, (Long, Instant)] {
-
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetRoundOfLatestDataResponse] =
-      client.getRoundOfLatestData(headers)
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetRoundOfLatestDataResponse.OK(response) =>
-        Right((response.round, response.effectiveAt.toInstant))
-      case http.GetRoundOfLatestDataResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
   case class GetMemberTrafficStatus(synchronizerId: SynchronizerId, memberId: Member)
       extends ExternalBaseCommand[
         http.GetMemberTrafficStatusResponse,

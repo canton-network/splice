@@ -44,7 +44,6 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future, blocking}
 
 class CachingScanStore(
@@ -112,15 +111,6 @@ class CachingScanStore(
       cacheConfig.amuletConfigForRound,
       store.getAmuletConfigForRound,
     ).get(round)
-
-  override def lookupRoundOfLatestData()(implicit
-      tc: TraceContext
-  ): Future[Option[(Long, Instant)]] =
-    getCache(
-      "roundOfLatestData",
-      cacheConfig.roundOfLatestData,
-      (_: Unit) => store.lookupRoundOfLatestData(),
-    ).get(())
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext

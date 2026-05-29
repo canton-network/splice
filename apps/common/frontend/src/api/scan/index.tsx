@@ -8,7 +8,6 @@ import useDsoInfo from './useDsoInfo';
 import useGetAmuletRules from './useGetAmuletRules';
 import useGetAnsRules, { useGetAnsRulesFromResponse } from './useGetAnsRules';
 import useGetDsoPartyId from './useGetDsoPartyId';
-import useGetRoundOfLatestData from './useGetRoundOfLatestData';
 import useListAnsEntries, { useListAnsEntriesFromResponse } from './useListAnsEntries';
 import useLookupAnsEntryByName, {
   useLookupAnsEntryByNameFromResponse,
@@ -30,7 +29,6 @@ export {
   useGetAmuletRules,
   useGetAnsRules,
   useGetAnsRulesFromResponse,
-  useGetRoundOfLatestData,
   useGetDsoPartyId,
   useLookupFeaturedAppRight,
   useLookupFeaturedAppRightBuilder,

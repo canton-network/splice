@@ -78,7 +78,6 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import slick.jdbc.canton.SQLActionBuilder
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
@@ -520,35 +519,6 @@ class DbScanStore(
       }
     } yield result
   }
-
-  override def lookupRoundOfLatestData()(implicit
-      tc: TraceContext
-  ): Future[Option[(Long, Instant)]] =
-    waitUntilAcsIngested {
-      for {
-        row <- storage
-          .querySingle(
-            sql"""
-            select   closed_round,
-                     closed_round_effective_at
-            from     round_totals
-            where    store_id = $roundTotalsStoreId
-            order by closed_round desc
-            limit    1;
-            """.as[(Long, Long)].headOption,
-            "getRoundOfLatestData",
-          )
-          .value
-        result <- row match {
-          case Some((closedRound, effectiveAt)) =>
-            Future.successful(
-              Some((closedRound, CantonTimestamp.assertFromLong(micros = effectiveAt).toInstant))
-            )
-          case None =>
-            Future.successful(None)
-        }
-      } yield result
-    }
 
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {

@@ -75,14 +75,13 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
     // advance rounds for the reward triggers to run
     advanceTimeForRewardAutomationToRunForCurrentRound
 
-    // TODO(DACH-NY/canton-network-node#2930): Since we are reporting in getRoundOfLatestData() only the latest round that is aggregated (fully closed),
-    // we must advance rounds until round 3 closes, which is the first round that sv2's scan is guaranteed to have seen.
+    // Advance rounds until round 3 closes, which is the first round that sv2's scan is guaranteed to have seen.
     (firstOpenRound.payload.round.number.toInt to (firstOpenRound.payload.round.number.toInt + 6))
       .foreach { n =>
         clue("Ensure SvRewardCoupons are received") {
           eventually() {
             ensureSvRewardCouponReceivedForCurrentRound(sv1ScanBackend, sv1WalletClient)
-            // sv2 did not start up it's validator app (thus wallet), so it won't claim any coupons.
+            // sv2 did not start up its validator app (thus wallet), so it won't claim any coupons.
           }
         }
         clue("Ensure ValidatorLivenessActivityRecord are received") {

@@ -273,14 +273,6 @@ abstract class ScanAppReference(
     }
 
   @Help.Summary(
-    "Get the latest round number for which aggregated data is available and the ledger effective time at which the round was closed"
-  )
-  def getRoundOfLatestData(): (Long, Instant) =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRoundOfLatestData())
-    }
-
-  @Help.Summary(
     "Get a member's (participant or mediator) traffic status as reported by the sequencer"
   )
   def getMemberTrafficStatus(

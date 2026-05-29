@@ -278,9 +278,6 @@ sv:
         /api/scan/v0/roll-forward-lsu:
           name: 'rollForwardLsu'
           type: 'unlimited'
-        /api/scan/v0/round-of-latest-data:
-          name: 'round-of-latest-data'
-          type: 'banned'
         /api/scan/v0/scans:
           name: 'scans'
           type: 'unlimited'

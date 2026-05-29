@@ -106,3 +106,4 @@
           - ``/v0/round-party-totals``
           - ``/v0/round-totals``
           - ``/v0/aggregated-rounds``
+          - ``/v0/round-of-latest-data``

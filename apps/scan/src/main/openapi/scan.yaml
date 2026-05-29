@@ -1379,25 +1379,6 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/round-of-latest-data:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getRoundOfLatestData"
-      description: |
-        **Deprecated**. Get the latest round number for which aggregated data is available and
-        the ledger effective time at which the round was closed.
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GetRoundOfLatestDataResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/activities:
     post:
       deprecated: true
@@ -1983,16 +1964,6 @@ components:
           type: string
         rate:
           type: string
-    GetRoundOfLatestDataResponse:
-      type: object
-      required: ["round", "effectiveAt"]
-      properties:
-        round:
-          type: integer
-          format: int64
-        effectiveAt:
-          type: string
-          format: date-time
     GetValidatorTrafficBalanceResponse:
       type: object
       required: ["remainingBalance", "totalPurchased"]

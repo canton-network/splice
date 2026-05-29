@@ -38,7 +38,6 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -146,11 +145,6 @@ trait ScanStore
   def getAmuletConfigForRound(round: Long)(implicit
       tc: TraceContext
   ): Future[OpenMiningRoundTxLogEntry]
-
-  final def getRoundOfLatestData()(implicit tc: TraceContext): Future[(Long, Instant)] =
-    lookupRoundOfLatestData().map(_.getOrElse(throw roundNotAggregated()))
-
-  def lookupRoundOfLatestData()(implicit tc: TraceContext): Future[Option[(Long, Instant)]]
 
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[

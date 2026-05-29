@@ -530,23 +530,6 @@ class HttpScanHandler(
     }
   }
 
-  def getRoundOfLatestData(
-      response: v0.ScanResource.GetRoundOfLatestDataResponse.type
-  )()(extracted: TraceContext): Future[v0.ScanResource.GetRoundOfLatestDataResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRoundOfLatestData") { _ => _ =>
-      store
-        .getRoundOfLatestData()
-        .map { case (round, effectiveAt) =>
-          v0.ScanResource.GetRoundOfLatestDataResponse.OK(
-            definitions
-              .GetRoundOfLatestDataResponse(round, effectiveAt.atOffset(ZoneOffset.UTC))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(

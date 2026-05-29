@@ -8,8 +8,3 @@ rateLimits:
   /api/scan/v0/amulet-config-for-round:
     name: amulet-config-for-round
     type: banned
-
-  # banned because deprecated
-  /api/scan/v0/round-of-latest-data:
-    name: round-of-latest-data
-    type: banned
