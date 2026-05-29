@@ -4,6 +4,8 @@ import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 
 export type MainnetHistoryDumpsUserConfig = {
+  /** GCS bucket name that the SA is granted access to */
+  bucket: string;
   /** Project number that hosts the GitHub WIF pool */
   wifProjectNumber: string;
   /** WIF pool id */
@@ -12,11 +14,9 @@ export type MainnetHistoryDumpsUserConfig = {
   githubRepositories: string[];
 };
 
-const BUCKET = 'mainnet-history-dumps';
-
 /**
  * Creates a dedicated service account that GHA impersonate via WIF
- * to use objects in `gs://mainnet-history-dumps`.
+ * to use objects in `gs://<config.bucket>`.
  */
 export function manageMainnetHistoryDumpsUser(
   projectId: string,
@@ -26,8 +26,8 @@ export function manageMainnetHistoryDumpsUser(
 
   const sa = new gcp.serviceaccount.Account('mainnet-history-dumps-user', {
     accountId: 'mainnet-history-dumps-user',
-    displayName: 'Mainnet History Dumps User',
-    description: `Service account for GitHub Actions to read/write gs://${BUCKET}`,
+    displayName: 'Mainnet History Dumps User (Pulumi managed)',
+    description: `Service account for GitHub Actions to read/write gs://${config.bucket}. Managed via Pulumi, do not modify manually.`,
     project: projectId,
   });
   resources.push(sa);
@@ -35,7 +35,7 @@ export function manageMainnetHistoryDumpsUser(
   const bucketBinding = new gcp.storage.BucketIAMMember(
     'mainnet-history-dumps-bucket-user',
     {
-      bucket: BUCKET,
+      bucket: config.bucket,
       role: 'roles/storage.objectUser',
       member: pulumi.interpolate`serviceAccount:${sa.email}`,
     },

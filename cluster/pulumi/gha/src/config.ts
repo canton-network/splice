@@ -32,10 +32,11 @@ const GhaConfigSchema = z.object({
       .default([]),
     mainnetHistoryDumpsUser: z
       .object({
-        wifProjectNumber: z.string(),
-        wifPoolId: z.string(),
+        bucket: z.string().min(1),
+        wifProjectNumber: z.string().min(1),
+        wifPoolId: z.string().min(1),
         // GitHub repos (full "org/name") allowed to impersonate the SA via WIF.
-        githubRepositories: z.array(z.string()).min(1),
+        githubRepositories: z.array(z.string().min(1)).min(1),
       })
       .optional(),
   }),

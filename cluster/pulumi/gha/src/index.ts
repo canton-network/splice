@@ -19,7 +19,6 @@ for (const repo of ghaConfig.githubRepos) {
 }
 
 if (ghaConfig.mainnetHistoryDumpsUser) {
-  // `isSpliceCluster` also accepts GCP_CLUSTER_BASENAME === 'splice' for dump-config.
   if (!isSpliceCluster) {
     throw new Error(`mainnetHistoryDumpsUser is only allowed on da-cn-splice, got ${GcpProject}`);
   }
