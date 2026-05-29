@@ -760,6 +760,41 @@ class WalletIntegrationTest
       )
     }
 
+    "Validator automation does not accept preapprovals from non-hosted parties" in { implicit env =>
+      val bobUserParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+
+      clue("TransferPreapprovalProposal is created but not accepted") {
+        loggerFactory.assertEventuallyLogsSeq(
+          SuppressionRule.LevelAndAbove(Level.INFO) && SuppressionRule.LoggerNameContains(
+            "AcceptTransferPreapprovalProposalTrigger"
+          )
+        )(
+          bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = bobValidatorBackend.config.ledgerApiUser,
+              actAs = Seq(bobUserParty),
+              readAs = Seq.empty,
+              update = TransferPreapprovalProposal
+                .create(
+                  bobUserParty.toProtoPrimitive,
+                  aliceValidatorParty.toProtoPrimitive,
+                  java.util.Optional.of(dsoParty.toProtoPrimitive),
+                ),
+            ),
+          logs =>
+            forExactly(1, logs) {
+              _.message should include("not hosted on our participant")
+            },
+        )
+      }
+      clue("No preapproval was created") {
+        aliceValidatorBackend
+          .listTransferPreapprovals()
+          .filter(_.payload.receiver == bobUserParty.toProtoPrimitive) shouldBe empty
+      }
+    }
+
     "upload all splice-util-featured-app-proxies.dar files w/o error" in { implicit env =>
       import better.files.*
       import scala.util.matching.Regex

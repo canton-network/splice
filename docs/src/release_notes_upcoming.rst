@@ -71,15 +71,9 @@
           walletPayments     0.1.19
           ================== =======
 
-    - Scan app
+- Validator app
 
-        - The following deprecated endpoints have been removed from the public API:
+  - ``TransferPreapprovalProposal``s are now only accepted for parties hosted on your node.
+    To recover the prior behavior you can enable ``canton.validator-apps.validator_backend.transfer-preapproval.accept-non-hosted-preapproval-proposals = true``.
 
-          - ``/v0/top-validators-by-validator-faucets``
-          - ``/v0/top-providers-by-app-rewards``
-          - ``/v0/top-validators-by-validator-rewards``
-          - ``/v0/top-validators-by-purchased-traffic``
-
-    - Deployment
-
-        - Switch docker base images to https://github.com/canton-network/canton-base-images to reduce attack surface.
+    Thanks to `Rhaydden <https://github.com/Rhaydden>`_ for reporting.
