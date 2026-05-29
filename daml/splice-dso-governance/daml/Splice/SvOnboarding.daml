@@ -11,6 +11,7 @@ data SvOnboardingRequest_ExpireResult = SvOnboardingRequest_ExpireResult
 
 data SvOnboardingConfirmed_ExpireResult = SvOnboardingConfirmed_ExpireResult
 
+-- TODO: Deprecate
 -- | Template used by the SVs to collect confirmations for the onboarding of an SV candidate.
 -- The existence of this contract triggers SV automation that creates confirmation contracts for
 -- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
@@ -34,6 +35,7 @@ template SvOnboardingRequest with
         require "Onboarding has expired" (now >= expiresAt)
         pure SvOnboardingRequest_ExpireResult
 
+-- TODO: Deprecate
 -- | A confirmation for approval of a candidate SV.
 --
 -- Once this contract is created, the workflows to onboard that SVs node starts.

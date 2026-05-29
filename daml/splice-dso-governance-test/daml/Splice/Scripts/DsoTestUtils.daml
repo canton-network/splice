@@ -163,6 +163,13 @@ getSvInfoByParty app sv = do
     None -> fail $ "Not a sv: " <> show sv
     Some info -> pure info
 
+getHostedSvInfoByParty : AmuletApp -> Party -> Script HostedSvInfo
+getHostedSvInfoByParty app sv = do
+  [(_, rules)] <- query @DsoRules app.dso
+  case Map.lookup sv (fromOptional Map.empty rules.hostedSvs) of
+    None -> fail $ "Not a hosted sv: " <> show sv
+    Some info -> pure info
+
 generateUnclaimedReward : AmuletApp -> AmuletUser -> Script ()
 generateUnclaimedReward app provider1 = do
   submit (actAs app.dso <> actAs provider1.primaryParty) $ createCmd AppRewardCoupon with
