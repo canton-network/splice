@@ -373,7 +373,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -411,13 +411,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -447,7 +451,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -485,13 +489,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -521,7 +529,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -559,13 +567,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -595,7 +607,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -633,13 +645,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -669,7 +685,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -707,13 +723,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -743,7 +763,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -781,13 +801,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -817,7 +841,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -855,13 +879,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -891,7 +919,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -929,13 +957,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -965,7 +997,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1003,13 +1035,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1039,7 +1075,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1077,13 +1113,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1113,7 +1153,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1151,13 +1191,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1187,7 +1231,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1225,13 +1269,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1261,7 +1309,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1299,13 +1347,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1335,7 +1387,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1373,13 +1425,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1409,7 +1465,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1447,13 +1503,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1483,7 +1543,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1521,13 +1581,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     svApp:
       resources:
         limits:
@@ -1597,12 +1661,12 @@ svs:
     sequencer:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
-          value: "canton.sequencers.sequencer.sequencer.config {\n  epoch-length = 64\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          memory: '8Gi'
+          memory: '10Gi'
         requests:
           cpu: '4'
           memory: '4Gi'
@@ -1637,7 +1701,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1676,13 +1740,17 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DABFT_SCALE_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
+        - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
+          value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
       resources:
         limits:
-          cpu: '3'
-          memory: '4Gi'
+          memory: '10Gi'
         requests:
-          cpu: '1'
-          memory: '2Gi'
+          cpu: '4'
+          memory: '4Gi'
     subdomain: 'sv-1'
     svApp:
       auth0:
