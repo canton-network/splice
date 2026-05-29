@@ -42,6 +42,10 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmule
     results : [AmuletAllocation_DsoExpireResult]
   deriving (Eq, Show)
 
+data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
+  -- intentionally no results to save storage space in Scan
+  deriving (Eq, Show)
+
 -- | Rules contract that can be used in transactions that require signatures
 -- from an external party. This is intended to get archived and recreated as rarely as possible
 -- to support long delays between preparing and signing a transaction.
@@ -59,17 +63,38 @@ template ExternalPartyAmuletRules
       observer observers
       controller dso
       do
-        require ("expectedDso " <> show expectedDso <> " matches the dsoParty " <> show dso) (expectedDso == dso)
+        requireMatchExpected ("expectedDso", expectedDso) dso
 
-        individualResults <- forA inputs $ \input -> do
+        results <- forA inputs $ \input -> do
           alloc <- fetchButArchiveLater (ForDso with dso) input.allocationCid
-          require "The dsoParty must be the admin of the allocation's instrument" (alloc.allocation.transferLeg.instrumentId.admin == dso)
-
+          requireMatchExpected ("allocation.transferLeg.instrumentId.admin", alloc.allocation.transferLeg.instrumentId.admin) dso
           exercise input.allocationCid AmuletAllocation_DsoExpire with
             expireLock = input.expireLock
 
-        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsResult with
-          results = individualResults
+        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsResult with results
+
+    nonconsuming choice ExternalPartyAmuletRules_ExpireAmuletAllocationsV2 : ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result
+      with
+        cancellations : [(ContractId V2.Allocation, V2.Allocation_Cancel)]
+        observers : [Party]
+      observer observers
+      controller dso
+      do
+        forA_ cancellations $ \(allocCid, choiceArg) -> do
+          -- prudent engineering: double-check the actors
+          requireMatchExpected ("choiceArg.actors", choiceArg.actors) [dso]
+          alloc <- fetchCheckedInterface @V2.Allocation (ForDso with dso) allocCid
+          -- Only allow this call on expired allocations, so that it becomes safe to delegate it
+          -- to any SV. Without this check a malicious SV could use this call to cancel any allocation
+          -- that has the DSO party as the executor.
+          case (view alloc).expiresAt of
+            None -> fail "Cannot expire allocation without an expiry time"
+            Some expiresAt -> do
+              assertDeadlineExceeded "allocation.expiresAt" expiresAt
+              exercise allocCid choiceArg
+
+        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result
+
 
     -- This choice is not guarded by any resource consumption other than the traffic required to pay for the submission of the exercising of this choice.
     -- If this is being abused the DSO party can blacklist (or rate limit) the submitting participant node.
@@ -456,6 +481,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- allocation.settlementDeadline:
   whenSome allocation.settlementDeadline \d -> do
     assertWithinDeadline "Allocation.settlementDeadline" d
+    -- TODO(#5752): double-check that allocation deadline timing conforms to SHOUD/MUST guidance on the interface
 
   -- settlement.executors: no check
   -- settlement.id: no check
@@ -551,3 +577,6 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
 
 requireExpectedAdminMatch : Party -> Party -> Update ()
 requireExpectedAdminMatch expected actual =   require ("Expected admin " <> show expected <> " matches actual admin " <> show actual) (expected == actual)
+
+instance HasCheckedFetch ExternalPartyAmuletRules ForDso where
+  contractGroupId ExternalPartyAmuletRules{..} = ForDso dso

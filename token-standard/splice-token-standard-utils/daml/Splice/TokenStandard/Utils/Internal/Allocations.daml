@@ -43,7 +43,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
   -- ** Choice implementations
   allocationV2_withdrawDefaultImplUsingV1,
-  allocationV2_cancelDefaultImplUsingV1,
+  allocationV2_cancelDefaultImpl,
 
   ensureWithdrawIsAllowed,
   mkCannotWithdrawCommittedAllocationFailure,
@@ -75,6 +75,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
   viewAsAllocationInstructionV1,
   canViewAsAllocationInstructionV1,
 
+  -- TODO(#5754): use allocationInstructionV1_withdrawDefaultImplUsingV2 here and for other like cases; or alternatively remove convert the V2 suffix to a _v2 suffix in the other cases
   allocationInstruction_v1_withdrawDefaultImplUsingV2,
   allocationInstruction_v1_updateDefaultImplUsingV2,
 
@@ -110,6 +111,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
 ) where
 
+import DA.Assert (assertDeadlineExceeded)
 import DA.Action
 import DA.Fail (failWithStatus, FailureStatus(..), FailureCategory(..))
 import DA.Foldable (forA_)
@@ -306,28 +308,35 @@ allocationV2_withdrawDefaultImplUsingV1 this self (AllocationV2.Allocation_Withd
       [ (thisView.allocation.transferLeg.instrumentId.id, map upcast result.senderHoldingCids) ]
     meta = emptyMetadata -- empty to avoid duplicating the metadata
 
--- | Default implementation for the `V2.Allocation_Cancel` for a template that
--- implements the `V1.Allocation` interface.
---
--- It uses the `V1.Allocation_Cancel` choice to ensure the sender's tx parsing
--- sees the expected choice.
-allocationV2_cancelDefaultImplUsingV1
-  : AllocationV1.Allocation
+-- | Default implementation for the `V2.Allocation_Cancel` that allows
+-- the executors to cancel the allocation, and also allows the admin to cancel
+-- the allocation if it is expired.
+allocationV2_cancelDefaultImpl
+  : AllocationV2.Allocation
   -> ContractId AllocationV2.Allocation
   -> AllocationV2.Allocation_Cancel
+  -> Update (TextMap.TextMap [ContractId HoldingV2.Holding], Metadata)
+     -- ^ Function that unlocks the locked tockens and returns the base metadata.
   -> Update AllocationV2.AllocationResult
-allocationV2_cancelDefaultImplUsingV1 this self (AllocationV2.Allocation_Cancel{..}) = do
+allocationV2_cancelDefaultImpl this self arg doCancel = do
   let thisView = view this
-  -- no archive of self, as the V1 choice is consuming
-  checkActors actors [AllocationV1.allocationControllers thisView]
-  let v1Cid = coerceInterfaceContractId self : ContractId AllocationV1.Allocation
-  result <- exercise v1Cid AllocationV1.Allocation_Cancel with
-    extraArgs
+  let admin = thisView.allocation.admin
+  let executors = thisView.settlement.executors
+  archiveAndCheckActors self arg.actors [executors, [admin]]
+  (authorizerHoldingCids, meta0) <- doCancel
+  -- only allow the admin to cancel the allocation if it expired
+  meta <-
+    if (Set.fromList arg.actors == Set.fromList executors) then pure meta0
+    else
+      case thisView.expiresAt of
+        None -> fail "The admin cannot cancel an unexpired allocation"
+        Some expiresAt -> do
+          assertDeadlineExceeded "allocation.expiresAt" expiresAt
+          pure $ reasonToMeta "cancelled expired allocation" meta0
   pure AllocationResult with
     output = AllocationV2.AllocationResult_Cancelled
-    authorizerHoldingCids = TextMap.fromList
-      [ (thisView.allocation.transferLeg.instrumentId.id, map upcast result.senderHoldingCids) ]
-    meta = emptyMetadata -- empty to avoid duplicating the metadata
+    authorizerHoldingCids
+    meta = v1HistoryTagAsUnlockV1 meta
 
 
 -- Batch settlement
@@ -548,11 +557,15 @@ upcast_v1_v2_AllocationView originalAllocationCid expiresAt availableActions (Al
     meta
 
 -- | Available actions for a V1 allocation that uses the default controllers for its actions.
+--
+-- The admin's right to cancel an expired allocation is not included here, as it is time-limited
+-- and it is not expected to be executed via a token standard wallet.
 allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV1_availableActionsDefault allocView = Map.fromList
   [ (AllocationV2.AA_Withdraw, [[leg.sender]])
   , (AllocationV2.AA_Settle, [v1SettleControllers])
-  , (AllocationV2.AA_Cancel, [v1SettleControllers])
+  , (AllocationV2.AA_Cancel, [[allocation.settlement.executor]])
+
   ]
   where
     v1SettleControllers = dedupSort [leg.sender, leg.receiver, allocation.settlement.executor]
@@ -560,6 +573,9 @@ allocationV1_availableActionsDefault allocView = Map.fromList
     leg = allocation.transferLeg
 
 -- | Available actions for a V2 allocation that uses the default controllers for its actions.
+--
+-- The admin's right to cancel an expired allocation is not included here, as it is time-limited
+-- and it is not expected to be executed via a token standard wallet.
 allocationV2_availableActionsDefault : [Party] -> AllocationV2.AllocationSpecification -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV2_availableActionsDefault executors allocation = Map.fromList
   [ (AllocationV2.AA_Withdraw, [[accountPrincipal allocation.admin allocation.authorizer]])

@@ -61,16 +61,12 @@ import Splice.Round
 import Splice.ValidatorLicense
 
 import Splice.Testing.Utils
+import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistryV1
 import Splice.Testing.Registries.AmuletRegistry.Parameters
 import Splice.Testing.TokenStandard.RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 import Daml.Script
-
-
--- TODO(#4621): this code should not exist on its own at all. There's only one
--- AmuletRegistry, and it should implement both APIs fix this as part of merging
--- the V1 and V2 test suites.
 
 
 -- Registry representation
@@ -97,6 +93,16 @@ instance RegistryApi AmuletRegistry where
   getTransferInstruction_AcceptContext app cid _meta = registryApi_getTransferInstruction_AcceptContext app cid
   getTransferInstruction_RejectContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
   getTransferInstruction_WithdrawContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
+
+instance TSU.BackwardCompatible AmuletRegistryV1.AmuletRegistry AmuletRegistry where
+  upcast v1 = AmuletRegistry with
+    dso = v1.dso
+    instrumentId = TSU.upcast v1.instrumentId
+
+instance TSU.ForwardCompatible AmuletRegistryV1.AmuletRegistry AmuletRegistry where
+  downcast v2 = AmuletRegistryV1.AmuletRegistry with
+    dso = v2.dso
+    instrumentId = TSU.downcast v2.instrumentId
 
 
 -- Registry initialization

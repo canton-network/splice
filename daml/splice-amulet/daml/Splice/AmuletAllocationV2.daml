@@ -32,7 +32,6 @@ import Splice.Types
 import Splice.Util
 
 
-
 -- | V2 amulet allocation created using the `V2.AllocationFactory_Allocate`
 -- choice and expected to be settled using `V2.SettlementFactory_SettleBatch`.
 template AmuletAllocationV2
@@ -54,8 +53,6 @@ template AmuletAllocationV2
       isBasicAccount allocation.authorizer &&
       isValidSettlementInfoV2 settlement &&
       isValidAllocationSpecificationV2 (== amuletInstrumentIdName) allocation
-
-    -- TODO(#4525): add expiry choice for the DSO party and hook it up to AmuletRules, so that AmuletAllocationV2 is also auto-expired
 
     interface instance V2.Allocation for AmuletAllocationV2 where
       view = V2.AllocationView with
@@ -88,13 +85,10 @@ template AmuletAllocationV2
             authorizerHoldingCids
             meta = emptyMetadata
 
-      allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
-        archiveAndCheckActors self arg.actors [settlement.executors]
-        authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
-        pure V2.AllocationResult with
-            output = V2.AllocationResult_Cancelled
-            authorizerHoldingCids
-            meta = emptyMetadata
+      allocation_cancelImpl self arg = do
+        allocationV2_cancelDefaultImpl (toInterface this) self arg $ do
+          authorizerHoldingCids <- unlockAmuletAllocationV2 this arg.extraArgs
+          pure (authorizerHoldingCids, emptyMetadata)
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
