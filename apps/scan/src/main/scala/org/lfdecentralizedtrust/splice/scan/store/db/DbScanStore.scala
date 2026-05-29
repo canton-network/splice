@@ -878,8 +878,7 @@ class DbScanStore(
               and template_id_entity_name = ${lengthLimited(entityName)}
               and package_name = ${lengthLimited(packageName)}
               and record_time < $before""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id desc limit 1""",
+            orderLimit = sql"""order by record_time desc, row_id desc limit 1""",
           ).headOption,
           s"lookupBefore[$pqn]",
         )
@@ -980,8 +979,7 @@ class DbScanStore(
               and template_id_entity_name = ${lengthLimited(entityName)}
               and package_name = ${lengthLimited(packageName)}
               and record_time > $recordTime""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id asc limit 1""",
+            orderLimit = sql"""order by record_time asc, row_id asc limit 1""",
           ).headOption,
           s"lookup[$pqn]",
         )
