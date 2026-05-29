@@ -52,18 +52,39 @@ function query_seq_delay() {
 }
 
 function query_part_delay() {
-  query_prom "max by (namespace) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"}) - ((daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"} > 0) / 1e6))"
+  query_prom "max by (namespace) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"}) - (daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"participant\"} / 1e6))"
 }
 
 function query_med_delay() {
-  query_prom "max by (namespace, job) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"}) - ((daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"} > 0) / 1e6))"
+  query_prom "max by (namespace, job) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"}) - (daml_sequencer_client_handler_last_sequencing_time_micros{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"} / 1e6))"
 }
 
 # Capture initial delays for catchup ratio computation
+initial_seq_delay=$(query_seq_delay)
 initial_part_delay=$(query_part_delay)
 initial_med_delay=$(query_med_delay)
 
-_info "Initial delays — participant: ${initial_part_delay}s, mediator: ${initial_med_delay}s"
+_info "Initial delays — seq: ${initial_seq_delay}s, participant: ${initial_part_delay}s, mediator: ${initial_med_delay}s"
+
+# If all components are already caught up at start, the backup was too recent
+# or the node caught up before monitoring started. Treat as success.
+if (( $(echo "$initial_seq_delay <= $seq_delay_ok" | bc -l) )) && \
+   (( $(echo "$initial_part_delay <= $part_delay_ok" | bc -l) )) && \
+   (( $(echo "$initial_med_delay <= $med_delay_ok" | bc -l) )); then
+  _info "All components already caught up at start — no catchup window to measure."
+
+  message="✅ *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
+Outcome: already_caught_up | Duration: 0m
+
+All components were already caught up when monitoring started.
+Initial delays — seq: ${initial_seq_delay}s, participant: ${initial_part_delay}s, mediator: ${initial_med_delay}s
+No catchup window to measure rates."
+
+  _info "$message"
+  "${DA_REPO_ROOT}/.circleci/scripts/slack/post-slack-message.sh" \
+    "$message" "$slack_channel"
+  exit 0
+fi
 
 while true; do
   elapsed=$(( $(date +%s) - start ))
@@ -78,9 +99,9 @@ while true; do
 
   _info "Delays — seq: ${seq_delay}s, participant: ${part_delay}s, mediator: ${med_delay}s (elapsed: ${elapsed}s)"
 
-  seq_caught=$(echo "$seq_delay  <= $seq_delay_ok" | bc)
-  part_caught=$(echo "$part_delay <= $part_delay_ok" | bc)
-  med_caught=$(echo "$med_delay  <= $med_delay_ok" | bc)
+  seq_caught=$(echo "$seq_delay  <= $seq_delay_ok" | bc -l)
+  part_caught=$(echo "$part_delay <= $part_delay_ok" | bc -l)
+  med_caught=$(echo "$med_delay  <= $med_delay_ok" | bc -l)
 
   if [ "$seq_caught" = "1" ] && [ "$part_caught" = "1" ] && [ "$med_caught" = "1" ]; then
     _info "All components caught up"
@@ -93,6 +114,11 @@ done
 
 elapsed=$(( $(date +%s) - start ))
 elapsed_mins=$(( elapsed / 60 ))
+
+# Re-query final delays for rate computation
+seq_delay=$(query_seq_delay)
+part_delay=$(query_part_delay)
+med_delay=$(query_med_delay)
 
 # Sequencer: average events/second over the catchup window
 window="${elapsed_mins}m"
@@ -112,9 +138,9 @@ else
   med_rate="0"
 fi
 
-seq_ok=$(echo  "$seq_rate  >= $seq_min_eps"| bc)
-part_ok=$(echo "$part_rate >= $part_min_ratio" | bc)
-med_ok=$(echo  "$med_rate  >= $med_min_ratio"  | bc)
+seq_ok=$(echo  "$seq_rate  >= $seq_min_eps"| bc -l)
+part_ok=$(echo "$part_rate >= $part_min_ratio" | bc -l)
+med_ok=$(echo  "$med_rate  >= $med_min_ratio"  | bc -l)
 
 if [ "$outcome" = "success" ] && [ "$seq_ok" = "1" ] && [ "$part_ok" = "1" ] && [ "$med_ok" = "1" ]; then
   icon="✅"
