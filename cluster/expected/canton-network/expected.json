@@ -287,6 +287,9 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
+          "cometbft": {
+            "volumeSize": "42Gi"
+          },
           "enableLogicalSynchronizerDeploymentMode": false,
           "id": 9,
           "migrateParticipantsFromSvCantonToSv": false,
