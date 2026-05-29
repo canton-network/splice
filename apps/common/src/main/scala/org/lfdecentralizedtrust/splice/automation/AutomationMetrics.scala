@@ -10,6 +10,8 @@ import com.daml.metrics.api.MetricQualification.Debug
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 import org.lfdecentralizedtrust.splice.util.HasHealth
 
+import scala.util.control.NonFatal
+
 class AutomationMetrics(
     metricsFactory: LabeledMetricsFactory
 )(implicit mc: MetricsContext)
@@ -23,7 +25,6 @@ class AutomationMetrics(
     summary = "Health of an automation background service",
     description =
       "Reports the health of a background service registered with an AutomationService. " +
-        s"$DefaultValue - no known health status, " +
         s"$HealthyValue - service is healthy, $UnhealthyValue - service is not healthy. ",
     qualification = Debug,
     labelsWithDescription =
@@ -35,7 +36,7 @@ class AutomationMetrics(
       try {
         if (service.isHealthy) HealthyValue else UnhealthyValue
       } catch {
-        case _: Throwable => DefaultValue
+        case NonFatal(_) => UnhealthyValue
       }
     }
 
@@ -51,10 +52,6 @@ class AutomationMetrics(
 
 object AutomationMetrics {
 
-  /** Default value reported before the service has produced a health reading
-    * (e.g. if [[HasHealth.isHealthy]] throws).
-    */
-  val DefaultValue: Long = -1L
   val HealthyValue: Long = 0L
   val UnhealthyValue: Long = 1L
 }
