@@ -11,7 +11,7 @@
 
       **Action recommended for validator operators:** upgrade to this release
       before the SVs start testing traffic-based app rewards in dry-run mode
-      (see `SV Longterm Operations Schedule <https://calendar.google.com/calendar/embed?src=c_47e748ab029165cdec4986e77a00f039544b9507ec99a4d0a657b27dccf70ae2%40group.calendar.google.com&ctz=America%2FNew_York>`__ for dates for the different networks).
+      (see `SV Longterm Operations Schedule <https://docs.google.com/document/d/1QhLL5bL0u8temBL86y957VbWDtZJhH9udH-_C7nBlvc/edit?tab=t.0#heading=h.ripdn5ydglli>`__ for dates for the different networks).
       Otherwise, CC transfers and reward collection will stop working for parties on your node until you upgrade.
 
       **Action recommended for app devs:** app's with Daml code that statically depends on ``splice-amulet``
