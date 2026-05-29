@@ -48,7 +48,7 @@ class RewardComputationTrigger(
 
   private val rewardMetrics = new RewardComputationMetrics(context.metricsFactory)(
     MetricsContext(
-      "current_migration_id" -> updateHistory.domainMigrationInfo.currentMigrationId.toString
+      "current_migration_id" -> updateHistory.domainMigrationId.toString
     )
   )
 

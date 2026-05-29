@@ -7,7 +7,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as v
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
@@ -35,7 +34,7 @@ class DbExternalPartyWalletStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     override val defaultLimit: Limit,
@@ -58,7 +57,7 @@ class DbExternalPartyWalletStore(
           "dsoParty" -> key.dsoParty.toProtoPrimitive,
         ),
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with ExternalPartyWalletStore
@@ -70,7 +69,6 @@ class DbExternalPartyWalletStore(
   import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 
   override protected def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  override protected def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
   override protected def acsTableName: String = WalletTables.externalPartyAcsTableName
   override protected def dbStorage: DbStorage = storage
 

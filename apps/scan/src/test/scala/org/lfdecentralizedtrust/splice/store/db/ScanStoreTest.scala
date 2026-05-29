@@ -38,7 +38,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.history.*
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbScanStore,
   DbScanStoreMetrics,
@@ -1791,10 +1790,7 @@ class DbScanStoreTest
           ): Future[Option[ScanAggregator.RoundAggregate]] = Future.successful(None)
           def close(): Unit = ()
         },
-      DomainMigrationInfo(
-        domainMigrationId,
-        None,
-      ),
+      domainMigrationId,
       participantId = mkParticipantId("ScanStoreTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
@@ -1834,7 +1830,7 @@ class DbScanStoreTest
   ): Future[UpdateHistory] = {
     val updateHistory = new UpdateHistory(
       storage.underlying, // not under test
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "update_history_scan_store_test",
       mkParticipantId("whatever"),
       dsoParty,

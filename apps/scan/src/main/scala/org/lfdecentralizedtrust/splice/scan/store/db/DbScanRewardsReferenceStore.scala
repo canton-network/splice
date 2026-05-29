@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
@@ -44,7 +43,7 @@ class DbScanRewardsReferenceStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     override val defaultLimit: Limit,
@@ -66,7 +65,7 @@ class DbScanRewardsReferenceStore(
           "synchronizerId" -> key.synchronizerId.toProtoPrimitive,
         ),
       ),
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = migrationId,
       ingestionConfig = ingestionConfig,
       acsArchiveConfigOpt = Some(
         AcsArchiveConfig.withIndexColumns(

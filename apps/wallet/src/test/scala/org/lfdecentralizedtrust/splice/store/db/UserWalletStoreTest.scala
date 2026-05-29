@@ -37,7 +37,6 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 }
 import org.lfdecentralizedtrust.splice.wallet.store.db.DbUserWalletStore
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
   Limit,
@@ -2119,10 +2118,7 @@ class DbUserWalletStoreTest
       loggerFactory = loggerFactory,
       retryProvider =
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       participantId = mkParticipantId("UserWalletStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

@@ -652,8 +652,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2,
-          "migrating": false
+          "id": 2
         },
         "participantAddress": "participant-2",
         "persistence": {
@@ -1322,8 +1321,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2,
-          "migrating": false
+          "id": 2
         },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",

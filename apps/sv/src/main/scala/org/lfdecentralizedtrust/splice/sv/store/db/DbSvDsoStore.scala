@@ -35,7 +35,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.
   SubscriptionRequest,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{ContractCompanion, QueryResult}
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFromAcsTableResult}
 import org.lfdecentralizedtrust.splice.store.db.{
@@ -78,7 +77,7 @@ class DbSvDsoStore(
     storage: DbStorage,
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -104,7 +103,7 @@ class DbSvDsoStore(
         ),
         userVersion = acsStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with SvDsoStore
@@ -129,8 +128,6 @@ class DbSvDsoStore(
   }
 
   import multiDomainAcsStore.waitUntilAcsIngested
-
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
 

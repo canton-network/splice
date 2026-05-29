@@ -1079,8 +1079,7 @@
             "enable": true
           },
           "migration": {
-            "id": 2,
-            "migrating": false
+            "id": 2
           },
           "nodeIdentifier": "validator1",
           "onboardingSecretFrom": {
