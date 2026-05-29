@@ -536,6 +536,8 @@ object SpliceConfig {
       deriveReader[InitialAnsConfig]
     implicit val domainFeesConfigReader: ConfigReader[SynchronizerFeesConfig] =
       deriveReader[SynchronizerFeesConfig]
+    implicit val initialRewardConfigReader: ConfigReader[InitialRewardConfig] =
+      deriveReader[InitialRewardConfig]
     implicit val svOnboardingFoundDsoReader: ConfigReader[SvOnboardingConfig.FoundDso] =
       deriveReader[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyReader: ConfigReader[SvOnboardingConfig.JoinWithKey] =
@@ -668,13 +670,6 @@ object SpliceConfig {
             (),
             ConfigValidationFailed(
               "initialPackageConfig is not valid due to inconsistent dependencies"
-            ),
-          )
-          _ <- Either.cond(
-            conf.legacyMigrationId.forall(_ == conf.domainMigrationId - 1L),
-            (),
-            ConfigValidationFailed(
-              "legacyMigrationId must equal to domainMigrationId - 1 unless legacyMigrationId is empty"
             ),
           )
         } yield conf
@@ -995,6 +990,8 @@ object SpliceConfig {
       deriveWriter[InitialAnsConfig]
     implicit val domainFeesConfigWriter: ConfigWriter[SynchronizerFeesConfig] =
       deriveWriter[SynchronizerFeesConfig]
+    implicit val initialRewardConfigWriter: ConfigWriter[InitialRewardConfig] =
+      deriveWriter[InitialRewardConfig]
     implicit val svOnboardingFoundDsoWriter: ConfigWriter[SvOnboardingConfig.FoundDso] =
       deriveWriter[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyWriter: ConfigWriter[SvOnboardingConfig.JoinWithKey] =

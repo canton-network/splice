@@ -114,6 +114,7 @@ object SvOnboardingConfig {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
+      initialRewardConfig: Option[InitialRewardConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -237,6 +238,35 @@ object SvOnboardingConfig {
   ) extends SvOnboardingConfig
 }
 
+final case class InitialRewardConfig(
+    mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
+    dryRunVersion: Option[String] = None,
+    batchSize: Long = 100,
+    rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
+    appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
+) {
+  def toRewardConfig: splice.amuletconfig.RewardConfig = {
+    def parseVersion(s: String): splice.amuletconfig.RewardVersion = s match {
+      case "RewardVersion_FeaturedAppMarkers" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS
+      case "RewardVersion_TrafficBasedAppRewards" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
+      case other => throw new IllegalArgumentException(s"Unknown RewardVersion: $other")
+    }
+    new splice.amuletconfig.RewardConfig(
+      parseVersion(mintingVersion),
+      dryRunVersion
+        .map(parseVersion)
+        .fold(java.util.Optional.empty[splice.amuletconfig.RewardVersion]())(java.util.Optional.of),
+      batchSize,
+      new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+        rewardCouponTimeToLiveMicros
+      ),
+      appRewardCouponThreshold.bigDecimal,
+    )
+  }
+}
+
 final case class InitialAnsConfig(
     renewalDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(30),
     entryLifetime: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
@@ -344,7 +374,6 @@ case class SvAppBackendConfig(
       NonNegativeFiniteDuration.ofSeconds(10),
     // Identifier for all Canton nodes controlled by this application
     cantonIdentifierConfig: Option[SvCantonIdentifierConfig] = None,
-    legacyMigrationId: Option[Long] = None,
     // Defaults to 24h to allow for 24h between preparation and execution of an externally signed transaction
     preparationTimeRecordTimeTolerance: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofHours(24),

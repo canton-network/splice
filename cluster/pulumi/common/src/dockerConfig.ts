@@ -32,16 +32,6 @@ export class DockerConfig {
               username: jfrog.username,
               password: jfrog.password,
             },
-            'digitalasset-canton-network-docker.jfrog.io': {
-              auth: artifactoryAuth,
-              username: jfrog.username,
-              password: jfrog.password,
-            },
-            'digitalasset-canton-network-docker-dev.jfrog.io': {
-              auth: artifactoryAuth,
-              username: jfrog.username,
-              password: jfrog.password,
-            },
             'us-central1-docker.pkg.dev': {
               auth: googleAuth,
               username: google.username,

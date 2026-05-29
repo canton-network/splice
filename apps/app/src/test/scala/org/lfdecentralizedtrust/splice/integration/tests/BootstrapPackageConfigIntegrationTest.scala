@@ -229,6 +229,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.featuredAppActivityMarkerAmount,
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
+        amuletConfig.rewardConfig,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -377,6 +378,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.featuredAppActivityMarkerAmount,
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
+        amuletConfig.rewardConfig,
       )
 
       val upgradeAction = new ARC_AmuletRules(

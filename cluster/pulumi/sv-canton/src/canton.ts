@@ -159,6 +159,7 @@ export async function installCantonComponents(
           version,
           imagePullServiceAccountName,
           disableProtection,
+          migrationInfo.cometbft?.volumeSize,
           opts
         );
     return {

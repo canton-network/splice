@@ -73,23 +73,18 @@ export class DecentralizedSynchronizerMigrationConfig {
   migratingNodeConfig(): {
     migration: {
       id: DomainMigrationIndex;
-      migrating: boolean;
-      legacyId?: DomainMigrationIndex;
     };
   } {
     if (this.lsuEnabled) {
       return {
         migration: {
           id: this.frozenMigrationId!,
-          migrating: false,
         },
       };
     } else {
       return {
         migration: {
           id: this.active.id,
-          migrating: this.isRunningMigration(),
-          legacyId: this.legacy?.id,
         },
       };
     }

@@ -559,3 +559,59 @@ groups:
             This can also happen when an SV was just onboarded and is catching up with the ACS.
           summary: The ingestion batch size has exceeded the expected size for a prolonged time.
         isPaused: false
+      - uid: bgh7m2a8cy3x4a
+        title: Automation service unhealthy
+        condition: threshold
+        data:
+          - refId: health
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: min by(namespace, node_type, service) (min_over_time((splice_automation_background_service_health == 1)[5m:]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: health
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - threshold
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: health
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: threshold
+              type: threshold
+        dashboardUid: a3e1385f-6f03-46d9-908c-34aca0f507a6
+        panelId: 32
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          __dashboardUid__: a3e1385f-6f03-46d9-908c-34aca0f507a6
+          __panelId__: "32"
+          description: The {{ index $labels "service" }} background service of the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace has been continuously reporting unhealthy for more than 5 minutes.
+          summary: '{{ index $labels "namespace" }} - {{ index $labels "node_type" }} - {{ index $labels "service" }} automation service is unhealthy'
+        labels:
+          gcloud_filter: 'resource.labels.namespace_name=%22{{ index $labels "namespace" }}%22'
+        isPaused: false

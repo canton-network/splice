@@ -9,7 +9,6 @@ import com.digitalasset.canton.topology.PartyId
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
@@ -44,7 +43,7 @@ class UpdateHistoryIngestionPerformanceTest(
   override protected def mkStore(storage: DbStorage): UpdateHistory = {
     new UpdateHistory(
       storage = storage,
-      domainMigrationInfo = DomainMigrationInfo(migrationId, None),
+      domainMigrationId = migrationId,
       storeName = this.getClass.getName,
       participantId = mkParticipantId(this.getClass.getSimpleName),
       updateStreamParty = dsoParty,

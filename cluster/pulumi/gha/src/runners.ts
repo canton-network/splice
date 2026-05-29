@@ -305,7 +305,7 @@ function installDockerRunnerScaleSets(
     .filter(spec => spec.docker)
     .forEach(spec => {
       installDockerRunnerScaleSet(
-        `self-hosted-docker-${spec.name}`,
+        repo == 'splice' ? `self-hosted-docker-${spec.name}` : `docker-${spec.name}`,
         runnersNamespace,
         controller,
         tokenSecret,
@@ -673,7 +673,7 @@ function installK8sRunnerScaleSets(
     .forEach(spec => {
       installK8sRunnerScaleSet(
         runnersNamespace,
-        `self-hosted-k8s-${spec.name}`,
+        repo == 'splice' ? `self-hosted-k8s-${spec.name}` : `k8s-${spec.name}`,
         tokenSecret,
         cachePvcName,
         spec.resources,

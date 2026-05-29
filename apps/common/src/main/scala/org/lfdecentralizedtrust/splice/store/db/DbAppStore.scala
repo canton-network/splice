@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -21,7 +20,7 @@ abstract class DbTxLogAppStore[TXE](
     interfaceViewsTableNameOpt: Option[String],
     acsStoreDescriptor: StoreDescriptor,
     txLogStoreDescriptor: StoreDescriptor,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     ingestionConfig: IngestionConfig,
     acsArchiveConfigOpt: Option[AcsArchiveConfig] = None,
 )(implicit
@@ -33,7 +32,7 @@ abstract class DbTxLogAppStore[TXE](
       acsTableName = acsTableName,
       interfaceViewsTableNameOpt = interfaceViewsTableNameOpt,
       acsStoreDescriptor = acsStoreDescriptor,
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = migrationId,
       ingestionConfig = ingestionConfig,
       acsArchiveConfigOpt = acsArchiveConfigOpt,
     )
@@ -50,7 +49,7 @@ abstract class DbTxLogAppStore[TXE](
       loggerFactory,
       acsContractFilter,
       txLogConfig,
-      domainMigrationInfo,
+      migrationId,
       retryProvider,
       ingestionConfig,
       handleIngestionSummary,
@@ -64,7 +63,7 @@ abstract class DbAppStore(
     acsTableName: String,
     interfaceViewsTableNameOpt: Option[String],
     acsStoreDescriptor: StoreDescriptor,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     ingestionConfig: IngestionConfig,
     acsArchiveConfigOpt: Option[AcsArchiveConfig] = None,
 )(implicit
@@ -89,7 +88,7 @@ abstract class DbAppStore(
       loggerFactory,
       acsContractFilter,
       TxLogStore.Config.empty,
-      domainMigrationInfo,
+      migrationId,
       retryProvider,
       ingestionConfig,
       handleIngestionSummary,

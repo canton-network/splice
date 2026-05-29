@@ -35,7 +35,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -106,7 +105,7 @@ class DbScanStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeMetrics: DbScanStoreMetrics,
@@ -144,7 +143,7 @@ class DbScanStore(
         ),
         userVersion = txLogStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with ScanStore
@@ -182,8 +181,6 @@ class DbScanStore(
   private[splice] def txLogStoreId: TxLogStoreId = multiDomainAcsStore.txLogStoreId
   // Round totals are derived from TxLog entries, and are therefore linked to that store
   private[splice] def roundTotalsStoreId: TxLogStoreId = txLogStoreId
-
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   override def lookupAmuletRules()(implicit
       tc: TraceContext

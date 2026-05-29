@@ -12,7 +12,6 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics, ScanTables}
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, MultiDomainAcsStore}
@@ -61,10 +60,7 @@ class ScanStoreIngestionPerformanceTest(
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
         NoReportingTracerProvider.tracer
       ),
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
