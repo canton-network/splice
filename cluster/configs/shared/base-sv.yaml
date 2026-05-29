@@ -2,7 +2,7 @@ logging:
   appsLogLevel: DEBUG
   appsAsync: false
   cantonLogLevel: INFO
-  apiRequestLogLevel: DEBUG
+  apiRequestLogLevel: INFO
   cantonAsync: false
   cometbftLogLevel: debug
 pruning:
