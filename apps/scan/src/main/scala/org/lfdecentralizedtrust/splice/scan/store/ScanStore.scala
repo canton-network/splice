@@ -234,11 +234,12 @@ trait ScanStore
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
 
-  def lookupSvRewardWeightBefore(
-      svParty: PartyId,
+  def lookupDsoRulesBefore(
       before: Instant,
       updateHistory: UpdateHistory,
-  )(implicit tc: TraceContext): Future[Option[Long]]
+  )(implicit
+      tc: TraceContext
+  ): Future[Option[Contract[splice.dsorules.DsoRules.ContractId, splice.dsorules.DsoRules]]]
 }
 
 object ScanStore {

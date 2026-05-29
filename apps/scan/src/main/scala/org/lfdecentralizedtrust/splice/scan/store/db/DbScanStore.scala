@@ -668,19 +668,14 @@ class DbScanStore(
     } yield ResultsPage(recentVoteResults, afterToken)
   }
 
-  override def lookupSvRewardWeightBefore(
-      svParty: PartyId,
+  override def lookupDsoRulesBefore(
       before: Instant,
       updateHistory: UpdateHistory,
-  )(implicit tc: TraceContext): Future[Option[Long]] =
+  )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
     lookupContractByRecordTimeBefore(
       DsoRules.COMPANION,
       updateHistory,
       CantonTimestamp.assertFromInstant(before),
-    ).map(
-      _.flatMap(dsoRules =>
-        Option(dsoRules.payload.svs.get(svParty.toProtoPrimitive)).map(_.svRewardWeight.toLong)
-      )
     )
 
   private def lookupContractByRecordTimeBefore[C, TCId <: ContractId[?], T](
