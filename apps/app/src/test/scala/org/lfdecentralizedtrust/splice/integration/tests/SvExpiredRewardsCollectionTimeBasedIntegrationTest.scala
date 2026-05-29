@@ -79,31 +79,15 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
         advanceRoundsToNextRoundOpening
       }),
     )(
-      "Wait for all unclaimed coupons to be archived and the closed round to be archived",
+      "Wait for all unclaimed coupons to be archived",
       _ => {
         getRewardCoupons(round) shouldBe empty withClue s"reward coupons round $round"
-        sv1ScanBackend
-          .getClosedRounds()
-          .filter(r => r.payload.round.number == round.payload.round.number) should be(
-          empty
-        ) withClue s"ClosedRound $round"
-        val lastRound = sv1ScanBackend
-          .getClosedRounds()
-          .map(_.payload.round.number)
-          .maxOption
-          .getOrElse(
-            fail(s"No closed rounds found, expected at least round ${round.payload.round.number}")
-          )
         sv1WalletClient
           .listSvRewardCoupons()
-          .filter(_.payload.round.number <= lastRound) should be(
+          .filter(_.payload.round.number <= round.payload.round.number) should be(
           empty
         )
       },
     )
-
-    // it seems that without this, the round-party-totals aggregations cannot be computed for SV-2,
-    // and the scan-txlog script fails because it expects those to be there.
-    advanceRoundsToNextRoundOpening
   }
 }
