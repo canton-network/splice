@@ -40,6 +40,9 @@ class RegistryApi app where
   getAllocation_WithdrawContext
     : app -> ContractId V1.Allocation -> Metadata -> Script OpenApiChoiceContext
 
+  getAllocationInstruction_WithdrawContext
+    : app -> ContractId V1.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+
   getAllocation_CancelContext
     : app -> ContractId V1.Allocation -> Metadata -> Script OpenApiChoiceContext
 
@@ -77,6 +80,9 @@ data GenericRegistry = GenericRegistry with
   ggetAllocation_WithdrawContext
     : ContractId V1.Allocation -> Metadata -> Script OpenApiChoiceContext
 
+  ggetAllocationInstruction_WithdrawContext
+    : ContractId V1.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+
   ggetAllocation_CancelContext
     : ContractId V1.Allocation -> Metadata -> Script OpenApiChoiceContext
 
@@ -97,6 +103,7 @@ mkGenericRegistry app =
     ggetAllocationFactory = getAllocationFactory app
     ggetAllocation_TransferContext = getAllocation_TransferContext app
     ggetAllocation_WithdrawContext = getAllocation_WithdrawContext app
+    ggetAllocationInstruction_WithdrawContext = getAllocationInstruction_WithdrawContext app
     ggetAllocation_CancelContext = getAllocation_CancelContext app
     ggetTransferInstruction_AcceptContext = getTransferInstruction_AcceptContext app
     ggetTransferInstruction_RejectContext = getTransferInstruction_RejectContext app
@@ -107,6 +114,7 @@ instance RegistryApi GenericRegistry where
   getAllocationFactory registry = registry.ggetAllocationFactory
   getAllocation_TransferContext registry = registry.ggetAllocation_TransferContext
   getAllocation_WithdrawContext registry = registry.ggetAllocation_WithdrawContext
+  getAllocationInstruction_WithdrawContext registry = registry.ggetAllocationInstruction_WithdrawContext
   getAllocation_CancelContext registry = registry.ggetAllocation_CancelContext
   getTransferInstruction_AcceptContext registry = registry.ggetTransferInstruction_AcceptContext
   getTransferInstruction_RejectContext registry = registry.ggetTransferInstruction_RejectContext

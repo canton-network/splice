@@ -39,6 +39,7 @@ instance RegistryApi TestTokenV1Registry where
   getAllocation_TransferContext = registryApi_getEmptyContext
   getAllocation_WithdrawContext = registryApi_getEmptyContext
   getAllocation_CancelContext = registryApi_getEmptyContext
+  getAllocationInstruction_WithdrawContext = registryApi_getEmptyContext
   getTransferInstruction_AcceptContext = registryApi_getEmptyContext
   getTransferInstruction_RejectContext = registryApi_getEmptyContext
   getTransferInstruction_WithdrawContext = registryApi_getEmptyContext
