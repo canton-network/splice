@@ -52,7 +52,12 @@ module Splice.TokenStandard.Utils (
   fromAnyContractId,
   toAnyContractId,
 
-  -- * Transfer metadata
+  -- * Metadata utilities
+
+  -- ** Extra metadata fields
+  expiresAtToMeta,
+
+  -- ** Transfer metadata
   reasonMetaKey,
   txKindMetaKey,
   senderMetaKey,

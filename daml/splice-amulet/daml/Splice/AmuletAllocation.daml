@@ -14,7 +14,8 @@ module Splice.AmuletAllocation (
   AmuletAllocation_DsoExpireResult,
 ) where
 
-import DA.Assert (assertDeadlineExceeded)
+import DA.Assert (assertDeadlineExceeded, assertWithinDeadline)
+import DA.Optional (fromOptional)
 import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
@@ -45,7 +46,9 @@ template AmuletAllocation
   with
     lockedAmulet : ContractId LockedAmulet -- ^ Locked amulet that holds the funds for the allocation
     allocation : V1.AllocationSpecification
-    -- TODO(#4665): enforce max lock duration and add early expiry to V1 allocation
+    expiresAt : Optional Time
+      -- ^ When this allocation and its locked amulet expire, which can be earlier than the settlement
+      -- deadline specified in the allocation. This is used as a DoS protection mechanism.
   where
     signatory allocationInstrumentAdmin allocation, allocation.transferLeg.sender
     observer allocation.settlement.executor
@@ -57,7 +60,7 @@ template AmuletAllocation
       view = V1.AllocationView with
         allocation
         holdingCids = [toInterfaceContractId lockedAmulet]
-        meta = emptyMetadata
+        meta = TSU.expiresAtToMeta expiresAt emptyMetadata
 
       allocation_executeTransferImpl _self V1.Allocation_ExecuteTransfer{..} =
         transferAmuletAllocation this extraArgs
@@ -77,8 +80,10 @@ template AmuletAllocation
             meta = emptyMetadata
 
     interface instance V2.Allocation for AmuletAllocation where
-      view = upcast (view (toInterface @V1.Allocation this))
-        -- TODO(#4665): change upcast to properly communicate expiresAt once we have that
+      view = upcast_v1_v2_AllocationView None expiresAt availableActions v1View
+        where
+          v1View = view (toInterface @V1.Allocation this)
+          availableActions = allocationV1_availableActionsDefault v1View
 
       -- executors are required actors on the settle choice, and thus do not have to be added as extra observers for settle
       allocation_settleExtraObservers _arg = []
@@ -101,6 +106,8 @@ template AmuletAllocation
         let leg = allocation.transferLeg
         let dso = leg.instrumentId.admin
         archiveAndCheckActors self arg.actors [[dso, allocation.settlement.executor]]
+        -- TODO(#4517): add test for this deadline
+        assertWithinDeadline "allocation.settlement.settleBefore" allocation.settlement.settleBefore
         -- Archive locked amulet to execute the debit (extra checks part of defensive programming)
         la <- fetchAndArchive (ForOwner with dso, owner = leg.sender) lockedAmulet
         requireMatchExpected ("lockedAmulet.amount", la.amulet.amount.initialAmount) leg.amount
@@ -123,7 +130,8 @@ template AmuletAllocation
         expireLock : Bool
       controller allocationInstrumentAdmin allocation
       do
-        assertDeadlineExceeded "allocation.settlement.settleBefore" allocation.settlement.settleBefore
+        let actualExpiresAt = fromOptional allocation.settlement.settleBefore expiresAt
+        assertDeadlineExceeded "AmuletAllocation.expiresAt" actualExpiresAt
 
         let extraArgs = ExtraArgs with
               context = ChoiceContext with

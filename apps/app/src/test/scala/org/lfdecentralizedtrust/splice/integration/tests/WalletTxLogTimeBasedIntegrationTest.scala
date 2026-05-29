@@ -434,7 +434,7 @@ class WalletTxLogTimeBasedIntegrationTest
             bobParty,
             transferAmount, // will need the locked amulet as input
             "transfer offer description",
-            CantonTimestamp.now().plusSeconds(60),
+            env.environment.clock.now().plusSeconds(60),
             trackingId,
           )
           val offer = inside(offerResponse.output) {
