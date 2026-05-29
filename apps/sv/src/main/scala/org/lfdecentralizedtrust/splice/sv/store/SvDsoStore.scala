@@ -240,6 +240,13 @@ trait SvDsoStore
       tc: TraceContext
   ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
 
+  def listConfirmationsByConfirmer(
+      confirmer: PartyId,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
+
   def listAppRewardCouponsOnDomain(
       round: Long,
       synchronizerId: SynchronizerId,
@@ -543,6 +550,45 @@ trait SvDsoStore
     splice.round.SummarizingMiningRound.ContractId,
     splice.round.SummarizingMiningRound,
   ]]]
+
+  def listCalculateRewardsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+  ]]]
+
+  def listProcessRewardsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+  ]]]
+
+  def listRewardCouponsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ]]]
+
+  /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
+    * round number is in the given set.
+    */
+  def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+        ]],
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+        ]],
+    )
+  ]
 
   /** All `ClosedMiningRound` contracts that should be confirmed to be archived.
     *
@@ -1263,6 +1309,31 @@ object SvDsoStore {
           rewardRound = Some(contract.payload.round.number),
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sv)),
           rewardWeight = Some(contract.payload.weight),
+        )
+      },
+      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          rewardRound = Some(contract.payload.round.number),
+          rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
+          rewardAmount = Some(contract.payload.amount),
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
+        co.payload.dso == dso
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          miningRound = Some(contract.payload.round.number),
+        )
+      },
+      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
+        co.payload.dso == dso
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          miningRound = Some(contract.payload.round.number),
         )
       },
       mkFilter(splice.round.OpenMiningRound.COMPANION)(co => co.payload.dso == dso) { contract =>

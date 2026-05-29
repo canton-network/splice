@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SequencerPruningMe
 import org.lfdecentralizedtrust.splice.sv.automation.{
   AmuletPriceMetricsTrigger,
   ReportSvStatusMetricsExportTrigger,
+  RewardProcessingMetrics,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
 import org.lfdecentralizedtrust.splice.store.{DomainParamsStore, HistoryMetrics, StoreMetrics}
@@ -103,6 +104,7 @@ object MetricsDocs {
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
+    new RewardProcessingMetrics(generator)
     val svMetrics = generator.getAll()
     generator.reset()
     // scan

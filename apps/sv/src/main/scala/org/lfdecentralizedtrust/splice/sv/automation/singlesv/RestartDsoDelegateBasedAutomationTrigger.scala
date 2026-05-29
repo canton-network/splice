@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
   SpliceLedgerConnection,
 }
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
@@ -30,7 +31,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import com.digitalasset.canton.lifecycle.RunOnClosing
 import com.digitalasset.canton.lifecycle.AsyncOrSyncCloseable
 import com.digitalasset.canton.lifecycle.SyncCloseable
@@ -50,8 +51,9 @@ class RestartDsoDelegateBasedAutomationTrigger(
     appLevelRetryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
     packageVettingService: PackageVettingLookupService,
+    scanConnectionF: Future[ScanConnection],
 )(implicit
-    override val ec: ExecutionContext,
+    override val ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
 ) extends OnAssignedContractTrigger.Template[
@@ -129,9 +131,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
     }
   }
 
-  private def restartAutomation(epoch: Long)(implicit
-      ec: ExecutionContext
-  ): TaskOutcome = {
+  private def restartAutomation(epoch: Long): TaskOutcome = {
     val svTaskContext =
       SvTaskBasedTrigger.Context(
         store,
@@ -164,6 +164,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
          domainUnpausedSync,
          config,
          svTaskContext,
+         scanConnectionF,
          retryProvider,
          loggerFactory,
        )
