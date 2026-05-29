@@ -15,11 +15,7 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -66,7 +62,6 @@ class ScanAutomationService(
       clock,
       // scan only does reads so no need to block anything.
       DomainTimeSynchronization.Noop,
-      DomainUnpausedSynchronization.Noop,
       store,
       ledgerClient,
       retryProvider,

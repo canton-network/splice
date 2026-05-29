@@ -18,7 +18,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
 import org.lfdecentralizedtrust.splice.scan.store.db.{
@@ -296,7 +295,7 @@ object ScanStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       createScanAggregatesReader: DbScanStore => ScanAggregatesReader,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       cacheConfigs: ScanCacheConfig,
       metrics: DbScanStoreMetrics,
@@ -320,7 +319,7 @@ object ScanStore {
         loggerFactory,
         retryProvider,
         createScanAggregatesReader,
-        domainMigrationInfo,
+        migrationId,
         participantId,
         ingestionConfig,
         metrics,

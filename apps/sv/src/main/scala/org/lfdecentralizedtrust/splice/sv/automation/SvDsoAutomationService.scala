@@ -34,10 +34,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.{BftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
@@ -69,7 +66,6 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 class SvDsoAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svStore: SvSvStore,
     dsoStore: SvDsoStore,
@@ -97,7 +93,6 @@ class SvDsoAutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       dsoStore,
       ledgerClient,
       retryProvider,
@@ -146,7 +141,6 @@ class SvDsoAutomationService(
     new RestartDsoDelegateBasedAutomationTrigger(
       triggerContext,
       domainTimeSync,
-      domainUnpausedSync,
       dsoStore,
       connection,
       clock,

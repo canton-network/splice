@@ -169,7 +169,7 @@ abstract class AcsSnapshotTriggerBase(
   }
 
   protected def getLastIngestedRecordTime(migrationId: Long): Option[CantonTimestamp] = {
-    if (migrationId == updateHistory.domainMigrationInfo.currentMigrationId) {
+    if (migrationId == updateHistory.domainMigrationId) {
       updateHistory.lastIngestedRecordTime
     } else {
       Some(CantonTimestamp.MaxValue)

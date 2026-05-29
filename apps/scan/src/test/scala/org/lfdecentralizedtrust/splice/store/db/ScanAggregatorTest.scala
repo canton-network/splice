@@ -27,7 +27,6 @@ import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.codegen.java.splice
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 
 import scala.concurrent.ExecutionContext
@@ -898,10 +897,7 @@ class ScanAggregatorTest
         NoOpMetricsFactory,
       ),
       createReader,
-      DomainMigrationInfo(
-        0,
-        None,
-      ),
+      0,
       participantId = mkParticipantId("ScanAggregatorTest"),
       ingestionConfig = IngestionConfig(),
       new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, ProcessingTimeout()),

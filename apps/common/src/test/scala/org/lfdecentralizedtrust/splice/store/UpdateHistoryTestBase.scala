@@ -9,7 +9,6 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
   TransactionTreeUpdate,
 }
-import org.lfdecentralizedtrust.splice.migration.MigrationTimeInfo
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsTables, SplicePostgresTest}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -28,7 +27,6 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import com.daml.metrics.api.noop.NoOpMetricsFactory
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 
 abstract class UpdateHistoryTestBase
     extends StoreTestBase
@@ -240,14 +238,10 @@ abstract class UpdateHistoryTestBase
       participantId: ParticipantId = participant1,
       storeName: String = storeName1,
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.NeedsBackfilling,
-      migrationTimeInfo: Option[MigrationTimeInfo] = None,
   ): UpdateHistory = {
     new UpdateHistory(
       storage,
-      DomainMigrationInfo(
-        domainMigrationId,
-        migrationTimeInfo,
-      ),
+      domainMigrationId,
       storeName,
       participantId,
       updateStreamParty,

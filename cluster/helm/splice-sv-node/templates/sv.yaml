@@ -49,14 +49,7 @@ spec:
             {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator") | indent 12}}
             - name: SPLICE_APP_SV_PARTICIPANT_ADDRESS
               value: {{ .Values.participantAddress | quote }}
-            {{- if .Values.migration.migrating }}
-            - name: ADDITIONAL_CONFIG_SV_ONBOARDING
-              value: |
-                _onboarding {
-                  type = "domain-migration"
-                  dump-file-path = "/domain-upgrade-dump/domain_migration_dump.json"
-                }
-            {{- else if .Values.joinWithKeyOnboarding }}
+            {{- if .Values.joinWithKeyOnboarding }}
             - name: ADDITIONAL_CONFIG_SV_ONBOARDING
               value: |
                 _onboarding {
@@ -186,13 +179,6 @@ spec:
                 canton.sv-apps.sv {
                   domain-migration-id = {{ .Values.migration.id }}
                 }
-            {{ if hasKey .Values.migration "legacyId" }}
-            - name: ADDITIONAL_CONFIG_LEGACY_MIGRATION_ID
-              value: |
-                canton.sv-apps.sv {
-                  legacy-migration-id = {{ .Values.migration.legacyId }}
-                }
-            {{ end }}
             - name: ADDITIONAL_CONFIG_GLOBAL_DOMAIN_UPGRADE_DUMP_PATH
               value: |
                 canton.sv-apps.sv.domain-migration-dump-path = "/domain-upgrade-dump/domain_migration_dump.json"

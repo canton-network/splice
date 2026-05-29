@@ -14,7 +14,6 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
   UpdateHistory,
 }
 import com.digitalasset.canton.time.{Clock, WallClock}
@@ -33,7 +32,6 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     override val store: Store,
     ledgerClient: SpliceLedgerClient,
     retryProvider: RetryProvider,
@@ -46,7 +44,6 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       retryProvider,
     )
     with AppStoreWithIngestion[Store] {

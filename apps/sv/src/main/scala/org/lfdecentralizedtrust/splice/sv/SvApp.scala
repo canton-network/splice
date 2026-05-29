@@ -39,11 +39,7 @@ import org.lfdecentralizedtrust.splice.auth.{
   ParticipantUserRightsProvider,
   RSAVerifier,
 }
-import org.lfdecentralizedtrust.splice.automation.{
-  AutomationService,
-  DomainParamsAutomationService,
-  DomainTimeAutomationService,
-}
+import org.lfdecentralizedtrust.splice.automation.{AutomationService, DomainTimeAutomationService}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
@@ -55,7 +51,6 @@ import org.lfdecentralizedtrust.splice.http.{HttpClient, HttpRateLimiter}
 import org.lfdecentralizedtrust.splice.http.v0.sv_admin.SvAdminResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
-import org.lfdecentralizedtrust.splice.migration.AcsExporter
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -78,7 +73,6 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvSynchronizerNodeConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
-import org.lfdecentralizedtrust.splice.sv.migration.DomainDataSnapshotGenerator
 import org.lfdecentralizedtrust.splice.sv.onboarding.joining.JoiningNodeInitializer
 import org.lfdecentralizedtrust.splice.sv.onboarding.lsu.RollForwardLsuInitializer
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
@@ -263,14 +257,6 @@ class SvApp(
         retryProvider,
         loggerFactory,
       )
-      domainParamsAutomationService = new DomainParamsAutomationService(
-        config.domains.global.alias,
-        participantAdminConnection,
-        config.automation,
-        clock,
-        retryProvider,
-        loggerFactory,
-      )
 
       synchronizerNodeService = new SynchronizerNodeService[LocalSynchronizerNode](
         localSynchronizerNodes,
@@ -293,7 +279,6 @@ class SvApp(
           participantAdminConnection,
           clock,
           domainTimeAutomationService.domainTimeSync,
-          domainParamsAutomationService.domainUnpausedSync,
           storage,
           loggerFactory,
           retryProvider,
@@ -327,7 +312,6 @@ class SvApp(
               participantAdminConnection,
               clock,
               domainTimeAutomationService.domainTimeSync,
-              domainParamsAutomationService.domainUnpausedSync,
               storage,
               retryProvider,
               config.spliceInstanceNames,
@@ -353,7 +337,6 @@ class SvApp(
               participantAdminConnection,
               clock,
               domainTimeAutomationService.domainTimeSync,
-              domainParamsAutomationService.domainUnpausedSync,
               storage,
               loggerFactory,
               retryProvider,
@@ -527,24 +510,9 @@ class SvApp(
 
       adminHandler = new HttpSvAdminHandler(
         config,
-        config.domainMigrationDumpPath,
-        svAutomation,
         dsoAutomation,
         synchronizerNodeService,
         participantAdminConnection,
-        new DomainDataSnapshotGenerator(
-          participantAdminConnection,
-          localSynchronizerNodes.current.sequencerAdminConnection,
-          dsoStore,
-          new AcsExporter(
-            participantAdminConnection,
-            retryProvider,
-            config.parameters.enabledFeatures.enableNewAcsExport,
-            loggerFactory,
-          ),
-          retryProvider,
-          loggerFactory,
-        ),
         loggerFactory,
       )
       httpRateLimiter = new HttpRateLimiter(
@@ -634,7 +602,6 @@ class SvApp(
         localSynchronizerNodes,
         storage,
         domainTimeAutomationService,
-        domainParamsAutomationService,
         svStore,
         dsoStore,
         svAutomation,
@@ -766,7 +733,6 @@ object SvApp {
       localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
       storage: DbStorage,
       domainTimeAutomationService: DomainTimeAutomationService,
-      domainParamsAutomationService: DomainParamsAutomationService,
       svStore: SvSvStore,
       dsoStore: SvDsoStore,
       svAutomation: SvSvAutomationService,
@@ -800,7 +766,6 @@ object SvApp {
         SyncCloseable("sv store", svStore.close()),
         SyncCloseable("dso store", dsoStore.close()),
         SyncCloseable("domain time automation", domainTimeAutomationService.close()),
-        SyncCloseable("domain params automation", domainParamsAutomationService.close()),
         SyncCloseable("operator handler", svOperatorHandler.close()),
         SyncCloseable("storage", storage.close()),
         SyncCloseable("http rate limiter", httpRateLimiter.close()),

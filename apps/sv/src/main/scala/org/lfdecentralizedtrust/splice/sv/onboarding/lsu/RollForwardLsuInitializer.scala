@@ -21,10 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvOnboardingConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{LsuNodeInitializer, LsuStateExporter}
@@ -42,7 +39,6 @@ class RollForwardLsuInitializer(
     override protected val participantAdminConnection: ParticipantAdminConnection,
     override protected val clock: Clock,
     override protected val domainTimeSync: DomainTimeSynchronization,
-    override protected val domainUnpausedSync: DomainUnpausedSynchronization,
     override protected val storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,

@@ -15,13 +15,8 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  LimitHelpers,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, LimitHelpers}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.lfdecentralizedtrust.splice.wallet.store.{ExternalPartyWalletStore, WalletStore}
 
@@ -36,11 +31,10 @@ class ExternalPartyWalletManager(
     automationConfig: AutomationConfig,
     private[splice] val clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     storage: DbStorage,
     retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
@@ -165,11 +159,10 @@ class ExternalPartyWalletManager(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       storage,
       externalPartyRetryProvider,
       partyLoggerFactory,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       params,
       scanConnection,

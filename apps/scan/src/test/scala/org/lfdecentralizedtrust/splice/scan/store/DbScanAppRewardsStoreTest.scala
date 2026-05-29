@@ -4,7 +4,6 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
@@ -1080,7 +1079,7 @@ class DbScanAppRewardsStoreTest
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       s"app_rewards_test_$n",
       participantId,
       dsoParty,

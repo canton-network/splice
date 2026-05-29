@@ -61,7 +61,6 @@ ONBOARDING_SECRET="undefined"
 SEQUENCER_ADDRESS=""
 network_name=""
 migration_id=""
-migrating=0
 party_hint=""
 participant_id=""
 restore_identities_dump=""
@@ -105,9 +104,6 @@ while getopts 'has:c:C:t:o:n:bq:m:Mp:P:i:wlEBu:S:T:' arg; do
       ;;
     m)
       migration_id="${OPTARG}"
-      ;;
-    M)
-      migrating=1
       ;;
     p)
       party_hint="${OPTARG}"
@@ -289,9 +285,6 @@ if [ $auth -ne 1 ]; then
 fi
 if [ $trust_single -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-trust-single.yaml")
-fi
-if [ $migrating -eq 1 ]; then
-  extra_compose_files+=("-f" "${script_dir}/compose-migrate.yaml")
 fi
 if [ -n "${network_name}" ]; then
   export DOCKER_NETWORK="${network_name}"

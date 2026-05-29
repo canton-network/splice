@@ -23,11 +23,8 @@ import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParameter
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
@@ -42,7 +39,6 @@ class UserWalletAutomationService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     scanConnection: BftScanConnection,
     retryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
@@ -60,7 +56,6 @@ class UserWalletAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,

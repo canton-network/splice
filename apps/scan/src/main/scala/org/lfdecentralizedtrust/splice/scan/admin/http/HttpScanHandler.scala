@@ -887,7 +887,7 @@ class HttpScanHandler(
     for {
       eventO <- eventStore.getEventByUpdateId(
         updateId,
-        updateHistory.domainMigrationInfo.currentMigrationId,
+        updateHistory.domainMigrationId,
       )
       result <- eventO match {
         case None =>
@@ -975,7 +975,7 @@ class HttpScanHandler(
       for {
         events <- eventStore.getEvents(
           afterO = afterO,
-          currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId,
+          currentMigrationId = updateHistory.domainMigrationId,
           limit = PageLimit.tryCreate(pageSize, updateHistoryMaxPageSize),
         )
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>

@@ -49,7 +49,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{Payme
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
@@ -1876,10 +1875,7 @@ class DbSvDsoStoreTest
       storage,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(
-        domainMigrationId,
-        None,
-      ),
+      domainMigrationId,
       participantId = mkParticipantId("SvDsoStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

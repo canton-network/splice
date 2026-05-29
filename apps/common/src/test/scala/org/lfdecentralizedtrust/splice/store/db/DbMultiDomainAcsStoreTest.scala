@@ -13,7 +13,6 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
   TreeUpdateOrOffsetCheckpoint,
 }
-import org.lfdecentralizedtrust.splice.migration.{DomainMigrationInfo, MigrationTimeInfo}
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.testTxLogConfig
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
@@ -586,64 +585,6 @@ class DbMultiDomainAcsStoreTest
       } yield succeed
     }
 
-    "tx rollbacks after migrations are handled correctly" in {
-      import com.digitalasset.canton.data.CantonTimestamp
-      val store1 = mkStore(acsId = 1, txLogId = Some(1), migrationId = 1L)
-      val coupon1 = c(1)
-      val coupon2 = c(2)
-      val t0 = CantonTimestamp.Epoch
-      val t1 = CantonTimestamp.Epoch.plusSeconds(60)
-      val store2TimeTooEarly = mkStore(
-        acsId = 1,
-        txLogId = Some(1),
-        migrationId = 2L,
-        migrationTimeInfo = Some(MigrationTimeInfo(t0, synchronizerWasPaused = true)),
-      )
-      val store2CorrectTime = mkStore(
-        acsId = 1,
-        txLogId = Some(1),
-        migrationId = 2L,
-        migrationTimeInfo = Some(MigrationTimeInfo(t1, synchronizerWasPaused = true)),
-      )
-      for {
-        _ <- initWithAcs()(store1)
-        _ <- d1.create(coupon1, recordTime = t0.toInstant)(store1)
-        _ <- d1.create(coupon2, recordTime = t1.toInstant)(store1)
-        txLogs <- store1.listTxLogEntries()
-        _ = txLogs should have size 2
-        ex <- recoverToExceptionIf[IllegalStateException](initWithAcs()(store2TimeTooEarly))
-        _ = ex.getMessage should include("Found 1 rows")
-        _ <- initWithAcs()(store2CorrectTime)
-        txLogs <- store2CorrectTime.listTxLogEntries()
-        _ = txLogs should have size 2
-      } yield succeed
-    }
-
-    "tx rollbacks after DR are handled correctly" in {
-      import com.digitalasset.canton.data.CantonTimestamp
-      val store1 = mkStore(acsId = 1, txLogId = Some(1), migrationId = 1L)
-      val coupon1 = c(1)
-      val coupon2 = c(2)
-      val t0 = CantonTimestamp.Epoch
-      val t1 = CantonTimestamp.Epoch.plusSeconds(60)
-      val store2TimeTooEarlyDR = mkStore(
-        acsId = 1,
-        txLogId = Some(1),
-        migrationId = 2L,
-        migrationTimeInfo = Some(MigrationTimeInfo(t0, synchronizerWasPaused = false)),
-      )
-      for {
-        _ <- initWithAcs()(store1)
-        _ <- d1.create(coupon1, recordTime = t0.toInstant)(store1)
-        _ <- d1.create(coupon2, recordTime = t1.toInstant)(store1)
-        txLogs <- store1.listTxLogEntries()
-        _ = txLogs should have size 2
-        _ <- initWithAcs()(store2TimeTooEarlyDR)
-        txLogs <- store2TimeTooEarlyDR.listTxLogEntries()
-        _ = txLogs should have size 1
-      } yield succeed
-    }
-
     "can ingest large batches" in {
       implicit val store = mkStore()
       // 100 txs of 1000 CreatedEvents each
@@ -755,7 +696,6 @@ class DbMultiDomainAcsStoreTest
         GenericAcsRowData,
         GenericInterfaceRowData,
       ],
-      migrationTimeInfo: Option[MigrationTimeInfo],
   ) = {
     mkStoreWithAcsRowDataF(
       acsId,
@@ -766,7 +706,6 @@ class DbMultiDomainAcsStoreTest
       "acs_store_template",
       txLogId.map(_ => "txlog_store_template"),
       Some("interface_views_template"),
-      migrationTimeInfo,
     )
   }
 
@@ -779,7 +718,6 @@ class DbMultiDomainAcsStoreTest
       acsTableName: String,
       txLogTableName: Option[String],
       interfaceViewsTableNameOpt: Option[String],
-      migrationTimeInfo: Option[MigrationTimeInfo] = None,
   ) = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
@@ -798,10 +736,7 @@ class DbMultiDomainAcsStoreTest
       loggerFactory,
       filter,
       testTxLogConfig,
-      DomainMigrationInfo(
-        migrationId,
-        migrationTimeInfo,
-      ),
+      migrationId,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

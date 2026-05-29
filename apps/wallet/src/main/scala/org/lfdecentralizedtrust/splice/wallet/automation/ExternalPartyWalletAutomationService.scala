@@ -16,11 +16,8 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.Tri
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
@@ -31,7 +28,6 @@ class ExternalPartyWalletAutomationService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
@@ -44,7 +40,6 @@ class ExternalPartyWalletAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
