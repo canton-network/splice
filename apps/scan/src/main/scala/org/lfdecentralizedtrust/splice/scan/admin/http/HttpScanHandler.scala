@@ -2317,25 +2317,19 @@ class HttpScanHandler(
     }
   }
 
-  override def lookupSvRewardWeightBefore(
-      respond: ScanResource.LookupSvRewardWeightBeforeResponse.type
+  override def lookupDsoRulesBefore(
+      respond: ScanResource.LookupDsoRulesBeforeResponse.type
   )(
-      body: definitions.LookupSvRewardWeightBeforeRequest
-  )(extracted: TraceContext): Future[ScanResource.LookupSvRewardWeightBeforeResponse] = {
+      body: definitions.LookupDsoRulesBeforeRequest
+  )(extracted: TraceContext): Future[ScanResource.LookupDsoRulesBeforeResponse] = {
     implicit val tc: TraceContext = extracted
-    withSpan(s"$workflowId.lookupSvRewardWeightBefore") { _ => _ =>
-      val svParty = PartyId.tryFromProtoPrimitive(body.svParty)
+    withSpan(s"$workflowId.lookupDsoRulesBefore") { _ => _ =>
       val before = body.before.toInstant
       for {
         dsoRules <- store.lookupDsoRulesBefore(before, updateHistory)
-      } yield {
-        val priorWeight = dsoRules.flatMap(dsoRules =>
-          Option(dsoRules.payload.svs.get(svParty.toProtoPrimitive)).map(_.svRewardWeight.toLong)
-        )
-        ScanResource.LookupSvRewardWeightBeforeResponse.OK(
-          definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
-        )
-      }
+      } yield ScanResource.LookupDsoRulesBeforeResponse.OK(
+        definitions.LookupDsoRulesBeforeResponse(dsoRules.map(_.toHttp))
+      )
     }
   }
 

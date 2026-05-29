@@ -639,16 +639,15 @@ class SingleScanConnection private[client] (
     ),
   )
 
-  override def lookupSvRewardWeightBefore(
-      svParty: String,
-      before: Instant,
+  override def lookupDsoRulesBefore(
+      before: Instant
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[Long]] =
+  ): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.LookupSvRewardWeightBefore(svParty, before),
+      HttpScanAppClient.LookupDsoRulesBefore(before),
     )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit

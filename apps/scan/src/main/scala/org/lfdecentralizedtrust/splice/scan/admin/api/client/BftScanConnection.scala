@@ -805,15 +805,14 @@ class BftScanConnection(
       )
   }
 
-  override def lookupSvRewardWeightBefore(
-      svParty: String,
-      before: Instant,
+  override def lookupDsoRulesBefore(
+      before: Instant
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[Long]] = bftCall(
-    _.lookupSvRewardWeightBefore(svParty, before),
-    "lookupSvRewardWeightBefore",
+  ): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] = bftCall(
+    _.lookupDsoRulesBefore(before),
+    "lookupDsoRulesBefore",
   )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit

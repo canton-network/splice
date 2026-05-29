@@ -313,13 +313,12 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
 
-  def lookupSvRewardWeightBefore(
-      svParty: String,
-      before: Instant,
+  def lookupDsoRulesBefore(
+      before: Instant
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[Long]]
+  ): Future[Option[Contract[DsoRules.ContractId, DsoRules]]]
 
   def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,

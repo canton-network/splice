@@ -89,6 +89,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetFactoryRequest as GetTransferFactoryRequest
 import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.definitions.GetFactoryRequest as GetAllocationFactoryRequest
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -2504,27 +2505,30 @@ object HttpScanAppClient {
     }
   }
 
-  case class LookupSvRewardWeightBefore(
-      svParty: String,
-      before: Instant,
-  ) extends InternalBaseCommand[http.LookupSvRewardWeightBeforeResponse, Option[Long]] {
+  case class LookupDsoRulesBefore(
+      before: Instant
+  ) extends InternalBaseCommand[
+        http.LookupDsoRulesBeforeResponse,
+        Option[Contract[DsoRules.ContractId, DsoRules]],
+      ] {
 
     override def submitRequest(
         client: ScanClient,
         headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.LookupSvRewardWeightBeforeResponse] =
-      client.lookupSvRewardWeightBefore(
-        body = definitions.LookupSvRewardWeightBeforeRequest(
-          svParty = svParty,
-          before = java.time.OffsetDateTime.ofInstant(before, java.time.ZoneOffset.UTC),
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.LookupDsoRulesBeforeResponse] =
+      client.lookupDsoRulesBefore(
+        body = definitions.LookupDsoRulesBeforeRequest(
+          before = java.time.OffsetDateTime.ofInstant(before, java.time.ZoneOffset.UTC)
         ),
         headers = headers,
       )
 
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
-    ) = { case http.LookupSvRewardWeightBeforeResponse.OK(response) =>
-      Right(response.priorWeight)
+    ) = { case http.LookupDsoRulesBeforeResponse.OK(response) =>
+      response.dsoRules
+        .traverse(co => Contract.fromHttp(DsoRules.COMPANION)(co))
+        .leftMap(_.toString)
     }
   }
 

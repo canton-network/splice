@@ -66,7 +66,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
   }),
 
   http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, () => {
-    return HttpResponse.json({ prior_weight: null });
+    return HttpResponse.json({});
   }),
 
   http.post<PathParams, ListVoteResultsRequest>(

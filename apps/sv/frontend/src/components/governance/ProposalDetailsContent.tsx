@@ -34,7 +34,7 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
-import { useSvRewardWeightBefore } from '../../hooks/useSvRewardWeightBefore';
+import { useDsoRulesBefore } from '../../hooks/useDsoRulesBefore';
 import { formatBasisPoints } from '../../utils/governance';
 
 dayjs.extend(relativeTime);
@@ -665,10 +665,10 @@ const UpdateSvRewardWeightSection = ({
   weightChange,
   before,
 }: UpdateSvRewardWeightSectionProps) => {
-  const { data: priorWeight } = useSvRewardWeightBefore(svToUpdate, before);
+  const { data: dsoRules } = useDsoRulesBefore(before);
 
-  const beforeValue =
-    priorWeight != null ? formatBasisPoints(priorWeight.toString()) : currentWeight;
+  const priorWeight = dsoRules?.payload.svs.get(svToUpdate)?.svRewardWeight;
+  const beforeValue = priorWeight != null ? formatBasisPoints(priorWeight) : currentWeight;
 
   return (
     <>

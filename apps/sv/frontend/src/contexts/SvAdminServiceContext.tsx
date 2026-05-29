@@ -23,6 +23,7 @@ import {
   ListValidatorLicensesResponse,
   ListVoteRequestByTrackingCidResponse,
   ListVoteResultsRequest,
+  LookupDsoRulesBeforeResponse,
   LookupDsoRulesVoteRequestResponse,
   Middleware,
   PrepareValidatorOnboardingRequest,
@@ -94,7 +95,7 @@ export interface SvAdminClient {
   lookupFeaturedAppRightByContractId: (
     contractId: string
   ) => Promise<LookupFeaturedAppRightByContractIdResponse>;
-  lookupSvRewardWeightBefore: (svParty: string, before: string) => Promise<number | null>;
+  lookupDsoRulesBefore: (before: string) => Promise<LookupDsoRulesBeforeResponse>;
 }
 
 class ApiMiddleware
@@ -238,15 +239,10 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
       ): Promise<LookupFeaturedAppRightByContractIdResponse> => {
         return await svAdminClient.lookupFeaturedAppRightByContractId(contractId);
       },
-      lookupSvRewardWeightBefore: async (
-        svParty: string,
-        before: string
-      ): Promise<number | null> => {
-        const response = await svAdminClient.lookupSvRewardWeightBefore({
-          sv_party: svParty,
+      lookupDsoRulesBefore: async (before: string): Promise<LookupDsoRulesBeforeResponse> => {
+        return await svAdminClient.lookupDsoRulesBefore({
           before: new Date(before),
         });
-        return response.prior_weight;
       },
     };
   }, [url, userAccessToken]);
