@@ -259,6 +259,7 @@ lazy val docs = project
           (`splice-wallet-payments-daml` / Compile / damlBuild).value ++
           (`splice-util-featured-app-proxies-daml` / Compile / damlBuild).value ++
           (`splice-util-token-standard-wallet-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
@@ -1006,6 +1007,7 @@ lazy val `splice-util-token-standard-wallet-daml` =
         (`splice-token-standard-utils-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value,
+      Compile / damlEnableJavaCodegen := true,
     )
 
 lazy val `splice-util-featured-app-proxies-test-daml` =
@@ -1141,6 +1143,9 @@ lazy val `apps-common` =
       `splice-api-token-allocation-request-v2-daml`,
       `splice-api-token-allocation-instruction-v1-daml`,
       `splice-api-token-allocation-instruction-v2-daml`,
+      `splice-api-token-transfer-events-v2-daml`,
+      `splice-token-standard-utils-daml`,
+      `splice-util-token-standard-wallet-daml`,
       `splice-token-test-dummy-holding-daml`,
       `splice-token-test-trading-app-daml`,
       `splice-token-test-trading-app-v2-daml`,
@@ -2276,6 +2281,9 @@ lazy val `apps-dar-resources-generator` =
       `splice-api-token-allocation-request-v2-daml`,
       `splice-api-token-allocation-instruction-v1-daml`,
       `splice-api-token-allocation-instruction-v2-daml`,
+      `splice-api-token-transfer-events-v2-daml`,
+      `splice-token-standard-utils-daml`,
+      `splice-util-token-standard-wallet-daml`,
       `splice-token-test-dummy-holding-daml`,
       `splice-token-test-trading-app-daml`,
       `splice-featured-app-api-v1-daml`,

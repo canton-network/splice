@@ -39,5 +39,7 @@
         For creating all allocations in a single transaction `as documented in CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md#423-traders-accept-allocation-requests-and-create-allocations>`__, we recommend using
         a token standard v2 wallet UI that uniformly supports all V1 and V2 assets.
 
+      - The dar ``splice-api-token-transfer-events-v2`` and its dependencies (namely, Token Standard V2 dars) are now uploaded by default on all validator nodes.
+
       .. TODO(#4707): add callouts for wallets, explorers, SVs, validator operators, app operators as needed
       .. TODO(#4707): add Daml versions of token standard to release notes
