@@ -310,7 +310,7 @@ paths:
             application/json:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ListDsoRulesVoteResultsResponse"
-  /v0/admin/sv/reward-weight-before:
+  /v0/admin/dso-rules-before:
     post:
       tags: [ sv ]
       x-jvm-package: sv_operator

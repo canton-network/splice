@@ -1624,8 +1624,8 @@
           "name": "activities",
           "type": "unlimited"
         },
-        "/api/scan/v0/admin/sv/reward-weight-before": {
-          "name": "sv-reward-weight-before",
+        "/api/scan/v0/admin/dso-rules-before": {
+          "name": "dso-rules-before",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -1879,8 +1879,8 @@
           "name": "activities",
           "type": "unlimited"
         },
-        "/api/scan/v0/admin/sv/reward-weight-before": {
-          "name": "sv-reward-weight-before",
+        "/api/scan/v0/admin/dso-rules-before": {
+          "name": "dso-rules-before",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
