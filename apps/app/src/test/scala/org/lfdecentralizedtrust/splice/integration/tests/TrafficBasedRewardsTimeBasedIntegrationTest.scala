@@ -13,10 +13,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 }
 import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
+import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.CompactJson
 import definitions.GetRewardAccountingActivityTotalsResponse
@@ -69,6 +71,15 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Scan)(
           _.withPausedTrigger[RewardComputationTrigger]
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.withRewardConfig(
+          InitialRewardConfig(
+            mintingVersion = TrafficBasedRewardsTimeBasedIntegrationTest.trafficBasedAppRewards,
+            appRewardCouponThreshold =
+              TrafficBasedRewardsTimeBasedIntegrationTest.appRewardCouponThreshold,
+          )
         )(config)
       )
 
@@ -190,23 +201,36 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       assertNoAppActivity(event, "updateId1")
     }
 
-    clue("updateId2") {
-      val event = fetchEvent(updateId2, "updateId2")
-      assertTrafficSummary(event, "updateId2")
-      assertAppActivity(event, "updateId2", Set(venueParty), expectedRound = 5)
-    }
+    // Expected featured app providers per round — used for both event-level
+    // activity assertions and reward pipeline provider assertions.
+    val expectedProvidersByRound: Map[Long, Set[PartyId]] = Map(
+      5L -> Set(venueParty),
+      6L -> Set(venueParty, aliceParty),
+      7L -> Set(aliceParty),
+    )
 
-    clue("updateId3") {
-      val event = fetchEvent(updateId3, "updateId3")
-      assertTrafficSummary(event, "updateId3")
-      assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
-    }
-
-    clue("updateId4") {
-      val event = fetchEvent(updateId4, "updateId4")
-      assertTrafficSummary(event, "updateId4")
-      assertAppActivity(event, "updateId4", Set(aliceParty), expectedRound = 7)
-    }
+    // Capture per-round traffic costs for reward pipeline assertions.
+    // Each round has exactly one settlement in this test.
+    val trafficCostByRound: Map[Long, Long] = Map(
+      5L -> clue("updateId2") {
+        val event = fetchEvent(updateId2, "updateId2")
+        assertTrafficSummary(event, "updateId2")
+        assertAppActivity(event, "updateId2", expectedProvidersByRound(5L), expectedRound = 5)
+        event.trafficSummary.value.totalTrafficCost
+      },
+      6L -> clue("updateId3") {
+        val event = fetchEvent(updateId3, "updateId3")
+        assertTrafficSummary(event, "updateId3")
+        assertAppActivity(event, "updateId3", expectedProvidersByRound(6L), expectedRound = 6)
+        event.trafficSummary.value.totalTrafficCost
+      },
+      7L -> clue("updateId4") {
+        val event = fetchEvent(updateId4, "updateId4")
+        assertTrafficSummary(event, "updateId4")
+        assertAppActivity(event, "updateId4", expectedProvidersByRound(7L), expectedRound = 7)
+        event.trafficSummary.value.totalTrafficCost
+      },
+    )
 
     clue("Alice-submitted create TransferInstruction has app activity for alice") {
       val event = fetchEvent(aliceCreateId, "aliceCreateId")
@@ -240,6 +264,11 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       e.value
     }
 
+    val expectedProviders = expectedProvidersByRound.getOrElse(
+      earliest,
+      fail(s"No expected providers for earliest round $earliest"),
+    )
+
     clue("Verify activity totals for the computed round") {
       val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(earliest)) {
         case GetRewardAccountingActivityTotalsResponse.members
@@ -248,6 +277,13 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       }
       totals.roundNumber shouldBe earliest
       totals.activityRecordsCount should be > 0L
+      totals.activePartiesCount shouldBe expectedProviders.size.toLong
+      totals.totalAppActivityWeight should be > 0L
+      // The total weight must be at least as large as the traffic cost from the
+      // test's known settlement, since that settlement contributes activity records
+      // to the round (other background transactions may also contribute).
+      val roundTrafficCost = trafficCostByRound(earliest)
+      totals.totalAppActivityWeight should be >= roundTrafficCost
     }
 
     clue("Verify root hash is available") {
@@ -258,12 +294,25 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
       rootHash.rootHash should have length 64 // hex-encoded SHA-256
     }
 
-    clue("Verify batch lookup for root hash returns batch contents") {
+    clue("Verify batch contains expected providers with non-zero amounts") {
       val rootHashHex = inside(sv1ScanBackend.getRewardAccountingRootHash(earliest)) {
         case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
           h.rootHash
       }
-      sv1ScanBackend.getRewardAccountingBatch(earliest, rootHashHex) shouldBe defined
+      val batch = sv1ScanBackend.getRewardAccountingBatch(earliest, rootHashHex)
+      batch shouldBe defined
+      batch.value match {
+        case definitions.GetRewardAccountingBatchResponse.members
+              .RewardAccountingBatchOfMintingAllowances(allowances) =>
+          val providers = allowances.mintingAllowances.map(_.provider).toSet
+          providers shouldBe expectedProviders.map(_.toProtoPrimitive)
+          allowances.mintingAllowances.foreach { ma =>
+            BigDecimal(ma.amount) should be > BigDecimal(0)
+          }
+        case definitions.GetRewardAccountingBatchResponse.members
+              .RewardAccountingBatchOfBatches(batches) =>
+          batches.childHashes should not be empty
+      }
     }
 
     clue("Verify response for non-existent data") {
@@ -542,4 +591,14 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     )
     new allocationv1.Allocation.ContractId(allocation.contractId.contractId)
   }
+}
+
+object TrafficBasedRewardsTimeBasedIntegrationTest {
+
+  // Use traffic-based app rewards (CIP-0104), not on-ledger coupon counting.
+  val trafficBasedAppRewards = "RewardVersion_TrafficBasedAppRewards"
+
+  // Set to zero so no rewards are filtered out in this test.
+  // In production this would be a small USD amount (e.g. 0.5).
+  val appRewardCouponThreshold = BigDecimal(0.0)
 }
