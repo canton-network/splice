@@ -4,10 +4,12 @@
 package org.lfdecentralizedtrust.splice.wallet.automation
 
 import org.lfdecentralizedtrust.splice.automation.{
+  AutomationMetrics,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
 }
 import AutomationServiceCompanion.TriggerClass
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
@@ -49,6 +51,15 @@ class ExternalPartyWalletAutomationService(
       retryProvider,
       params,
     ) {
+
+  override protected val automationMetrics: AutomationMetrics =
+    new AutomationMetrics(retryProvider.metricsFactory)(
+      MetricsContext(
+        "automation_service" -> getClass.getSimpleName,
+        "party" -> store.key.externalParty.toString,
+      )
+    )
+
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService.type =
     ExternalPartyWalletAutomationService

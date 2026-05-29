@@ -127,8 +127,7 @@ class UserWalletService(
   val connection: SpliceLedgerConnection =
     automation.connection(SpliceLedgerConnectionPriority.Medium)
 
-  override def isHealthy: Boolean =
-    automation.isHealthy && treasury.isHealthy
+  override def isHealthy: Boolean = treasury.isHealthy
 
   override def onClosed(): Unit = {
     // Close treasury early, that will result in it no longer accepting new requests

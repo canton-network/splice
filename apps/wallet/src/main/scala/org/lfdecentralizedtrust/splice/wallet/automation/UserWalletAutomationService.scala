@@ -5,12 +5,14 @@ package org.lfdecentralizedtrust.splice.wallet.automation
 
 import org.lfdecentralizedtrust.splice.automation.{
   AssignTrigger,
+  AutomationMetrics,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
   TransferFollowTrigger,
   UnassignTrigger,
 }
-import AutomationServiceCompanion.{TriggerClass, aTrigger}
+import AutomationServiceCompanion.{aTrigger, TriggerClass}
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
@@ -62,6 +64,15 @@ class UserWalletAutomationService(
       retryProvider,
       paramsConfig,
     ) {
+
+  override protected val automationMetrics: AutomationMetrics =
+    new AutomationMetrics(retryProvider.metricsFactory)(
+      MetricsContext(
+        "automation_service" -> getClass.getSimpleName,
+        "party" -> store.key.endUserParty.toString,
+      )
+    )
+
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService.type =
     UserWalletAutomationService

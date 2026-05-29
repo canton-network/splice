@@ -580,7 +580,7 @@ object ScanApp {
   ) extends AutoCloseable
       with HasHealth {
     override def isHealthy: Boolean =
-      storage.isActive && automation.isHealthy && verdictAutomation.isHealthy
+      storage.isActive
 
     override def close(): Unit = {
       LifeCycle.close(bftSequencersAdminConnections*)(logger)

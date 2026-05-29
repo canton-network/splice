@@ -3,6 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.wallet
 
+import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.ParticipantId
+import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
@@ -11,16 +18,9 @@ import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
 }
-import org.lfdecentralizedtrust.splice.util.{HasHealth, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
-import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
-import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.ParticipantId
-import io.opentelemetry.api.trace.Tracer
-import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.ExecutionContext
 
@@ -47,8 +47,7 @@ class ExternalPartyWalletService(
     close: CloseContext,
 ) extends RetryProvider.Has
     with FlagCloseable
-    with NamedLogging
-    with HasHealth {
+    with NamedLogging {
 
   val store: ExternalPartyWalletStore =
     ExternalPartyWalletStore(
@@ -74,9 +73,6 @@ class ExternalPartyWalletService(
     scanConnection,
     loggerFactory,
   )
-
-  override def isHealthy: Boolean =
-    automation.isHealthy
 
   override def onClosed(): Unit = {
     automation.close()
