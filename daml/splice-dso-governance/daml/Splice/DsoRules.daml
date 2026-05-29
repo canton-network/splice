@@ -19,6 +19,7 @@ import DA.Time
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.ExternalPartyAmuletRules
+import Splice.TokenStandard.Utils qualified as TSU
 
 import Splice.ExternalPartyConfigState
 import Splice.Round
@@ -325,6 +326,11 @@ data DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult = DsoRule
 data DsoRules_ExpireAmuletAllocationsResult = DsoRules_ExpireAmuletAllocationsResult
   with
     result : ExternalPartyAmuletRules_ExpireAmuletAllocationsResult
+  deriving (Eq, Show)
+
+data DsoRules_ExpireAmuletAllocationsV2Result = DsoRules_ExpireAmuletAllocationsV2Result
+  with
+    result : ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result
   deriving (Eq, Show)
 
 
@@ -1145,12 +1151,22 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
-
-        require ("expectedDso " <> show expireAllocations.expectedDso <> " matches the actualDso " <> show dso) (expireAllocations.expectedDso == dso)
+        TSU.requireMatchExpected  ("expireAllocations.expectedDso", expireAllocations.expectedDso) dso
 
         res <- exercise extAmuletRulesCid (expireAllocations with expectedDso = dso)
-
         pure DsoRules_ExpireAmuletAllocationsResult with result = res
+
+    nonconsuming choice DsoRules_ExpireAmuletAllocationsV2 : DsoRules_ExpireAmuletAllocationsV2Result
+      with
+        extAmuletRulesCid : ContractId ExternalPartyAmuletRules
+        choiceArg : ExternalPartyAmuletRules_ExpireAmuletAllocationsV2
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        _ <- fetchChecked (ForDso with dso) extAmuletRulesCid
+        result <- exercise extAmuletRulesCid choiceArg
+        pure DsoRules_ExpireAmuletAllocationsV2Result with result
 
     nonconsuming choice DsoRules_Amulet_ExpireTransferInstructions : DsoRules_Amulet_ExpireTransferInstructionsResult
       with
