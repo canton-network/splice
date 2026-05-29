@@ -674,7 +674,7 @@ abstract class ScanStoreTest
       }
     }
 
-    "lookupSvRewardWeightBefore" should {
+    "lookupDsoRulesBefore" should {
 
       def ingestDsoRulesWithSvWeight(
           updateHistory: UpdateHistory,
@@ -693,13 +693,27 @@ abstract class ScanStoreTest
           recordTime = recordTime.toInstant,
         )(updateHistory)
 
+      def svWeightBefore(
+          store: ScanStore,
+          sv: PartyId,
+          before: CantonTimestamp,
+          updateHistory: UpdateHistory,
+      ): Future[Option[Long]] =
+        store
+          .lookupDsoRulesBefore(before.toInstant, updateHistory)
+          .map(
+            _.flatMap(dsoRules =>
+              Option(dsoRules.payload.svs.get(sv.toProtoPrimitive)).map(_.svRewardWeight.toLong)
+            )
+          )
+
       "returns None when no DsoRules exists before the given time" in {
         val sv = providerParty(7)
         for {
           store <- mkStore()
           updateHistory <- mkUpdateHistory(domainMigrationId)
           _ <- updateHistory.ingestionSink.initialize()
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
         } yield result shouldBe None
       }
 
@@ -710,7 +724,7 @@ abstract class ScanStoreTest
           updateHistory <- mkUpdateHistory(domainMigrationId)
           _ <- updateHistory.ingestionSink.initialize()
           _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
         } yield result shouldBe Some(5L)
       }
 
@@ -723,7 +737,7 @@ abstract class ScanStoreTest
           _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
           _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 10L, recordTime = time(75))
           _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 15L, recordTime = time(125))
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
         } yield result shouldBe Some(10L)
       }
 
@@ -740,7 +754,7 @@ abstract class ScanStoreTest
             weight = 5L,
             recordTime = time(50),
           )
-          result <- store.lookupSvRewardWeightBefore(sv, time(100).toInstant, updateHistory)
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
         } yield result shouldBe None
       }
     }

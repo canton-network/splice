@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -275,16 +276,15 @@ class CachingScanStore(
     recordTime,
   )
 
-  override def lookupSvRewardWeightBefore(
-      svParty: PartyId,
+  override def lookupDsoRulesBefore(
       before: Instant,
       updateHistory: UpdateHistory,
-  )(implicit tc: TraceContext): Future[Option[Long]] =
-    getCache[(PartyId, Instant), Option[Long]](
-      "lookupSvRewardWeightBefore",
+  )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
+    getCache[Instant, Option[Contract[DsoRules.ContractId, DsoRules]]](
+      "lookupDsoRulesBefore",
       cacheConfig.voteRequests,
-      { case (party, t) => store.lookupSvRewardWeightBefore(party, t, updateHistory) },
-    ).get((svParty, before))
+      { t => store.lookupDsoRulesBefore(t, updateHistory) },
+    ).get(before)
 
   override def listVoteRequestResults(
       actionName: Option[String],

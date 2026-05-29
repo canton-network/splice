@@ -2327,10 +2327,15 @@ class HttpScanHandler(
       val svParty = PartyId.tryFromProtoPrimitive(body.svParty)
       val before = body.before.toInstant
       for {
-        priorWeight <- store.lookupSvRewardWeightBefore(svParty, before, updateHistory)
-      } yield ScanResource.LookupSvRewardWeightBeforeResponse.OK(
-        definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
-      )
+        dsoRules <- store.lookupDsoRulesBefore(before, updateHistory)
+      } yield {
+        val priorWeight = dsoRules.flatMap(dsoRules =>
+          Option(dsoRules.payload.svs.get(svParty.toProtoPrimitive)).map(_.svRewardWeight.toLong)
+        )
+        ScanResource.LookupSvRewardWeightBeforeResponse.OK(
+          definitions.LookupSvRewardWeightBeforeResponse(priorWeight = priorWeight)
+        )
+      }
     }
   }
 
