@@ -52,6 +52,7 @@ to restore the node:
 Scale down all components in the SV node to 0 replicas
 (replace ``-0`` with the correct serial ID in case a :ref:`logical synchronizer upgrade <sv-logical-synchronizer-upgrades>` has already been performed):
 
+.. CF_DOCS_SPLICE_SNIPPET_093_START
 .. code-block:: bash
 
     kubectl scale deployment --replicas=0 -n sv \
@@ -62,6 +63,7 @@ Scale down all components in the SV node to 0 replicas
       scan-app \
       sv-app \
       validator-app
+.. CF_DOCS_SPLICE_SNIPPET_093_END
 
 Restore the storage and DBs of all components from the backups. The exact process for this
 depends on the storage and DBs used by the components, and is not documented here.
@@ -69,6 +71,7 @@ depends on the storage and DBs used by the components, and is not documented her
 Once all storage has been restored, scale up all components in the SV node back to 1 replica
 (replace ``-0`` with the correct serial ID in case a :ref:`logical synchronizer upgrade <sv-logical-synchronizer-upgrades>` has already been performed):
 
+.. CF_DOCS_SPLICE_SNIPPET_094_START
 .. code-block:: bash
 
     kubectl scale deployment --replicas=1 -n sv \
@@ -79,6 +82,7 @@ Once all storage has been restored, scale up all components in the SV node back 
       scan-app \
       sv-app \
       validator-app
+.. CF_DOCS_SPLICE_SNIPPET_094_END
 
 Once all components are healthy again, they should start catching up their state from peer
 SVs, and eventually become functional again.
@@ -97,9 +101,11 @@ The details of fetching the identities are provided in the :ref:`Backup of Node 
 From the backup of Node Identities, copy the content of the field ``identities.participant`` and save it as a separate JSON file.
 This file will be used as identities bootstrap dump for the validator runbook.
 
+.. CF_DOCS_SPLICE_SNIPPET_092_START
 .. code-block:: bash
 
     jq '.identities.participant' backup.json > dump.json
+.. CF_DOCS_SPLICE_SNIPPET_092_END
 
 
 Once the failed SV node is offboarded by a majority of SVs (via a governance vote on a ``OffboardMember`` action), we can deploy a standalone validator node for recovering the SV's amulets.

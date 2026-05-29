@@ -43,11 +43,13 @@ In order to associate a user with the party of the validator operator, the follo
    Save it in a PARTY_ID environment variable: ``export PARTY_ID=<PartyID of the operator>``
 5. Run the following command to associate the user with the party of the validator operator:
 
+.. CF_DOCS_SPLICE_SNIPPET_133_START
 .. code-block:: bash
 
     curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
     --data-raw "{\"party_id\":\"$PARTY_ID\",\"name\":\"$USER\"}" \
     https://<URL of your wallet>/api/validator/v0/admin/users
+.. CF_DOCS_SPLICE_SNIPPET_133_END
 
 6. The user can now login to the wallet UI, and will be accessing the wallet of the validator operator.
    Note that the user should not be greeted with the "Onboard yourself" button, as the user is already
@@ -61,11 +63,13 @@ This is used to create parties with descriptive hints (e.g., treasury_dept::...)
 2. Determine the desired, full PartyID ``(Hint::Namespace)``, e.g., ``alice::f3d917....``. Use the namespace of an existing party (like the validator operator's) for the namespace part. Save the full ID in a ``PARTY_ID`` environment variable: ``export PARTY_ID=alice::f3d917...``.
 3. Run the following command to create the new party and associate the user:
 
+.. CF_DOCS_SPLICE_SNIPPET_134_START
 .. code-block:: bash
 
     curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
     --data-raw "{\"party_id\":\"$PARTY_ID\",\"name\":\"$USER\",\"createPartyIfMissing\":true}" \
     https://<URL of your wallet>/api/validator/v0/admin/users
+.. CF_DOCS_SPLICE_SNIPPET_134_END
 
 Disable wallet and wallet automation
 -----------------------------------------------

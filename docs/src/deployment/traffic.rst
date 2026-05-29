@@ -83,12 +83,15 @@ The current synchronizer traffic parameters are recorded on the global ``AmuletR
 and can be obtained from Scan. You can obtain them via the Scan UI or by querying the Scan API using,
 for example, this command (requires installing `jq <https://jqlang.org/>`_):
 
+.. CF_DOCS_SPLICE_SNIPPET_023_START
 .. parsed-literal::
 
     curl -X POST --header "Content-Type: application/json" -d "{}" |gsf_scan_url|/api/scan/v0/amulet-rules | jq ".amulet_rules_update.contract.payload.configSchedule.initialValue.decentralizedSynchronizer.fees"
+.. CF_DOCS_SPLICE_SNIPPET_023_END
 
 Above command will return a JSON object similar to the following:
 
+.. CF_DOCS_SPLICE_SNIPPET_021_START
 .. code-block:: json
 
     "fees": {
@@ -102,6 +105,7 @@ Above command will return a JSON object similar to the following:
       "readVsWriteScalingFactor": "4",
       "minTopupAmount": "200000"
     }
+.. CF_DOCS_SPLICE_SNIPPET_021_END
 
 
 This represents an encoded instance of the
@@ -124,9 +128,11 @@ To give an overview here:
   For querying the current CC price in USD as per the currently open mining round,
   you can check the Scan UI or use the following command (requires installing `jq <https://jqlang.org/>`_):
 
+  .. CF_DOCS_SPLICE_SNIPPET_022_START
   .. parsed-literal::
 
      curl -X POST --header "Content-Type: application/json" -d "{\"cached_open_mining_round_contract_ids\":[], \"cached_issuing_round_contract_ids\":[]}" |gsf_scan_url|/api/scan/v0/open-and-issuing-mining-rounds | jq ".open_mining_rounds | values[] | .contract.payload | {round, amuletPrice}"
+  .. CF_DOCS_SPLICE_SNIPPET_022_END
 
 - ``readVsWriteScalingFactor``: specifies the weight of additional traffic balance subtractions (from a sender's balance)
   for delivering a synchronizer message to each of its recipients.

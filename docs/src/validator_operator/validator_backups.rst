@@ -31,9 +31,11 @@ access to your Canton Coin holdings), so must be backed up outside of the cluste
 
 Your identites may be fetched from your node through the following endpoint:
 
+.. CF_DOCS_SPLICE_SNIPPET_098_START
 .. code-block:: bash
 
     curl "https://wallet.validator.YOUR_HOSTNAME/api/validator/v0/admin/participant/identities" -H "authorization: Bearer <token>"
+.. CF_DOCS_SPLICE_SNIPPET_098_END
 
 where `<token>` is an OAuth2 Bearer Token with enough claims to access the Validator app,
 as obtained from your OAuth provider. For context, see the Authentication section :ref:`here <app-auth>`.
@@ -62,11 +64,13 @@ If you are running a docker-compose deployment, you can run the following comman
 the Postgres databases. This will create two dump files, one for the participant and one for
 the validator app.
 
+.. CF_DOCS_SPLICE_SNIPPET_099_START
 .. code-block:: bash
 
   docker exec -i splice-validator-postgres-splice-1 pg_dump -U cnadmin validator > "${backup_dir}"/validator-"$(date -u +"%Y-%m-%dT%H:%M:%S%:z")".dump
   active_participant_db=$(docker exec splice-validator-participant-1 bash -c 'echo $CANTON_PARTICIPANT_POSTGRES_DB')
   docker exec splice-validator-postgres-splice-1 pg_dump -U cnadmin "${active_participant_db}" > "${backup_dir}"/"${active_participant_db}"-"$(date -u +"%Y-%m-%dT%H:%M:%S%:z")".dump
+.. CF_DOCS_SPLICE_SNIPPET_099_END
 
 Historical backups
 ^^^^^^^^^^^^^^^^^^

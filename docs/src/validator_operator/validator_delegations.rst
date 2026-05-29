@@ -196,6 +196,7 @@ To create the proposal, submit a ``create`` command via the Ledger API
 
 First, set up the required environment variables:
 
+.. CF_DOCS_SPLICE_SNIPPET_109_START
 .. code-block:: bash
 
    export LEDGER_API_URL="https://validator.example.com:5003"
@@ -207,9 +208,11 @@ First, set up the required environment variables:
    # This could be created by
    # export EXPIRES_AT="$(date -u -d '+1 year' '+%Y-%m-%dT%H:%M:%SZ')"
    export AMULET_MERGE_LIMIT=10
+.. CF_DOCS_SPLICE_SNIPPET_109_END
 
 Then create the proposal using curl:
 
+.. CF_DOCS_SPLICE_SNIPPET_110_START
 .. code-block:: bash
 
    curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -232,6 +235,7 @@ Then create the proposal using curl:
      ]
    }' \
    "$LEDGER_API_URL/v2/commands"
+.. CF_DOCS_SPLICE_SNIPPET_110_END
 
 See the `MintingDelegationProposal template source code
 <https://github.com/canton-network/splice/blob/main/daml/splice-wallet/daml/Splice/Wallet/MintingDelegation.daml>`_
@@ -246,6 +250,7 @@ The beneficiary can monitor their proposal status by querying for active
 
 To query for pending proposals:
 
+.. CF_DOCS_SPLICE_SNIPPET_111_START
 .. code-block:: bash
 
    curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -267,10 +272,12 @@ To query for pending proposals:
      }
    }' \
    "$LEDGER_API_URL/v2/state/active-contracts"
+.. CF_DOCS_SPLICE_SNIPPET_111_END
 
 Once accepted, query for the active ``MintingDelegation`` contract to confirm the
 delegation is active:
 
+.. CF_DOCS_SPLICE_SNIPPET_112_START
 .. code-block:: bash
 
    curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -292,6 +299,7 @@ delegation is active:
      }
    }' \
    "$LEDGER_API_URL/v2/state/active-contracts"
+.. CF_DOCS_SPLICE_SNIPPET_112_END
 
 Withdrawing a Proposal
 """"""""""""""""""""""
@@ -304,6 +312,7 @@ contract via the Ledger API's
 First, obtain the contract ID of the proposal from the active contracts query above,
 then exercise the withdrawal choice:
 
+.. CF_DOCS_SPLICE_SNIPPET_113_START
 .. code-block:: bash
 
    export PROPOSAL_CONTRACT_ID="00abcd1234..."
@@ -322,6 +331,7 @@ then exercise the withdrawal choice:
      ]
    }' \
    "$LEDGER_API_URL/v2/commands"
+.. CF_DOCS_SPLICE_SNIPPET_113_END
 
 
 Security Considerations
