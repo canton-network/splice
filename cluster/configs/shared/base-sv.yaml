@@ -2,6 +2,7 @@ logging:
   appsLogLevel: DEBUG
   appsAsync: false
   cantonLogLevel: INFO
+  cantonStdoutLogLevel: INFO
   apiRequestLogLevel: INFO
   cantonAsync: false
   cometbftLogLevel: debug
