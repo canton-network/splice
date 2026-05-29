@@ -85,7 +85,7 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("getDsoInfo" -> SpliceRateLimitConfig(
+                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig(
                     ratePerSecond = 5
                   ))
               ),
@@ -708,7 +708,7 @@ class ScanIntegrationTest
     import env.{actorSystem, executionContext}
 
     def doCall() = {
-      sv1ScanBackend.getDsoInfo()
+      sv1ScanBackend.listEntries("", 1)
     }
 
     loggerFactory.assertLoggedWarningsAndErrorsSeq(
