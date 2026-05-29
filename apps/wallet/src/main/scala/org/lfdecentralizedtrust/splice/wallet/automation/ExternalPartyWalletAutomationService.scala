@@ -3,14 +3,16 @@
 
 package org.lfdecentralizedtrust.splice.wallet.automation
 
+import com.daml.metrics.api.MetricsContext
+import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.time.Clock
+import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
-  AutomationMetrics,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
 }
-import AutomationServiceCompanion.TriggerClass
-import com.daml.metrics.api.MetricsContext
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.TriggerClass
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
@@ -18,11 +20,8 @@ import org.lfdecentralizedtrust.splice.store.{
   DomainTimeSynchronization,
   DomainUnpausedSynchronization,
 }
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
-import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.time.Clock
-import io.opentelemetry.api.trace.Tracer
-import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.ExecutionContext
 
@@ -52,12 +51,10 @@ class ExternalPartyWalletAutomationService(
       params,
     ) {
 
-  override protected val automationMetrics: AutomationMetrics =
-    new AutomationMetrics(retryProvider.metricsFactory)(
-      MetricsContext(
-        "automation_service" -> getClass.getSimpleName,
-        "party" -> store.key.externalParty.toString,
-      )
+  override protected def metricsContext: MetricsContext =
+    MetricsContext(
+      "automation_service" -> getClass.getSimpleName,
+      "party" -> store.key.externalParty.toString,
     )
 
   override def companion

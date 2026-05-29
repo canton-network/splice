@@ -44,10 +44,11 @@ abstract class AutomationService(
       Seq.empty
     )
 
-  protected val automationMetrics: AutomationMetrics =
-    new AutomationMetrics(retryProvider.metricsFactory)(
-      MetricsContext("automation_service" -> getClass.getSimpleName)
-    )
+  protected def metricsContext: MetricsContext =
+    MetricsContext("automation_service" -> getClass.getSimpleName)
+
+  protected final lazy val automationMetrics: AutomationMetrics =
+    new AutomationMetrics(retryProvider.metricsFactory)(metricsContext)
 
   /** Shared parameters for instantiating triggers. */
   protected def triggerContext: TriggerContext =
