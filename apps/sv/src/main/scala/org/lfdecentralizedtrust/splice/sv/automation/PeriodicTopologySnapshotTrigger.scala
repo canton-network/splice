@@ -58,7 +58,9 @@ class PeriodicTopologySnapshotTrigger(
           val utcDate = now.toInstant.toString.split("T").head
           val folderName = s"topology_snapshot_${now.toInstant}"
           for {
-            snapshotExists <- checkTopologySnapshot(startOffset = s"topology_snapshot_$utcDate")
+            snapshotExists <- validTopologySnapshotExists(startOffset =
+              s"topology_snapshot_$utcDate"
+            )
             res <-
               if (!snapshotExists)
                 takeTopologySnapshot(
@@ -72,11 +74,14 @@ class PeriodicTopologySnapshotTrigger(
       }
   }
 
-  private def checkTopologySnapshot(startOffset: String): Future[Boolean] =
+  private def validTopologySnapshotExists(startOffset: String): Future[Boolean] =
     for {
       res <- Future {
         blocking {
-          BackupDump.bucketExists(config.location, s"$startOffset", loggerFactory)
+          val blobs = BackupDump.getBlobs(config.location, s"$startOffset", loggerFactory)
+          Seq("onboarding-state.zst", "authorized", "metadata").forall(suffix =>
+            blobs.exists(_.getName.endsWith(suffix))
+          ) && blobs.size == 3
         }
       }
     } yield res
@@ -122,6 +127,32 @@ class PeriodicTopologySnapshotTrigger(
         sequencerAdminConnection.exportAuthorizedStoreSnapshot(sequencerId.uid),
         logger,
       )
+      authorizedStoreFileName = s"$folderName/authorized"
+      _ <- triggerContext.retryProvider.retry(
+        RetryFor.Automation,
+        "writeAuthorizedFile",
+        "Write authorized store into GCP bucket",
+        Future {
+          blocking {
+            val _ = BackupDump.writeBytes(
+              config.location,
+              Paths.get(authorizedStoreFileName),
+              authorizedStore.toByteArray,
+              loggerFactory,
+            )
+            if (
+              BackupDump.getBlobs(config.location, authorizedStoreFileName, loggerFactory).isEmpty
+            ) {
+              throw Status.NOT_FOUND
+                .withDescription(
+                  s"Verification failed: authorized does not exist in '$folderName'"
+                )
+                .asRuntimeException
+            }
+          }
+        },
+        logger,
+      )
       // list a summary of the transactions state at the time of the snapshot to validate further imports
       summary <- triggerContext.retryProvider.retry(
         RetryFor.Automation,
@@ -140,28 +171,23 @@ class PeriodicTopologySnapshotTrigger(
       metadataJson = Json
         .obj(metadataMap.map { case (k, v) => k -> Json.fromString(v) }.toSeq*)
         .spaces2
+      metadataFileName = s"$folderName/metadata"
       _ <- triggerContext.retryProvider.retry(
         RetryFor.Automation,
-        "writeTopologySnapshotFiles",
-        "Write authorized store and metadata into GCP bucket",
+        "writeMetadataFile",
+        "Write metadata into GCP bucket",
         Future {
           blocking {
-            val _ = BackupDump.writeBytes(
-              config.location,
-              Paths.get(s"$folderName/authorized"),
-              authorizedStore.toByteArray,
-              loggerFactory,
-            )
             val _ = BackupDump.write(
               config.location,
-              Paths.get(s"$folderName/metadata"),
+              Paths.get(metadataFileName),
               metadataJson,
               loggerFactory,
             )
-            if (!BackupDump.bucketExists(config.location, s"$folderName", loggerFactory)) {
+            if (BackupDump.getBlobs(config.location, metadataFileName, loggerFactory).isEmpty) {
               throw Status.NOT_FOUND
                 .withDescription(
-                  s"Verification failed: '$folderName' not found in bucket after write"
+                  s"Verification failed: metadata does not exist in '$folderName'"
                 )
                 .asRuntimeException
             }
