@@ -25,7 +25,7 @@ sequencer:
   # formerly the effect of `SEQUENCER_LOW_RESOURCES=true`
   resources:
     limits:
-      memory: 8Gi
+      memory: 10Gi
     requests:
       cpu: "4"
       memory: 4Gi

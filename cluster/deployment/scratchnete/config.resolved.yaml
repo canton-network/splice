@@ -379,7 +379,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -453,7 +453,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -527,7 +527,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -601,7 +601,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -675,7 +675,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -749,7 +749,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -823,7 +823,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -897,7 +897,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -971,7 +971,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1045,7 +1045,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1119,7 +1119,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1193,7 +1193,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1267,7 +1267,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1341,7 +1341,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1415,7 +1415,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1489,7 +1489,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
@@ -1649,7 +1649,7 @@ svs:
       appsAsync: false
       appsLogLevel: 'DEBUG'
       cantonAsync: false
-      cantonLogLevel: 'DEBUG'
+      cantonLogLevel: 'INFO'
       cometbftLogLevel: 'debug'
     mediator:
       resources:
