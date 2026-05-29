@@ -22,6 +22,7 @@ import { http, HttpResponse } from 'msw';
 import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
+import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
 import { Wrapper } from '../helpers';
 
 const voteRequest = {
@@ -320,12 +321,13 @@ describe('Proposal Details Content', () => {
   test('should render completed update sv reward weight proposal with prior weight from lookup', async () => {
     const svToUpdate = 'sv2';
 
-    let capturedSvParty: string | undefined;
+    const dsoRulesContract = JSON.parse(JSON.stringify(dsoInfo.dso_rules.contract));
+    const templateSvInfo = dsoRulesContract.payload.svs[0][1];
+    dsoRulesContract.payload.svs = [[svToUpdate, { ...templateSvInfo, svRewardWeight: '5' }]];
+
     server.use(
-      http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, async ({ request }) => {
-        const body = (await request.json()) as { sv_party: string };
-        capturedSvParty = body.sv_party;
-        return HttpResponse.json({ prior_weight: 5 });
+      http.post(`${svUrl}/v0/admin/sv/reward-weight-before`, () => {
+        return HttpResponse.json({ dso_rules: dsoRulesContract });
       })
     );
 
@@ -361,7 +363,6 @@ describe('Proposal Details Content', () => {
       expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('5');
     });
     expect(screen.getByTestId('config-change-new-value')).toHaveTextContent('10');
-    expect(capturedSvParty).toBe(svToUpdate);
   });
 
   test('should render unallocated unclaimed activity record details', () => {

@@ -1270,9 +1270,9 @@ paths:
     post:
       tags: [internal, scan]
       x-jvm-package: scan
-      operationId: "lookupSvRewardWeightBefore"
+      operationId: "lookupDsoRulesBefore"
       description: |
-        Returns the SV's reward weight as it stood immediately before the
+        Returns the DsoRules contract as it stood immediately before the
         given timestamp. Used by the SV frontend to render the "before"
         value on completed DsoRules_UpdateSvRewardWeight proposals.
       requestBody:
@@ -1280,14 +1280,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LookupSvRewardWeightBeforeRequest"
+              $ref: "#/components/schemas/LookupDsoRulesBeforeRequest"
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LookupSvRewardWeightBeforeResponse"
+                $ref: "#/components/schemas/LookupDsoRulesBeforeResponse"
 
   /v0/backfilling/migration-info:
     post:
@@ -4433,29 +4433,25 @@ components:
         amount:
           type: string
 
-    LookupSvRewardWeightBeforeRequest:
+    LookupDsoRulesBeforeRequest:
       type: object
-      required: [sv_party, before]
+      required: [before]
       properties:
-        sv_party:
-          type: string
-          description: SV party id.
         before:
           type: string
           format: date-time
           description: |
             Exclusive upper bound. Typically the effective_at of the
-            proposal whose "before" weight you want to display.
+            proposal whose "before" state you want to display.
 
-    LookupSvRewardWeightBeforeResponse:
+    LookupDsoRulesBeforeResponse:
       type: object
-      required: [prior_weight]
       properties:
-        prior_weight:
-          type: integer
-          format: int64
-          nullable: true
+        dso_rules:
           description: |
-            Null when neither a prior accepted weight-change vote nor an
-            SV onboarding event has been recorded. This should generally
-            never happen for the standard Vote History usage.
+            Contract of the Daml template `Splice.DsoRules:DsoRules` in
+            effect immediately before the given timestamp. Absent when no
+            DsoRules contract has been recorded before that time. This
+            should generally never happen for the standard Vote History
+            usage.
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"

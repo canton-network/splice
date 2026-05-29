@@ -233,20 +233,20 @@ paths:
     post:
       tags: [ sv ]
       x-jvm-package: sv_operator
-      operationId: "lookupSvRewardWeightBefore"
+      operationId: "lookupDsoRulesBefore"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "../../../../scan/src/main/openapi/scan.yaml#/components/schemas/LookupSvRewardWeightBeforeRequest"
+              $ref: "../../../../scan/src/main/openapi/scan.yaml#/components/schemas/LookupDsoRulesBeforeRequest"
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                $ref: "../../../../scan/src/main/openapi/scan.yaml#/components/schemas/LookupSvRewardWeightBeforeResponse"
+                $ref: "../../../../scan/src/main/openapi/scan.yaml#/components/schemas/LookupDsoRulesBeforeResponse"
   /v0/admin/sv/voterequests/{vote_request_contract_id}:
     get:
       tags: [ sv ]

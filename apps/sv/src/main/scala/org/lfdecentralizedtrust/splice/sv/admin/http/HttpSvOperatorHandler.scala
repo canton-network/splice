@@ -162,23 +162,20 @@ class HttpSvOperatorHandler(
     }
   }
 
-  override def lookupSvRewardWeightBefore(
-      respond: r0.LookupSvRewardWeightBeforeResponse.type
+  override def lookupDsoRulesBefore(
+      respond: r0.LookupDsoRulesBeforeResponse.type
   )(
-      body: definitions.LookupSvRewardWeightBeforeRequest
+      body: definitions.LookupDsoRulesBeforeRequest
   )(
       extracted: ActAsKnownUserRequest
-  ): Future[r0.LookupSvRewardWeightBeforeResponse] = {
+  ): Future[r0.LookupDsoRulesBeforeResponse] = {
     implicit val ActAsKnownUserRequest(traceContext) = extracted
-    withSpan(s"$workflowId.lookupSvRewardWeightBefore") { _ => _ =>
+    withSpan(s"$workflowId.lookupDsoRulesBefore") { _ => _ =>
       for {
         scanConnection <- scanConnectionF
-        priorWeight <- scanConnection.lookupSvRewardWeightBefore(
-          body.svParty,
-          body.before.toInstant,
-        )
+        dsoRules <- scanConnection.lookupDsoRulesBefore(body.before.toInstant)
       } yield respond.OK(
-        definitions.LookupSvRewardWeightBeforeResponse(priorWeight)
+        definitions.LookupDsoRulesBeforeResponse(dsoRules.map(_.toHttp))
       )
     }
   }
