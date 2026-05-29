@@ -15,6 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import ExpiredLockedAmuletTrigger.*
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
@@ -23,6 +24,7 @@ class ExpiredLockedAmuletTrigger(
     svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -45,7 +47,30 @@ class ExpiredLockedAmuletTrigger(
     with SvTaskBasedTrigger[Task] {
   private val store = svTaskContext.dsoStore
 
-  override protected def completeTaskAsDsoDelegate(
+  override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    logger.info(
+      s"Completing task ${svConfig.brokenAmuletVersions} for expired locked amulets with vetted version ${task.work.vettedVersion}, expired contracts: ${task.work.expiredContracts.map(_.contractId).mkString(", ")}"
+    )
+    if (svConfig.brokenAmuletVersions.contains(task.work.vettedVersion.toString)) {
+      val owners = task.work.expiredContracts
+        .map(c => PartyId.tryFromProtoPrimitive(c.payload.amulet.owner))
+      logger.debug(
+        s"Batch resolved to broken version ${task.work.vettedVersion}: adding ${owners.size} parties to the ignore list: $owners"
+      )
+      ignoredPartiesStore.addAll(owners)
+      Future.successful(
+        TaskSuccess(
+          s"Skipped batch with broken version ${task.work.vettedVersion}: added ${owners.size} parties to ignore list"
+        )
+      )
+    } else {
+      completeExpiryTaskAsDsoDelegate(task, controller)
+    }
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {

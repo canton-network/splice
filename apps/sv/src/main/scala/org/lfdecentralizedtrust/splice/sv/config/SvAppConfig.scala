@@ -434,6 +434,8 @@ case class SvAppBackendConfig(
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
+    //
+    brokenAmuletVersions: Set[String] = Set.empty,
 ) extends SpliceBackendConfig {
 
   def shouldSkipSynchronizerInitialization: Boolean =

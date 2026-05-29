@@ -15,6 +15,7 @@ import ExpiredAmuletTrigger.*
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
@@ -23,6 +24,7 @@ class ExpiredAmuletTrigger(
     svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -34,7 +36,7 @@ class ExpiredAmuletTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletBatchSize,
-      svTaskContext.dsoStore.listExpiredAmulets(context.config.ignoredExpiredAmuletPartyIds),
+      svTaskContext.dsoStore.listExpiredAmulets(ignoredPartiesStore.getAll),
       splice.amulet.Amulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
@@ -44,6 +46,26 @@ class ExpiredAmuletTrigger(
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    if (svConfig.brokenAmuletVersions.contains(task.work.vettedVersion.toString)) {
+      val owners = task.work.expiredContracts
+        .map(c => PartyId.tryFromProtoPrimitive(c.payload.owner))
+      logger.debug(
+        s"Batch resolved to broken version ${task.work.vettedVersion}: adding ${owners.size} parties to the ignore list: $owners"
+      )
+      ignoredPartiesStore.addAll(owners)
+      Future.successful(
+        TaskSuccess(
+          s"Skipped batch with broken version ${task.work.vettedVersion}: added ${owners.size} parties to ignore list"
+        )
+      )
+    } else {
+      completeExpiryTaskAsDsoDelegate(task, controller)
+    }
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
     val informees = task.work.expiredContracts
