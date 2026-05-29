@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { GcpProject } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/gcpConfig';
 
-import { ghaConfig, isSpliceCluster } from './config';
+import { ghaConfig } from './config';
 import { installController } from './controller';
 import { installDockerRegistryMirror } from './dockerMirror';
 import { installGithubRepo } from './github';
@@ -19,8 +19,5 @@ for (const repo of ghaConfig.githubRepos) {
 }
 
 if (ghaConfig.mainnetHistoryDumpsUser) {
-  if (!isSpliceCluster) {
-    throw new Error(`mainnetHistoryDumpsUser is only allowed on da-cn-splice, got ${GcpProject}`);
-  }
   manageMainnetHistoryDumpsUser(GcpProject, ghaConfig.mainnetHistoryDumpsUser);
 }
