@@ -5,8 +5,8 @@ import {
   DsoInfo,
   Loading,
   PartyId,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { InfiniteData, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import React, { useEffect } from 'react';
 import { useInView } from 'react-intersection-observer';

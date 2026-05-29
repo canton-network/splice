@@ -7,9 +7,9 @@ import * as assert from 'assert/strict';
 import {
   allSvsToDeployBasic,
   coreSvsToDeployBasic,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
-import { cometBFTExternalPort } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { mergeWith } from 'lodash';
 
 import {

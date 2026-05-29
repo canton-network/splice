@@ -3,7 +3,7 @@
 import {
   ConfirmationDialog,
   DisableConditionally,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';

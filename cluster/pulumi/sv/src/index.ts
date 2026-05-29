@@ -5,7 +5,7 @@ import {
   config,
   DecentralizedSynchronizerUpgradeConfig,
   getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { installNode } from './installNode';
 

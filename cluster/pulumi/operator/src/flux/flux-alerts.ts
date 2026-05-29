@@ -5,7 +5,7 @@ import {
   CLUSTER_BASENAME,
   clusterProdLike,
   config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { namespace } from '../namespace';
 import { flux } from './flux';

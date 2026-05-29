@@ -6,7 +6,7 @@ import {
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';

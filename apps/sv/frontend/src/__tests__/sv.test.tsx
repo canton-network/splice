@@ -7,7 +7,7 @@ import { mockAllIsIntersecting } from 'react-intersection-observer/test-utils';
 import {
   CreateVoteRequest,
   ListDsoRulesVoteRequestsResponse,
-} from '@lfdecentralizedtrust/sv-openapi';
+} from '@canton-network/sv-openapi';
 import { test, expect, describe } from 'vitest';
 
 import App from '../App';
@@ -19,9 +19,9 @@ import { changeAction, navigateToLegacyGovernancePage } from './helpers';
 import {
   dateTimeFormatISO,
   getUTCWithOffset,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 
 const AppWithConfig = () => {
   return (

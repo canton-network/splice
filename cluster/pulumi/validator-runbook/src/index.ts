@@ -4,7 +4,7 @@ import {
   Auth0Fetch,
   config,
   getAuth0ClusterConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { installNode } from './installNode';
 

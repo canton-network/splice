@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { Contract } from '@lfdecentralizedtrust/scan-openapi';
+import { Contract } from '@canton-network/scan-openapi';
 
 import {
   AcceptedGroupInvite,

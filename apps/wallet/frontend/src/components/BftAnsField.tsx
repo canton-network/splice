@@ -4,7 +4,7 @@ import {
   AnsFieldProps,
   BaseAnsField,
   UserInput,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import React from 'react';
 
 import useListAnsEntries from '../hooks/scan-proxy/useListAnsEntries';

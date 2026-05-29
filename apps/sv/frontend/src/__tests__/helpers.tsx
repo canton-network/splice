@@ -6,8 +6,8 @@ import {
   SvClientProvider,
   theme,
   UserProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';

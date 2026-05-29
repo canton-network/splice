@@ -4,8 +4,8 @@ import {
   Auth0ClientType,
   Auth0Fetch,
   getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { svRunbookConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { svRunbookConfig } from '@canton-network/splice-pulumi-common-sv';
 
 import { buildSvAppConfig } from './config';
 import { installNode } from './installNode';

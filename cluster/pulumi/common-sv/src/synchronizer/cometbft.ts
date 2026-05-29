@@ -21,9 +21,9 @@ import {
   standardStorageClassName,
   svCometBftKeysFromSecret,
   withAddedDependencies,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { CnChartVersion } from '@lfdecentralizedtrust/splice-pulumi-common/src/artifacts';
-import { hyperdiskSupportConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/hyperdiskSupportConfig';
+} from '@canton-network/splice-pulumi-common';
+import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
+import { hyperdiskSupportConfig } from '@canton-network/splice-pulumi-common/src/config/hyperdiskSupportConfig';
 import { jsonStringify, Output } from '@pulumi/pulumi';
 
 import { svsConfig } from '../config';

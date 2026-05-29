@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import {
   GetAmuletRulesResponse,
   GetBackfillingStatusResponse,
-} from '@lfdecentralizedtrust/scan-openapi';
+} from '@canton-network/scan-openapi';
 import { test, expect } from 'vitest';
 
 import App from '../App';

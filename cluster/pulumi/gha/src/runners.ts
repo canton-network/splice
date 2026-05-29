@@ -11,8 +11,8 @@ import {
   infraAffinityAndTolerations,
   K8sResourceSchema,
   SingleK8sResourceSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { DockerConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/dockerConfig';
+} from '@canton-network/splice-pulumi-common';
+import { DockerConfig } from '@canton-network/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { ConfigMap, Namespace, PersistentVolumeClaim, Secret } from '@pulumi/kubernetes/core/v1';
 import { Release } from '@pulumi/kubernetes/helm/v3';

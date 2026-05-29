@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
-import { extractApiErrorMessage } from '@lfdecentralizedtrust/splice-common-frontend';
+import { extractApiErrorMessage } from '@canton-network/splice-common-frontend';
 import { useWalletClient } from '../contexts/WalletServiceContext';
 import { useIsDevelopmentFundManager } from './useIsDevelopmentFundManager';
 import { useUnclaimedDevelopmentFundTotal } from './useUnclaimedDevelopmentFundTotal';

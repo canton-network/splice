@@ -8,15 +8,15 @@ import {
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
   installParticipant,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { StackReferences } from '@lfdecentralizedtrust/splice-pulumi-common/src/stackReferences';
+} from '@canton-network/splice-pulumi-common-sv';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
   const staticConfig = findStaticConfigOrFail(sv);

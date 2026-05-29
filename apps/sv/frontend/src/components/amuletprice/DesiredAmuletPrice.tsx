@@ -7,7 +7,7 @@ import {
   PartyId,
   AmuletPriceVote,
   DsoInfo,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useMutation, UseQueryResult, UseMutationResult } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import React, { useCallback, useState } from 'react';
