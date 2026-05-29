@@ -110,6 +110,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
 ) where
 
+import DA.Assert (assertDeadlineExceeded)
 import DA.Action
 import DA.Fail (failWithStatus, FailureStatus(..), FailureCategory(..))
 import DA.Foldable (forA_)
@@ -313,21 +314,35 @@ allocationV2_withdrawDefaultImplUsingV1 this self (AllocationV2.Allocation_Withd
 -- sees the expected choice.
 allocationV2_cancelDefaultImplUsingV1
   : AllocationV1.Allocation
+  -> AllocationV2.Allocation
   -> ContractId AllocationV2.Allocation
   -> AllocationV2.Allocation_Cancel
   -> Update AllocationV2.AllocationResult
-allocationV2_cancelDefaultImplUsingV1 this self (AllocationV2.Allocation_Cancel{..}) = do
-  let thisView = view this
+allocationV2_cancelDefaultImplUsingV1 v1This v2This self (AllocationV2.Allocation_Cancel{..}) = do
+  let v2View = view v2This
+  let admin = v2View.allocation.admin
+  let executors = v2View.settlement.executors
   -- no archive of self, as the V1 choice is consuming
-  checkActors actors [AllocationV1.allocationControllers thisView]
+  checkActors actors [executors, [admin]]
+  -- allow the admin to cancel the allocation iff it is expired
+  meta <-
+    if (Set.fromList actors == Set.fromList executors) then pure emptyMetadata
+    else
+      case v2View.expiresAt of
+        None -> fail "The admin cannot cancel an unexpired allocation"
+        Some expiresAt -> do
+          assertDeadlineExceeded "allocation.expiresAt" expiresAt
+          pure $ reasonToMeta "cancelled expired allocation" emptyMetadata
+
   let v1Cid = coerceInterfaceContractId self : ContractId AllocationV1.Allocation
   result <- exercise v1Cid AllocationV1.Allocation_Cancel with
     extraArgs
+  let v1View = view v1This
   pure AllocationResult with
     output = AllocationV2.AllocationResult_Cancelled
     authorizerHoldingCids = TextMap.fromList
-      [ (thisView.allocation.transferLeg.instrumentId.id, map upcast result.senderHoldingCids) ]
-    meta = emptyMetadata -- empty to avoid duplicating the metadata
+      [ (v1View.allocation.transferLeg.instrumentId.id, map upcast result.senderHoldingCids) ]
+    meta
 
 
 -- Batch settlement

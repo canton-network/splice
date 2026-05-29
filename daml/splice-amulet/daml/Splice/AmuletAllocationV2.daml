@@ -10,9 +10,10 @@ module Splice.AmuletAllocationV2 (
 ) where
 
 import DA.Action
-import DA.Assert (assertWithinDeadline)
+import DA.Assert (assertWithinDeadline, assertDeadlineExceeded)
 import DA.Foldable (forA_)
 import DA.Optional
+import DA.Set qualified as Set
 import DA.TextMap qualified as TextMap
 import DA.Time
 
@@ -55,8 +56,6 @@ template AmuletAllocationV2
       isValidSettlementInfoV2 settlement &&
       isValidAllocationSpecificationV2 (== amuletInstrumentIdName) allocation
 
-    -- TODO(#4525): add expiry choice for the DSO party and hook it up to AmuletRules, so that AmuletAllocationV2 is also auto-expired
-
     interface instance V2.Allocation for AmuletAllocationV2 where
       view = V2.AllocationView with
         originalAllocationCid = None
@@ -89,12 +88,19 @@ template AmuletAllocationV2
             meta = emptyMetadata
 
       allocation_cancelImpl self arg@(V2.Allocation_Cancel{..}) = do
-        archiveAndCheckActors self arg.actors [settlement.executors]
+        -- We allow the DSO party to cancel the allocation if it expired
+        archiveAndCheckActors self arg.actors [settlement.executors, [dso]]
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
-        pure V2.AllocationResult with
-            output = V2.AllocationResult_Cancelled
-            authorizerHoldingCids
-            meta = emptyMetadata
+        let mkResult meta = pure V2.AllocationResult with
+              output = V2.AllocationResult_Cancelled
+              authorizerHoldingCids
+              meta
+        if Set.fromList arg.actors == Set.fromList settlement.executors
+          then mkResult emptyMetadata
+          else do
+            -- check deadline if the DSO party cancels the allocation
+            assertDeadlineExceeded "expiresAt" expiresAt
+            mkResult $ reasonToMeta "cancelled expired allocation" emptyMetadata
 
       allocation_settleImpl self arg = do
         -- check actors and deadline

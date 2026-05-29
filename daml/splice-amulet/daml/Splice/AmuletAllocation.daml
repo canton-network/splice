@@ -88,7 +88,7 @@ template AmuletAllocation
       allocation_withdrawExtraObservers _arg = [allocation.settlement.executor]
 
       allocation_withdrawImpl = allocationV2_withdrawDefaultImplUsingV1 (toInterface this)
-      allocation_cancelImpl = allocationV2_cancelDefaultImplUsingV1 (toInterface this)
+      allocation_cancelImpl = allocationV2_cancelDefaultImplUsingV1 (toInterface this) (toInterface this)
       allocation_settleImpl self arg = do
         -- V2 settlement of a V1 allocation
         let leg = allocation.transferLeg
@@ -127,7 +127,7 @@ template AmuletAllocation
 
         pure AmuletAllocation_DsoExpireResult with
           senderHoldingCids
-          meta = TSU.reasonToMeta "expired as settleBefore has passed" emptyMetadata
+          meta = TSU.reasonToMeta "cancelled expired allocation" emptyMetadata
 
 
 -- Allocation usage
