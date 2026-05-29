@@ -116,6 +116,20 @@ class MultiHostValidatorOperatorIntegrationTest extends IntegrationTest with Wal
       bobValidatorBackend.startSync()
     }
 
+    // bobValidator's participant has just reconnected and its topology store may still lag behind,
+    // causing the propose_delta below to become racy; hence we wait a bit to avoid flakes
+    eventually() {
+      forEvery(multiHostedParties) { party =>
+        val aliceView = aliceParticipant.topology.party_to_participant_mappings
+          .list(synchronizerId, filterParty = party.toProtoPrimitive)
+          .map(result => result.context.serial -> result.item)
+        val bobView = bobParticipant.topology.party_to_participant_mappings
+          .list(synchronizerId, filterParty = party.toProtoPrimitive)
+          .map(result => result.context.serial -> result.item)
+        bobView shouldBe aliceView withClue s"bob caught up to alice's view of $party"
+      }
+    }
+
     actAndCheck(
       "Clear the onboarding flags", {
         multiHostedParties.map(party =>
