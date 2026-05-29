@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { SingleResourceSchema } from '@lfdecentralizedtrust/splice-pulumi-common';
 import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig';
+import { GcpProject } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/gcpConfig';
 import util from 'node:util';
 import { z } from 'zod';
 
@@ -28,6 +30,14 @@ const GhaConfigSchema = z.object({
         })
       )
       .default([]),
+    mainnetHistoryDumpsUser: z
+      .object({
+        wifProjectNumber: z.string(),
+        wifPoolId: z.string(),
+        // GitHub repos (full "org/name") allowed to impersonate the SA via WIF.
+        githubRepositories: z.array(z.string()).min(1),
+      })
+      .optional(),
   }),
 });
 
@@ -45,3 +55,6 @@ console.error(
 );
 
 export const ghaConfig = fullConfig.gha;
+
+export const isSpliceCluster =
+  GcpProject === 'da-cn-splice' || spliceEnvConfig.optionalEnv('GCP_CLUSTER_BASENAME') === 'splice';
