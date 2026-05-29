@@ -127,7 +127,7 @@ template AmuletAllocation
 
         pure AmuletAllocation_DsoExpireResult with
           senderHoldingCids
-          meta = TSU.reasonToMeta "expired as settleBefore has passed" emptyMetadata
+          meta = TSU.reasonToMeta "cancelled expired allocation" emptyMetadata
 
 
 -- Allocation usage

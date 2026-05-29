@@ -100,7 +100,7 @@ template AmuletAllocationV2
           else do
             -- check deadline if the DSO party cancels the allocation
             assertDeadlineExceeded "expiresAt" expiresAt
-            mkResult $ reasonToMeta "cancel expired allocation" emptyMetadata
+            mkResult $ reasonToMeta "cancelled expired allocation" emptyMetadata
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
