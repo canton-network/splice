@@ -5,6 +5,7 @@ window.splice_config = {
     authority: "${SPLICE_APP_UI_AUTH_URL}",
     client_id: "${SPLICE_APP_UI_AUTH_CLIENT_ID}",
     token_audience: "${SPLICE_APP_UI_AUTH_AUDIENCE}",
+    enable_offline_scope: ${SPLICE_APP_UI_AUTH_ENABLE_OFFLINE_SCOPE},
   },
   services: {
     sv: {
