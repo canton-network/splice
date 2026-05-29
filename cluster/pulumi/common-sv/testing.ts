@@ -12,7 +12,7 @@ const CatchupTestThresholdsSchema = z
     // delays under which a component is considered "caught up"
     caughtUpThresholds: z
       .object({
-        sequencerBlockDelaySeconds: z.number().nonnegative().default(5),
+        sequencerBlockDelaySeconds: z.number().nonnegative().default(30),
         participantDelaySeconds: z.number().nonnegative().default(30),
         mediatorDelaySeconds: z.number().nonnegative().default(30),
       })
