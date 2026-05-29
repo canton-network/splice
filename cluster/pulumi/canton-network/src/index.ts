@@ -4,7 +4,7 @@ import {
   Auth0ClientType,
   getAuth0Config,
   Auth0Fetch,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { installClusterVersion } from './clusterVersion';
 import { installCluster } from './installCluster';

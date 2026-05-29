@@ -3,7 +3,7 @@
 import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { EnvVarConfig, SingleSvConfiguration } from './singleSvConfig';
 

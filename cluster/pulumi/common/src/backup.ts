@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as fs from 'fs/promises';
 import { Bucket, File, Storage } from '@google-cloud/storage';
-import { CnInput, ExactNamespace, config } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { CnInput, ExactNamespace, config } from '@canton-network/splice-pulumi-common';
 import { exit } from 'process';
 
 import { bootstrapBucket, GcpBucket } from './buckets';

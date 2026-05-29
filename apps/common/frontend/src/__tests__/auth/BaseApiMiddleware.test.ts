@@ -3,7 +3,7 @@
 import {
   BaseApiMiddleware,
   onAuthExpired,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 interface FakeRequestContext {

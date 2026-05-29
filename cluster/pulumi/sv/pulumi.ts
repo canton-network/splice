@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
-import { DecentralizedSynchronizerUpgradeConfig } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { DecentralizedSynchronizerUpgradeConfig } from '@canton-network/splice-pulumi-common';
 
 import { allSvNamesToDeploy } from '../common-sv/src/dsoConfig';
 import { DeploySvRunbook, isDevNet } from '../common/src/config';

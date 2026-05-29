@@ -10,18 +10,18 @@ import {
   installLedgerApiUserSecret,
   SpliceCustomResourceOptions,
   withAddedDependencies,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   InstalledMigrationSpecificSv,
   installParticipant,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { installPostgres, Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import {
   InStackCantonBftDecentralizedSynchronizerNode,
   InStackCometBftDecentralizedSynchronizerNode,
-} from '@lfdecentralizedtrust/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
+} from '@canton-network/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
 
 import { spliceConfig } from '../../common/src/config/config';
 

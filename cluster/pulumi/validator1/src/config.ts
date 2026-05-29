@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { ValidatorNodeConfigSchema } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { ValidatorNodeConfigSchema } from '@canton-network/splice-pulumi-common-validator';
+import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
 const Validator1ConfigSchema = z

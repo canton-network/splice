@@ -1,5 +1,5 @@
 {
-    "name": "@lfdecentralizedtrust/canton-network-pulumi-deployment",
+    "name": "@canton-network/canton-network-pulumi-deployment",
     "version": "1.0.0",
     "main": "src/index.ts",
     "devDependencies": {

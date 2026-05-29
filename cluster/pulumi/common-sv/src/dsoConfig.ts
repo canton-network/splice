@@ -4,7 +4,7 @@ import {
   config,
   isDevNet,
   DeploySvRunbook,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/config';
+} from '@canton-network/splice-pulumi-common/src/config';
 
 import { configuredExtraSvs } from './singleSvConfig';
 

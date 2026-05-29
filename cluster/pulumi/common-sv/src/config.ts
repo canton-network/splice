@@ -13,9 +13,9 @@ import {
   ValidatorTopupConfig,
   RateLimitSchema,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
 import { BulkStorageBucket } from './bulkStorage';

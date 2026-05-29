@@ -3,7 +3,7 @@
 import { AmuletRules } from '@daml.js/splice-amulet/lib/Splice/AmuletRules/module';
 
 import damlTypes from '@daml/types';
-import { GetAmuletRulesResponse } from '@lfdecentralizedtrust/scan-openapi';
+import { GetAmuletRulesResponse } from '@canton-network/scan-openapi';
 
 export function getAmuletRulesResponse(zeroTransferFees: boolean): GetAmuletRulesResponse {
   return {

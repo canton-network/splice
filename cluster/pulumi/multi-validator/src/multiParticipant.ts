@@ -5,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   generatePortSequence,
   numNodesPerInstance,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { multiValidatorConfig } from './config';
 import { BaseMultiNodeArgs, MultiNodeDeployment } from './multiNodeDeployment';
