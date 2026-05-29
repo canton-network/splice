@@ -14,6 +14,7 @@ import { merge } from 'lodash';
 import util from 'node:util';
 import { z } from 'zod';
 
+import { CatchupTestSchema } from '../testing';
 import { TopologySnapshotSchema } from './config';
 
 const SvCometbftConfigSchema = z
@@ -186,6 +187,7 @@ const SingleSvConfigSchema = z
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
+    testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })
   .strict();

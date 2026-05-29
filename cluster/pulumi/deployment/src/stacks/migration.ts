@@ -7,6 +7,7 @@ import {
   DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
 } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { configForSv } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
@@ -77,11 +78,14 @@ function createStackForMigration(
   namespace: string,
   gcpSecret: k8s.core.v1.Secret
 ) {
+  const supportsReset =
+    (sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET')) ||
+    (configForSv(sv)?.testing?.catchup?.enabled ?? false);
   createStackCR(
     `sv-canton.${sv}-migration-${migrationId}`,
     'sv-canton',
     namespace,
-    sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET'),
+    supportsReset,
     reference,
     envRefs,
     gcpSecret,

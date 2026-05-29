@@ -1,7 +1,7 @@
 !include(base-sv.yaml)
 pruning:
   cometbft:
-    retainBlocks: 2000 # corresponds to a retention period of ~2 hours
+    retainBlocks: 20000 # corresponds to a retention period of ~20 hours
 svApp:
   resources:
     limits:
