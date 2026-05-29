@@ -674,6 +674,103 @@ abstract class ScanStoreTest
       }
     }
 
+    "lookupDsoRulesBefore" should {
+
+      def ingestDsoRulesWithSvWeight(
+          updateHistory: UpdateHistory,
+          sv: PartyId,
+          weight: Long,
+          recordTime: CantonTimestamp,
+      ): Future[?] =
+        dummyDomain.create(
+          dsoRules(
+            dsoParty,
+            svs = Collections.singletonMap(
+              sv.toProtoPrimitive,
+              new dsorulesCodegen.SvInfo("sv-name", new Round(0L), weight, "participantId"),
+            ),
+          ),
+          recordTime = recordTime.toInstant,
+        )(updateHistory)
+
+      def svWeightBefore(
+          store: ScanStore,
+          sv: PartyId,
+          before: CantonTimestamp,
+          updateHistory: UpdateHistory,
+      ): Future[Option[Long]] =
+        store
+          .lookupDsoRulesBefore(before.toInstant, updateHistory)
+          .map(
+            _.flatMap(dsoRules =>
+              Option(dsoRules.payload.svs.get(sv.toProtoPrimitive)).map(_.svRewardWeight.toLong)
+            )
+          )
+
+      "returns None when no DsoRules exists before the given time" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe None
+      }
+
+      "returns the onboarding weight when no weight change happened" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe Some(5L)
+      }
+
+      "returns the weight from the most recent DsoRules before the given time" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 10L, recordTime = time(75))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 15L, recordTime = time(125))
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe Some(10L)
+      }
+
+      "returns the latest by record time even when ingested out of record-time order" in {
+        val sv = providerParty(7)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 10L, recordTime = time(75))
+          _ <- ingestDsoRulesWithSvWeight(updateHistory, sv, weight = 5L, recordTime = time(50))
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe Some(10L)
+      }
+
+      "returns None for an SV absent from the DsoRules svs map" in {
+        val sv = providerParty(7)
+        val otherSv = providerParty(8)
+        for {
+          store <- mkStore()
+          updateHistory <- mkUpdateHistory(domainMigrationId)
+          _ <- updateHistory.ingestionSink.initialize()
+          _ <- ingestDsoRulesWithSvWeight(
+            updateHistory,
+            otherSv,
+            weight = 5L,
+            recordTime = time(50),
+          )
+          result <- svWeightBefore(store, sv, time(100), updateHistory)
+        } yield result shouldBe None
+      }
+    }
+
     "lookupLatestTransferCommandEvent" should {
       def createTransferCommand(
           store: ScanStore,

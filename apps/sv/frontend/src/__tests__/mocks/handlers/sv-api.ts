@@ -65,6 +65,10 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
     return HttpResponse.json<ListVoteRequestByTrackingCidResponse>(voteRequest);
   }),
 
+  http.post(`${svUrl}/v0/admin/dso-rules-before`, () => {
+    return HttpResponse.json({});
+  }),
+
   http.post<PathParams, ListVoteResultsRequest>(
     `${svUrl}/v0/admin/sv/voteresults`,
     ({ request }) => {

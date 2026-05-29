@@ -81,3 +81,7 @@
     To recover the prior behavior you can enable ``canton.validator-apps.validator_backend.transfer-preapproval.accept-non-hosted-preapproval-proposals = true``.
 
     Thanks to `Rhaydden <https://github.com/Rhaydden>`_ for reporting.
+
+- SV UI
+
+   - Fixed "Set SV Weight" base weight display in Vote History

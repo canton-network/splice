@@ -22,6 +22,7 @@ import { http, HttpResponse } from 'msw';
 import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
+import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
 import { Wrapper } from '../helpers';
 
 const voteRequest = {
@@ -315,6 +316,53 @@ describe('Proposal Details Content', () => {
     expect(screen.getByTestId('config-change-field-label').textContent).toBe('Weight');
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('999');
     expect(screen.getByTestId('config-change-new-value').textContent).toBe('1000');
+  });
+
+  test('should render completed update sv reward weight proposal with prior weight from lookup', async () => {
+    const svToUpdate = 'sv2';
+
+    const dsoRulesContract = JSON.parse(JSON.stringify(dsoInfo.dso_rules.contract));
+    const templateSvInfo = dsoRulesContract.payload.svs[0][1];
+    dsoRulesContract.payload.svs = [[svToUpdate, { ...templateSvInfo, svRewardWeight: '5' }]];
+
+    server.use(
+      http.post(`${svUrl}/v0/admin/dso-rules-before`, () => {
+        return HttpResponse.json({ dso_rules: dsoRulesContract });
+      })
+    );
+
+    const completedUpdateSvRewardWeightDetails = {
+      actionName: 'Update SV Reward Weight',
+      action: 'SRARC_UpdateSvRewardWeight',
+      createdAt: '2024-02-02T13:00:00.000Z',
+      isVoteRequest: false,
+      proposal: {
+        svToUpdate,
+        currentWeight: '10',
+        weightChange: '10',
+      } as UpdateSvRewardWeightProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteResult.votingInformation.requester}
+          contractId={voteResult.contractId}
+          proposalDetails={completedUpdateSvRewardWeightDetails}
+          votingInformation={voteResult.votingInformation}
+          votes={voteResult.votes}
+        />
+      </Wrapper>
+    );
+
+    expect(
+      await screen.findByTestId('proposal-details-update-sv-reward-weight-section')
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId('config-change-field-label')).toHaveTextContent('Weight');
+    await waitFor(() => {
+      expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('5');
+    });
+    expect(screen.getByTestId('config-change-new-value')).toHaveTextContent('10');
   });
 
   test('should render unallocated unclaimed activity record details', () => {

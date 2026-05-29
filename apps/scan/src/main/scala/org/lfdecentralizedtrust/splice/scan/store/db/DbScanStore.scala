@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -848,6 +849,43 @@ class DbScanStore(
     } yield ResultsPage(recentVoteResults, afterToken)
   }
 
+  override def lookupDsoRulesBefore(
+      before: Instant,
+      updateHistory: UpdateHistory,
+  )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
+    lookupContractByRecordTimeBefore(
+      DsoRules.COMPANION,
+      updateHistory,
+      CantonTimestamp.assertFromInstant(before),
+    )
+
+  private def lookupContractByRecordTimeBefore[C, TCId <: ContractId[?], T](
+      companion: C,
+      updateHistory: UpdateHistory,
+      before: CantonTimestamp,
+  )(implicit
+      companionClass: ContractCompanion[C, TCId, T],
+      tc: TraceContext,
+  ): Future[Option[Contract[TCId, T]]] = {
+    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
+      companionClass.packageQualifiedName(companion)
+    for {
+      row <- storage
+        .querySingle(
+          selectFromUpdateCreatesTableResult(
+            updateHistory.historyId,
+            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
+              and template_id_entity_name = ${lengthLimited(entityName)}
+              and package_name = ${lengthLimited(packageName)}
+              and record_time < $before""",
+            orderLimit = sql"""order by record_time desc, row_id desc limit 1""",
+          ).headOption,
+          s"lookupBefore[$pqn]",
+        )
+        .value
+    } yield row.map(contractFromEvent(companion)(_))
+  }
+
   override def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId],
       limit: Limit,
@@ -941,8 +979,7 @@ class DbScanStore(
               and template_id_entity_name = ${lengthLimited(entityName)}
               and package_name = ${lengthLimited(packageName)}
               and record_time > $recordTime""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id asc limit 1""",
+            orderLimit = sql"""order by record_time asc, row_id asc limit 1""",
           ).headOption,
           s"lookup[$pqn]",
         )

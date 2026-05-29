@@ -2317,6 +2317,22 @@ class HttpScanHandler(
     }
   }
 
+  override def lookupDsoRulesBefore(
+      respond: ScanResource.LookupDsoRulesBeforeResponse.type
+  )(
+      body: definitions.LookupDsoRulesBeforeRequest
+  )(extracted: TraceContext): Future[ScanResource.LookupDsoRulesBeforeResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.lookupDsoRulesBefore") { _ => _ =>
+      val before = body.before.toInstant
+      for {
+        dsoRules <- store.lookupDsoRulesBefore(before, updateHistory)
+      } yield ScanResource.LookupDsoRulesBeforeResponse.OK(
+        definitions.LookupDsoRulesBeforeResponse(dsoRules.map(_.toHttp))
+      )
+    }
+  }
+
   override def listVoteRequestsByTrackingCid(
       respond: ScanResource.ListVoteRequestsByTrackingCidResponse.type
   )(body: BatchListVotesByVoteRequestsRequest)(

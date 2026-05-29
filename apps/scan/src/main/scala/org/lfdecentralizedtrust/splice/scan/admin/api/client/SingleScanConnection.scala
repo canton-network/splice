@@ -639,6 +639,17 @@ class SingleScanConnection private[client] (
     ),
   )
 
+  override def lookupDsoRulesBefore(
+      before: Instant
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.LookupDsoRulesBefore(before),
+    )
+
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,

@@ -12,11 +12,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
   SRARC_OffboardSv,
   SRARC_SetConfig,
+  SRARC_UpdateSvRewardWeight,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
+  DsoRules_OffboardSv,
   DsoRules_SetConfig,
+  DsoRules_UpdateSvRewardWeight,
   VoteRequest,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -51,6 +53,12 @@ class SvFrontendIntegrationTest
       )
 
   def testId(id: String) = cssSelector(s"[data-testid='$id']")
+
+  private def formatBasisPoints(weight: Long): String = {
+    val s = weight.toString
+    val padded = "0" * math.max(0, 5 - s.length) + s
+    s"${padded.dropRight(4)}_${padded.takeRight(4)}"
+  }
 
   "SV UIs" should {
     "have basic login functionality" in { implicit env =>
@@ -564,6 +572,50 @@ class SvFrontendIntegrationTest
       }
 
       proposalContractId
+    }
+
+    def runUpdateSvRewardWeightVote(
+        sv: PartyId,
+        targetWeight: Long,
+        reason: String,
+    )(implicit env: SpliceTestConsoleEnvironment): VoteRequest.ContractId = {
+      val action: ActionRequiringConfirmation = new ARC_DsoRules(
+        new SRARC_UpdateSvRewardWeight(
+          new DsoRules_UpdateSvRewardWeight(
+            sv.toProtoPrimitive,
+            java.lang.Long.valueOf(targetWeight),
+          )
+        )
+      )
+      val (_, voteRequest) = actAndCheck(
+        s"sv1 creates UpdateSvRewardWeight proposal '$reason'",
+        sv1Backend.createVoteRequest(
+          sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+          action,
+          "https://example.com",
+          reason,
+          sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+          None,
+        ),
+      )(
+        "the vote request appears in listVoteRequests",
+        _ => sv1Backend.listVoteRequests().filter(_.payload.reason.body == reason).loneElement,
+      )
+      val tracking = getTrackingId(voteRequest)
+      Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(
+        _.castVote(tracking, true, "https://example.com", s"accept $reason")
+      )
+      eventually() {
+        sv1Backend
+          .getDsoInfo()
+          .dsoRules
+          .payload
+          .svs
+          .get(sv.toProtoPrimitive)
+          .svRewardWeight
+          .longValue shouldBe targetWeight
+      }
+      tracking
     }
 
     def testCreateAndVoteDsoRulesAction(action: String, effectiveAtThreshold: Boolean = true)(
@@ -1516,6 +1568,46 @@ class SvFrontendIntegrationTest
         implicit webDriver =>
           selectMuiOptionByValue("update-sv-reward-weight-member-dropdown", sv3PartyId)
           fillOutTextField("update-sv-reward-weight-weight", newWeight)
+      }
+    }
+
+    "NEW UI: Update SV Reward Weight proposal shows prior weight" in { implicit env =>
+      val sv4PartyId = sv4Backend.getDsoInfo().svParty
+      val priorWeightAtStart = sv1Backend
+        .getDsoInfo()
+        .dsoRules
+        .payload
+        .svs
+        .get(sv4PartyId.toProtoPrimitive)
+        .svRewardWeight
+        .longValue
+      val setupWeight = priorWeightAtStart + 1000L
+      val testTargetWeight = setupWeight + 7777L
+
+      runUpdateSvRewardWeightVote(sv4PartyId, setupWeight, "setup-prior-weight")
+      val testTrackingCid =
+        runUpdateSvRewardWeightVote(sv4PartyId, testTargetWeight, "test-prior-weight")
+
+      withFrontEnd("sv1") { implicit webDriver =>
+        actAndCheck(
+          "sv1 navigates to the completed proposal details page", {
+            go to s"http://localhost:$sv1UIPort/governance/proposals/${testTrackingCid.contractId}"
+            loginOnCurrentPage(sv1UIPort, sv1Backend.config.ledgerApiUser)
+          },
+        )(
+          "the diff shows setupWeight as before-value, not testTargetWeight",
+          _ => {
+            find(
+              testId("proposal-details-update-sv-reward-weight-section")
+            ) should not be empty
+            inside(find(testId("config-change-current-value"))) { case Some(element) =>
+              element.text shouldBe formatBasisPoints(setupWeight)
+            }
+            inside(find(testId("config-change-new-value"))) { case Some(element) =>
+              element.text shouldBe formatBasisPoints(testTargetWeight)
+            }
+          },
+        )
       }
     }
 

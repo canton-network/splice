@@ -1266,6 +1266,29 @@ paths:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ListDsoRulesVoteResultsResponse"
 
+  /v0/admin/dso-rules-before:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "lookupDsoRulesBefore"
+      description: |
+        Returns the DsoRules contract as it stood immediately before the
+        given timestamp. Used by the SV frontend to render the "before"
+        value on completed DsoRules_UpdateSvRewardWeight proposals.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupDsoRulesBeforeRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupDsoRulesBeforeResponse"
+
   /v0/backfilling/migration-info:
     post:
       tags: [internal, scan]
@@ -4679,3 +4702,26 @@ components:
           type: string
         amount:
           type: string
+
+    LookupDsoRulesBeforeRequest:
+      type: object
+      required: [before]
+      properties:
+        before:
+          type: string
+          format: date-time
+          description: |
+            Exclusive upper bound. Typically the effective_at of the
+            proposal whose "before" state you want to display.
+
+    LookupDsoRulesBeforeResponse:
+      type: object
+      properties:
+        dso_rules:
+          description: |
+            Contract of the Daml template `Splice.DsoRules:DsoRules` in
+            effect immediately before the given timestamp. Absent when no
+            DsoRules contract has been recorded before that time. This
+            should generally never happen for the standard Vote History
+            usage.
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"

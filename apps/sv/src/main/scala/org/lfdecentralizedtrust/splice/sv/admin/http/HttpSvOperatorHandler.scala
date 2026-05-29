@@ -162,6 +162,24 @@ class HttpSvOperatorHandler(
     }
   }
 
+  override def lookupDsoRulesBefore(
+      respond: r0.LookupDsoRulesBeforeResponse.type
+  )(
+      body: definitions.LookupDsoRulesBeforeRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.LookupDsoRulesBeforeResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.lookupDsoRulesBefore") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        dsoRules <- scanConnection.lookupDsoRulesBefore(body.before.toInstant)
+      } yield respond.OK(
+        definitions.LookupDsoRulesBeforeResponse(dsoRules.map(_.toHttp))
+      )
+    }
+  }
+
   override def listValidatorLicenses(
       respond: r0.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(

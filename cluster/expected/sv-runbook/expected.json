@@ -865,6 +865,10 @@
           "name": "activities",
           "type": "unlimited"
         },
+        "/api/scan/v0/admin/dso-rules-before": {
+          "name": "dso-rules-before",
+          "type": "unlimited"
+        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"

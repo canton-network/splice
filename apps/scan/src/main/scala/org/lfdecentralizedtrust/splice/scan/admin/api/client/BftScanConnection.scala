@@ -111,6 +111,7 @@ import org.lfdecentralizedtrust.tokenstandard.{
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
 import org.slf4j.event.Level
 
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
@@ -803,6 +804,16 @@ class BftScanConnection(
         SyncCloseable("scan_list", scanList.close())
       )
   }
+
+  override def lookupDsoRulesBefore(
+      before: Instant
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] = bftCall(
+    _.lookupDsoRulesBefore(before),
+    "lookupDsoRulesBefore",
+  )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,

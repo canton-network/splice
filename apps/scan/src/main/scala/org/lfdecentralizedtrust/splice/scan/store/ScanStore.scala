@@ -276,6 +276,13 @@ trait ScanStore
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
+
+  def lookupDsoRulesBefore(
+      before: Instant,
+      updateHistory: UpdateHistory,
+  )(implicit
+      tc: TraceContext
+  ): Future[Option[Contract[splice.dsorules.DsoRules.ContractId, splice.dsorules.DsoRules]]]
 }
 
 object ScanStore {
