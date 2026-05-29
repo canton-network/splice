@@ -50,6 +50,11 @@ export interface ConfigChange {
   currentValue: string;
   newValue: string;
   /**
+   * If the current value is still being fetched, render a loading indicator
+   * instead of `currentValue`.
+   */
+  currentValueLoading?: boolean;
+  /**
    * If the field is an id, e.g a party id.
    */
   isId?: boolean;

@@ -665,7 +665,7 @@ const UpdateSvRewardWeightSection = ({
   weightChange,
   before,
 }: UpdateSvRewardWeightSectionProps) => {
-  const { data: dsoRules } = useDsoRulesBefore(before);
+  const { data: dsoRules, isLoading } = useDsoRulesBefore(before);
 
   const priorWeight = dsoRules?.payload.svs.get(svToUpdate)?.svRewardWeight;
   const beforeValue = priorWeight != null ? formatBasisPoints(priorWeight) : currentWeight;
@@ -698,6 +698,7 @@ const UpdateSvRewardWeightSection = ({
                 label: 'Weight',
                 fieldName: 'svRewardWeight',
                 currentValue: beforeValue,
+                currentValueLoading: isLoading,
                 newValue: weightChange,
               },
             ]}
