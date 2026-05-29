@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Box, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import { ConfigChange } from '../../utils/types';
 import { PartyId } from '@lfdecentralizedtrust/splice-common-frontend';
 
@@ -54,7 +54,13 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
               }}
               data-testid="config-change-current-value-container"
             >
-              {change.isId ? (
+              {change.currentValueLoading ? (
+                <CircularProgress
+                  size={16}
+                  data-testid="config-change-current-value-loading"
+                  aria-label="Loading current value"
+                />
+              ) : change.isId ? (
                 <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
               ) : (
                 <Typography
