@@ -1,24 +1,42 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import { Container, Stack, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import {
+  Box,
+  Container,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+} from '@mui/material';
 import Typography from '@mui/material/Typography';
 import BftAnsEntry from './BftAnsEntry';
 import { AllocationSpecification } from '@daml.js/splice-api-token-allocation-v2/lib/Splice/Api/Token/AllocationV2/module';
-import MetaDisplay from './MetaDisplay';
 import BigNumber from 'bignumber.js';
 import { DateWithDurationDisplay } from '@lfdecentralizedtrust/splice-common-frontend';
+import { TextMapDisplay } from './TextMap';
 
 const AllocationSpecificationDisplay: React.FC<{
   parentId: string;
   spec: AllocationSpecification;
   getActionButton: () => React.ReactNode | null;
 }> = ({ spec, parentId, getActionButton }) => {
-  // TODO (#5498): show the iterated settlement data
-  const { authorizer, settlementDeadline, transferLegSides } = spec;
+  const {
+    authorizer,
+    committed,
+    meta,
+    nextIterationFunding,
+    settlementDeadline,
+    transferLegSides,
+  } = spec;
   const sortedLegs = [...transferLegSides].sort((a, b) =>
     a.transferLegId.localeCompare(b.transferLegId)
   );
+  const hasAllocationMeta = Object.keys(meta.values).length > 0;
+  const hasNextIterationFunding =
+    !!nextIterationFunding && Object.keys(nextIterationFunding).length > 0;
   return (
     <Container>
       <Typography variant="body2">Allocation with Authorizer</Typography>
@@ -31,6 +49,23 @@ const AllocationSpecificationDisplay: React.FC<{
           (Settlement deadline:{' '}
           <DateWithDurationDisplay datetime={settlementDeadline} enableDuration />)
         </Typography>
+      ) : null}
+      <Typography variant="body2" className="allocation-committed">
+        Committed: {committed ? 'yes' : 'no'}
+      </Typography>
+      {hasNextIterationFunding ? (
+        <>
+          <Typography variant="body2">Next iteration funding</Typography>
+          <Box className="allocation-next-iteration-funding">
+            <TextMapDisplay textMap={nextIterationFunding} />
+          </Box>
+        </>
+      ) : null}
+      {hasAllocationMeta ? (
+        <>
+          <Typography variant="body2">Allocation Meta</Typography>
+          <TextMapDisplay textMap={meta.values} />
+        </>
       ) : null}
       <Table>
         <TableHead>
@@ -95,7 +130,7 @@ const AllocationSpecificationDisplay: React.FC<{
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <MetaDisplay meta={meta.values} />
+                  <TextMapDisplay textMap={meta.values} />
                 </TableCell>
               </TableRow>
             );

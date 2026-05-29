@@ -13,7 +13,9 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Divider,
+  FormControlLabel,
   Stack,
   TextField,
   Typography,
@@ -28,6 +30,7 @@ import {
   isValidDamlTimestamp,
 } from '../utils/timestampConversion';
 import { usePrimaryParty } from '../hooks';
+import { TextMap, TextMapEditor } from './TextMap';
 
 const CreateAllocation: React.FC = () => {
   const { createAllocationV2 } = useWalletClient();
@@ -251,6 +254,46 @@ const CreateAllocation: React.FC = () => {
               Add Transfer Leg
             </Button>
 
+            <Divider />
+            <Typography variant="h5">Iterated Settlement Options</Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="create-allocation-committed"
+                  checked={allocation.committed}
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      committed: event.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Committed"
+            />
+            <Typography variant="body2">Metadata</Typography>
+            <TextMapEditor
+              meta={allocation.meta}
+              setTextMap={meta =>
+                setAllocation({
+                  ...allocation,
+                  meta,
+                })
+              }
+              idPrefix="create-allocation"
+            />
+            <Typography variant="body2">Next iteration funding (optional)</Typography>
+            <TextMapEditor
+              meta={allocation.next_iteration_funding}
+              setTextMap={next_iteration_funding =>
+                setAllocation({
+                  ...allocation,
+                  next_iteration_funding,
+                })
+              }
+              idPrefix="create-allocation-next-iteration-funding"
+            />
+
             <DisableConditionally
               conditions={[
                 {
@@ -296,6 +339,9 @@ interface PartialAllocateAmuletV2Request {
     settlement_deadline?: string;
   };
   transfer_legs: PartialTransferLeg[];
+  committed: boolean;
+  meta: TextMap;
+  next_iteration_funding: TextMap;
 }
 
 function emptyTransferLeg(): PartialTransferLeg {
@@ -309,7 +355,10 @@ function emptyForm(): PartialAllocateAmuletV2Request {
       settlement_deadline: undefined,
       settlement_ref: { id: '', cid: undefined },
     },
-    transfer_legs: [emptyTransferLeg()],
+    transfer_legs: [],
+    committed: false,
+    meta: {},
+    next_iteration_funding: {},
   };
 }
 
@@ -348,7 +397,9 @@ function validatedForm(
       amount: leg.amount,
     });
   }
-  if (validLegSides.length === 0) return null;
+  // You must specify either transfger legs, or the next iteration funding
+  if (validLegSides.length === 0 && Object.keys(partial.next_iteration_funding).length === 0)
+    return null;
   return {
     settlement: {
       executors: partial.settlement.executors,
@@ -361,9 +412,11 @@ function validatedForm(
       },
     },
     transfer_leg_sides: validLegSides,
-    // TODO (#5498): make the FE specify these
-    committed: false,
-    meta: {},
-    next_iteration_funding: undefined,
+    committed: partial.committed,
+    meta: partial.meta,
+    next_iteration_funding:
+      Object.keys(partial.next_iteration_funding).length > 0
+        ? partial.next_iteration_funding
+        : undefined,
   };
 }

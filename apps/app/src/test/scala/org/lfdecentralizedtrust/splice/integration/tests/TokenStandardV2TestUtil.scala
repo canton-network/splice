@@ -26,6 +26,9 @@ trait TokenStandardV2TestUtil extends TestCommon {
   protected val tokenStandardV2TestDarPath =
     "token-standard/examples/splice-token-test-trading-app-v2/.daml/dist/splice-token-test-trading-app-v2-current.dar"
 
+  val emptyMetadata = new metadatav1.Metadata(java.util.Map.of())
+  val emptyChoiceContext = new metadatav1.ChoiceContext(java.util.Map.of())
+
   def basicAccount(party: PartyId): holdingv2.Account =
     new holdingv2.Account(
       java.util.Optional.of(party.toProtoPrimitive),

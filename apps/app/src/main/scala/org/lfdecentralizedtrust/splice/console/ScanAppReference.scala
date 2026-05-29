@@ -54,6 +54,7 @@ import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, Synchro
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
+  allocationinstructionv2,
   allocationv1,
   allocationv2,
   transferinstructionv1,
@@ -794,6 +795,17 @@ abstract class ScanAppReference(
   ] = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationFactory(choiceArgs))
+    }
+  }
+
+  def getAllocationFactoryV2(
+      choiceArgs: allocationinstructionv2.AllocationFactory_Allocate
+  ): FactoryChoiceWithDisclosures[
+    allocationinstructionv2.AllocationFactory.ContractId,
+    allocationinstructionv2.AllocationFactory_Allocate,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationFactoryV2(choiceArgs))
     }
   }
 

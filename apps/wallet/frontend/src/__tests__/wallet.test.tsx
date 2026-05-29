@@ -417,8 +417,8 @@ describe('Wallet user can', () => {
           .filter(side => side.transferLegId === 'acceptable');
         const expected = openApiV2RequestFromAllocationRequest(
           allocationRequest.settlement,
-          acceptableSides,
-          allocationRequest.allocations[0].settlementDeadline
+          allocationRequest.allocations[0],
+          acceptableSides
         );
         expect(calledWithBody).toStrictEqual(expected);
       });
