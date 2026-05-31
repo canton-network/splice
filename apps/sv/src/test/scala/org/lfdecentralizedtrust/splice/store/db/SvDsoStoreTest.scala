@@ -228,12 +228,17 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- MonadUtil.sequentialTraverse(Seq(sv1Permission1, sv1Permission2, sv2Permission1))(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listSponsoredValidatorPermissions(sv1)
-        } yield {
-          result should contain theSameElementsAs Seq(
-            sv1Permission1,
-            sv1Permission2,
+          (result, token) <- store.listSponsoredValidatorPermissions(
+            sv1,
+            None,
+            PageLimit.Max,
           )
+        } yield {
+          result shouldBe Seq(
+            sv1Permission2,
+            sv1Permission1,
+          )
+          token shouldBe None
         }
       }
     }

@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSe
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.store.{Limit, PageLimit}
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
@@ -204,7 +205,7 @@ class HttpSvOperatorHandler(
 
   override def listValidatorPermissions(
       respond: r0.ListValidatorPermissionsResponse.type
-  )()(
+  )(after: Option[Long], limit: Option[Int])(
       extracted: ActAsKnownUserRequest
   ): Future[r0.ListValidatorPermissionsResponse] = {
     implicit val ActAsKnownUserRequest(traceContext) = extracted
@@ -212,25 +213,32 @@ class HttpSvOperatorHandler(
       if (!config.permissionedSynchronizer) {
         Future.failed(
           HttpErrorHandler.notFound(
-            "Validator permissioning is disabled. The permissionedSynchronizer flag must be enabled to call this end point."
+            "Validator permissioning is disabled. The permissionedSynchronizer flag must be enabled."
           )
         )
       } else {
         val svParty = dsoStoreWithIngestion.store.key.svParty
+        val pageLimit =
+          limit.fold(PageLimit.Max)(l => PageLimit.tryCreate(l, Limit.DefaultMaxPageSize))
 
         for {
           dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-          permissions <- SvApp.listValidatorPermissions(
+          (permissions, nextPageToken) <- SvApp.listValidatorPermissions(
             svParty,
             dsoRules.domain,
             dsoStoreWithIngestion.store,
             participantAdminConnection,
+            after,
+            pageLimit,
           )
         } yield {
           r0.ListValidatorPermissionsResponseOK(
-            permissions.map { case (party, participant) =>
-              definitions.ValidatorPermissionsResponse(party, participant)
-            }.toVector
+            definitions.ListValidatorPermissionsResponse(
+              validatorPermissions = permissions.map { case (party, participant) =>
+                definitions.ValidatorPermissionsResponse(party, participant)
+              }.toVector,
+              nextPageToken = nextPageToken,
+            )
           )
         }
       }

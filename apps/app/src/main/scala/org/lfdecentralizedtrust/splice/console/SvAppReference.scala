@@ -96,10 +96,13 @@ abstract class SvAppReference(
   @Help.Summary(
     "List validator permission topology (via admin API)"
   )
-  def listValidatorPermissions(): Seq[definitions.ValidatorPermissionsResponse] =
+  def listValidatorPermissions(
+      after: Option[Long] = None,
+      limit: Option[Int] = None,
+  ): definitions.ListValidatorPermissionsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpSvOperatorAppClient.ListValidatorPermissions
+        HttpSvOperatorAppClient.ListValidatorPermissions(after, limit)
       )
     }
 

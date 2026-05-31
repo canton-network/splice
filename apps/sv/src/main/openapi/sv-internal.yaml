@@ -52,15 +52,28 @@ paths:
       tags: [sv]
       x-jvm-package: sv_operator
       operationId: "listValidatorPermissions"
+      parameters:
+        - name: "after"
+          description: A `next_page_token` from a prior response; if absent, return the first page.
+          in: "query"
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: "limit"
+          description: Maximum number of elements to return.
+          in: "query"
+          required: false
+          schema:
+            type: integer
+            format: int32
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ValidatorPermissionsResponse"
+                $ref: "#/components/schemas/ListValidatorPermissionsResponse"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
@@ -793,6 +806,19 @@ components:
           type: string
         validator_participant_id:
           type: string
+
+    ListValidatorPermissionsResponse:
+      type: object
+      required:
+        - validator_permissions
+      properties:
+        validator_permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidatorPermissionsResponse"
+        next_page_token:
+          type: integer
+          format: int64
 
     GrantValidatorPermissionRequest:
       type: object

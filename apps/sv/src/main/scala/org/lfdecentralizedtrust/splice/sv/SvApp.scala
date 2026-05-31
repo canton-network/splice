@@ -60,6 +60,7 @@ import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   MultiDomainAcsStore,
+  PageLimit,
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -817,12 +818,18 @@ object SvApp {
       synchronizerId: SynchronizerId,
       dsoStore: SvDsoStore,
       participantAdminConnection: ParticipantAdminConnection,
+      after: Option[Long],
+      limit: PageLimit,
   )(implicit
       ec: ExecutionContext,
       traceContext: TraceContext,
-  ): Future[Seq[(String, String)]] = {
+  ): Future[(Seq[(String, String)], Option[Long])] = {
     for {
-      validatorPermissions <- dsoStore.listSponsoredValidatorPermissions(svParty)
+      (validatorPermissions, nextPageToken) <- dsoStore.listSponsoredValidatorPermissions(
+        svParty,
+        after,
+        limit,
+      )
       topologyPermissions <- participantAdminConnection.listParticipantSynchronizerPermission(
         synchronizerId,
         "",
@@ -831,10 +838,12 @@ object SvApp {
       val activeParticipantIds =
         topologyPermissions.map(_.mapping.participantId.toProtoPrimitive).toSet
 
-      validatorPermissions
+      val confirmed = validatorPermissions
         .map(_.payload)
         .filter(p => activeParticipantIds.contains(p.validatorParticipantId))
         .map(p => (p.validator, p.validatorParticipantId))
+
+      (confirmed, nextPageToken)
     }
   }
 

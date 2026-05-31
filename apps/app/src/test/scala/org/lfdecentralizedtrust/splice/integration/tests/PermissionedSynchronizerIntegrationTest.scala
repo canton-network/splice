@@ -148,6 +148,7 @@ class PermissionedSynchronizerIntegrationTest
       eventually() {
         sv1Backend
           .listValidatorPermissions()
+          .validatorPermissions
           .map(p => (p.validatorPartyId, p.validatorParticipantId)) should contain(
           (
             aliceValidatorBackend.participantClient.id.adminParty.toProtoPrimitive,
