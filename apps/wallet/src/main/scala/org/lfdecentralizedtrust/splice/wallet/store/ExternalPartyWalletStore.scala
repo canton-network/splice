@@ -18,7 +18,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegat
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.*
 import org.lfdecentralizedtrust.splice.store.{Limit, TransferInputStore}
 import org.lfdecentralizedtrust.splice.util.*
@@ -119,7 +118,7 @@ object ExternalPartyWalletStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -133,7 +132,7 @@ object ExternalPartyWalletStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       defaultLimit,

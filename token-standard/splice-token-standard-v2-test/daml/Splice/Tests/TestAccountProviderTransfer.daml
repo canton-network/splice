@@ -261,9 +261,9 @@ test_transfer_flow env sender senderProvider receiver receiverProvider mkacSende
   -- Now fold through actions
   endResult <- foldlA (\(Some instrCid) (actor, action) -> do
       case action of
-        V2.TIA_Accept -> WalletClientV2.acceptTransferOffer registries actor instrCid
-        V2.TIA_Withdraw -> WalletClientV2.withdrawTransferOffer registries actor instrCid
-        V2.TIA_Reject -> WalletClientV2.rejectTransferOffer registries actor instrCid
+        V2.TIA_Accept -> WalletClientV2.acceptTransferInstructionV2 registries actor instrCid
+        V2.TIA_Withdraw -> WalletClientV2.withdrawTransferInstructionV2 registries actor instrCid
+        V2.TIA_Reject -> WalletClientV2.rejectTransferInstructionV2 registries actor instrCid
         _ -> abort "Custom actions are not supported."
     )
     oInstrCid
@@ -379,7 +379,7 @@ test_transfers_between_accounts = do
       executeBefore
       meta = TSU.reasonToMeta "alice -> aliceCustody - test transfer 2" emptyMetadata
 
-  WalletClientV2.acceptTransferOffer registries custodian1 instrCid1
+  WalletClientV2.acceptTransferInstructionV2 registries custodian1 instrCid1
 
   WalletClientV2.checkAccountBalance alice aliceSelf1 instrX 70.0
   WalletClientV2.checkAccountBalance alice aliceCustody instrX 220.0
@@ -400,9 +400,9 @@ test_transfers_between_accounts = do
       meta = TSU.reasonToMeta "aliceCustody -> bobSelf - test transfer 3" emptyMetadata
 
   Some instrCid3 <-
-    WalletClientV2.acceptTransferOffer registries custodian1 instrCid2
+    WalletClientV2.acceptTransferInstructionV2 registries custodian1 instrCid2
 
-  WalletClientV2.acceptTransferOffer registries bob instrCid3
+  WalletClientV2.acceptTransferInstructionV2 registries bob instrCid3
 
   WalletClientV2.checkAccountBalance custodian1 aliceCustody instrX 219.0
   WalletClientV2.checkAccountBalance bob bobSelf instrX 1.0
@@ -421,8 +421,8 @@ test_transfers_between_accounts = do
       executeBefore
       meta = TSU.reasonToMeta "bob -> aliceCustody - test transfer 3" emptyMetadata
 
-  Some instrCid2 <- WalletClientV2.acceptTransferOffer registries custodian1 instrCid1
-  WalletClientV2.acceptTransferOffer registries alice instrCid2
+  Some instrCid2 <- WalletClientV2.acceptTransferInstructionV2 registries custodian1 instrCid1
+  WalletClientV2.acceptTransferInstructionV2 registries alice instrCid2
 
   WalletClientV2.checkAccountBalance custodian1 aliceCustody instrX 219.5
   WalletClientV2.checkAccountBalance bob bobSelf instrX 0.5
@@ -441,7 +441,7 @@ test_transfers_between_accounts = do
       executeBefore
       meta = TSU.reasonToMeta "aliceCustody -> aliceSelf2 - test transfer 4" emptyMetadata
 
-  None <- WalletClientV2.acceptTransferOffer registries alice instrCid4
+  None <- WalletClientV2.acceptTransferInstructionV2 registries alice instrCid4
 
   WalletClientV2.checkAccountBalance alice aliceCustody instrX 217.5
   WalletClientV2.checkAccountBalance alice aliceSelf1 instrX 70.0  -- unchanged
@@ -450,12 +450,12 @@ test_transfers_between_accounts = do
   pure ()
 
 
-acceptTransferOffers : MultiRegistry.MultiRegistry -> Party -> V2.InstrumentId -> Script WalletClientV2.TSABatch
-acceptTransferOffers registries actor instrumentId = do
-  offers <- WalletClientV2.listTransferOffersV2 actor instrumentId
+acceptTransferInstructionV2s : MultiRegistry.MultiRegistry -> Party -> V2.InstrumentId -> Script WalletClientV2.TSABatch
+acceptTransferInstructionV2s registries actor instrumentId = do
+  offers <- WalletClientV2.listTransferInstructionsV2 actor instrumentId
   acceptChoices <- forA offers $ \(cid, offer) -> do
     case Map.lookup V2.TIA_Accept offer.availableActions of
       Some actors | [actor] `elem` actors ->
-        WalletClientV2.mkAcceptTransferOffer registries actor (cid, offer.transfer)
+        WalletClientV2.mkTransferInstruction_AcceptV1V2 registries actor (cid, offer.transfer)
       _ -> pure mempty
   pure (mconcat acceptChoices)

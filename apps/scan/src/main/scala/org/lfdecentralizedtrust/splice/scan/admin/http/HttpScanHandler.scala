@@ -103,7 +103,6 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.{
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator.{RoundPartyTotals, RoundTotals}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.{
@@ -531,42 +530,6 @@ class HttpScanHandler(
     }
   }
 
-  def getRoundOfLatestData(
-      response: v0.ScanResource.GetRoundOfLatestDataResponse.type
-  )()(extracted: TraceContext): Future[v0.ScanResource.GetRoundOfLatestDataResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRoundOfLatestData") { _ => _ =>
-      store
-        .getRoundOfLatestData()
-        .map { case (round, effectiveAt) =>
-          v0.ScanResource.GetRoundOfLatestDataResponse.OK(
-            definitions
-              .GetRoundOfLatestDataResponse(round, effectiveAt.atOffset(ZoneOffset.UTC))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
-  def getRewardsCollected(
-      response: v0.ScanResource.GetRewardsCollectedResponse.type
-  )(
-      round: Option[Long]
-  )(extracted: TraceContext): Future[v0.ScanResource.GetRewardsCollectedResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRewardsCollected") { _ => _ =>
-      round
-        .fold(store.getTotalRewardsCollectedEver())(store.getRewardsCollectedInRound(_))
-        .map { case amount =>
-          v0.ScanResource.GetRewardsCollectedResponse.OK(
-            definitions
-              .GetRewardsCollectedResponse(Codec.encode(amount))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(
@@ -887,7 +850,7 @@ class HttpScanHandler(
     for {
       eventO <- eventStore.getEventByUpdateId(
         updateId,
-        updateHistory.domainMigrationInfo.currentMigrationId,
+        updateHistory.domainMigrationId,
       )
       result <- eventO match {
         case None =>
@@ -975,7 +938,7 @@ class HttpScanHandler(
       for {
         events <- eventStore.getEvents(
           afterO = afterO,
-          currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId,
+          currentMigrationId = updateHistory.domainMigrationId,
           limit = PageLimit.tryCreate(pageSize, updateHistoryMaxPageSize),
         )
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
@@ -1963,27 +1926,6 @@ class HttpScanHandler(
       )
   }
 
-  override def getAggregatedRounds(respond: ScanResource.GetAggregatedRoundsResponse.type)()(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.GetAggregatedRoundsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getAggregatedRounds") { _ => _ =>
-      for {
-        range <- store.getAggregatedRounds()
-      } yield {
-        range.fold(
-          v0.ScanResource.GetAggregatedRoundsResponse.NotFound(
-            definitions.ErrorResponse("No aggregated rounds found")
-          )
-        )(range =>
-          v0.ScanResource.GetAggregatedRoundsResponse.OK(
-            definitions.GetAggregatedRoundsResponse(start = range.start, end = range.end)
-          )
-        )
-      }
-    }
-  }
-
   def getUpdateById(
       updateId: String,
       encoding: DamlValueEncoding,
@@ -2127,82 +2069,6 @@ class HttpScanHandler(
           case Right(update) =>
             ScanResource.GetUpdateByHashResponse.OK(toUpdateV2WithHash(update))
         }
-    }
-  }
-
-  private def ensureValidRange[T](start: Long, end: Long, maxRounds: Int)(
-      f: => Future[T]
-  )(implicit tc: com.digitalasset.canton.tracing.TraceContext): Future[T] = {
-    require(maxRounds > 0, "maxRounds must be positive")
-    if (start < 0 || end < 0) {
-      Future.failed(
-        HttpErrorHandler.badRequest(
-          s"rounds must be non-negative: start_round $start, end_round $end"
-        )
-      )
-    } else if (end < start) {
-      Future.failed(
-        HttpErrorHandler.badRequest(s"end_round $end must be >= start_round $start")
-      )
-    } else if (end - start + 1 > maxRounds) {
-      Future.failed(
-        HttpErrorHandler.badRequest(s"Cannot request more than $maxRounds rounds at a time")
-      )
-    } else {
-      for {
-        range <- store.getAggregatedRounds()
-        res <- range.fold(
-          Future.failed(
-            HttpErrorHandler.notFound("No aggregated rounds found")
-          ): Future[T]
-        )(range =>
-          if (start < range.start || end > range.end) {
-            Future.failed(
-              HttpErrorHandler.badRequest(
-                s"Requested rounds range ${start}-${end} is outside of the available rounds range ${range.start}-${range.end}"
-              )
-            ): Future[T]
-          } else {
-            f
-          }
-        )
-      } yield res
-    }
-  }
-
-  override def listRoundTotals(
-      respond: ScanResource.ListRoundTotalsResponse.type
-  )(request: definitions.ListRoundTotalsRequest)(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.ListRoundTotalsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listRoundTotals") { _ => _ =>
-      ensureValidRange(request.startRound, request.endRound, 200) {
-        for {
-          roundTotals <- store.getRoundTotals(request.startRound, request.endRound)
-          entries = roundTotals.map(encodeRoundTotals)
-        } yield v0.ScanResource.ListRoundTotalsResponse.OK(
-          definitions.ListRoundTotalsResponse(entries.toVector)
-        )
-      }
-    }
-  }
-
-  override def listRoundPartyTotals(
-      respond: ScanResource.ListRoundPartyTotalsResponse.type
-  )(request: definitions.ListRoundPartyTotalsRequest)(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.ListRoundPartyTotalsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listRoundPartyTotals") { _ => _ =>
-      ensureValidRange(request.startRound, request.endRound, 50) {
-        for {
-          roundPartyTotals <- store.getRoundPartyTotals(request.startRound, request.endRound)
-          entries = roundPartyTotals.map(encodeRoundPartyTotals)
-        } yield v0.ScanResource.ListRoundPartyTotalsResponse.OK(
-          definitions.ListRoundPartyTotalsResponse(entries.toVector)
-        )
-      }
     }
   }
 
@@ -3038,46 +2904,4 @@ object HttpScanHandler {
   // for DsoSequencers that use the serial instead of the migration we set -1 as the migration id
   // we can't simply make it non required as it's part of the public API and it would break clients
   val NoMigrationIdSet = -1L
-
-  def encodeRoundTotals(roundTotal: RoundTotals): definitions.RoundTotals = {
-    definitions.RoundTotals(
-      closedRound = roundTotal.closedRound,
-      closedRoundEffectiveAt = java.time.OffsetDateTime
-        .ofInstant(roundTotal.closedRoundEffectiveAt.toInstant, ZoneOffset.UTC),
-      appRewards = Codec.encode(roundTotal.appRewards),
-      validatorRewards = Codec.encode(roundTotal.validatorRewards),
-      changeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundTotal.changeToInitialAmountAsOfRoundZero),
-      changeToHoldingFeesRate = Codec.encode(roundTotal.changeToHoldingFeesRate),
-      cumulativeAppRewards = Codec.encode(roundTotal.cumulativeAppRewards),
-      cumulativeValidatorRewards = Codec.encode(roundTotal.cumulativeValidatorRewards),
-      cumulativeChangeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundTotal.cumulativeChangeToInitialAmountAsOfRoundZero),
-      cumulativeChangeToHoldingFeesRate =
-        Codec.encode(roundTotal.cumulativeChangeToHoldingFeesRate),
-      totalAmuletBalance = Codec.encode(roundTotal.totalAmuletBalance),
-    )
-  }
-
-  def encodeRoundPartyTotals(roundPartyTotal: RoundPartyTotals): definitions.RoundPartyTotals = {
-    definitions.RoundPartyTotals(
-      closedRound = roundPartyTotal.closedRound,
-      party = roundPartyTotal.party,
-      appRewards = Codec.encode(roundPartyTotal.appRewards),
-      validatorRewards = Codec.encode(roundPartyTotal.validatorRewards),
-      trafficPurchased = roundPartyTotal.trafficPurchased,
-      trafficPurchasedCcSpent = Codec.encode(roundPartyTotal.trafficPurchasedCcSpent),
-      trafficNumPurchases = roundPartyTotal.trafficNumPurchases,
-      cumulativeAppRewards = Codec.encode(roundPartyTotal.cumulativeAppRewards),
-      cumulativeValidatorRewards = Codec.encode(roundPartyTotal.cumulativeValidatorRewards),
-      cumulativeChangeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundPartyTotal.cumulativeChangeToInitialAmountAsOfRoundZero),
-      cumulativeChangeToHoldingFeesRate =
-        Codec.encode(roundPartyTotal.cumulativeChangeToHoldingFeesRate),
-      cumulativeTrafficPurchased = roundPartyTotal.cumulativeTrafficPurchased,
-      cumulativeTrafficPurchasedCcSpent =
-        Codec.encode(roundPartyTotal.cumulativeTrafficPurchasedCcSpent),
-      cumulativeTrafficNumPurchases = roundPartyTotal.cumulativeTrafficNumPurchases,
-    )
-  }
 }

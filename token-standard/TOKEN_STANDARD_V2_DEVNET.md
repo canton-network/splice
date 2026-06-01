@@ -1,6 +1,6 @@
 # Token Standard V2 DevNet
 
-Splice version: `0.6.5-snapshot.20260518.2872.0.vb91de5d4`
+Splice version: `0.6.5-snapshot.20260526.2931.0.ve28a6722`
 
 Container image repository (compose `IMAGE_REPO`/ helm `imageRepo`): `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker`
 So the docker pull command should look like `docker pull ghcr.io/digital-asset/decentralized-canton-sync-dev/docker/SOME_IMAGE:THE_VERSION_ABOVE`
@@ -19,7 +19,7 @@ If you have any questions or bug reports, please post them in the [Canton Networ
 ## Connecting to Token Standard V2 DevNet
 
 You can connect to the Token Standard DevNet by spinning up a validator node
-using the [guide for DevNet](https://hyperledger-labs.github.io/splice/validator_operator/validator_onboarding.html#onboarding-process-overview) with the following changes:
+using the [guide for DevNet](https://canton-network.github.io/splice/validator_operator/validator_onboarding.html#onboarding-process-overview) with the following changes:
 1. Any IPs that are allowed in regular DevNet are also allowed in Token-Standard-DevNet,
    so no extra steps required on your side to get yours allowed.
    If you anyway need to get a different IP allowed, request it in the [Canton Network Forum](https://forum.canton.network/t/token-standard-v2-devnet-is-live/8502).
@@ -33,7 +33,7 @@ using the [guide for DevNet](https://hyperledger-labs.github.io/splice/validator
      - to get an onboarding secret: `curl -X POST https://sv.sv-2.token-std-v2-dev.global.canton.network.digitalasset.com/api/sv/v0/devnet/onboard/validator/prepare`
      - as the URL of your onboarding SV
    - Scan URL: https://scan.sv-2.token-std-v2-dev.global.canton.network.digitalasset.com/
-4. Configure your participant to use protocol version 35 and support Non-Unique Contract Keys by using the following environment variable (see [docs for ad-hoc configuration](https://hyperledger-labs.github.io/splice/deployment/configuration.html#adding-ad-hoc-configuration)):
+4. Configure your participant to use protocol version 35 and support Non-Unique Contract Keys by using the following environment variable (see [docs for ad-hoc configuration](https://canton-network.github.io/splice/deployment/configuration.html#adding-ad-hoc-configuration)):
    ```
    - name: ADDITIONAL_CONFIG_TOKEN_STANDARD_V2_DEVNET
      value: |

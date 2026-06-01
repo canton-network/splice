@@ -38,13 +38,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.history.*
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbScanStore,
-  DbScanStoreMetrics,
-  ScanAggregatesReader,
-  ScanAggregator,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
@@ -56,7 +50,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
@@ -76,120 +70,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getTotalRewardsCollectedEver" should {
-
-      "return the sum of reward amounts (ValidatorReward & AppReward)" in {
-        val validatorRewards = Seq(
-          9.5,
-          11.5,
-        )
-        val appRewards = Seq(
-          11.25,
-          9.75,
-        )
-        val closedRounds = (0 to 1).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(appRewards.zip(validatorRewards).zipWithIndex) {
-            case ((appAmount, validatorAmount), round) =>
-              dummyDomain.exercise(
-                amuletRules(),
-                Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-                Transfer.choice.name,
-                mkAmuletRulesTransfer(user1, 1.0),
-                mkTransferResultRecord(
-                  round = round.toLong,
-                  inputAppRewardAmount = appAmount,
-                  inputValidatorRewardAmount = validatorAmount,
-                  inputSvRewardAmount = 0,
-                  inputAmuletAmount = 0,
-                  balanceChanges = Map(),
-                  amuletPrice = 0.0005,
-                ),
-              )(store.multiDomainAcsStore)
-          }
-          _ = closedRounds.map(closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore).futureValue
-          )
-          _ <- store.aggregate()
-        } yield {
-          store
-            .getTotalRewardsCollectedEver()
-            .futureValue shouldBe validatorRewards.sum + appRewards.sum
-        }
-      }
-
-    }
-
-    "getRewardsCollectedInRound" should {
-
-      "return the sum of reward amounts (ValidatorReward & AppReward) up to the round" in {
-        val validatorRewards = Seq(
-          9.5,
-          11.5,
-          33.3,
-        )
-        val appRewards = Seq(
-          11.25,
-          9.75,
-          33.3,
-        )
-        val closedRounds = (0 to 2).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(appRewards.zipWithIndex) { case (amount, round) =>
-            dummyDomain.exercise(
-              amuletRules(),
-              Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              Transfer.choice.name,
-              mkAmuletRulesTransfer(user1, amount),
-              mkTransferResultRecord(
-                round = round.toLong,
-                inputAppRewardAmount = amount,
-                inputAmuletAmount = 0,
-                inputValidatorRewardAmount = 0,
-                inputSvRewardAmount = 0,
-                balanceChanges = Map(),
-                amuletPrice = 0.0005,
-              ),
-            )(store.multiDomainAcsStore)
-          }
-          _ <- MonadUtil.sequentialTraverse(validatorRewards.zipWithIndex) { case (amount, round) =>
-            dummyDomain.exercise(
-              amuletRules(),
-              Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              Transfer.choice.name,
-              mkAmuletRulesTransfer(user1, amount),
-              mkTransferResultRecord(
-                round = round.toLong,
-                inputAppRewardAmount = 0,
-                inputValidatorRewardAmount = amount,
-                inputSvRewardAmount = 0,
-                inputAmuletAmount = 0,
-                balanceChanges = Map(),
-                amuletPrice = 0.0005,
-              ),
-            )(store.multiDomainAcsStore)
-          }
-          _ = closedRounds.map(closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore).futureValue
-          )
-          _ <- store.aggregate()
-        } yield {
-          store.getRewardsCollectedInRound(1).futureValue shouldBe validatorRewards(
-            1
-          ) + appRewards(1)
-        }
-      }
-
-    }
-
     "getAmuletConfigForRound" should {
 
       "return the amulet OpenMiningRoundTxLogEntry for the round" in {
@@ -215,44 +95,6 @@ abstract class ScanStoreTest
         }
       }
 
-    }
-
-    "getRoundOfLatestData" should {
-
-      "return the latest closed round" in {
-        val closedBefore = (0 until 2).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-        val closed = closedMiningRound(dsoParty, round = 2)
-        for {
-          store <- mkStore()
-          closeTime = Instant.ofEpochSecond(1500)
-          _ <- MonadUtil.sequentialTraverse(closedBefore) { closed =>
-            dummyDomain.create(closed, txEffectiveAt = closeTime)(
-              store.multiDomainAcsStore
-            )
-          }
-          _ <- dummyDomain.create(closed, txEffectiveAt = closeTime)(
-            store.multiDomainAcsStore
-          )
-          _ <- store.aggregate()
-        } yield {
-          val (round, effectiveAt) = store.getRoundOfLatestData().futureValue
-          round should be(2)
-          effectiveAt should be(closeTime)
-        }
-      }
-
-      "fail if there's no closed round" in {
-        val open = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(open)(store.multiDomainAcsStore)
-        } yield {
-          val failure = store.getRoundOfLatestData().failed.futureValue
-          failure.getMessage should be(roundNotAggregated().getMessage)
-        }
-      }
     }
 
     "getTotalPurchasedMemberTraffic" should {
@@ -1780,27 +1622,12 @@ class DbScanStoreTest
     val store = new DbScanStore(
       key = ScanStore.Key(dsoParty),
       storage,
-      // to allow aggregating from round zero without previous round aggregate
-      isFirstSv = true,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      // required to instantiate a DbScanStore, returns none not to affect this test.
-      _ =>
-        new ScanAggregatesReader() {
-          def readRoundAggregateFromDso(round: Long)(implicit
-              ec: ExecutionContext,
-              traceContext: TraceContext,
-          ): Future[Option[ScanAggregator.RoundAggregate]] = Future.successful(None)
-          def close(): Unit = ()
-        },
-      DomainMigrationInfo(
-        domainMigrationId,
-        None,
-      ),
+      domainMigrationId,
       participantId = mkParticipantId("ScanStoreTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
-      initialRound = 0,
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       acsStoreDescriptorUserVersion,
       txLogStoreDescriptorUserVersion,
@@ -1836,7 +1663,7 @@ class DbScanStoreTest
   ): Future[UpdateHistory] = {
     val updateHistory = new UpdateHistory(
       storage.underlying, // not under test
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "update_history_scan_store_test",
       mkParticipantId("whatever"),
       dsoParty,

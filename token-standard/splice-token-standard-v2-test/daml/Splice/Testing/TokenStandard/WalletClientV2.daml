@@ -25,31 +25,41 @@ module Splice.Testing.TokenStandard.WalletClientV2
 
     getAccountBalance,
 
-    -- * Managing transfer offers
-    listTransferOffers,
-    listTransferOffersV2,
+    -- * Managing transfer instructions
+    listTransferInstructionsV1V2,
+    listTransferInstructionsV2,
+
+    transferV2,
+    acceptTransferInstructionV2,
+    rejectTransferInstructionV2,
+    withdrawTransferInstructionV2,
 
     transferV1,
-    transferV2,
-    acceptTransferOffer,
-    rejectTransferOffer,
-    withdrawTransferOffer,
+    acceptTransferInstructionV1,
+    rejectTransferInstructionV1,
+    withdrawTransferInstructionV1,
 
     -- * Managing allocations
-    listRequestedAllocationsForAdmin,
     listAllocationInstructionsV2,
     listAllocationRequestsV2,
     listAllocationsV2,
 
+    listAllocationInstructionsV1,
     listAllocationRequestsV1,
+    listAllocationsV1,
 
-    acceptAllocationRequestV1,
-    acceptAllocationRequestV2,
-
+    allocateV2,
     acceptAllocationInstructionV2,
     withdrawAllocationInstructionV2,
-
     withdrawAllocationV2,
+
+    allocateV1,
+    withdrawAllocationInstructionV1,
+    withdrawAllocationV1,
+
+    -- ** one-step acceptance of allocation requests
+    acceptAndCreateRequestedAllocationsV2,
+    acceptAndCreateRequestedAllocationsV1,
 
     -- * Batching utility usage
     TSABatch(..),
@@ -61,22 +71,35 @@ module Splice.Testing.TokenStandard.WalletClientV2
     -- ** Allocations
     extractNextIterationAllocationCid,
 
-    mkAllocationFactory_AllocateV1,
     mkAllocationFactory_AllocateV2,
+    mkAllocationInstruction_AcceptV2,
+    mkAllocationInstruction_WithdrawV2,
+    mkAllocation_WithdrawV2,
     mkAllocationRequest_AcceptV2,
-    mkAcceptAllocationRequestV1,
-    mkAcceptAllocationRequestV2,
+    mkAllocationRequest_RejectV2,
+
+    mkAllocationFactory_AllocateV1,
+    mkAllocationInstruction_WithdrawV1,
+    mkAllocation_WithdrawV1,
+
+    -- *** Create batch of actions to accept an allocation request (incl. allocation creation)
+    mkAcceptAndCreateRequestedAllocationsV1,
+    mkAcceptAndCreateRequestedAllocationsV2,
 
     -- ** Transfers
     mkTransferFactory_TransferV1,
     mkTransferInstruction_AcceptV1,
+    mkTransferInstruction_RejectV1,
+    mkTransferInstruction_WithdrawV1,
+
     mkTransferFactory_TransferV2,
     mkTransferInstruction_AcceptV2,
+    mkTransferInstruction_RejectV2,
+    mkTransferInstruction_WithdrawV2,
 
-    mkAcceptTransferOffer,
+    mkTransferInstruction_AcceptV1V2,
 
     -- *** Transfer test utility
-
     SimpleTransfer(..),
     mkTransferFactory_TransferV1',
     mkTransferFactory_TransferV2',
@@ -231,12 +254,12 @@ checkUnlockedBalance p instrumentId balance = do
     "Unlocked holdings: " <> show unlockedHoldings ]
 
 
--- Transfer offers
-------------------
+-- Transfer instructions
+------------------------
 
 -- | List pending V2 transfer offers (as sender or receiver)
-listTransferOffersV2 : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.TransferInstructionView)]
-listTransferOffersV2 p instrumentId = do
+listTransferInstructionsV2 : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.TransferInstructionView)]
+listTransferInstructionsV2 p instrumentId = do
   instrs <- queryInterface @V2.TransferInstruction p
   let pendingOffers = do
         (cid, Some instr) <- instrs
@@ -245,10 +268,10 @@ listTransferOffersV2 p instrumentId = do
         pure (cid, instr)
   pure pendingOffers
 
--- | List pending transfer offers.
-listTransferOffers : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.Transfer)]
-listTransferOffers p instrumentId = do
-  offersV2 <- listTransferOffersV2 p instrumentId
+-- | List pending transfer offers of both V1 and V2 versions, upcasted to V2 for ease of viewing.
+listTransferInstructionsV1V2 : Party -> V2.InstrumentId -> Script [(ContractId V2.TransferInstruction, V2.Transfer)]
+listTransferInstructionsV1V2 p instrumentId = do
+  offersV2 <- listTransferInstructionsV2 p instrumentId
   offersV1 <- WalletClientV1.listTransferOffers p (TSU.downcast instrumentId)
   let adjustedOffersV2 = do
         (cid, instrView) <- offersV2
@@ -271,48 +294,35 @@ transferV2 registries actor transferArg = do
   batch <- mkTransferFactory_TransferV2 registries transferArg
   extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
-acceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
-acceptTransferOffer registries actor instrCid = do
+acceptTransferInstructionV2 : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+acceptTransferInstructionV2 registries actor instrCid = do
   batch <- mkTransferInstruction_AcceptV2 registries actor instrCid
   extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
--- TODO(#5303): Switch to batching
-rejectTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
-rejectTransferOffer registries actor instrCid = do
-  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
-  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
-  context <- V2.getTransferInstruction_RejectContext registry instrCid emptyMetadata
-  (res, _changes) <-
-    extractAndCheckTxHistory (Map.keys registries) $
-    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
-    exerciseCmd instrCid
-      V2.TransferInstruction_Reject with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
-  return $ case res.output of
-    V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
-    _ -> None
+rejectTransferInstructionV2 : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+rejectTransferInstructionV2 registries actor instrCid = do
+  batch <- mkTransferInstruction_RejectV2 registries actor instrCid
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
 
--- TODO(#5303): Switch to batching
-withdrawTransferOffer : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
-withdrawTransferOffer registries actor instrCid = do
-  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor instrCid
-  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
-  context <- V2.getTransferInstruction_WithdrawContext registry instrCid emptyMetadata
-  (res, _changes) <-
-    extractAndCheckTxHistory (Map.keys registries) $
-    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
-    exerciseCmd instrCid
-      V2.TransferInstruction_Withdraw with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
-  return $ case res.output of
-    V2.TransferInstructionResult_Pending instrCid' -> Some instrCid'
-    _ -> None
+withdrawTransferInstructionV2 : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script (Optional (ContractId V2.TransferInstruction))
+withdrawTransferInstructionV2 registries actor instrCid = do
+  batch <- mkTransferInstruction_WithdrawV2 registries actor instrCid
+  extractPendingTransferInstructionV2 <$> executeSingletonTSABatch registries actor batch
+
+acceptTransferInstructionV1 : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Optional (ContractId V1.TransferInstruction))
+acceptTransferInstructionV1 registries actor instrCid = do
+  batch <- mkTransferInstruction_AcceptV1 registries actor instrCid
+  extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
+
+rejectTransferInstructionV1 : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Optional (ContractId V1.TransferInstruction))
+rejectTransferInstructionV1 registries actor instrCid = do
+  batch <- mkTransferInstruction_RejectV1 registries actor instrCid
+  extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
+
+withdrawTransferInstructionV1 : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Optional (ContractId V1.TransferInstruction))
+withdrawTransferInstructionV1 registries actor instrCid = do
+  batch <- mkTransferInstruction_WithdrawV1 registries actor instrCid
+  extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
 
 extractPendingTransferInstructionV1 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V1.TransferInstruction)
 extractPendingTransferInstructionV1 (BatchingUtilityV2.TSAR_TransferInstructionResultV1 result) =
@@ -335,16 +345,10 @@ extractPendingTransferInstructionV2 result =
 -- Allocations
 --------------
 
--- | List all allocations requested from the account for instruments by the admin.
-listRequestedAllocationsForAdmin : Party -> V2.Account -> Party -> Script [V2.AllocationSpecification]
-listRequestedAllocationsForAdmin admin tradingAccount actor = do
-  reqs <- queryInterface @V2.AllocationRequest actor
-  let allocSpecs = do
-        (_reqCid, Some req) <- reqs
-        alloc <- req.allocations
-        guard (alloc.admin == admin && alloc.authorizer == tradingAccount)
-        pure alloc
-  pure allocSpecs
+listAllocationsV1 : Party -> Script [(ContractId V1.Allocation, V1.AllocationView)]
+listAllocationsV1 sender = do
+  allocs <- queryInterface @V1.Allocation sender
+  pure [ (allocCid, allocView) | (allocCid, Some allocView) <- allocs, sender == allocView.allocation.transferLeg.sender ]
 
 listAllocationsV2 : V2.Account -> Party -> Script [(ContractId V2.Allocation, V2.AllocationView)]
 listAllocationsV2 tradingAccount actor = do
@@ -355,6 +359,11 @@ listAllocationInstructionsV2 : V2.Account -> Party -> Script [(ContractId V2.All
 listAllocationInstructionsV2 tradingAccount actor = do
   instrs <- queryInterface @V2.AllocationInstruction actor
   pure [ (instrCid, instrView) | (instrCid, Some instrView) <- instrs, tradingAccount == instrView.allocation.authorizer ]
+
+listAllocationInstructionsV1 : Party -> Script [(ContractId V1.AllocationInstruction, V1.AllocationInstructionView)]
+listAllocationInstructionsV1 sender = do
+  instrs <- queryInterface @V1.AllocationInstruction sender
+  pure [ (instrCid, instrView) | (instrCid, Some instrView) <- instrs, sender == instrView.allocation.transferLeg.sender ]
 
 listAllocationRequestsV1 : Party -> Script [(ContractId V1.AllocationRequest, V1.AllocationRequestView)]
 listAllocationRequestsV1 actor = do
@@ -372,81 +381,85 @@ extractNextIterationAllocationCid allocResult =
     V2.AllocationResult_Settled with nextIterationAllocationCid -> nextIterationAllocationCid
     _ -> None
 
+allocateV1 : MultiRegistry.MultiRegistry -> V1.AllocationSpecification -> Script V1.AllocationInstructionResult
+allocateV1 registries allocation = do
+  let leg = allocation.transferLeg
+  registry <- MultiRegistry.getRegistryApiV1 registries leg.instrumentId.admin
+  batch <- mkAllocationFactory_AllocateV1 registry allocation
+  extractAllocationInstructionResultV1 <$>executeSingletonTSABatch registries leg.sender batch
+
+extractAllocationInstructionResultV1 : BatchingUtilityV2.TokenStandardActionResult -> V1.AllocationInstructionResult
+extractAllocationInstructionResultV1 (BatchingUtilityV2.TSAR_AllocationInstructionResultV1 result) = result
+extractAllocationInstructionResultV1 result = error $ "Expected a AllocationInstructionResultV1, but got: " <> show result
+
+
+allocateV2
+  : MultiRegistry.MultiRegistry -> Party -> V2.SettlementInfo -> V2.AllocationSpecification -> Script V2.AllocationInstructionResult
+allocateV2 registries actor settlementInfo allocation = do
+  registry <- MultiRegistry.getRegistryApiV2 registries allocation.admin
+  batch <- mkAllocationFactory_AllocateV2 registry actor settlementInfo allocation
+  extractAllocationInstructionResultV2 <$>executeSingletonTSABatch registries actor batch
+
+extractAllocationInstructionResultV2 : BatchingUtilityV2.TokenStandardActionResult -> V2.AllocationInstructionResult
+extractAllocationInstructionResultV2 (BatchingUtilityV2.TSAR_AllocationInstructionResultV2 result) = result
+extractAllocationInstructionResultV2 result = error $ "Expected a AllocationInstructionResultV2, but got: " <> show result
+
+
 -- | Simulate a V2 wallet accepting an allocation request from a V1 app.
-acceptAllocationRequestV1
+acceptAndCreateRequestedAllocationsV1
   :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView
   -> Script (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, [TransferEventsV2.EventLog_HoldingsChange])
-acceptAllocationRequestV1 registries actor req = do
-  batch <- mkAcceptAllocationRequestV1 registries actor req
+acceptAndCreateRequestedAllocationsV1 registries actor req = do
+  batch <- mkAcceptAndCreateRequestedAllocationsV1 registries actor req
   executeTSABatch registries actor batch
 
 -- | Simulate a V2 wallet accepting an allocation request from a V2 app.
-acceptAllocationRequestV2
+acceptAndCreateRequestedAllocationsV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationRequest, V2.AllocationRequestView)
   -> Script (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, [TransferEventsV2.EventLog_HoldingsChange])
-acceptAllocationRequestV2 registries actor (reqCid, req) = do
-  batch <- mkAcceptAllocationRequestV2 registries actor (reqCid, req)
+acceptAndCreateRequestedAllocationsV2 registries actor (reqCid, req) = do
+  batch <- mkAcceptAndCreateRequestedAllocationsV2 registries actor (reqCid, req)
   executeTSABatch registries actor batch
 
 -- | Simulate a V2 wallet accepting an allocation instruction from a V2 app.
--- TODO(#5303): Use Batching
 acceptAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
-  -> Script V2.AllocationInstructionResult
+  -> Script BatchingUtilityV2.TokenStandardActionResult
 acceptAllocationInstructionV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
-  context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
-  (result, _change) <- extractAndCheckTxHistory (Map.keys registries) $
-    submitResultAndTree (actAs actor <> discloseMany' context.disclosures) $
-      exerciseCmd instrCid
-        V2.AllocationInstruction_Accept with
-          actors = [actor]
-          extraArgs = ExtraArgs with
-            context = context.choiceContext
-            meta = emptyMetadata
-  pure result
+  batch <- mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView)
+  executeSingletonTSABatch registries actor batch
 
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
--- TODO(#5303): Use Batching
 withdrawAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
-  -> Script (Optional (ContractId V2.AllocationInstruction))
+  -> Script BatchingUtilityV2.TokenStandardActionResult
 withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
-  context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
-  (res, _change) <-
-    extractAndCheckTxHistory (Map.keys registries) $
-    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
-      exerciseCmd instrCid
-      V2.AllocationInstruction_Withdraw with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
-  return $ case res.output of
-    V2.AllocationInstructionResult_Pending instrCid' -> Some instrCid'
-    _ -> None
+  batch <- mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView)
+  executeSingletonTSABatch registries actor batch
+
+-- | Simulate a V2 wallet withdrawing an allocation instruction from a V1 app.
+withdrawAllocationInstructionV1
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V1.AllocationInstruction, V1.AllocationInstructionView)
+  -> Script BatchingUtilityV2.TokenStandardActionResult
+withdrawAllocationInstructionV1 registries actor (instrCid, instrView) = do
+  batch <- mkAllocationInstruction_WithdrawV1 registries (instrCid, instrView)
+  executeSingletonTSABatch registries actor batch
 
 -- | Simulate a V2 wallet withdrawing an allocation from a V2 app.
--- TODO(#5303): Use Batching
 withdrawAllocationV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView)
-  -> Script (Optional (ContractId V2.Allocation))
-withdrawAllocationV2 registries actor (allocCid, allocView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
-  context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
-  (res, _change) <-
-    extractAndCheckTxHistory (Map.keys registries) $
-    submitResultAndTree (actAs  actor <> discloseMany' context.disclosures) $
-    exerciseCmd allocCid
-      V2.Allocation_Withdraw with
-        actors = [actor]
-        extraArgs = ExtraArgs with
-          context = context.choiceContext
-          meta = emptyMetadata
-  return $ case res.output of
-    V2.AllocationResult_Pending instrCid' -> Some instrCid'
-    _ -> None
+  -> Script BatchingUtilityV2.TokenStandardActionResult
+withdrawAllocationV2 registries actor alloc = do
+  batch <- mkAllocation_WithdrawV2 registries actor alloc
+  executeSingletonTSABatch registries actor batch
+
+-- | Simulate a V2 wallet withdrawing an allocation from a V1 app.
+withdrawAllocationV1
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V1.Allocation, V1.AllocationView)
+  -> Script BatchingUtilityV2.TokenStandardActionResult
+withdrawAllocationV1 registries actor alloc = do
+  batch <- mkAllocation_WithdrawV1 registries alloc
+  executeSingletonTSABatch registries actor batch
 
 -- | Execute a batch of token standard actions.
 executeTSABatch
@@ -461,14 +474,16 @@ executeTSABatch registries actor batch
     )
   | otherwise = do
     inputHoldingMap <- getHoldingMap actor (Set.toList batch.accountsAndInstruments)
-    [(batchingUtilityCid, _)] <- queryFilter @BatchingUtilityV2.BatchingUtility actor (\u -> u.user == actor)
-    extractAndCheckTxHistory (Map.keys registries) $
-      submitResultAndTree (actAs actor <> discloseMany' batch.disclosures) $
-        exerciseCmd batchingUtilityCid BatchingUtilityV2.BatchingUtility_ExecuteBatch with
-            actions = batch.actions
-            inputHoldingMap
-            archiveAfterExecution = False
-
+    batchingUtils <- queryFilter @BatchingUtilityV2.BatchingUtility actor (\u -> u.user == actor)
+    case batchingUtils of
+      [] -> fail $ "No batching utility found for actor " <> show actor
+      (batchingUtilityCid, _) :: _ ->
+        extractAndCheckTxHistory (Map.keys registries) $
+          submitResultAndTree (actAs actor <> discloseMany' batch.disclosures) $
+            exerciseCmd batchingUtilityCid BatchingUtilityV2.BatchingUtility_ExecuteBatch with
+                actions = batch.actions
+                inputHoldingMap
+                archiveAfterExecution = False
 
 -- | Execute a batch containing a single token standard action.
 executeSingletonTSABatch : MultiRegistry.MultiRegistry -> Party -> TSABatch -> Script BatchingUtilityV2.TokenStandardActionResult
@@ -582,6 +597,151 @@ mkTransferInstruction_AcceptV2 registries actor cid = do
     disclosures = context.disclosures
     accountsAndInstruments = Set.empty
 
+mkTransferInstruction_RejectV1
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script TSABatch
+mkTransferInstruction_RejectV1 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V1.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV1 registries (instrView.transfer.instrumentId.admin)
+  context <- V1.getTransferInstruction_RejectContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_RejectV1 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V1.TransferInstruction_Reject with
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+mkTransferInstruction_RejectV2
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script TSABatch
+mkTransferInstruction_RejectV2 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
+  context <- V2.getTransferInstruction_RejectContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_RejectV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V2.TransferInstruction_Reject with
+            actors = [actor]
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+
+mkTransferInstruction_WithdrawV1
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script TSABatch
+mkTransferInstruction_WithdrawV1 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V1.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV1 registries (instrView.transfer.instrumentId.admin)
+  context <- V1.getTransferInstruction_WithdrawContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_WithdrawV1 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V1.TransferInstruction_Withdraw with
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+
+mkTransferInstruction_WithdrawV2
+  : MultiRegistry.MultiRegistry -> Party -> ContractId V2.TransferInstruction -> Script TSABatch
+mkTransferInstruction_WithdrawV2 registries actor cid = do
+  Some instrView <- queryInterfaceContractId @V2.TransferInstruction actor cid
+  registry <- MultiRegistry.getRegistryApiV2 registries (instrView.transfer.instrumentId.admin)
+  context <- V2.getTransferInstruction_WithdrawContext registry cid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_TransferInstruction_WithdrawV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId cid
+          arg = V2.TransferInstruction_Withdraw with
+            actors = [actor]
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+mkAllocation_WithdrawV1 : MultiRegistry.MultiRegistry -> (ContractId V1.Allocation, V1.AllocationView) -> Script TSABatch
+mkAllocation_WithdrawV1 registries (allocCid, allocView) = do
+  registry <- MultiRegistry.getRegistryApiV1 registries allocView.allocation.transferLeg.instrumentId.admin
+  context <- V1.getAllocation_WithdrawContext registry allocCid emptyMetadata
+  let withdrawRequest = BatchingUtilityV2.TSA_Allocation_WithdrawV1 BatchingUtilityV2.ChoiceCall with
+        cid = TSU.toAnyContractId allocCid
+        arg = V1.Allocation_Withdraw with
+          extraArgs = ExtraArgs with
+            context = context.choiceContext
+            meta = emptyMetadata
+  pure TSABatch with
+    actions = [withdrawRequest]
+    accountsAndInstruments = mempty
+    disclosures = context.disclosures
+
+mkAllocationInstruction_WithdrawV1
+  : MultiRegistry.MultiRegistry -> (ContractId V1.AllocationInstruction, V1.AllocationInstructionView) -> Script TSABatch
+mkAllocationInstruction_WithdrawV1 registries (instrCid, instrView) = do
+  registry <- MultiRegistry.getRegistryApiV1 registries instrView.allocation.transferLeg.instrumentId.admin
+  context <- V1.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_AllocationInstruction_WithdrawV1 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId instrCid
+          arg = V1.AllocationInstruction_Withdraw with
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+
+mkAllocationInstruction_WithdrawV2
+  : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView) -> Script TSABatch
+mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+  context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_AllocationInstruction_WithdrawV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId instrCid
+          arg = V2.AllocationInstruction_Withdraw with
+            actors = [actor]
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
+mkAllocationInstruction_AcceptV2
+  : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView) -> Script TSABatch
+mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+  context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
+  pure $ TSABatch with
+    actions =
+      [ BatchingUtilityV2.TSA_AllocationInstruction_AcceptV2 BatchingUtilityV2.ChoiceCall with
+          cid = TSU.toAnyContractId instrCid
+          arg = V2.AllocationInstruction_Accept with
+            actors = [actor]
+            extraArgs = ExtraArgs with
+              context = context.choiceContext
+              meta = emptyMetadata
+      ]
+    disclosures = context.disclosures
+    accountsAndInstruments = Set.empty
+
 mkAllocationFactory_AllocateV1
   : V1.RegistryApi api => api -> V1.AllocationSpecification -> Script TSABatch
 mkAllocationFactory_AllocateV1 registry allocation = do
@@ -620,17 +780,39 @@ mkAllocationFactory_AllocateV2 registryV2 actor settlement allocation = do
         arg = enrichedChoice.arg
   pure TSABatch with
     actions = [action]
-    accountsAndInstruments = Set.fromList $ do
-      leg <- allocation.transferLegSides
-      let iid = V2.InstrumentId with
-            id = leg.instrumentId
-            admin = allocation.admin
-      pure (allocation.authorizer, iid)
+    accountsAndInstruments = Set.fromList $
+      do
+        leg <- allocation.transferLegSides
+        let iid = V2.InstrumentId with
+              id = leg.instrumentId
+              admin = allocation.admin
+        pure (allocation.authorizer, iid)
+      <>
+      do
+        funding <- optionalToList allocation.nextIterationFunding
+        id <- TSU.textMapKeys funding
+        pure (allocation.authorizer, V2.InstrumentId with id, admin = allocation.admin)
     disclosures = enrichedChoice.disclosures
+
+mkAllocation_WithdrawV2 : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView) -> Script TSABatch
+mkAllocation_WithdrawV2 registries actor (allocCid, allocView) = do
+  registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
+  context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
+  let withdrawRequest = BatchingUtilityV2.TSA_Allocation_WithdrawV2 BatchingUtilityV2.ChoiceCall with
+        cid = TSU.toAnyContractId allocCid
+        arg = V2.Allocation_Withdraw with
+          extraArgs = ExtraArgs with
+            context = context.choiceContext
+            meta = emptyMetadata
+          actors = [actor]
+  pure TSABatch with
+    actions = [withdrawRequest]
+    accountsAndInstruments = mempty
+    disclosures = context.disclosures
 
 mkAllocationRequest_AcceptV2 : Party -> ContractId V2.AllocationRequest -> Script TSABatch
 mkAllocationRequest_AcceptV2 actor reqCid = do
-  let acceptRequest = BatchingUtilityV2.TSA_AllocationRequestV2_Accept BatchingUtilityV2.ChoiceCall with
+  let acceptRequest = BatchingUtilityV2.TSA_AllocationRequest_AcceptV2 BatchingUtilityV2.ChoiceCall with
         cid = TSU.toAnyContractId reqCid
         arg = V2.AllocationRequest_Accept with
           extraArgs = emptyExtraArgs
@@ -640,10 +822,22 @@ mkAllocationRequest_AcceptV2 actor reqCid = do
     accountsAndInstruments = mempty
     disclosures = mempty
 
+mkAllocationRequest_RejectV2 : Party -> ContractId V2.AllocationRequest -> Script TSABatch
+mkAllocationRequest_RejectV2 actor reqCid = do
+  let rejectRequest = BatchingUtilityV2.TSA_AllocationRequest_RejectV2 BatchingUtilityV2.ChoiceCall with
+        cid = TSU.toAnyContractId reqCid
+        arg = V2.AllocationRequest_Reject with
+          extraArgs = emptyExtraArgs
+          actors = [actor]
+  pure TSABatch with
+    actions = [rejectRequest]
+    accountsAndInstruments = mempty
+    disclosures = mempty
+
 -- | Combined acceptance of all allocations required to be created by an actor
 -- for a V1 allocation request.
-mkAcceptAllocationRequestV1 :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView -> Script TSABatch
-mkAcceptAllocationRequestV1 registries actor req = do
+mkAcceptAndCreateRequestedAllocationsV1 :  MultiRegistry.MultiRegistry -> Party -> V1.AllocationRequestView -> Script TSABatch
+mkAcceptAndCreateRequestedAllocationsV1 registries actor req = do
   batches <- forA (TextMap.toList req.transferLegs) $ \(legId, leg) -> do
     let admin = leg.instrumentId.admin
     if actor == leg.sender
@@ -658,9 +852,9 @@ mkAcceptAllocationRequestV1 registries actor req = do
   pure $ mconcat batches
 
 -- | Combined acceptance and creation of allocaitons for V2 allocation requests.
-mkAcceptAllocationRequestV2
+mkAcceptAndCreateRequestedAllocationsV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationRequest, V2.AllocationRequestView) -> Script TSABatch
-mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
+mkAcceptAndCreateRequestedAllocationsV2 registries actor (reqCid, req) = do
   acceptRequestBatch <- mkAllocationRequest_AcceptV2 actor reqCid
   batches <- forA req.allocations $ \alloc -> do
     apis <- MultiRegistry.getRegistryApis registries alloc.admin
@@ -677,15 +871,15 @@ mkAcceptAllocationRequestV2 registries actor (reqCid, req) = do
                 leg <- alloc.transferLegSides
                 let legV2 = TSU.transferLegFromSide alloc.authorizer leg
                 pure (leg.transferLegId, TSU.downcast_v2_v1_TransferLeg alloc.admin legV2)
-        mkAcceptAllocationRequestV1 registries actor reqV1
+        mkAcceptAndCreateRequestedAllocationsV1 registries actor reqV1
 
       (None, None) -> fail $ "unknown registry admin " <> show alloc.admin
 
   pure (acceptRequestBatch <> mconcat batches)
 
 -- | Accept a transfer offer.
-mkAcceptTransferOffer : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.TransferInstruction, V2.Transfer) -> Script TSABatch
-mkAcceptTransferOffer registries actor (instrCid, transfer) = do
+mkTransferInstruction_AcceptV1V2 : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.TransferInstruction, V2.Transfer) -> Script TSABatch
+mkTransferInstruction_AcceptV1V2 registries actor (instrCid, transfer) = do
   supportsV2 <- MultiRegistry.supportsV2 registries transfer.instrumentId.admin
   if supportsV2
     then mkTransferInstruction_AcceptV2 registries actor instrCid
@@ -743,9 +937,6 @@ mkTransferFactory_TransferV2' registries t = do
       inputHoldingCids = []
       meta = TSU.reasonToMeta t.reason emptyMetadata
     extraArgs = emptyExtraArgs
-
--- TODO(#4823): add missing transfer instruction actions
--- TODO(#4838): add support for allocation instruction actions
 
 
 -- Tx History V2 checking utilities

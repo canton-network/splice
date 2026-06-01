@@ -22,10 +22,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, StoreTestBase, TcsStore}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, StoreTestBase, TcsStore}
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
 import slick.jdbc.JdbcProfile
 
@@ -238,6 +237,136 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
+    "lookupOpenMiningRoundByNumber returns the correct contract" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.5)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(200).toInstant)
+      val omr5 = openMiningRound(dsoParty, round = 5, amuletPrice = 2.0)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(omr3, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(omr4, recordTime = CantonTimestamp.ofEpochSecond(200).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(omr5, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+        // Archive round 3 — it should still be found in the archive table
+        _ <- sync1.archive(omr3, recordTime = CantonTimestamp.ofEpochSecond(350).toInstant)(
+          store.multiDomainAcsStore
+        )
+
+        // Round 3: archived — found via archive table
+        result3 <- store.lookupOpenMiningRoundByNumber(3)
+        _ = result3 shouldBe Some(omr3)
+
+        // Round 4: still active — found via active table
+        result4 <- store.lookupOpenMiningRoundByNumber(4)
+        _ = result4 shouldBe Some(omr4)
+
+        // Round 5: still active
+        result5 <- store.lookupOpenMiningRoundByNumber(5)
+        _ = result5 shouldBe Some(omr5)
+
+        // Round 99: never existed
+        resultMissing <- store.lookupOpenMiningRoundByNumber(99)
+        _ = resultMissing shouldBe None
+      } yield succeed
+    }
+
+    "listActiveCalculateRewardsV2 returns active contracts sorted by round" in {
+      val store = mkStore()
+      val cr5 = calculateRewardsV2(dsoParty, round = 5)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(200).toInstant)
+      val cr7 = calculateRewardsV2(dsoParty, round = 7)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(cr5, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr3, recordTime = CantonTimestamp.ofEpochSecond(200).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr7, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+
+        // All three active, sorted by round ascending
+        all <- store.listActiveCalculateRewardsV2()
+        _ = all.map(_.payload.round.number) shouldBe Seq(3L, 5L, 7L)
+
+        // Limit respected
+        limited <- store.listActiveCalculateRewardsV2(PageLimit.tryCreate(2))
+        _ = limited.map(_.payload.round.number) shouldBe Seq(3L, 5L)
+
+        // Archive round 3 — no longer returned
+        _ <- sync1.archive(cr3, recordTime = CantonTimestamp.ofEpochSecond(400).toInstant)(
+          store.multiDomainAcsStore
+        )
+        afterArchive <- store.listActiveCalculateRewardsV2()
+        _ = afterArchive.map(_.payload.round.number) shouldBe Seq(5L, 7L)
+
+        // Empty when all archived
+        _ <- sync1.archive(cr5, recordTime = CantonTimestamp.ofEpochSecond(500).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.archive(cr7, recordTime = CantonTimestamp.ofEpochSecond(600).toInstant)(
+          store.multiDomainAcsStore
+        )
+        allArchived <- store.listActiveCalculateRewardsV2()
+        _ = allArchived shouldBe Seq.empty
+      } yield succeed
+    }
+
+    "listActiveCalculateRewardsV2ForRound returns contracts for the given round" in {
+      val store = mkStore()
+      val cr5 = calculateRewardsV2(dsoParty, round = 5)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(200).toInstant)
+      val cr7 = calculateRewardsV2(dsoParty, round = 7)
+        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(cr5, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr3, recordTime = CantonTimestamp.ofEpochSecond(200).toInstant)(
+          store.multiDomainAcsStore
+        )
+        _ <- sync1.create(cr7, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
+          store.multiDomainAcsStore
+        )
+
+        // Returns contract for matching round
+        result5 <- store.listActiveCalculateRewardsV2ForRound(5)
+        _ = result5.map(_.payload.round.number) shouldBe Seq(5L)
+
+        // Returns empty for non-existent round
+        result99 <- store.listActiveCalculateRewardsV2ForRound(99)
+        _ = result99 shouldBe empty
+
+        // Returns empty after archiving
+        _ <- sync1.archive(cr5, recordTime = CantonTimestamp.ofEpochSecond(400).toInstant)(
+          store.multiDomainAcsStore
+        )
+        afterArchive <- store.listActiveCalculateRewardsV2ForRound(5)
+        _ = afterArchive shouldBe empty
+
+        // Other rounds unaffected
+        still3 <- store.listActiveCalculateRewardsV2ForRound(3)
+        _ = still3.map(_.payload.round.number) shouldBe Seq(3L)
+      } yield succeed
+    }
+
     "lookupActiveOpenMiningRounds" in {
       val store = mkStore()
       // Timeline (ingestion start = 250, earliest archived_at):
@@ -377,7 +506,7 @@ class DbScanRewardsReferenceStoreTest
       storage,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(0L, None),
+      0L,
       participantId,
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

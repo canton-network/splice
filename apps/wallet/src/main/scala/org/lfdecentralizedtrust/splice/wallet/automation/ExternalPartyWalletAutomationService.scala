@@ -3,24 +3,22 @@
 
 package org.lfdecentralizedtrust.splice.wallet.automation
 
-import org.lfdecentralizedtrust.splice.automation.{
-  AutomationServiceCompanion,
-  SpliceAppAutomationService,
-}
-import AutomationServiceCompanion.TriggerClass
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
-import org.lfdecentralizedtrust.splice.environment.*
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
-import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.automation.{
+  AutomationServiceCompanion,
+  SpliceAppAutomationService,
+}
+import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.TriggerClass
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
+import org.lfdecentralizedtrust.splice.environment.*
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
 
@@ -30,7 +28,6 @@ class ExternalPartyWalletAutomationService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
@@ -43,12 +40,18 @@ class ExternalPartyWalletAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
       params,
     ) {
+
+  override protected def metricsContext: MetricsContext =
+    MetricsContext(
+      "automation_service" -> getClass.getSimpleName,
+      "party" -> store.key.externalParty.toString,
+    )
+
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService.type =
     ExternalPartyWalletAutomationService

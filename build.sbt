@@ -111,6 +111,7 @@ lazy val root: Project = (project in file("."))
     `splice-dso-governance-test-daml`,
     `splice-validator-lifecycle-daml`,
     `splice-validator-lifecycle-test-daml`,
+    `splice-api-reward-assignment-v1-daml`,
     `splice-api-token-metadata-v1-daml`,
     `splice-api-token-holding-v1-daml`,
     `splice-api-token-holding-v2-daml`,
@@ -865,6 +866,14 @@ lazy val `splice-featured-app-api-v2-daml` =
       ),
     )
 
+lazy val `splice-api-reward-assignment-v1-daml` =
+  project
+    .in(file("daml/splice-api-reward-assignment-v1"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings
+    )
+
 lazy val `splice-amulet-daml` =
   project
     .in(file("daml/splice-amulet"))
@@ -887,7 +896,8 @@ lazy val `splice-amulet-daml` =
           (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value ++
           (`splice-token-standard-utils-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
-          (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value,
+          (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-amulet-test-daml` =
@@ -1146,6 +1156,7 @@ lazy val `apps-common` =
       `splice-token-test-trading-app-v2-daml`,
       `splice-featured-app-api-v1-daml`,
       `splice-featured-app-api-v2-daml`,
+      `splice-api-reward-assignment-v1-daml`,
       `splice-util-batched-markers-daml`,
     )
     .enablePlugins(BuildInfoPlugin)
@@ -2280,6 +2291,7 @@ lazy val `apps-dar-resources-generator` =
       `splice-token-test-trading-app-daml`,
       `splice-featured-app-api-v1-daml`,
       `splice-featured-app-api-v2-daml`,
+      `splice-api-reward-assignment-v1-daml`,
       `splice-util-batched-markers-daml`,
     )
     .settings(

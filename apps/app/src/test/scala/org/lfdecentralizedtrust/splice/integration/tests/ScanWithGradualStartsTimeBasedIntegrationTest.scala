@@ -9,8 +9,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.Integration
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.LocalSequencerConnectionsTrigger
 import org.lfdecentralizedtrust.splice.util.{SvTestUtil, TimeTestUtil, WalletTestUtil}
 
-import scala.util.Try
-
 class ScanWithGradualStartsTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
@@ -77,14 +75,13 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
     // advance rounds for the reward triggers to run
     advanceTimeForRewardAutomationToRunForCurrentRound
 
-    // TODO(DACH-NY/canton-network-node#2930): Since we are reporting in getRoundOfLatestData() only the latest round that is aggregated (fully closed),
-    // we must advance rounds until round 3 closes, which is the first round that sv2's scan is guaranteed to have seen.
+    // Advance rounds until round 3 closes, which is the first round that sv2's scan is guaranteed to have seen.
     (firstOpenRound.payload.round.number.toInt to (firstOpenRound.payload.round.number.toInt + 6))
       .foreach { n =>
         clue("Ensure SvRewardCoupons are received") {
           eventually() {
             ensureSvRewardCouponReceivedForCurrentRound(sv1ScanBackend, sv1WalletClient)
-            // sv2 did not start up it's validator app (thus wallet), so it won't claim any coupons.
+            // sv2 did not start up its validator app (thus wallet), so it won't claim any coupons.
           }
         }
         clue("Ensure ValidatorLivenessActivityRecord are received") {
@@ -129,33 +126,5 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
           }
         }
       }
-
-    clue("Waiting for scan apps to report rounds as closed") {
-      eventually() {
-        Try(sv2ScanBackend.getRoundOfLatestData()._1).success.value shouldBe 3
-        Try(sv1ScanBackend.getRoundOfLatestData()._1).success.value shouldBe 3
-      }
-    }
-
-    val validatorLivenessActivityRecordAmount = 2.85
-
-    clue("Aggregated rewards collected on both scan apps should match") {
-      forEvery(
-        Table(
-          ("round", "total floor", "total ceiling"),
-          (2L, BigDecimal(0), BigDecimal(0)),
-          (
-            3L,
-            walletUsdToAmulet(validatorLivenessActivityRecordAmount * 3 - smallAmount),
-            walletUsdToAmulet(validatorLivenessActivityRecordAmount * 3),
-          ),
-        )
-      ) { (round, floor, ceil) =>
-        val rewards1 = sv1ScanBackend.getRewardsCollectedInRound(round)
-        val rewards2 = sv2ScanBackend.getRewardsCollectedInRound(round)
-        rewards1 shouldBe rewards2
-        rewards1 should beWithin(floor, ceil)
-      }
-    }
   }
 }

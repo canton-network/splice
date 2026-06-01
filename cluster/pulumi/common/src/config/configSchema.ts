@@ -20,6 +20,7 @@ export type PulumiProjectConfig = z.infer<typeof PulumiProjectConfigSchema>;
 export const ConfigSchema = z.object({
   synchronizerMigration: SynchronizerMigrationSchema.prefault({
     active: defaultActiveMigration,
+    frozenMigrationId: defaultActiveMigration.id,
   }),
   persistentHeapDumps: z.boolean().default(false),
   pulumiProjectConfig: z

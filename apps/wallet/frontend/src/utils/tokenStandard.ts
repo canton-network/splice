@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { SettlementInfo } from '@daml.js/splice-api-token-allocation-v2-1.0.0/lib/Splice/Api/Token/AllocationV2';
 import { Account } from '@daml.js/splice-api-token-holding-v2-1.0.0/lib/Splice/Api/Token/HoldingV2';
-import { AllocationRequest, isV2AllocationRequest } from 'src/contexts/WalletServiceContext';
+import { AllocationRequest, isV2AllocationRequest } from '../contexts/WalletServiceContext';
 
 export function basicAccount(party: string): Account {
   return { owner: party, provider: null, id: '' };

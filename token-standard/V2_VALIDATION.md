@@ -207,6 +207,7 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   - enables: creating a single allocation request for different `authorizer`s whose account parties
     are the same
   - required moving `AllocationSpecification.settlement` up to the `AllocationView` level
+- Clarify that `V2.Allocation_Cancel` can be called by the `admin` to cancel expired allocations
 
 ### Utility and test library changes
 
@@ -218,3 +219,5 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   aid in creating metadata for V1 transaction history parsing for `V2.Allocation_Settle` choices.
 - Add `transferAcceptanceTxHistoryV1ToMeta` utility function to `splice-token-standard-utils` to
   aid in creating metadata for V1 transaction history parsing for `V2.TransferInstruction_Accept` choices.
+- Replace `allocationV2_cancelDefaultImplUsingV1` with `allocationV2_cancelDefaultImpl`, which requires only
+  `exeuctors` authority and allows the `admin` to cancel expired allocations

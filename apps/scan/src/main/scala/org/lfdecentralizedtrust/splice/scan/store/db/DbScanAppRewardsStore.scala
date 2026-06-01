@@ -610,19 +610,19 @@ class DbScanAppRewardsStore(
 
   // -- Aggregation ------------------------------------------------------------
 
-  /** Returns the latest round for which reward computation has completed
-    * (i.e. a root hash exists). None if no rounds have been computed.
-    */
-  def lookupLatestRoundWithRewardComputation()(implicit
+  override def roundsWithComputedRewards(rounds: Seq[Long])(implicit
       tc: TraceContext
-  ): Future[Option[Long]] = {
-
-    runQuerySingle(
-      sql"""select max(round_number) from #${Tables.appRewardRootHashes}
-            where history_id = $historyId
-      """.as[Option[Long]].headOption.map(_.flatten),
-      "appRewards.lookupLatestRoundWithRewardComputation",
-    )
+  ): Future[Set[Long]] = {
+    if (rounds.isEmpty) Future.successful(Set.empty)
+    else {
+      runQuery(
+        (sql"""select round_number from #${Tables.appRewardRootHashes}
+               where history_id = $historyId
+                 and """ ++ inClause("round_number", rounds)).toActionBuilder
+          .as[Long],
+        "appRewards.roundsWithComputedRewards",
+      ).map(_.toSet)
+    }
   }
 
   /** Runs the full reward computation pipeline for a single round in a single
@@ -833,7 +833,7 @@ class DbScanAppRewardsStore(
     * Level 1+: hash batches of batches until a single root remains.
     * All levels run in a single transaction.
     */
-  private[store] def computeRewardHashes(
+  private[splice] def computeRewardHashes(
       roundNumber: Long,
       batchSize: Int,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -892,7 +892,7 @@ class DbScanAppRewardsStore(
             min(seq_num), max(seq_num) + 1,
             decode(hash_batch_of_minting_allowances(
               array_agg(
-                hash_minting_allowance(party, amount::text)
+                hash_minting_allowance(party, daml_numeric_to_text(amount))
                 order by seq_num
               )
             ), 'hex')

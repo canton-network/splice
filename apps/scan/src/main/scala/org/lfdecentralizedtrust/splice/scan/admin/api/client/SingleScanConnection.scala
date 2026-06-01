@@ -42,12 +42,10 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
-  Codec,
   Contract,
   ContractWithState,
   FactoryChoiceWithDisclosures,
@@ -118,7 +116,6 @@ class SingleScanConnection private[client] (
     with ScanConnection
     with BackfillingScanConnection
     with HasUrl {
-  import ScanRoundAggregatesDecoder.*
 
   override def runHttpCmd[Res, Result, Client](
       url: Uri,
@@ -468,72 +465,6 @@ class SingleScanConnection private[client] (
       config.adminApi.url,
       HttpScanAppClient.GetAcsSnapshot(partyId, recordTime),
     )
-  }
-  def listRoundTotals(
-      start: Long,
-      end: Long,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[org.lfdecentralizedtrust.splice.http.v0.definitions.RoundTotals]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.ListRoundTotals(start, end),
-    )
-  }
-  def listRoundPartyTotals(
-      start: Long,
-      end: Long,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[org.lfdecentralizedtrust.splice.http.v0.definitions.RoundPartyTotals]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.ListRoundPartyTotals(start, end),
-    )
-  }
-  def getAggregatedRounds()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundRange]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.GetAggregatedRounds,
-    )
-  }
-
-  def getRoundAggregate(round: Long)(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundAggregate]] = {
-    for {
-      roundTotals <- listRoundTotals(round, round).flatMap { roundTotals =>
-        roundTotals.headOption
-          .map { rt =>
-            decodeRoundTotal(rt).fold(
-              err =>
-                Future.failed(ScanAggregator.CannotAdvance(s"Failed to decode round totals: $err")),
-              rt => Future.successful(Some(rt)),
-            )
-          }
-          .getOrElse(Future.successful(None))
-      }
-      roundPartyTotals <- listRoundPartyTotals(round, round).flatMap { roundPartyTotals =>
-        val (errors, totals) = roundPartyTotals.partitionMap { rt =>
-          decodeRoundPartyTotals(rt)
-        }
-        if (errors.nonEmpty) {
-          Future.failed(
-            ScanAggregator.CannotAdvance(
-              s"""Failed to decode round party totals: ${errors.mkString(", ")}"""
-            )
-          )
-        } else {
-          Future.successful(totals.toVector)
-        }
-      }
-    } yield {
-      roundTotals.map { rt =>
-        ScanAggregator.RoundAggregate(roundTotals = rt, roundPartyTotals = roundPartyTotals)
-      }
-    }
   }
 
   override def getMigrationSchedule()(implicit
@@ -1085,62 +1016,4 @@ class CachedScanConnection private[client] (
       HttpScanAppClient.GetMigrationSchedule(),
     )
   )
-}
-
-object ScanRoundAggregatesDecoder {
-  def decodeRoundTotal(
-      rt: org.lfdecentralizedtrust.splice.http.v0.definitions.RoundTotals
-  ): Either[String, ScanAggregator.RoundTotals] = {
-    (for {
-      closedRoundEffectiveAt <- CantonTimestamp.fromInstant(rt.closedRoundEffectiveAt.toInstant)
-      appRewards <- Codec.decode(Codec.BigDecimal)(rt.appRewards)
-      validatorRewards <- Codec.decode(Codec.BigDecimal)(rt.validatorRewards)
-      cumulativeAppRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeAppRewards)
-      cumulativeValidatorRewards <- Codec
-        .decode(Codec.BigDecimal)(rt.cumulativeValidatorRewards)
-    } yield {
-      // changeToInitialAmountAsOfRoundZero, changeToHoldingFeesRate, cumulativeChangeToInitialAmountAsOfRoundZero,
-      // cumulativeChangeToHoldingFeesRate and totalAmuletBalance are intentionally left out
-      // since these are not calculated anymore.
-      ScanAggregator.RoundTotals(
-        closedRound = rt.closedRound,
-        closedRoundEffectiveAt = closedRoundEffectiveAt,
-        appRewards = appRewards,
-        validatorRewards = validatorRewards,
-        cumulativeAppRewards = cumulativeAppRewards,
-        cumulativeValidatorRewards = cumulativeValidatorRewards,
-      )
-    })
-  }
-
-  def decodeRoundPartyTotals(
-      rt: org.lfdecentralizedtrust.splice.http.v0.definitions.RoundPartyTotals
-  ): Either[String, ScanAggregator.RoundPartyTotals] = {
-    (for {
-      appRewards <- Codec.decode(Codec.BigDecimal)(rt.appRewards)
-      validatorRewards <- Codec.decode(Codec.BigDecimal)(rt.validatorRewards)
-      trafficPurchasedCcSpent <- Codec.decode(Codec.BigDecimal)(rt.trafficPurchasedCcSpent)
-      cumulativeAppRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeAppRewards)
-      cumulativeValidatorRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeValidatorRewards)
-      cumulativeTrafficPurchasedCcSpent <- Codec
-        .decode(Codec.BigDecimal)(rt.cumulativeTrafficPurchasedCcSpent)
-    } yield {
-      // cumulativeChangeToInitialAmountAsOfRoundZero and cumulativeChangeToHoldingFeesRate are intentionally left out
-      // since these are not calculated anymore.
-      ScanAggregator.RoundPartyTotals(
-        closedRound = rt.closedRound,
-        party = rt.party,
-        appRewards = appRewards,
-        validatorRewards = validatorRewards,
-        trafficPurchased = rt.trafficPurchased,
-        trafficPurchasedCcSpent = trafficPurchasedCcSpent,
-        trafficNumPurchases = rt.trafficNumPurchases,
-        cumulativeAppRewards = cumulativeAppRewards,
-        cumulativeValidatorRewards = cumulativeValidatorRewards,
-        cumulativeTrafficPurchased = rt.cumulativeTrafficPurchased,
-        cumulativeTrafficPurchasedCcSpent = cumulativeTrafficPurchasedCcSpent,
-        cumulativeTrafficNumPurchases = rt.cumulativeTrafficNumPurchases,
-      )
-    })
-  }
 }

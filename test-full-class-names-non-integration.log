@@ -17,7 +17,6 @@ org.lfdecentralizedtrust.splice.scan.admin.http.GeneratedScanRouteDropNullsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodingsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringComplianceTest
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
-org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
 org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputationTest
@@ -44,7 +43,6 @@ org.lfdecentralizedtrust.splice.store.db.DbSvDsoStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
-org.lfdecentralizedtrust.splice.store.db.ScanAggregatorTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNodeTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftRequestSignerTest
 org.lfdecentralizedtrust.splice.sv.onboarding.SequencerBftPeerReconcilerSpec
