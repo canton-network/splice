@@ -33,10 +33,27 @@
         "type": "indirect"
       }
     },
+    "nixpkgs-for-gcloud": {
+      "locked": {
+        "lastModified": 1779753082,
+        "narHash": "sha256-XOQGKweM531QTfdtT7+Cnmy1RR+DMP3dCtCrv0hKolg=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7e694d87970c8a280ac5420a5af2738a63ed2711",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7e694d87970c8a280ac5420a5af2738a63ed2711",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-for-gcloud": "nixpkgs-for-gcloud"
       }
     },
     "systems": {

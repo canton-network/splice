@@ -1,5 +1,10 @@
-{ use_enterprise }:
+{ use_enterprise, pkgs-for-gcloud }:
 [(self: super: {
+  # Use an older google-cloud-sdk that still ships with bundled Python 3.12.
+  # The current nixpkgs-unstable has 570.0.0 with bundled Python 3.14 which
+  # fails auto-patchelf (missing libpython3.14.so.1.0 / libtcl9.0.so / libtk).
+  # Remove this override once the upstream issue is resolved.
+  google-cloud-sdk = pkgs-for-gcloud.google-cloud-sdk;
   # We need the old version as our code is not compatible with the new one.
   # Just overwriting the version does not work as they changed the build code to be
   # incompatible with the new one.
