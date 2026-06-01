@@ -1484,7 +1484,7 @@ template DsoRules with
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     -- Note: Implement in phase 2
-    nonconsuming choice DsoRules_ConfirmSvOnboarding_V2 : DsoRules_ConfirmSvOnboarding_V2Result -- TODOV: add vote
+    nonconsuming choice DsoRules_ConfirmSvOnboarding_V2 : DsoRules_ConfirmSvOnboarding_V2Result
       with
         newSvOperatorParty : Party
         newSvNodeName : Text
