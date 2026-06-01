@@ -9,6 +9,7 @@ import cats.syntax.either.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.admin.http.AdminRoutes
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
+import org.lfdecentralizedtrust.splice.config.SpliceDbConfig.withClientConnectionCheckInterval
 import org.lfdecentralizedtrust.splice.environment.NodeBootstrapBase
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
@@ -109,7 +110,7 @@ object SvAppBootstrap {
           testingConfigInternal,
           clock,
           svMetrics,
-          new StorageSingleFactory(svConfig.storage),
+          new StorageSingleFactory(withClientConnectionCheckInterval(svConfig.storage)),
           loggerFactory,
           futureSupervisor,
           configuredOpenTelemetry,
