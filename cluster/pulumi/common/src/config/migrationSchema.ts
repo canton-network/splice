@@ -29,8 +29,6 @@ export const MigrationInfoSchema = z
     id: z.number().gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),
-    // TODO(#5708): legacy config, to be removed once all usage is removed
-    enableLogicalSynchronizerDeploymentMode: z.boolean().optional(),
     sequencer: z
       .object({
         enableBftSequencer: z.boolean().default(false),
@@ -59,8 +57,6 @@ export const SynchronizerMigrationSchema = z
     archived: z.array(MigrationInfoSchema).optional(),
     activeDatabaseId: z.number().optional(),
     attachPvc: z.boolean().default(true),
-    // TODO(#5708): legacy config, to be removed once all usage is removed
-    lsuEnabled: z.boolean().optional(),
     frozenMigrationId: z.number(),
   })
   .strict();
