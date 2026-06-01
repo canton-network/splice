@@ -18,15 +18,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbScanStore,
-  DbScanStoreMetrics,
-  ScanAggregatesReader,
-  ScanAggregator,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
 import org.lfdecentralizedtrust.splice.store.{
@@ -44,7 +38,6 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -59,14 +52,6 @@ trait ScanStore
     with MiningRoundsStore
     with VotesStore
     with ExternalPartyConfigStateStore {
-
-  def aggregate()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundTotals]]
-
-  def backFillAggregates()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]]
 
   def key: ScanStore.Key
 
@@ -157,27 +142,9 @@ trait ScanStore
       tc: TraceContext
   ): Future[Option[ContractWithState[splice.ans.AnsRules.ContractId, splice.ans.AnsRules]]]
 
-  def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal]
-  def getRewardsCollectedInRound(round: Long)(implicit tc: TraceContext): Future[BigDecimal]
-
   def getAmuletConfigForRound(round: Long)(implicit
       tc: TraceContext
   ): Future[OpenMiningRoundTxLogEntry]
-
-  final def getRoundOfLatestData()(implicit tc: TraceContext): Future[(Long, Instant)] =
-    lookupRoundOfLatestData().map(_.getOrElse(throw roundNotAggregated()))
-
-  def lookupRoundOfLatestData()(implicit tc: TraceContext): Future[Option[(Long, Instant)]]
-
-  // ensures that data is aggregated at least up to and including asOfEndOfRound, passes the last round aggregated to f
-  def ensureAggregated[T](asOfEndOfRound: Long)(f: Long => Future[T])(implicit
-      tc: TraceContext
-  ): Future[T] = for {
-    (lastRound, _) <- getRoundOfLatestData()
-    result <-
-      if (lastRound >= asOfEndOfRound) f(lastRound)
-      else Future.failed(roundNotAggregated())
-  } yield result
 
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
@@ -250,16 +217,6 @@ trait ScanStore
       tc: TraceContext
   ): Future[Seq[TxLogEntry.TransactionTxLogEntry]]
 
-  def getAggregatedRounds()(implicit tc: TraceContext): Future[Option[ScanAggregator.RoundRange]]
-
-  def getRoundTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundTotals]]
-
-  def getRoundPartyTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundPartyTotals]]
-
   def lookupLatestTransferCommandEvents(
       sender: PartyId,
       nonce: Long,
@@ -292,16 +249,13 @@ object ScanStore {
   def apply(
       key: ScanStore.Key,
       storage: DbStorage,
-      isFirstSv: Boolean,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      createScanAggregatesReader: DbScanStore => ScanAggregatesReader,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       cacheConfigs: ScanCacheConfig,
       metrics: DbScanStoreMetrics,
       ingestionConfig: IngestionConfig,
-      initialRound: Long,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
       txLogStoreDescriptorUserVersion: Option[Long] = None,
@@ -316,15 +270,12 @@ object ScanStore {
       new DbScanStore(
         key = key,
         storage,
-        isFirstSv,
         loggerFactory,
         retryProvider,
-        createScanAggregatesReader,
-        domainMigrationInfo,
+        migrationId,
         participantId,
         ingestionConfig,
         metrics,
-        initialRound,
         defaultLimit,
         acsStoreDescriptorUserVersion,
         txLogStoreDescriptorUserVersion,

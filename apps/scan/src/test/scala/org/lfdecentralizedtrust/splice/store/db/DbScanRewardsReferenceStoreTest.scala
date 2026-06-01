@@ -22,7 +22,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, StoreTestBase, TcsStore}
@@ -507,7 +506,7 @@ class DbScanRewardsReferenceStoreTest
       storage,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(0L, None),
+      0L,
       participantId,
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

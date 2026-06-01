@@ -374,7 +374,6 @@ case class SvAppBackendConfig(
       NonNegativeFiniteDuration.ofSeconds(10),
     // Identifier for all Canton nodes controlled by this application
     cantonIdentifierConfig: Option[SvCantonIdentifierConfig] = None,
-    legacyMigrationId: Option[Long] = None,
     // Defaults to 24h to allow for 24h between preparation and execution of an externally signed transaction
     preparationTimeRecordTimeTolerance: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofHours(24),

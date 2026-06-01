@@ -37,7 +37,6 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
-  lsuEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
@@ -99,7 +98,6 @@ synchronizerMigration:
   upgrade:
     id: 10
     version: 0.3.21
-    enableLogicalSynchronizerDeploymentMode: true
     sequencer:
       enableBftSequencer: true
     releaseReference:

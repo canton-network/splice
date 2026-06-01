@@ -6,12 +6,8 @@ package org.lfdecentralizedtrust.splice.wallet
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.config.{
@@ -42,14 +38,13 @@ class UserWalletService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     treasuryConfig: TreasuryConfig,
     storage: DbStorage,
     override protected[this] val retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
@@ -75,7 +70,7 @@ class UserWalletService(
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       automationConfig.ingestion,
       params.defaultLimit,
@@ -109,7 +104,6 @@ class UserWalletService(
     automationConfig,
     clock,
     domainTimeSync,
-    domainUnpausedSync,
     scanConnection,
     retryProvider,
     packageVersionSupport,
@@ -127,8 +121,7 @@ class UserWalletService(
   val connection: SpliceLedgerConnection =
     automation.connection(SpliceLedgerConnectionPriority.Medium)
 
-  override def isHealthy: Boolean =
-    automation.isHealthy && treasury.isHealthy
+  override def isHealthy: Boolean = treasury.isHealthy
 
   override def onClosed(): Unit = {
     // Close treasury early, that will result in it no longer accepting new requests

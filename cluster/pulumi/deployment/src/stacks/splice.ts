@@ -7,7 +7,6 @@ import {
   CLUSTER_BASENAME,
   CnChartVersion,
   config,
-  DecentralizedSynchronizerUpgradeConfig,
 } from '@lfdecentralizedtrust/splice-pulumi-common';
 import {
   allSvNamesToDeploy,
@@ -67,11 +66,7 @@ export function* getSpliceStacksFromMainReference(): Generator<StackFromRef> {
   if (deploymentConf.projectsToDeploy.has('canton-network')) {
     yield { project: 'canton-network', stack: `canton-network.${CLUSTER_BASENAME}` };
   }
-  if (
-    deploymentConf.projectsToDeploy.has('sv') &&
-    (DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-      DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv)
-  ) {
+  if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
       yield { project: 'sv', stack: `sv.${sv}.${CLUSTER_BASENAME}` };
     }
@@ -151,11 +146,7 @@ function installSvStacks(
   namespace: string,
   gcpSecret: k8s.core.v1.Secret
 ): void {
-  if (
-    deploymentConf.projectsToDeploy.has('sv') &&
-    (DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-      DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv)
-  ) {
+  if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
       createStackCR(
         `sv.${sv}`,

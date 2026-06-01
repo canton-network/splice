@@ -75,9 +75,35 @@
           walletPayments     0.1.19
           ================== =======
 
-- Validator app
+    - Validator app
 
-  - ``TransferPreapprovalProposal``s are now only accepted for parties hosted on your node.
-    To recover the prior behavior you can enable ``canton.validator-apps.validator_backend.transfer-preapproval.accept-non-hosted-preapproval-proposals = true``.
+      - ``TransferPreapprovalProposal``s are now only accepted for parties hosted on your node.
+        To recover the prior behavior you can enable ``canton.validator-apps.validator_backend.transfer-preapproval.accept-non-hosted-preapproval-proposals = true``.
 
-    Thanks to `Rhaydden <https://github.com/Rhaydden>`_ for reporting.
+        Thanks to `Rhaydden <https://github.com/Rhaydden>`_ for reporting.
+
+    - Deployment
+
+      - Remove leftover code from Hard Synchronizer Migrations. In particular the ``migration`` flags are gone from SV and validator helm charts as well as the ``-M`` option in docker compose.
+        The ``legacyId`` flag is also removed from the SV chart.
+
+      - Changed the default JVM args from ``-Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8`` to  ``-Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12``
+        for the participant, mediator, sequencer, sv app and scan app deployments.
+
+    - Observability
+
+      - The automation background services no longer affect the ``/readyz`` endpoint
+        of Splice apps and instead were replaced with a ``splice_automation_background_service_health`` gauge that reports
+        the health of each background service registered with an automation service. The gauge is ``0`` when the service
+        is healthy and ``1`` when it is unhealthy, and is labeled with
+        ``automation_service`` and ``service``.
+
+    - Scan
+
+      - The following deprecated endpoints have been removed from the public API:
+
+          - ``/v0/rewards-collected``
+          - ``/v0/round-party-totals``
+          - ``/v0/round-totals``
+          - ``/v0/aggregated-rounds``
+          - ``/v0/round-of-latest-data``

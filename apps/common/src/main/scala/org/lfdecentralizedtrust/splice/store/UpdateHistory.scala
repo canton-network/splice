@@ -21,7 +21,6 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TreeUpdateOrOffsetCheckpoint,
 }
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.IMPORT_ACS_WORKFLOW_ID_PREFIX
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.{
   DestinationBackfillingInfo,
   DestinationHistory,
@@ -88,7 +87,7 @@ import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection
   */
 class UpdateHistory(
     storage: DbStorage,
-    val domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     storeName: String,
     participantId: ParticipantId,
     val updateStreamParty: PartyId,
@@ -110,8 +109,6 @@ class UpdateHistory(
 
   import profile.api.jdbcActionExtensionMethods
   import UpdateHistory.*
-
-  private[this] def domainMigrationId = domainMigrationInfo.currentMigrationId
 
   private val state = new AtomicReference[State](State.empty())
 
@@ -283,8 +280,6 @@ class UpdateHistory(
               new RuntimeException(s"No row for $newHistoryId found, which was just inserted!")
             )
             .map(_.map(LegacyOffset.Api.assertFromStringToLong))
-
-          _ <- cleanUpDataAfterDomainMigration(newHistoryId)
         } yield {
           state.updateAndGet(
             _.copy(
@@ -774,133 +769,6 @@ class UpdateHistory(
   def markCorruptAcsSnapshotsDeleted(): Unit = {
     state.updateAndGet(_.copy(corruptSnapshotsDeleted = true))
     ()
-  }
-
-  private[this] def cleanUpDataAfterDomainMigration(
-      historyId: Long
-  )(implicit tc: TraceContext): Future[Unit] = {
-    val previousMigrationId = domainMigrationInfo.currentMigrationId - 1
-    domainMigrationInfo.migrationTimeInfo match {
-      case Some(info) =>
-        for {
-          _ <-
-            if (info.synchronizerWasPaused) {
-              for {
-                _ <- verifyNoRolledBackAcsSnapshots(
-                  historyId,
-                  previousMigrationId,
-                  info.acsRecordTime,
-                )
-                _ <- verifyNoRolledBackData(historyId, previousMigrationId, info.acsRecordTime)
-              } yield ()
-            } else {
-              for {
-                _ <- deleteAcsSnapshotsAfter(historyId, previousMigrationId, info.acsRecordTime)
-                _ <- deleteRolledBackUpdateHistory(
-                  historyId,
-                  previousMigrationId,
-                  info.acsRecordTime,
-                )
-              } yield ()
-            }
-        } yield ()
-      case _ =>
-        logger.debug("No previous domain migration, not checking or deleting updates")
-        Future.unit
-    }
-  }
-
-  private[this] def verifyNoRolledBackData(
-      historyId: Long, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    val action = DBIO
-      .sequence(
-        Seq(
-          sql"""
-            select count(*) from update_history_creates
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """.as[Long].head,
-          sql"""
-            select count(*) from update_history_exercises
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """.as[Long].head,
-          sql"""
-            select count(*) from update_history_transactions
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """.as[Long].head,
-          sql"""
-            select count(*) from update_history_assignments
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """.as[Long].head,
-          sql"""
-            select count(*) from update_history_unassignments
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """.as[Long].head,
-        )
-      )
-      .map(rows =>
-        if (rows.sum > 0) {
-          throw new IllegalStateException(
-            s"Found $rows rows for $updateStreamParty where migration_id = $migrationId and record_time > $recordTime, " +
-              "but the configuration says the domain was paused during the migration. " +
-              "Check the domain migration configuration and the content of the update history database."
-          )
-        } else {
-          logger.debug(
-            s"No updates found for $updateStreamParty where migration_id = $migrationId and record_time > $recordTime"
-          )
-        }
-      )
-    storage.query(action, "verifyNoRolledBackData")
-  }
-
-  private[this] def deleteRolledBackUpdateHistory(
-      historyId: Long, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    logger.info(
-      s"Deleting all updates for $updateStreamParty where migration = $migrationId and record time > $recordTime"
-    )
-    val action = DBIO
-      .sequence(
-        Seq(
-          sqlu"""
-            delete from update_history_creates
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """,
-          sqlu"""
-            delete from update_history_exercises
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """,
-          sqlu"""
-            delete from update_history_transactions
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """,
-          sqlu"""
-            delete from update_history_assignments
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """,
-          sqlu"""
-            delete from update_history_unassignments
-            where history_id = $historyId and migration_id = $migrationId and record_time > $recordTime
-          """,
-        )
-      )
-      .map(rows =>
-        if (rows.sum > 0) {
-          logger.info(
-            s"Deleted $rows rows for $updateStreamParty where migration_id = $migrationId and record_time > $recordTime. " +
-              "This is expected during a disaster recovery, where we are rolling back the domain to a previous state. " +
-              "In is NOT expected during regular hard domain migrations."
-          )
-        } else {
-          logger.info(s"No rows deleted for $updateStreamParty")
-        }
-      )
-    storage.update(action, "deleteRolledBackUpdateHistory")
   }
 
   /** Deletes all ACS snapshots with a record time after the given time.

@@ -18,10 +18,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.SvTaskBasedTrigger
@@ -43,7 +40,6 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 class RestartDsoDelegateBasedAutomationTrigger(
     override protected val context: TriggerContext,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     store: SvDsoStore,
     connection: SpliceLedgerConnectionPriority => SpliceLedgerConnection,
     clock: Clock,
@@ -161,7 +157,6 @@ class RestartDsoDelegateBasedAutomationTrigger(
        val dsoDelegateBasedAutomation = new DsoDelegateBasedAutomationService(
          clock,
          domainTimeSync,
-         domainUnpausedSync,
          config,
          svTaskContext,
          scanConnectionF,

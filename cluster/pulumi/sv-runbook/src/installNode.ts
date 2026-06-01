@@ -360,7 +360,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(canton.active.dependencies)
         .concat(svAppSecrets)
         .concat([appsPg])
@@ -442,10 +441,7 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
-        .concat(svAppSecrets)
-        .concat([appsPg]),
+      dependsOn: imagePullDeps.concat(svAppSecrets).concat([appsPg]),
     }
   );
 
@@ -518,7 +514,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(validatorSecrets)
         .concat(spliceConfig.pulumiProjectConfig.interAppsDependencies ? [sv] : [])
         .concat(backupConfigSecret ? [backupConfigSecret] : [])

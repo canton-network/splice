@@ -6,7 +6,6 @@ import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
@@ -845,7 +844,7 @@ class DbAppActivityRecordStoreTest
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       s"app_activity_test_$n",
       participantId,
       dsoParty,
@@ -873,7 +872,7 @@ class DbAppActivityRecordStoreTest
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "app_activity_combined_test",
       participantId,
       dsoParty,

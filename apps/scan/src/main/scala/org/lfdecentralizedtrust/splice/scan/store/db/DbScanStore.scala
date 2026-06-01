@@ -4,10 +4,8 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
-import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{
-  AsyncCloseable,
   AsyncOrSyncCloseable,
   CloseContext,
   FlagCloseableAsync,
@@ -37,7 +35,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -81,7 +78,6 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import slick.jdbc.canton.SQLActionBuilder
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
@@ -106,15 +102,12 @@ object DbScanStore {
 class DbScanStore(
     override val key: ScanStore.Key,
     storage: DbStorage,
-    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    createScanAggregatesReader: DbScanStore => ScanAggregatesReader,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeMetrics: DbScanStoreMetrics,
-    initialRound: Long,
     override val defaultLimit: Limit,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,
@@ -149,7 +142,7 @@ class DbScanStore(
         ),
         userVersion = txLogStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with ScanStore
@@ -170,61 +163,16 @@ class DbScanStore(
   ] = new DbScanTxLogStoreConfig(loggerFactory)
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    implicit def traceContext: TraceContext = TraceContext.empty
     Seq(
-      AsyncCloseable(
-        "db_scan_store",
-        aggregator.map(_.close()),
-        NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
-      ),
       SyncCloseable("db_scan_store_metrics", storeMetrics.close()),
       SyncCloseable("db_scan_acs_store", multiDomainAcsStore.close()),
     )
-  }
-
-  val aggregator: Future[ScanAggregator] =
-    waitUntilAcsIngested().map(_ =>
-      new ScanAggregator(
-        storage,
-        acsStoreId,
-        txLogStoreId,
-        isFirstSv,
-        createScanAggregatesReader(this),
-        loggerFactory,
-        domainMigrationId,
-        timeouts,
-        initialRound.toInt,
-      )
-    )
-
-  def aggregate()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundTotals]] = {
-    for {
-      a <- aggregator
-      lastAggregateRoundTotals <- a.aggregate()
-      _ = lastAggregateRoundTotals.foreach(rt =>
-        storeMetrics.latestAggregatedRound.updateValue(rt.closedRound)
-      )
-    } yield lastAggregateRoundTotals
-  }
-
-  def backFillAggregates()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]] = {
-    for {
-      a <- aggregator
-      backFilledRound <- a.backFillAggregates()
-      _ = backFilledRound.foreach(r => storeMetrics.earliestAggregatedRound.updateValue(r))
-    } yield backFilledRound
   }
 
   private[splice] def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
   private[splice] def txLogStoreId: TxLogStoreId = multiDomainAcsStore.txLogStoreId
   // Round totals are derived from TxLog entries, and are therefore linked to that store
   private[splice] def roundTotalsStoreId: TxLogStoreId = txLogStoreId
-
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   override def lookupAmuletRules()(implicit
       tc: TraceContext
@@ -565,35 +513,6 @@ class DbScanStore(
     } yield result
   }
 
-  override def lookupRoundOfLatestData()(implicit
-      tc: TraceContext
-  ): Future[Option[(Long, Instant)]] =
-    waitUntilAcsIngested {
-      for {
-        row <- storage
-          .querySingle(
-            sql"""
-            select   closed_round,
-                     closed_round_effective_at
-            from     round_totals
-            where    store_id = $roundTotalsStoreId
-            order by closed_round desc
-            limit    1;
-            """.as[(Long, Long)].headOption,
-            "getRoundOfLatestData",
-          )
-          .value
-        result <- row match {
-          case Some((closedRound, effectiveAt)) =>
-            Future.successful(
-              Some((closedRound, CantonTimestamp.assertFromLong(micros = effectiveAt).toInstant))
-            )
-          case None =>
-            Future.successful(None)
-        }
-      } yield result
-    }
-
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
       dsoRules <- getDsoRulesWithState()
@@ -601,43 +520,6 @@ class DbScanStore(
         getSvNodeState(PartyId.tryFromProtoPrimitive(svPartyId))
       }
     } yield nodeStates.map(_.contract.payload).toVector
-
-  override def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal] =
-    waitUntilAcsIngested {
-      for {
-        result <- storage.query(
-          sql"""
-          select coalesce(cumulative_app_rewards, 0) + coalesce(cumulative_validator_rewards, 0)
-          from   round_totals
-          where  store_id = $roundTotalsStoreId
-          and    closed_round = (
-                    select max(closed_round)
-                    from round_totals
-                    where store_id = $roundTotalsStoreId
-                 );
-          """.as[BigDecimal].headOption,
-          "getTotalRewardsCollectedEver",
-        )
-      } yield result.getOrElse(0)
-    }
-
-  override def getRewardsCollectedInRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[BigDecimal] = waitUntilAcsIngested {
-    for {
-      result <- ensureAggregated(round) { _ =>
-        storage.query(
-          sql"""
-            select coalesce(app_rewards, 0) + coalesce(validator_rewards, 0)
-            from   round_totals
-            where  store_id = $roundTotalsStoreId
-            and    closed_round = $round;
-            """.as[BigDecimal].headOption,
-          "getRewardsCollectedInRound",
-        )
-      }
-    } yield result.getOrElse(0)
-  }
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
@@ -708,75 +590,6 @@ class DbScanStore(
         )
         .value
     } yield sum.getOrElse(0L)
-  }
-
-  override def getAggregatedRounds()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundRange]] =
-    waitUntilAcsIngested {
-      for {
-        minMaxClosedRounds <- storage
-          .querySingle(
-            sql"""
-            select min(closed_round) as min_round,
-                   max(closed_round) as max_round
-            from   round_totals
-            where  store_id = $roundTotalsStoreId;
-          """.as[(Option[Long], Option[Long])].headOption,
-            "getAggregatedRounds",
-          )
-          .value
-      } yield {
-        minMaxClosedRounds.flatMap {
-          _ match {
-            case (Some(start), Some(end)) => Some(ScanAggregator.RoundRange(start, end))
-            case _ => None
-          }
-        }
-      }
-    }
-
-  override def getRoundTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundTotals]] = {
-    val q = sql"""
-    select   #${ScanAggregator.roundTotalsColumns}
-    from     round_totals
-    where    store_id = $roundTotalsStoreId
-    and      closed_round >= $startRound
-    and      closed_round <= $endRound
-    order by closed_round
-    """
-    waitUntilAcsIngested {
-      for {
-        roundTotals <- storage
-          .query(
-            q.as[ScanAggregator.RoundTotals],
-            "getRoundTotals",
-          )
-      } yield roundTotals
-    }
-  }
-  override def getRoundPartyTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundPartyTotals]] = {
-    val q = sql"""
-    select   #${ScanAggregator.roundPartyTotalsColumns}
-    from     round_party_totals
-    where    store_id = $roundTotalsStoreId
-    and      closed_round >= $startRound
-    and      closed_round <= $endRound
-    order by closed_round, party
-    """
-    waitUntilAcsIngested {
-      for {
-        roundPartyTotals <- storage
-          .query(
-            q.as[ScanAggregator.RoundPartyTotals],
-            "getRoundPartyTotals",
-          )
-      } yield roundPartyTotals
-    }
   }
 
   def lookupSvNodeState(svPartyId: PartyId)(implicit
