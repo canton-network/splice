@@ -310,63 +310,6 @@ class TokenStandardTransferIntegrationTest
 
       // TODO(#2254): check the exact balances once the scan backend supports it
 
-      val activityTxs = eventually() {
-        val activityTxs = sv1ScanBackend
-          .listActivity(None, 1000)
-          .filter(t => t.transfer.isDefined || t.abortTransferInstruction.isDefined)
-        // 4 transfer instructions + accept + withdraw + reject
-        activityTxs should have size (7) withClue "activityTxs"
-        activityTxs
-      }
-
-      clue("TransferInstruction accept") {
-        activityTxs(0).transactionType shouldBe HttpTransactionType.Transfer
-        val transfer = activityTxs(0).transfer.value
-        transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
-        transfer.transferInstructionCid shouldBe Some(cids(2).contractId)
-        transfer.description shouldBe None
-        transfer.transferInstructionReceiver shouldBe None
-        transfer.transferKind shouldBe Some(Transfer.TransferKind.members.TransferInstructionAccept)
-        transfer.receivers shouldBe Seq(
-          ReceiverAmount(bobUserParty.toProtoPrimitive, "10.0000000000", "0.0000000000")
-        )
-      }
-      clue("TransferInstruction withdraw") {
-        activityTxs(1).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
-        val abort = activityTxs(1).abortTransferInstruction.value
-        abort.transferInstructionCid shouldBe cids(1).contractId
-        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Withdraw
-        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
-      }
-      clue("TransferInstruction reject") {
-        activityTxs(2).transactionType shouldBe HttpTransactionType.AbortTransferInstruction
-        val abort = activityTxs(2).abortTransferInstruction.value
-        abort.transferInstructionCid shouldBe cids(0).contractId
-        abort.abortKind shouldBe AbortTransferInstruction.AbortKind.members.Reject
-        // Scan tracks the sum of locked and unlocked amulets so there is no balance change here.
-      }
-      forAll(Seq(3, 4, 5, 6)) { i =>
-        val transferInstructionNumber = 7 - i
-        clue(s"Transfer #$transferInstructionNumber") {
-          activityTxs(i).transactionType shouldBe HttpTransactionType.Transfer
-          val transfer = activityTxs(i).transfer.value
-          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
-          transfer.transferInstructionCid shouldBe Some(
-            cids(transferInstructionNumber - 1).contractId
-          )
-          transfer.description shouldBe Some(
-            s"Transfer #$transferInstructionNumber"
-          )
-          transfer.transferInstructionReceiver shouldBe Some(bobUserParty.toProtoPrimitive)
-          transfer.transferKind shouldBe Some(
-            Transfer.TransferKind.members.CreateTransferInstruction
-          )
-          transfer.sender.party shouldBe aliceUserParty.toProtoPrimitive
-          val receiver = transfer.receivers.loneElement
-          receiver.party shouldBe aliceUserParty.toProtoPrimitive
-          BigDecimal(receiver.amount) shouldBe (BigDecimal(10))
-        }
-      }
     }
 
     "locked amulet is expired before withdraw" in { implicit env =>

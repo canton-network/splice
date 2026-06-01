@@ -78,12 +78,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryRequestV2,
   UpdateHistoryTransactionV2WithHash,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem.TransactionType.members.{
-  AbortTransferInstruction,
-  DevnetTap,
-  Mint,
-  Transfer,
-}
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
@@ -1044,50 +1038,6 @@ class HttpScanHandler(
           )
         case BackfillingState.Complete => body
       }
-  }
-
-  override def listActivity(
-      respond: v0.ScanResource.ListActivityResponse.type
-  )(
-      request: definitions.ListActivityRequest
-  )(extracted: TraceContext): Future[v0.ScanResource.ListActivityResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listActivity") { _ => _ =>
-      val beginAfterId = if (request.beginAfterId.exists(_.isEmpty)) None else request.beginAfterId
-      for {
-        transactions <- store.listTransactions(
-          beginAfterId,
-          SortOrder.Descending,
-          PageLimit.tryCreate(request.pageSize.intValue()),
-        )
-      } yield definitions.ListActivityResponse(
-        transactions.map { tx =>
-          val txItem = TxLogEntry.Http.toResponseItem(tx)
-          import definitions.ListActivityResponseItem.*
-          definitions.ListActivityResponseItem(
-            activityType = txItem.transactionType match {
-              case DevnetTap =>
-                ActivityType.DevnetTap
-              case Mint =>
-                ActivityType.Mint
-              case Transfer =>
-                ActivityType.Transfer
-              case AbortTransferInstruction =>
-                ActivityType.AbortTransferInstruction
-            },
-            eventId = txItem.eventId,
-            offset = txItem.offset,
-            domainId = txItem.domainId,
-            date = txItem.date,
-            mint = txItem.mint,
-            tap = txItem.tap,
-            transfer = txItem.transfer,
-            abortTransferInstruction = txItem.abortTransferInstruction,
-            round = txItem.round,
-          )
-        }.toVector
-      )
-    }
   }
 
   override def listAnsEntries(
