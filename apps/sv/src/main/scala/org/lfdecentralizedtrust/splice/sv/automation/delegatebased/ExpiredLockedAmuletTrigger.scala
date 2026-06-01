@@ -21,10 +21,10 @@ import java.util.Optional
 import scala.jdk.CollectionConverters.*
 
 class ExpiredLockedAmuletTrigger(
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -36,7 +36,7 @@ class ExpiredLockedAmuletTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletBatchSize,
-      svTaskContext.dsoStore.listLockedExpiredAmulets(context.config.ignoredExpiredAmuletPartyIds),
+      svTaskContext.dsoStore.listLockedExpiredAmulets(ignoredPartiesStore.getAll),
       splice.amulet.LockedAmulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
@@ -44,31 +44,17 @@ class ExpiredLockedAmuletTrigger(
         (Seq(c.amulet.dso, c.amulet.owner) ++ c.lock.holders.asScala)
           .map(PartyId.tryFromProtoPrimitive(_)),
     )
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with BrokenAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] = {
-    logger.info(
-      s"Completing task ${svConfig.brokenAmuletVersions} for expired locked amulets with vetted version ${task.work.vettedVersion}, expired contracts: ${task.work.expiredContracts.map(_.contractId).mkString(", ")}"
-    )
-    if (svConfig.brokenAmuletVersions.contains(task.work.vettedVersion.toString)) {
-      val owners = task.work.expiredContracts
-        .map(c => PartyId.tryFromProtoPrimitive(c.payload.amulet.owner))
-      logger.debug(
-        s"Batch resolved to broken version ${task.work.vettedVersion}: adding ${owners.size} parties to the ignore list: $owners"
-      )
-      ignoredPartiesStore.addAll(owners)
-      Future.successful(
-        TaskSuccess(
-          s"Skipped batch with broken version ${task.work.vettedVersion}: added ${owners.size} parties to ignore list"
-        )
-      )
-    } else {
-      completeExpiryTaskAsDsoDelegate(task, controller)
-    }
-  }
+  ): Future[TaskOutcome] =
+    completeWithBrokenVersionCheck(
+      task.work.vettedVersion.toString,
+      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.amulet.owner)),
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,

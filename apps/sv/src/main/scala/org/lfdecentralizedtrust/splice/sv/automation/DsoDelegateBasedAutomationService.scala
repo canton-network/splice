@@ -51,7 +51,7 @@ class DsoDelegateBasedAutomationService(
     DsoDelegateBasedAutomationService
 
   val expiredAmuletIgnoredPartiesStore = new IgnoredPartiesStore(
-    triggerContext.config.ignoredExpiredAmuletPartyIds
+    triggerContext.config.ignoredUnavailablePartyIds
   )
 
   def start(): Unit = {
@@ -90,6 +90,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
       )
     )
     registerTrigger(
@@ -98,6 +99,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
       )
     )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
