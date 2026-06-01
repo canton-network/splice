@@ -67,6 +67,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
+            mintingVersion = "RewardVersion_FeaturedAppMarkers",
             dryRunVersion = None,
             appRewardCouponThreshold = BigDecimal("0"),
           )
@@ -415,7 +416,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     val rc = existing.rewardConfig.get()
     val newRc = new RewardConfig(
       if (enableMinting) RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
-      else rc.mintingVersion,
+      else RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS,
       if (enableDryRun) Optional.of(RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS)
       else Optional.empty[RewardVersion](),
       rc.batchSize,

@@ -241,7 +241,7 @@ object SvOnboardingConfig {
 }
 
 final case class InitialRewardConfig(
-    mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
+    mintingVersion: String = "RewardVersion_TrafficBasedAppRewards",
     dryRunVersion: Option[String] = None,
     batchSize: Long = 100,
     rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
