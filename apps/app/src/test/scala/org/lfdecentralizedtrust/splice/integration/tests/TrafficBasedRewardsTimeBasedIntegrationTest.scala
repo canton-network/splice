@@ -272,49 +272,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
                   s"CalculateRewardsV2 should exist for round $round"
               }
             }
-            // For rounds 0..5 scan will not be able calculate activity totals
-            // and root hashes, so archiving them here keep the
-            // CalculateRewardsTrigger's logs clean, as they expect each round
-            // with CalculateRewardsV2 to have a root hash.
-            if (dryRunEnabled) {
-              clue("Archive dry-run CalculateRewardsV2 for rounds 0..5 via sv admin API") {
-                sv1Backend.archiveDryRunRewardAccountingContracts((0L to 5L).toSeq)
-              }
-            } else {
-              // TODO (#5624): add support for bootstrapping
-              // Bootstrapping a network with mintingVersion set to trafficBasedAppRewards
-              // is in principle not supported, as the round 0 will never have
-              // activity totals/root-hash calculated, and its CalculateRewardsV2 cannot be processed.
-              // So the only way to handle this in test is via direct archive.
-              clue("Archive CalculateRewardsV2 for rounds 0..5 directly as dso") {
-                val cids = sv1Backend.appState.dsoStore
-                  .listCalculateRewardsV2()
-                  .futureValue
-                  .filter(c => c.payload.round.number >= 0L && c.payload.round.number <= 5L)
-                  .map(_.contractId)
-                if (cids.nonEmpty) {
-                  sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-                    .submitJava(
-                      userId = sv1Backend.config.ledgerApiUser,
-                      actAs = Seq(dsoParty),
-                      commands = cids.flatMap(_.exerciseArchive().commands.asScala.toSeq),
-                    )
-                }
-              }
-            }
-            clue("CalculateRewardsV2 contracts for rounds 0..5 are gone") {
-              eventually() {
-                val remaining = sv1Backend.appState.dsoStore
-                  .listCalculateRewardsV2()
-                  .futureValue
-                  .map(_.payload.round.number)
-                  .toSet
-                (0L to 5L).foreach { round =>
-                  remaining should not contain round withClue
-                    s"CalculateRewardsV2 for round $round should be archived"
-                }
-              }
-            }
           }
 
           (id0, id1, id3, id4, id5, id6, id7, aliceCreateId, svExpireId)
