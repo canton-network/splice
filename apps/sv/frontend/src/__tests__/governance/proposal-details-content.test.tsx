@@ -360,7 +360,7 @@ describe('Proposal Details Content', () => {
     ).toBeInTheDocument();
     expect(await screen.findByTestId('config-change-field-label')).toHaveTextContent('Weight');
     await waitFor(() => {
-      expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('5');
+      expect(screen.getByTestId('config-change-current-value')).toHaveTextContent('0_0005');
     });
     expect(screen.getByTestId('config-change-new-value')).toHaveTextContent('10');
   });
