@@ -447,13 +447,13 @@ runTest mkTest = do
       then do
         reqs <- WalletClientV2.listAllocationRequestsV1 trader
         forA_ reqs $ \(_, req) -> do
-          WalletClientV2.acceptAllocationRequestV1 env.registries trader req
+          WalletClientV2.acceptAndCreateRequestedAllocationsV1 env.registries trader req
       else do
         reqs <- WalletClientV2.listAllocationRequestsV2 (basicAccount trader) trader
         -- Batch all request acceptances together in a single transaction
         -- Note: whether to do this or not is a wallet UX concern.
         batches <- forA reqs $ \req -> do
-          WalletClientV2.mkAcceptAllocationRequestV2 env.registries trader req
+          WalletClientV2.mkAcceptAndCreateRequestedAllocationsV2 env.registries trader req
         void $ WalletClientV2.executeTSABatch env.registries trader (mconcat batches)
 
   -- check locked holdings

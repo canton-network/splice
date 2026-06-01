@@ -172,23 +172,6 @@ paths:
             application/json:
               schema:
                 $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
-  /v0/admin/domain/pause:
-    get:
-      tags: [sv]
-      x-jvm-package: sv_admin
-      operationId: "pauseDecentralizedSynchronizer"
-      responses:
-        "200":
-          description: ok
-
-  /v0/admin/domain/unpause:
-    post:
-      tags: [sv]
-      x-jvm-package: sv_admin
-      operationId: "unpauseDecentralizedSynchronizer"
-      responses:
-        "200":
-          description: ok
 
   /v0/admin/synchronizer/lsu/cancel:
     post:
@@ -201,35 +184,6 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/admin/domain/migration-dump:
-    get:
-      tags: [ sv ]
-      x-jvm-package: sv_admin
-      operationId: "getDomainMigrationDump"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetDomainMigrationDumpResponse"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-    post:
-      tags: [ sv ]
-      x-jvm-package: sv_admin
-      operationId: "triggerDomainMigrationDump"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/TriggerDomainMigrationDumpRequest"
-      responses:
-        "200":
-          description: ok
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
   /v0/admin/domain/identities-dump:
     get:
       tags: [ sv ]
@@ -242,41 +196,6 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetSynchronizerNodeIdentitiesDumpResponse"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-  /v0/admin/domain/data-snapshot:
-    get:
-      tags: [ sv ]
-      x-jvm-package: sv_admin
-      operationId: "getDomainDataSnapshot"
-      parameters:
-        - name: timestamp
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: party_id
-          in: query
-          schema:
-            type: string
-        - name: migration_id
-          in: query
-          required: false
-          schema:
-            type: integer
-            format: int64
-        - name: force
-          in: query
-          required: false
-          schema:
-            type: boolean
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetDomainDataSnapshotResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
@@ -686,6 +605,26 @@ paths:
                 $ref: "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/FeatureSupportResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/admin/reward-accounting-process/archive-dry-runs:
+    post:
+      tags: [ sv ]
+      x-jvm-package: sv_operator
+      operationId: "archiveDryRunRewardAccountingContracts"
+      description: |
+        Archive active `CalculateRewardsV2` and `ProcessRewardsV2` contracts
+        for the specified rounds if they have `dryRun` as `True`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveDryRunRewardAccountingContractsRequest"
+      responses:
+        "200":
+          description: ok
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
 
 components:
   schemas:
@@ -1182,38 +1121,6 @@ components:
             base64 encoded string of a dar package
           type: string
 
-    TriggerDomainMigrationDumpRequest:
-      type: object
-      required:
-        - migration_id
-      properties:
-        migration_id:
-          type: integer
-          format: int64
-        timestamp:
-          type: string
-
-    GetDomainMigrationDumpResponse:
-      type: object
-      required:
-        - migration_id
-        - identities
-        - data_snapshot
-        - participant_users
-        - created_at
-      properties:
-        migration_id:
-          type: integer
-          format: int64
-        identities:
-          $ref: "#/components/schemas/SynchronizerNodeIdentities"
-        data_snapshot:
-          $ref: "#/components/schemas/DomainDataSnapshot"
-        participant_users:
-          "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ParticipantUsersData"
-        created_at:
-          type: string
-
     GetSynchronizerNodeIdentitiesDumpResponse:
       type: object
       required:
@@ -1221,26 +1128,6 @@ components:
       properties:
         identities:
           $ref: "#/components/schemas/SynchronizerNodeIdentities"
-
-    GetDomainDataSnapshotResponse:
-      type: object
-      required:
-        - created_at
-        - migration_id
-        - data_snapshot
-        - participant_users
-      properties:
-        created_at:
-          description: |
-            equal to data_snapshot.acs_timestamp
-          type: string
-        migration_id:
-          type: integer
-          format: int64
-        data_snapshot:
-          $ref: "#/components/schemas/DomainDataSnapshot"
-        participant_users:
-          "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ParticipantUsersData"
 
     LookupFeaturedAppRightByContractIdResponse:
       description: |
@@ -1261,3 +1148,17 @@ components:
           type: array
           items:
             $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
+
+    ArchiveDryRunRewardAccountingContractsRequest:
+      type: object
+      required:
+        - rounds
+      properties:
+        rounds:
+          description: |
+            Round numbers whose dry-run `CalculateRewardsV2` and `ProcessRewardsV2`
+            contracts should be archived.
+          type: array
+          items:
+            type: integer
+            format: int64

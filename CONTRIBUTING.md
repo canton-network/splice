@@ -27,6 +27,7 @@
   - [Conversions between Java & Scala types](#conversions-between-java--scala-types)
   - [Porting between branches](#porting-between-branches)
   - [Dev Docs](#dev-docs)
+  - [Contributing via a feature fork](#contributing-via-a-feature-fork)
 
 
 # Contributing to the Splice repository
@@ -276,3 +277,49 @@ We publish docs from each commit from `main` to
 https://canton-network.github.io/splice/. This can
 often be useful to answer support requests with a docs link even if
 those docs are still very recent.
+
+## Contributing via a feature fork
+
+If you are not a Splice core maintainer, and you are working on a significant feature that requires more
+than a small handful of PRs, please consider asking for a feature fork to be setup for the feature.
+A feature fork is a fork of Splice under the same org, with full access to CI. It allows for a wider
+set of contributors to get write access to review and merge PRs to the feature fork without having to
+grant write permissions to the main Splice repo.
+
+### Setting up a feature fork
+
+- A canton-network org admin (currently: Amanda Martin, Stas German, Oleksii Maiko and Itai Segall) creates the fork in
+  canton-network org via GitHub UI or CLI (the convention is to use `splice-<feature>`).
+  - It usually suffices to fork main only, then manually add also the latest release line (see "Maintaining the feature fork" below)
+  - Add initial permissions to the fork:
+    - Add `admins` team as admins of the fork
+    - Add `splice-admins` team as admins of the fork
+    - Add `splice-maintainers` as maintainers of the fork
+- A Splice maintainer adds the fork to the list of repos in the splice
+  [cluster config file in canton-network-internal repo](https://github.com/DACH-NY/canton-network-internal/blob/main/cluster/deployment/splice/config.yaml).
+  Once merged to main, the Pulumi operator will configure runners for the fork.
+- A splice admin configures the fork repo (currently manually):
+  - Add maintainers that will develop the feature
+  - Add branch protection rules to main:
+    - Require PRs and approvals for merge
+    - Require status checks before merge: `ci / final_result` (you will need to wait for a first CI run on this repo for that to be an option)
+    - Enable "Do not allow bypassing the above settings"
+  - Under Actions -> General, select "Require approval for all external contributors"
+  - Under Environments, create a new environment `ci-forks`, with the maintainers of this repo as required reviewers.
+
+### Maintaining a feature fork
+
+- As a maintainer of a feature fork, you are responsible that:
+  - All commits to the fork's main are properly reviewed, and are granular enough and well documented,
+    for further review before upstreaming the feature to Splice main. It is a good idea to have a Splice maintainer
+    review any non-trivial PR, but you are also empowered to make informed decisions on the review process.
+    Keep in mind that everything will need to be reviewed again prior to accepting into upstream Splice, so the more
+    reviews from Splice maintainers you get on PRs in the feature fork, the less contention there will be later on.
+  - CI resources are not abused. The feature fork has full access to CI. Please consult the [CI section](TESTING.md#ci) in TESTING.md
+    on how to opt-in to full CI,  run static checks only, etc. The same instructions should work on the feature fork.
+    Please do not make any non-trivial changes to the workflows in `.github` (adding tests etc. is of course allowed).
+  - The fork is kept up-to-date with Splice main, to avoid painful merges into Splice later on.
+- CI assumes the branch for the latest release line, so after every Splice release (assuming you rebase/merge the fork's main to Splice main),
+  you will need to pull the corresponding release-line from splice and push it to the fork. In the future we might change CI to pull the release
+  line from main Splice rather than look for it in the fork, but as of now, it assumes it exists in the same repo on which it is running.
+

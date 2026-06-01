@@ -8,7 +8,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatoronboarding.{
   ValidatorOnboarding,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{AcsQueries, AcsTables, DbAppStore}
@@ -31,7 +30,7 @@ class DbSvSvStore(
     storage: DbStorage,
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -57,7 +56,7 @@ class DbSvSvStore(
         ),
         userVersion = acsStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = domainMigrationId,
       ingestionConfig,
     )
     with SvSvStore
@@ -70,7 +69,6 @@ class DbSvSvStore(
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
   override def lookupValidatorOnboardingBySecretWithOffset(
       secret: String
   )(implicit tc: TraceContext): Future[MultiDomainAcsStore.QueryResult[

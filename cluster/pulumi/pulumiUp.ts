@@ -6,10 +6,7 @@ import {
   mustInstallValidator1,
 } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validators';
 import { runSvCantonForAllMigrations } from '@lfdecentralizedtrust/splice-pulumi-sv-canton/pulumi';
-import {
-  runSvProjectForAllSvs,
-  runSvProjectForAllSvsIfLsu,
-} from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
+import { runSvProjectForAllSvs } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
 
 import { awaitAllOrThrowAllExceptions, Operation, PulumiAbortController, stack } from './pulumi';
 import { upOperation, upStack } from './pulumiOperations';
@@ -39,7 +36,7 @@ async function runAllStacksUp() {
     false
   );
   operations = operations.concat(cantonStacks);
-  const svStacks = runSvProjectForAllSvsIfLsu(
+  const svStacks = runSvProjectForAllSvs(
     'up',
     stack => {
       return upStack(stack, abortController);

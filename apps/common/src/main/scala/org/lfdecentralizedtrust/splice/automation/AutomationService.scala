@@ -6,12 +6,10 @@ package org.lfdecentralizedtrust.splice.automation
 import cats.syntax.foldable.*
 import cats.instances.seq.*
 import cats.instances.set.*
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.HasHealth
 import com.digitalasset.canton.lifecycle.*
 import com.digitalasset.canton.logging.NamedLogging
@@ -26,10 +24,8 @@ abstract class AutomationService(
     protected val automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     override protected[this] val retryProvider: RetryProvider,
-) extends HasHealth
-    with FlagCloseableAsync
+) extends FlagCloseableAsync
     with RetryProvider.Has
     with NamedLogging
     with Spanning {
@@ -44,29 +40,34 @@ abstract class AutomationService(
       Seq.empty
     )
 
+  protected def metricsContext: MetricsContext =
+    MetricsContext("automation_service" -> getClass.getSimpleName)
+
+  protected final lazy val automationMetrics: AutomationMetrics =
+    new AutomationMetrics(retryProvider.metricsFactory)(metricsContext)
+
   /** Shared parameters for instantiating triggers. */
   protected def triggerContext: TriggerContext =
     TriggerContext(
       automationConfig,
       clock = clock,
       pollingClock = new WallClock(timeouts, loggerFactory),
-      triggerEnabledSync = TriggerEnabledSynchronization.fromDomainTimeAndParams(
-        domainTimeSync,
-        domainUnpausedSync,
+      triggerEnabledSync = TriggerEnabledSynchronization.fromDomainTime(
+        domainTimeSync
       ),
       retryProvider,
       loggerFactory,
       retryProvider.metricsFactory,
     )
 
-  override def isHealthy: Boolean = backgroundServices.get().forall(_.isHealthy)
-
   /** Register a background service orchestrated by and required for this automation service.
     *
     * The background service is promptly closed when the automation service is closed.
+    * A health gauge for the service is also registered and reported via [[AutomationMetrics]].
     */
   final protected def registerService(service: BackgroundService): Unit = {
     val _ = backgroundServices.getAndUpdate(_.prepended(service))
+    val _ = automationMetrics.registerHealthGauge(service)
     ()
   }
 
@@ -132,7 +133,11 @@ abstract class AutomationService(
       SyncCloseable(
         "Orchestrated services",
         LifeCycle.close(backgroundServices.get()*)(logger),
-      )
+      ),
+      SyncCloseable(
+        "Automation metrics",
+        LifeCycle.close(automationMetrics)(logger),
+      ),
     )
 }
 

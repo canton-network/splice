@@ -13,33 +13,30 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
-import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class DsoDelegateBasedAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
+    scanConnectionF: Future[ScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
-    ec: ExecutionContext,
+    ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
 ) extends AutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       retryProvider,
     ) {
 
@@ -140,6 +137,13 @@ class DsoDelegateBasedAutomationService(
         svTaskContext,
       )
     )
+
+    registerTrigger(
+      new ProcessRewardsTrigger(triggerContext, svTaskContext, scanConnectionF)
+    )
+    registerTrigger(
+      new ProcessRewardsDryRunTrigger(triggerContext, svTaskContext, scanConnectionF)
+    )
   }
 
 }
@@ -179,5 +183,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
+    aTrigger[ProcessRewardsTrigger],
+    aTrigger[ProcessRewardsDryRunTrigger],
   )
 }

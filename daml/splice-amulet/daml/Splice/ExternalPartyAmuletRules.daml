@@ -30,7 +30,6 @@ import Splice.AmuletRules
 import Splice.Types
 import Splice.Util
 
-
 data ExternalPartyAmuletRules_ExpireAmuletAllocationInput = ExternalPartyAmuletRules_ExpireAmuletAllocationInput
   with
     allocationCid : ContractId AmuletAllocation
@@ -40,6 +39,10 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationInput = ExternalPartyAmuletR
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmuletRules_ExpireAmuletAllocationsResult
   with
     results : [AmuletAllocation_DsoExpireResult]
+  deriving (Eq, Show)
+
+data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
+  -- intentionally no results to save storage space in Scan
   deriving (Eq, Show)
 
 -- | Rules contract that can be used in transactions that require signatures
@@ -59,17 +62,38 @@ template ExternalPartyAmuletRules
       observer observers
       controller dso
       do
-        require ("expectedDso " <> show expectedDso <> " matches the dsoParty " <> show dso) (expectedDso == dso)
+        requireMatchExpected ("expectedDso", expectedDso) dso
 
-        individualResults <- forA inputs $ \input -> do
+        results <- forA inputs $ \input -> do
           alloc <- fetchButArchiveLater (ForDso with dso) input.allocationCid
-          require "The dsoParty must be the admin of the allocation's instrument" (alloc.allocation.transferLeg.instrumentId.admin == dso)
-
+          requireMatchExpected ("allocation.transferLeg.instrumentId.admin", alloc.allocation.transferLeg.instrumentId.admin) dso
           exercise input.allocationCid AmuletAllocation_DsoExpire with
             expireLock = input.expireLock
 
-        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsResult with
-          results = individualResults
+        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsResult with results
+
+    nonconsuming choice ExternalPartyAmuletRules_ExpireAmuletAllocationsV2 : ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result
+      with
+        cancellations : [(ContractId V2.Allocation, V2.Allocation_Cancel)]
+        observers : [Party]
+      observer observers
+      controller dso
+      do
+        forA_ cancellations $ \(allocCid, choiceArg) -> do
+          -- prudent engineering: double-check the actors
+          requireMatchExpected ("choiceArg.actors", choiceArg.actors) [dso]
+          alloc <- fetchCheckedInterface @V2.Allocation (ForDso with dso) allocCid
+          -- Only allow this call on expired allocations, so that it becomes safe to delegate it
+          -- to any SV. Without this check a malicious SV could use this call to cancel any allocation
+          -- that has the DSO party as the executor.
+          case (view alloc).expiresAt of
+            None -> fail "Cannot expire allocation without an expiry time"
+            Some expiresAt -> do
+              assertDeadlineExceeded "allocation.expiresAt" expiresAt
+              exercise allocCid choiceArg
+
+        pure ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result
+
 
     -- This choice is not guarded by any resource consumption other than the traffic required to pay for the submission of the exercising of this choice.
     -- If this is being abused the DSO party can blacklist (or rate limit) the submitting participant node.
@@ -453,10 +477,6 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
 
   -- == validate each field of the requested allocation
 
-  -- allocation.settlementDeadline:
-  whenSome allocation.settlementDeadline \d -> do
-    assertWithinDeadline "Allocation.settlementDeadline" d
-
   -- settlement.executors: no check
   -- settlement.id: no check
   -- settlement.cid: no check
@@ -465,7 +485,11 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- note: nextIterationFunding is validated in `amulet_allocationFactoryV2_allocateImpl`,
   -- as it is only supported for V2 factories
 
-  -- transferLegs:
+  -- allocation.settlementDeadline:
+  whenSome allocation.settlementDeadline \d -> do
+    assertWithinDeadline "Allocation.settlementDeadline" d
+
+  -- allocation.transferLegSides:
   let transferLegSides = allocation.transferLegSides
   requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
   unless (isSome allocation.nextIterationFunding) $
@@ -521,6 +545,12 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   let dso = externalAmuletRules.dso
   requireExpectedAdminMatch arg.expectedAdmin dso
 
+  -- validate allocateBefore
+  let settlement = arg.allocation.settlement
+  assertWithinDeadline "allocation.settlement.allocateBefore" settlement.allocateBefore
+  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessR
+    ("allocation.settlement.settleBefore", settlement.settleBefore)
+
   -- call V2 body with explicitly computed funding amount, which matters
   -- as V2 uses net amounts and V1 uses gross amounts, which are different for self-transfers
   let fundingAmount = arg.allocation.transferLeg.amount
@@ -551,3 +581,6 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
 
 requireExpectedAdminMatch : Party -> Party -> Update ()
 requireExpectedAdminMatch expected actual =   require ("Expected admin " <> show expected <> " matches actual admin " <> show actual) (expected == actual)
+
+instance HasCheckedFetch ExternalPartyAmuletRules ForDso where
+  contractGroupId ExternalPartyAmuletRules{..} = ForDso dso

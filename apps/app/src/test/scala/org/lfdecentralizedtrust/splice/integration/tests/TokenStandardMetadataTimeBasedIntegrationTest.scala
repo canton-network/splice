@@ -3,14 +3,9 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.daml.ledger.javaapi.data.codegen.json.JsonLfReader
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  ConfigurableApp,
-  updateAutomationConfig,
-}
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.{EnvironmentDefinition, InitialPackageVersions}
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
-import org.lfdecentralizedtrust.splice.scan.automation.ScanAggregationTrigger
 import org.lfdecentralizedtrust.splice.util.{Codec, TimeTestUtil, WalletTestUtil}
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1
 
@@ -28,12 +23,6 @@ class TokenStandardMetadataTimeBasedIntegrationTest
       // The wallet automation periodically merges amulets, which leads to non-deterministic balance changes.
       // We disable the automation for this suite.
       .withoutAutomaticRewardsCollectionAndAmuletMerging
-      // Start ScanAggregationTrigger in paused state, calling runOnce in tests
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Scan)(
-          _.withPausedTrigger[ScanAggregationTrigger]
-        )(config)
-      )
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllScanAppConfigs_(config =>
           config.copy(
@@ -77,7 +66,7 @@ class TokenStandardMetadataTimeBasedIntegrationTest
       sv1ScanBackend.getRegistryInfo() shouldBe aliceValidatorBackend.scanProxy.getRegistryInfo()
     }
 
-    clue("check instruments when no round totals have been aggregated") {
+    clue("lookup instruments work correctly for amulet and non existing instruments") {
       clue("listInstruments") {
         sv1ScanBackend.listInstruments().loneElement shouldBe amuletInstrument
         sv1ScanBackend.listInstruments() shouldBe aliceValidatorBackend.scanProxy.listInstruments()
@@ -104,7 +93,6 @@ class TokenStandardMetadataTimeBasedIntegrationTest
         // We sadly need 7 rounds as we need to get to a point where round 0 is closed
         for (i <- 1 to 7) {
           advanceRoundsToNextRoundOpening
-          sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
         },
       )(
         "rounds are defined and include tapped amulet",

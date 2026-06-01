@@ -8,7 +8,6 @@ import org.lfdecentralizedtrust.splice.automation.TransferFollowTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell as splitwellCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.splitwell.config.SplitwellSynchronizerConfig
 import org.lfdecentralizedtrust.splice.splitwell.store.SplitwellStore
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
@@ -42,7 +41,7 @@ class DbSplitwellStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     override val defaultLimit: Limit,
@@ -65,7 +64,7 @@ class DbSplitwellStore(
           "providerParty" -> key.providerParty.toProtoPrimitive
         ),
       ),
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = domainMigrationId,
       ingestionConfig,
     )
     with AcsTables
@@ -84,7 +83,6 @@ class DbSplitwellStore(
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   override def lookupInstallWithOffset(
       synchronizerId: SynchronizerId,

@@ -17,7 +17,6 @@ import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import io.circe.Json
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 
 import scala.concurrent.Future
@@ -867,10 +866,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     val participantId = mkParticipantId("ScanEventStoreTest")
     val uh = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       "scan_event_store_test",
       participantId,
       dsoParty,

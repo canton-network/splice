@@ -22,7 +22,6 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
   TreeUpdateOrOffsetCheckpoint,
 }
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
@@ -89,7 +88,7 @@ final class DbMultiDomainAcsStore[TXE](
       ? <: AcsInterfaceViewRowData,
     ],
     txLogConfig: TxLogStore.Config[TXE],
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     retryProvider: RetryProvider,
     ingestionConfig: IngestionConfig,
     /** Allows processing the summary in a store-specific manner, e.g., to produce metrics
@@ -136,8 +135,6 @@ final class DbMultiDomainAcsStore[TXE](
       throw new RuntimeException("This store is not using a TxLog")
     }
   }
-
-  def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   private[this] def txLogTableName =
     txLogTableNameOpt.getOrElse(throw new RuntimeException("This store doesn't use a TxLog"))
@@ -979,11 +976,6 @@ final class DbMultiDomainAcsStore[TXE](
         txLogInitResult <- txLogStoreDescriptor match {
           case Some(descriptor) => initializeDescriptor(descriptor).map(TxLogStoreId.subst)
           case None => Future.successful(StoreNotUsed[TxLogStoreId]())
-        }
-        _ <- txLogInitResult match {
-          case StoreHasData(txLogStoreId, _) => cleanUpDataAfterDomainMigration(txLogStoreId)
-          case StoreHasNoData(txLogStoreId) => cleanUpDataAfterDomainMigration(txLogStoreId)
-          case _ => Future.unit
         }
 
         acsSizeInDb <- acsInitResult match {
@@ -2185,79 +2177,6 @@ final class DbMultiDomainAcsStore[TXE](
     } else {
       DBIOAction.unit
     }
-  }
-
-  private[this] def cleanUpDataAfterDomainMigration(
-      txLogStoreId: TxLogStoreId
-  )(implicit tc: TraceContext): Future[Unit] = {
-    txLogTableNameOpt.fold(Future.unit) { _ =>
-      val previousMigrationId = domainMigrationInfo.currentMigrationId - 1
-      domainMigrationInfo.migrationTimeInfo match {
-        case Some(info) =>
-          if (info.synchronizerWasPaused) {
-            verifyNoRolledBackData(txLogStoreId, previousMigrationId, info.acsRecordTime)
-          } else {
-            deleteRolledBackTxLogEntries(txLogStoreId, previousMigrationId, info.acsRecordTime)
-          }
-        case _ =>
-          logger.debug("No previous domain migration, not checking or deleting txlog entries")
-          Future.unit
-      }
-    }
-  }
-
-  private[this] def verifyNoRolledBackData(
-      txLogStoreId: TxLogStoreId, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext) = {
-    val action =
-      sql"""
-            select count(*) from #$txLogTableName
-            where store_id = $txLogStoreId and migration_id = $migrationId and record_time > $recordTime
-          """
-        .as[Long]
-        .head
-        .map(rows =>
-          if (rows > 0) {
-            throw new IllegalStateException(
-              s"Found $rows rows for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime, " +
-                "but the configuration says the domain was paused during the migration. " +
-                "Check the domain migration configuration and the content of the txlog database."
-            )
-          } else {
-            logger.debug(
-              s"No txlog entries found for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime"
-            )
-          }
-        )
-    storage.query(action, "verifyNoRolledBackData")
-  }
-
-  private[this] def deleteRolledBackTxLogEntries(
-      txLogStoreId: TxLogStoreId, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext) = {
-    logger.info(
-      s"Deleting all txlog entries for $txLogStoreDescriptor where migration = $migrationId and record time > $recordTime"
-    )
-    val action =
-      sqlu"""
-            delete from #$txLogTableName
-            where store_id = $txLogStoreId and migration_id = $migrationId and record_time > $recordTime
-          """.map(rows =>
-        if (rows > 0) {
-          logger.info(
-            s"Deleted $rows txlog entries for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime. " +
-              "This is expected during a disaster recovery, where we are rolling back the domain to a previous state. " +
-              "In is NOT expected during regular hard domain migrations."
-          )
-        } else {
-          logger.info(s"No entries deleted for $txLogStoreDescriptor.")
-        }
-      )
-    storage.update(action, "deleteRolledBackTxLogEntries")
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

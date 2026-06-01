@@ -12,7 +12,6 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, MultiDomainAcsStore}
 import org.lfdecentralizedtrust.splice.sv.store.SvStore
 import org.lfdecentralizedtrust.splice.sv.store.db.{DbSvDsoStore, DsoTables}
@@ -61,10 +60,7 @@ class SvDsoStoreIngestionPerformanceTest(
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
         NoReportingTracerProvider.tracer
       ),
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

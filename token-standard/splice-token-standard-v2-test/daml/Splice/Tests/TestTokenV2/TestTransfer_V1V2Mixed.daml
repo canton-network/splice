@@ -139,14 +139,14 @@ testTransferWithV1Counterparty mkTestCase = do
       context = emptyChoiceContext
 
   -- bob accepts using their v2 wallet
-  [(bobOffer, _)] <- WalletClientV2.listTransferOffersV2 bob xId
+  [(bobOffer, _)] <- WalletClientV2.listTransferInstructionsV2 bob xId
   batch <- WalletClientV2.mkTransferInstruction_AcceptV2 env.registries bob bobOffer
   (BatchingUtilityV2.TSAR_TransferInstructionResultV2 bobResult) <-
     WalletClientV2.executeSingletonTSABatch env.registries bob batch
 
   -- bob provider also needs to accept
   bobProviderResult <- Traversable.forA bobProvider $ \bobProvider -> do
-    [(bobOffer, _)] <- WalletClientV2.listTransferOffersV2 bobProvider xId
+    [(bobOffer, _)] <- WalletClientV2.listTransferInstructionsV2 bobProvider xId
     batch <- WalletClientV2.mkTransferInstruction_AcceptV2 env.registries bobProvider bobOffer
     (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) <-
       WalletClientV2.executeSingletonTSABatch env.registries bobProvider batch
@@ -206,12 +206,12 @@ testTransferWithV1Counterparty mkTestCase = do
 
   -- bob provider also needs to accept, they do so using their V2 wallet
   Foldable.forA_ bobProvider $ \bobProvider -> do
-    [bobOffer] <- WalletClientV2.listTransferOffersV2 bobProvider xId
-    WalletClientV2.acceptTransferOffer env.registries bobProvider (fst bobOffer)
+    [bobOffer] <- WalletClientV2.listTransferInstructionsV2 bobProvider xId
+    WalletClientV2.acceptTransferInstructionV2 env.registries bobProvider (fst bobOffer)
 
   -- alice accepts using their V1 wallet
-  [aliceOffer] <- WalletClientV2.listTransferOffersV2 alice xId
-  WalletClientV2.acceptTransferOffer env.registries alice (fst aliceOffer)
+  [aliceOffer] <- WalletClientV2.listTransferInstructionsV2 alice xId
+  WalletClientV2.acceptTransferInstructionV2 env.registries alice (fst aliceOffer)
 
   -- no more transfer instructions are there
   [] <- queryInterface @V1.TransferInstruction registry.admin

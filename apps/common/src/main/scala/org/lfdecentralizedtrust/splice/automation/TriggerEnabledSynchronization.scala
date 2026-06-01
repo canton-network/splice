@@ -3,10 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.automation
 
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -28,9 +25,8 @@ object TriggerEnabledSynchronization {
   /** Triggers that are always enabled */
   val Noop = new NoopTriggerEnabledSynchronization()
 
-  def fromDomainTimeAndParams(
-      domainTimeSync: DomainTimeSynchronization,
-      domainParamsSync: DomainUnpausedSynchronization,
+  def fromDomainTime(
+      domainTimeSync: DomainTimeSynchronization
   ): TriggerEnabledSynchronization = new TriggerEnabledSynchronization {
     override def waitForTriggerEnabled()(implicit
         tc: TraceContext,
@@ -38,7 +34,6 @@ object TriggerEnabledSynchronization {
     ): Future[Unit] = {
       for {
         _ <- domainTimeSync.waitForDomainTimeSync()
-        _ <- domainParamsSync.waitForDomainUnpaused()
       } yield ()
     }
   }

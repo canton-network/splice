@@ -235,6 +235,9 @@ interface Allocation where
   nonconsuming choice Allocation_Settle : AllocationResult
     -- ^ Settle the allocation by moving the net amount of the transfer legs.
     --
+    -- If a settlement deadline is set, implementations MUST NOT allow calling
+    -- this choice after the settlement deadline has passed.
+    --
     -- The choice is nonconsuming to support alternative consumption patterns,
     -- e.g., by calling the consuming V1.Allocation_ExecuteTransfer choice for
     -- transaction parsing compatibility.
@@ -276,8 +279,9 @@ interface Allocation where
     -- ^ Cancel the allocation to release the funds and invalidate the approval
     -- to execute the settlement.
     --
-    -- Typically called by the executors once it is clear that the settlement
-    -- will not be executed.
+    -- Typically called by
+    --   - the executors once it is clear that the settlement will not be executed
+    --   - the admin to cancel an expired allocation
     --
     -- The choice is nonconsuming to support alternative consumption patterns,
     -- e.g., by calling the consuming V1.Allocation_Cancel choice for

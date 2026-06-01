@@ -6,7 +6,6 @@ import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
@@ -362,15 +361,20 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "return None when rounds are not consecutive" in {
+    // #5186: round with zero activity between non-zero rounds should not block progress
+    "treat a zero-activity round between non-zero rounds as complete" in {
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
+        // Round 10 and 12 have activity, round 11 has zero activity (no records)
         _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L), ("gap-12", 12L))
         result <- store.earliestRoundWithCompleteAppActivity()
       } yield {
-        result shouldBe None
+        // Round 11 has zero activity but is bounded by 10 and 12, so 11 is complete.
+        // Round 12 is also complete (activity exists for a prior round: 10).
+        // Earliest complete should be 11.
+        result.value shouldBe 11L
       }
     }
 
@@ -741,14 +745,20 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "return None when rounds are not consecutive" in {
+    // #5186: round with zero activity between non-zero rounds should not block progress
+    "treat a zero-activity round between non-zero rounds as complete" in {
       for {
         (store, historyId) <- newStore()
         baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L)
+        // Round 10 and 12 have activity, round 11 has zero activity (no records)
         _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L), ("gap-12", 12L))
         result <- store.latestRoundWithCompleteAppActivity()
       } yield {
-        result shouldBe None
+        // Round 12 is the max round. Round 11 has zero activity but is bounded
+        // by rounds with data, so it is complete. Latest complete should be 11
+        // (12 cannot be confirmed complete without seeing round 13).
+        result.value shouldBe 11L
       }
     }
 
@@ -834,7 +844,7 @@ class DbAppActivityRecordStoreTest
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       s"app_activity_test_$n",
       participantId,
       dsoParty,
@@ -862,7 +872,7 @@ class DbAppActivityRecordStoreTest
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "app_activity_combined_test",
       participantId,
       dsoParty,

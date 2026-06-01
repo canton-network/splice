@@ -60,6 +60,7 @@ module Splice.TokenStandard.Utils (
   reasonFromMeta,
   reasonToMeta,
   mkMetaTransferFrom,
+  v1HistoryTagAsUnlockV1,
 
   -- * Missing Time utilities
   -- TODO(#4865): upstream these to the Daml stdlib
@@ -133,7 +134,7 @@ module Splice.TokenStandard.Utils (
 
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
-  allocationV2_cancelDefaultImplUsingV1,
+  allocationV2_cancelDefaultImpl,
 
   validateNextIterationArgs,
   ensureWithdrawIsAllowed,

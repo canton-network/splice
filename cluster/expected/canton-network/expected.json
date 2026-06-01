@@ -199,7 +199,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -287,9 +287,10 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
-          "enableLogicalSynchronizerDeploymentMode": false,
+          "cometbft": {
+            "volumeSize": "42Gi"
+          },
           "id": 9,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -310,9 +311,7 @@
         },
         "additionalLegacy": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 7,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.20",
@@ -334,9 +333,7 @@
         ],
         "archived": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 5,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "981227e62011e386cca3cdb5f00b472cf05a12c4",
@@ -354,9 +351,7 @@
             }
           },
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 6,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.19",
@@ -376,9 +371,7 @@
         ],
         "frozenMigrationId": 2,
         "legacy": {
-          "enableLogicalSynchronizerDeploymentMode": false,
           "id": 8,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -397,11 +390,8 @@
             "version": "0.3.20"
           }
         },
-        "lsuEnabled": true,
         "upgrade": {
-          "enableLogicalSynchronizerDeploymentMode": true,
           "id": 10,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.21",
@@ -1633,10 +1623,6 @@
           "name": "validator-licenses",
           "type": "unlimited"
         },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
-        },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
           "type": "banned"
@@ -1721,25 +1707,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -1884,10 +1854,6 @@
           "name": "validator-licenses",
           "type": "unlimited"
         },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
-        },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
           "type": "banned"
@@ -1972,25 +1938,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -2138,8 +2088,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -2200,6 +2153,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           },
           {
             "name": "cloudsql.logical_decoding",
@@ -2303,7 +2268,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -2845,7 +2810,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_1",
           "port": 5432,
@@ -3059,15 +3024,14 @@
             "enable": true
           },
           "migration": {
-            "id": 2,
-            "migrating": false
+            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
           "onboardingName": "Digital-Asset-2",
           "onboardingRoundZeroDuration": "2 h",
           "onboardingType": "found-dso",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "periodicTopologySnapshotConfig": {
             "backupInterval": "12h",
             "location": {
@@ -3277,7 +3241,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -3414,8 +3378,11 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
           "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647"
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
         },
         "maintenanceWindow": {
           "day": 2,
@@ -3476,6 +3443,18 @@
           {
             "name": "temp_file_limit",
             "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -3548,7 +3527,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -3950,7 +3929,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
           "port": 5432,
@@ -4142,13 +4121,12 @@
             "enable": true
           },
           "migration": {
-            "id": 2,
-            "migrating": false
+            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "permissionedSynchronizer": false,
           "persistence": {
             "databaseName": "sv_sv_da_1",
@@ -4339,7 +4317,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

@@ -30,7 +30,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStoreMetrics, ScanAggregator}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
   MiningRoundsStore,
@@ -44,7 +44,6 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future, blocking}
 
 class CachingScanStore(
@@ -77,12 +76,6 @@ class CachingScanStore(
     ).get(())
   }
 
-  override def aggregate()(implicit tc: TraceContext): Future[Option[ScanAggregator.RoundTotals]] =
-    store.aggregate()
-
-  override def backFillAggregates()(implicit tc: TraceContext): Future[Option[Long]] =
-    store.backFillAggregates()
-
   override def lookupAmuletRules()(implicit
       tc: TraceContext
   ): Future[Option[ContractWithState[AmuletRules.ContractId, AmuletRules]]] =
@@ -110,23 +103,6 @@ class CachingScanStore(
       (_: Unit) => store.lookupAnsRules(),
     ).get(())
 
-  override def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal] =
-    getCache(
-      "totalRewardsCollected",
-      cacheConfig.totalRewardsCollected,
-      (_: Unit) => store.getTotalRewardsCollectedEver(),
-    ).get(())
-
-  override def getRewardsCollectedInRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[BigDecimal] = {
-    getCache(
-      "rewardsCollectedInRound",
-      cacheConfig.rewardsCollectedInRound,
-      store.getRewardsCollectedInRound,
-    ).get(round)
-  }
-
   override def getAmuletConfigForRound(round: Long)(implicit
       tc: TraceContext
   ): Future[OpenMiningRoundTxLogEntry] =
@@ -135,15 +111,6 @@ class CachingScanStore(
       cacheConfig.amuletConfigForRound,
       store.getAmuletConfigForRound,
     ).get(round)
-
-  override def lookupRoundOfLatestData()(implicit
-      tc: TraceContext
-  ): Future[Option[(Long, Instant)]] =
-    getCache(
-      "roundOfLatestData",
-      cacheConfig.roundOfLatestData,
-      (_: Unit) => store.lookupRoundOfLatestData(),
-    ).get(())
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
@@ -229,33 +196,6 @@ class CachingScanStore(
       sortOrder,
       limit,
     )
-
-  override def getAggregatedRounds()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundRange]] =
-    getCache(
-      "aggregatedRounds",
-      cacheConfig.aggregatedRounds,
-      (_: Unit) => store.getAggregatedRounds(),
-    ).get(())
-
-  override def getRoundTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundTotals]] =
-    getCache(
-      "roundTotals",
-      cacheConfig.roundTotals,
-      store.getRoundTotals _ tupled,
-    ).get((startRound, endRound))
-
-  override def getRoundPartyTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundPartyTotals]] =
-    getCache(
-      "roundPartyTotals",
-      cacheConfig.roundTotals,
-      store.getRoundPartyTotals _ tupled,
-    ).get((startRound, endRound))
 
   override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
       tc: TraceContext

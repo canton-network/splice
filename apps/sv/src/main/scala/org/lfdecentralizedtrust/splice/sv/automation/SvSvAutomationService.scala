@@ -16,10 +16,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ExpireValidatorOnboardingTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -37,7 +34,6 @@ import scala.concurrent.ExecutionContextExecutor
 class SvSvAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svStore: SvSvStore,
     dsoStore: SvDsoStore,
@@ -58,7 +54,6 @@ class SvSvAutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       svStore,
       ledgerClient,
       retryProvider,

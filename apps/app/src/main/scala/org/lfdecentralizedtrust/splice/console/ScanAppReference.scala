@@ -37,7 +37,6 @@ import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
 import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanAppClientConfig}
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   ChoiceContextWithDisclosures,
@@ -273,30 +272,6 @@ abstract class ScanAppReference(
   ): HttpScanAppClient.AmuletConfig =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAmuletConfigForRound(round))
-    }
-
-  @Help.Summary(
-    "Get the latest round number for which aggregated data is available and the ledger effective time at which the round was closed"
-  )
-  def getRoundOfLatestData(): (Long, Instant) =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRoundOfLatestData())
-    }
-
-  @Help.Summary(
-    "Get the total rewards collected ever"
-  )
-  def getTotalRewardsCollectedEver(): BigDecimal =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRewardsCollected(None))
-    }
-
-  @Help.Summary(
-    "Get the total rewards collected in a specific round"
-  )
-  def getRewardsCollectedInRound(round: Long): BigDecimal =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRewardsCollected(Some(round)))
     }
 
   @Help.Summary(
@@ -573,27 +548,6 @@ abstract class ScanAppReference(
           ownerPartyIds,
           recordTimeMatch,
         )
-      )
-    }
-
-  def getAggregatedRounds(): Option[ScanAggregator.RoundRange] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAggregatedRounds
-      )
-    }
-
-  def listRoundTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundTotals(start, end)
-      )
-    }
-
-  def listRoundPartyTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundPartyTotals(start, end)
       )
     }
 
