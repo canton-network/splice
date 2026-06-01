@@ -90,6 +90,11 @@
       - Changed the default JVM args from ``-Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8`` to  ``-Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12``
         for the participant, mediator, sequencer, sv app and scan app deployments.
 
+      - The ``migration.id`` value is no longer required by the SV (sv, validator, scan apps) and validator (validator app) helm charts and has been removed.
+        These apps now resolve the synchronizer migration id automatically at start-up. For the scan helm chart the
+        ``migration.id`` value is now optional and only needs to be set to bootstrap a scan that does not yet have any
+        migration id in its database (e.g. the network-founding or a freshly joining scan).
+
     - Observability
 
       - The automation background services no longer affect the ``/readyz`` endpoint
