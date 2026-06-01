@@ -6,7 +6,6 @@ import * as pulumi from '@pulumi/pulumi';
 import * as std from '@pulumi/std';
 import {
   CLUSTER_BASENAME,
-  DomainMigrationIndex,
   ExactNamespace,
   GcpServiceAccount,
   KmsConfig,
@@ -21,24 +20,16 @@ export type ParticipantKmsHelmResources = {
   extraVolumes: { name: string; secret: { secretName: string } }[];
 };
 
-const createKmsServiceAccount = (
-  xns: ExactNamespace,
-  kmsConfig: KmsConfig,
-  migrationId?: DomainMigrationIndex
-) => {
+const createKmsServiceAccount = (xns: ExactNamespace, kmsConfig: KmsConfig) => {
   const condition = {
     title: `"${kmsConfig.keyRingId}" keyring`,
     description: '(managed by Pulumi)',
     expression: `resource.name.startsWith("projects/${kmsConfig.projectId}/locations/${kmsConfig.locationId}/keyRings/${kmsConfig.keyRingId}")`,
   };
-  const serviceAccountName = migrationIdSuffixed(
-    `${CLUSTER_BASENAME}-${xns.logicalName}-kms`,
-    migrationId,
-    true
-  );
+  const serviceAccountName = `${CLUSTER_BASENAME}-${xns.logicalName}-kms`;
   const kmsServiceAccount = new GcpServiceAccount(serviceAccountName, {
     accountId: serviceAccountName,
-    displayName: `KMS Service Account (${CLUSTER_BASENAME} ${xns.logicalName}${migrationId ? ` M${migrationId}` : ''})`,
+    displayName: `KMS Service Account (${CLUSTER_BASENAME} ${xns.logicalName})`,
     description: '(managed by Pulumi)',
     roles: [
       { id: 'roles/cloudkms.admin', condition },
@@ -46,23 +37,19 @@ const createKmsServiceAccount = (
     ],
   });
 
-  return new gcp.serviceaccount.Key(
-    migrationIdSuffixed('participantKmsServiceAccountKey', migrationId),
-    {
-      serviceAccountId: kmsServiceAccount.name,
-    }
-  );
+  return new gcp.serviceaccount.Key('participantKmsServiceAccountKey', {
+    serviceAccountId: kmsServiceAccount.name,
+  });
 };
 
 export const getParticipantKmsHelmResources = (
   xns: ExactNamespace,
-  kmsConfig: KmsConfig,
-  migrationId?: DomainMigrationIndex
+  kmsConfig: KmsConfig
 ): {
   kmsValues: ParticipantKmsHelmResources;
   kmsDependencies: pulumi.Resource[];
 } => {
-  const gkeCredentialsSecretName = migrationIdSuffixed('gke-credentials', migrationId);
+  const gkeCredentialsSecretName = 'gke-credentials';
   const gkeCredentialsSecret = new k8s.core.v1.Secret(gkeCredentialsSecretName, {
     metadata: {
       name: gkeCredentialsSecretName,
@@ -72,7 +59,7 @@ export const getParticipantKmsHelmResources = (
     stringData: {
       googleCredentials: std
         .base64decodeOutput({
-          input: createKmsServiceAccount(xns, kmsConfig, migrationId).privateKey,
+          input: createKmsServiceAccount(xns, kmsConfig).privateKey,
         })
         .apply(invoke => invoke.result),
     },
@@ -109,17 +96,3 @@ export const getParticipantKmsHelmResources = (
     kmsDependencies: [gkeCredentialsSecret, keyRing],
   };
 };
-
-function migrationIdSuffixed(
-  name: string,
-  migrationId?: DomainMigrationIndex,
-  limit30?: boolean
-): string {
-  if (migrationId === undefined) {
-    return name;
-  }
-  const longName = `${name}-migration-${migrationId}`;
-  // error: gcp:serviceaccount/account:Account
-  // resource..."account_id"...must be between 6 and 30 characters long
-  return limit30 && longName.length > 30 ? `${name}-mg-${migrationId}` : longName;
-}

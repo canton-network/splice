@@ -1,7 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
-import { DecentralizedSynchronizerUpgradeConfig } from '@lfdecentralizedtrust/splice-pulumi-common';
 
 import { allSvNamesToDeploy } from '../common-sv/src/dsoConfig';
 import { DeploySvRunbook, isDevNet } from '../common/src/config';
@@ -61,21 +60,4 @@ export function runSvProjectForAllSvs<T>(
   );
   console.log(`Running for svs ${JSON.stringify(svsToRunFor)}`);
   return runSvProjectForSvs(svsToRunFor, operation, requiresExistingStack, runForStack);
-}
-
-export function runSvProjectForAllSvsIfLsu<T>(
-  operation: string,
-  runForStack: (stack: automation.Stack, sv: string) => Promise<T>,
-  requiresExistingStack: boolean,
-  forceSvRunbook: boolean = false
-): { name: string; promise: Promise<T> }[] {
-  const isLsuDeployment =
-    DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-    DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv;
-  if (!isLsuDeployment) {
-    console.log('Not an LSU deployment. Skipping sv stacks.');
-    return [];
-  } else {
-    return runSvProjectForAllSvs(operation, runForStack, requiresExistingStack, forceSvRunbook);
-  }
 }

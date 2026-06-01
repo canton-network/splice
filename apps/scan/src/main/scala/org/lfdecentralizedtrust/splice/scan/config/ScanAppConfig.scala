@@ -160,14 +160,6 @@ final case class ScanCacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 2000,
     ),
-    aggregatedRounds: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofSeconds(30),
-      maxSize = 1,
-    ),
-    roundTotals: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofMinutes(1),
-      maxSize = 1000,
-    ),
     voteRequests: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 1000,

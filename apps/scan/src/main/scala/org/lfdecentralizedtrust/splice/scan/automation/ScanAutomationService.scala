@@ -50,7 +50,6 @@ class ScanAutomationService(
     svParty: PartyId,
     svName: String,
     upgradesConfig: UpgradesConfig,
-    initialRound: Long,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -71,10 +70,6 @@ class ScanAutomationService(
       : org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService.type =
     ScanAutomationService
 
-  registerTrigger(new ScanAggregationTrigger(store, triggerContext))
-  registerTrigger(
-    new ScanBackfillAggregatesTrigger(store, triggerContext, initialRound)
-  )
   def registerRewardComputationTrigger(
       rewardsReferenceStore: ScanRewardsReferenceStore
   ): Unit =
