@@ -29,7 +29,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
@@ -41,6 +41,7 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvCantonIdentifierConfig}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
+import org.lfdecentralizedtrust.splice.sv.store.db.DsoTables
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -65,9 +66,9 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       closeContext: CloseContext,
       tc: TraceContext,
   ): Future[Long] =
-    UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
+    DbAppStore.getHighestKnownMigrationId(storage, DsoTables.acsTableName).flatMap {
       case Some(migrationId) =>
-        logger.info(s"Resolved domain migration id $migrationId from the local update history")
+        logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
         Future.successful(migrationId)
       case None =>
         scanFallback.map { migrationId =>

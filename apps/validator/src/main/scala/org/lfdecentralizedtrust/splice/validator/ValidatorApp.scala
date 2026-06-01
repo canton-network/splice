@@ -55,7 +55,8 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.ValidatorApp.OAuthRealms
 import org.lfdecentralizedtrust.splice.validator.admin.http.*
@@ -72,6 +73,7 @@ import org.lfdecentralizedtrust.splice.validator.store.{
   ValidatorInternalStore,
   ValidatorStore,
 }
+import org.lfdecentralizedtrust.splice.validator.store.db.ValidatorTables
 import org.lfdecentralizedtrust.splice.validator.util.{ValidatorScanConnection, ValidatorUtil}
 import org.lfdecentralizedtrust.splice.wallet.admin.http.{
   HttpExternalWalletHandler,
@@ -533,9 +535,9 @@ class ValidatorApp(
   private def resolveDomainMigrationId(
       scanConnection: ScanConnection
   )(implicit traceContext: TraceContext): Future[Long] =
-    UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
+    DbAppStore.getHighestKnownMigrationId(storage, ValidatorTables.acsTableName).flatMap {
       case Some(migrationId) =>
-        logger.info(s"Resolved domain migration id $migrationId from the local update history")
+        logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
         Future.successful(migrationId)
       case None =>
         scanConnection.getMigrationId().map { migrationId =>

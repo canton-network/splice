@@ -74,7 +74,9 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  ScanTables,
 }
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -550,9 +552,9 @@ class ScanApp(
   }
 
   private def resolveDomainMigrationId()(implicit tc: TraceContext): Future[Long] =
-    UpdateHistory.getHighestKnownMigrationId(storage).map {
+    DbAppStore.getHighestKnownMigrationId(storage, ScanTables.acsTableName).map {
       case Some(migrationId) =>
-        logger.info(s"Resolved domain migration id $migrationId from the local update history")
+        logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
         migrationId
       case None =>
         config.domainMigrationId match {

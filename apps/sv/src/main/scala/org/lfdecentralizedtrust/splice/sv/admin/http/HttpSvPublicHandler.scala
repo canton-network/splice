@@ -384,8 +384,7 @@ class HttpSvPublicHandler(
   }
 
   /** Intended use: A joining SV node calls this on its sponsoring SV to learn the
-    * synchronizer migration id to use, since the joining node cannot derive it locally
-    * before its stores (and thus its own scan) are initialized.
+    * synchronizer migration id to use)
     *
     * Protection: None; the migration id is not sensitive.
     */

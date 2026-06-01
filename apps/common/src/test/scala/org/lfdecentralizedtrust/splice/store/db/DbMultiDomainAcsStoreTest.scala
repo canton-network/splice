@@ -98,6 +98,35 @@ class DbMultiDomainAcsStoreTest
       } yield succeed
     }
 
+    "getHighestKnownMigrationId" should {
+      "return None when the ACS table is empty" in {
+        DbAppStore
+          .getHighestKnownMigrationId(storage, "acs_store_template")
+          .map(_ shouldBe None)
+      }
+
+      "return the migration id of an initialized store" in {
+        val store = mkStore(acsId = 1, txLogId = Some(1), migrationId = 3L)
+        for {
+          _ <- initWithAcs()(store)
+          _ <- d1.create(c(1))(store)
+          migrationId <- DbAppStore.getHighestKnownMigrationId(storage, "acs_store_template")
+        } yield migrationId shouldBe Some(3L)
+      }
+
+      "return the highest migration id across stores" in {
+        val store1 = mkStore(acsId = 1, txLogId = Some(1), migrationId = 1L)
+        val store2 = mkStore(acsId = 2, txLogId = Some(2), migrationId = 2L)
+        for {
+          _ <- initWithAcs()(store1)
+          _ <- d1.create(c(1))(store1)
+          _ <- initWithAcs()(store2)
+          _ <- d1.create(c(2))(store2)
+          migrationId <- DbAppStore.getHighestKnownMigrationId(storage, "acs_store_template")
+        } yield migrationId shouldBe Some(2L)
+      }
+    }
+
     "not be SQL-injectable" in {
       import MultiDomainAcsStore.mkFilter
       val store = mkStoreWithAcsRowDataF(
