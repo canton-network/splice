@@ -235,6 +235,21 @@ object HttpSvPublicAppClient {
     }
   }
 
+  case object GetMigrationId extends BaseCommandPublic[http.GetMigrationIdResponse, Long] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetMigrationIdResponse] =
+      client.getMigrationId(headers = headers)
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetMigrationIdResponse.OK(response) =>
+      Right(response.migrationId)
+    }
+  }
+
   case class SequencerSnapshot(
       topologySnapshot: GenericStoredTopologyTransactions,
       sequencerSnapshot: CantonSequencerSnapshot,

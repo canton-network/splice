@@ -488,6 +488,22 @@ paths:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponse"
 
+  /v0/migration-id:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_public
+      operationId: "getMigrationId"
+      description: |
+        Returns the synchronizer migration id this SV is currently using.
+        Used by joining SV nodes to learn the migration id from their sponsoring SV.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetMigrationIdResponse"
+
   # TODO(DACH-NY/canton-network-node#13301) Replace by automation
   /v0/synchronizer/{domain_id_prefix}/reconcile-daml-state:
     post:
@@ -628,6 +644,15 @@ paths:
 
 components:
   schemas:
+    GetMigrationIdResponse:
+      type: object
+      required:
+        - migration_id
+      properties:
+        migration_id:
+          type: integer
+          format: int64
+
     ListOngoingValidatorOnboardingsResponse:
       type: object
       required:
