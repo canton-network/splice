@@ -26,7 +26,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetRewardAccountingBatchResponse,
   RewardAccountingMintingAllowance,
 }
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.util.AssignedContract
@@ -45,6 +45,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -139,13 +140,21 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
   ): Future[GetRewardAccountingBatchResponse] =
-    scanConnectionF.flatMap(_.getRewardAccountingBatch(round, batchHash)).map {
-      case Some(response) => response
+    scanConnectionF.flatMap(_.getRewardAccountingBatch(round, batchHash)).flatMap {
+      case Some(response) => Future.successful(response)
       case None =>
-        // TODO (#5623) replace with BFT read
-        throw new RuntimeException(
-          s"Batch not found from scan for round $round with hash $batchHash"
+        logger.info(
+          s"Own scan cannot provide batch for round $round, hash $batchHash, doing BFT read."
         )
+        bftScanConnectionF
+          .flatMap(_.getRewardAccountingBatch(round, batchHash))
+          .map {
+            case Some(response) => response
+            case None =>
+              throw new RuntimeException(
+                s"Batch could not be obtained via BFT read for round $round with hash $batchHash"
+              )
+          }
     }
 }
 
@@ -153,6 +162,7 @@ class ProcessRewardsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -161,6 +171,7 @@ class ProcessRewardsTrigger(
       context,
       svTaskContext,
       scanConnectionF,
+      bftScanConnectionF,
       isDryRun = false,
     )
 
@@ -168,6 +179,7 @@ class ProcessRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -176,6 +188,7 @@ class ProcessRewardsDryRunTrigger(
       context,
       svTaskContext,
       scanConnectionF,
+      bftScanConnectionF,
       isDryRun = true,
     )
 

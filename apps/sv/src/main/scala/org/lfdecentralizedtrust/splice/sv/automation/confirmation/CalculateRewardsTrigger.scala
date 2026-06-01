@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequir
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
@@ -38,6 +38,7 @@ abstract class CalculateRewardsTriggerBase(
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -151,16 +152,24 @@ abstract class CalculateRewardsTriggerBase(
     }
 
   private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Option[Hash]] =
-    scanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).map {
+    scanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).flatMap {
       case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-        Some(new Hash(ok.rootHash))
+        Future.successful(Some(new Hash(ok.rootHash)))
       case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
-        None
+        Future.successful(None)
       case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
-        // TODO (#5623) replace with BFT read
-        throw new RuntimeException(
-          s"Scan cannot provide root hash for round $round"
+        logger.info(
+          s"Our scan cannot provide the root-hash for round $round, doing BFT read."
         )
+        bftScanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).map {
+          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+            Some(new Hash(ok.rootHash))
+          case _ =>
+            logger.warn(
+              s"Could not obtain root-hash for round $round via BFT read."
+            )
+            None
+        }
     }
 
   private def startProcessingRewardsAction(
@@ -183,6 +192,7 @@ class CalculateRewardsTrigger(
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -192,6 +202,7 @@ class CalculateRewardsTrigger(
       store,
       connection,
       scanConnectionF,
+      bftScanConnectionF,
       isDryRun = false,
     )
 
@@ -200,6 +211,7 @@ class CalculateRewardsDryRunTrigger(
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -209,6 +221,7 @@ class CalculateRewardsDryRunTrigger(
       store,
       connection,
       scanConnectionF,
+      bftScanConnectionF,
       isDryRun = true,
     )
 

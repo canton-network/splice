@@ -45,6 +45,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  RewardAccountingRootHashOk,
+  RewardAccountingRootHashUndetermined,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
@@ -57,6 +59,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.store.DsoRulesStore
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -117,6 +120,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Pro
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Success, Try}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 class BftScanConnection(
     override protected val amuletLedgerClient: SpliceLedgerClient,
@@ -823,17 +827,71 @@ class BftScanConnection(
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
 
+  /** This is special because in addition to 'Ok' we can receive
+    * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
+    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+    *
+    * So simple equality comparison on responses is not possible, and we treat
+    * the two non-Ok responses as a "no response" by throwing an exception so
+    * that this does not cause grouping in executeCall.
+    *
+    * And if no response could be obtained via bft we respond with 'Undetermined'
+    */
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[GetRewardAccountingRootHashResponse] =
-    bftCall(_.getRewardAccountingRootHash(roundNumber), "getRewardAccountingRootHash")
+  ): Future[GetRewardAccountingRootHashResponse] = {
+    val undetermined =
+      GetRewardAccountingRootHashResponse(
+        RewardAccountingRootHashUndetermined(status = "Undetermined")
+      )
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
+    else
+      BftScanConnection
+        .executeCall[String, SingleScanConnection](
+          call = scan =>
+            scan.getRewardAccountingRootHash(roundNumber).map {
+              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                ok.rootHash
+              case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
+                  _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
+                throw new RuntimeException(
+                  s"Scan response for round $roundNumber is not Ok"
+                )
+            },
+          requestFrom = callConfig.connections,
+          nTargetSuccess = callConfig.targetSuccess,
+          logger = logger,
+        )
+        .transform(tryRootHash =>
+          Success(
+            tryRootHash.toOption.fold(undetermined)(rootHash =>
+              GetRewardAccountingRootHashResponse(
+                RewardAccountingRootHashOk(
+                  status = "Ok",
+                  roundNumber = roundNumber,
+                  rootHash = rootHash,
+                )
+              )
+            )
+          )
+        )
+  }
 
+  /** Here we query all scans in parallel and resolve to the first response that has the
+    * batch because the contents of batch are verifiable using the hash.
+    */
   override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]] =
-    bftCall(_.getRewardAccountingBatch(roundNumber, batchHash), "getRewardAccountingBatch")
+    Future
+      .find(
+        scanList.scanConnections.open.toList
+          .map(_.getRewardAccountingBatch(roundNumber, batchHash))
+      )(_.isDefined)
+      .map(_.flatten)
 }
 trait HasUrl {
   def url: Uri
@@ -1349,6 +1407,24 @@ object BftScanConnection {
           )
       } yield domainScans.map(scanInfo => DsoScan(scanInfo.publicUrl, scanInfo.svName))
     }
+
+    def getPeerScansFromDsoRules(store: DsoRulesStore, ownSvParty: String)(implicit
+        tc: TraceContext,
+        ec: ExecutionContext,
+    ): Future[Seq[DsoScan]] =
+      store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
+        rulesAndStates.svNodeStates.values
+          .filterNot(_.payload.sv == ownSvParty)
+          .flatMap { nodeState =>
+            nodeState.payload.state.synchronizerNodes.asScala.values
+              .flatMap(
+                _.scan.toScala.toList
+                  .map(scan => DsoScan(Uri(scan.publicUrl), nodeState.payload.sv))
+              )
+          }
+          .toList
+          .sortBy(_.publicUrl.toString)
+      }
   }
 
   private def bootstrapWithSeedNodes(
@@ -1621,8 +1697,7 @@ object BftScanConnection {
   }
 
   def peerScanConnection(
-      store: ScanStore,
-      svName: String,
+      getPeerScans: () => Future[Seq[DsoScan]],
       spliceLedgerClient: SpliceLedgerClient,
       scansRefreshInterval: NonNegativeFiniteDuration,
       amuletRulesCacheTimeToLive: NonNegativeFiniteDuration,
@@ -1642,19 +1717,17 @@ object BftScanConnection {
     for {
       scans <- retryProvider.retry(
         RetryFor.WaitingOnInitDependency,
-        "fetch_scan_list_from_store",
-        "Peer scans found in store.",
-        Bft
-          .getPeerScansFromStore(store, svName)
-          .flatMap {
-            case Nil =>
-              Future.failed(
-                Status.UNAVAILABLE
-                  .withDescription("No peer scans found in store")
-                  .asException()
-              )
-            case scans => Future.successful(scans)
-          },
+        "fetch_peer_scan_list",
+        "Peer scans found.",
+        getPeerScans().flatMap {
+          case Nil =>
+            Future.failed(
+              Status.UNAVAILABLE
+                .withDescription("No peer scans found")
+                .asException()
+            )
+          case scans => Future.successful(scans)
+        },
         loggerFactory.getTracedLogger(classOf[BftScanConnection]),
       )
       initialConnections <- MonadUtil
@@ -1671,20 +1744,19 @@ object BftScanConnection {
         failed.toMap,
         uri => builder(uri, amuletRulesCacheTimeToLive),
         _ => Future.unit,
-        _ => Bft.getPeerScansFromStore(store, svName),
+        _ => getPeerScans(),
         scansRefreshInterval,
         retryProvider,
         loggerFactory,
       )
-      bftConnection = new BftScanConnection(
-        spliceLedgerClient,
-        amuletRulesCacheTimeToLive,
-        scanList,
-        clock,
-        retryProvider,
-        loggerFactory,
-      )
-    } yield bftConnection
+    } yield new BftScanConnection(
+      spliceLedgerClient,
+      amuletRulesCacheTimeToLive,
+      scanList,
+      clock,
+      retryProvider,
+      loggerFactory,
+    )
   }
 
   private def buildScanConnection(

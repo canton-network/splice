@@ -30,7 +30,15 @@ import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
   SpliceLedgerClient,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.ErrorResponse
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  ErrorResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
+  RewardAccountingBatchOfBatches,
+  RewardAccountingRootHashCannotProvide,
+  RewardAccountingRootHashOk,
+  RewardAccountingRootHashUndetermined,
+}
 
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.Bft
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
@@ -56,7 +64,7 @@ import org.slf4j.event.Level
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 // mock verification triggers this
 @SuppressWarnings(Array("com.digitalasset.canton.DiscardedFuture"))
@@ -241,6 +249,48 @@ class BftScanConnectionTest
 
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
+
+  private def rootHashOk(round: Long, hash: String): GetRewardAccountingRootHashResponse =
+    GetRewardAccountingRootHashResponse(
+      RewardAccountingRootHashOk(status = "Ok", roundNumber = round, rootHash = hash)
+    )
+  def makeMockReturnRootHashOk(mock: SingleScanConnection, round: Long, hash: String): Unit =
+    when(mock.getRewardAccountingRootHash(round))
+      .thenReturn(Future.successful(rootHashOk(round, hash)))
+  def makeMockReturnRootHashUndetermined(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingRootHash(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingRootHashResponse(
+          RewardAccountingRootHashUndetermined(status = "Undetermined")
+        )
+      )
+    )
+  def makeMockReturnRootHashCannotProvide(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingRootHash(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingRootHashResponse(
+          RewardAccountingRootHashCannotProvide(status = "CannotProvide")
+        )
+      )
+    )
+  private val rewardAccountingBatchResponse: GetRewardAccountingBatchResponse =
+    GetRewardAccountingBatchResponse(
+      RewardAccountingBatchOfBatches(batchType = "BatchOfBatches", childHashes = Vector("aa", "bb"))
+    )
+  def makeMockReturnBatch(
+      mock: SingleScanConnection,
+      round: Long,
+      hash: String,
+      resp: Option[GetRewardAccountingBatchResponse],
+  ): Unit =
+    when(mock.getRewardAccountingBatch(round, hash)).thenReturn(Future.successful(resp))
+  def makeMockFailBatch(
+      mock: SingleScanConnection,
+      round: Long,
+      hash: String,
+      failure: Throwable,
+  ): Unit =
+    when(mock.getRewardAccountingBatch(round, hash)).thenReturn(Future.failed(failure))
 
   "BftScanConnection" should {
 
@@ -980,6 +1030,143 @@ class BftScanConnectionTest
           .executeCall(call, connections, nTargetSuccess = 1, logger)
           .failed
       } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+    }
+  }
+
+  "BftScanConnection.getRewardAccountingRootHash" should {
+
+    // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
+    "reaches consensus when f+1 scans agree on the same hash" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashOk(connections(1), round, "aabb")
+      makeMockReturnRootHashUndetermined(connections(2), round)
+      makeMockReturnRootHashUndetermined(connections(3), round)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+          ok.rootHash should be("aabb")
+          ok.roundNumber should be(round)
+      }
+    }
+
+    "returns Undetermined when no quorum agrees on a hash" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, i) =>
+        makeMockReturnRootHashOk(c, round, s"hash$i")
+      }
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on CannotProvide as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnRootHashCannotProvide(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on Undetermined as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnRootHashUndetermined(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "returns Undetermined when there are no peer scans" in {
+      val bft = getBft(Seq.empty)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(1L)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+  }
+
+  "BftScanConnection.getRewardAccountingBatch" should {
+
+    "returns the batch from the first scan that has it" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      makeMockReturnBatch(connections(0), round, hash, None)
+      makeMockReturnBatch(connections(1), round, hash, Some(rewardAccountingBatchResponse))
+      makeMockReturnBatch(connections(2), round, hash, None)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingBatch(round, hash)
+      } yield resp should be(Some(rewardAccountingBatchResponse))
+    }
+
+    "returns None when no scan has the batch" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      connections.foreach(makeMockReturnBatch(_, round, hash, None))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingBatch(round, hash)
+      } yield resp should be(None)
+    }
+
+    "ignores failing scans and still returns a batch" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      makeMockFailBatch(connections(0), round, hash, notFoundFailure)
+      makeMockReturnBatch(connections(1), round, hash, Some(rewardAccountingBatchResponse))
+      makeMockReturnBatch(connections(2), round, hash, None)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingBatch(round, hash)
+      } yield resp should be(Some(rewardAccountingBatchResponse))
+    }
+
+    "resolves as soon as one scan has data, without waiting for slow scans" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      makeMockReturnBatch(connections(0), round, hash, Some(rewardAccountingBatchResponse))
+      // These never complete; the call must still resolve from connection 0.
+      when(connections(1).getRewardAccountingBatch(round, hash))
+        .thenReturn(Promise[Option[GetRewardAccountingBatchResponse]]().future)
+      when(connections(2).getRewardAccountingBatch(round, hash))
+        .thenReturn(Promise[Option[GetRewardAccountingBatchResponse]]().future)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingBatch(round, hash)
+      } yield resp should be(Some(rewardAccountingBatchResponse))
     }
   }
 
