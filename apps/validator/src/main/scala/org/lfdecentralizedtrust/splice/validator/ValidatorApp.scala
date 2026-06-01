@@ -540,10 +540,16 @@ class ValidatorApp(
         logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
         Future.successful(migrationId)
       case None =>
-        scanConnection.getMigrationId().map { migrationId =>
-          logger.info(s"Resolved domain migration id $migrationId from scan")
-          migrationId
-        }
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "scan_migration_id",
+          "resolving domain migration id from scan",
+          scanConnection.getMigrationId().map { migrationId =>
+            logger.info(s"Resolved domain migration id $migrationId from scan")
+            migrationId
+          },
+          logger,
+        )
     }
 
   private def newTrafficBalanceService(

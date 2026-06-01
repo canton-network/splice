@@ -110,7 +110,13 @@ class JoiningNodeInitializer(
 
   private def migrationIdFromSponsorSv(): Future[Long] =
     svConnection.flatMap { case (_, connection) =>
-      connection.getMigrationId()
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "get_migration_id",
+        "Getting migration id from sponsor SV",
+        connection.getMigrationId(),
+        logger,
+      )
     }
 
   def joinDsoAndOnboardNodes(): Future[

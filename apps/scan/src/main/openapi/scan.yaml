@@ -1113,7 +1113,7 @@ paths:
         "404":
           description: "No migration scheduled"
 
-  /v0/migration-id:
+  /v0/migrations/last:
     get:
       tags: [internal, scan]
       x-jvm-package: scan

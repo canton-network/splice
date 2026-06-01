@@ -141,10 +141,6 @@ rateLimits:
     name: migrations-schedule
     type: unlimited
 
-  /api/scan/v0/migration-id:
-    name: migration-id
-    type: unlimited
-
   /api/scan/v0/splice-instance-names:
     name: splice-instance-names
     type: unlimited
