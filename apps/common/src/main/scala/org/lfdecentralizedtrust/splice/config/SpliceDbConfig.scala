@@ -28,9 +28,9 @@ object SpliceDbConfig {
     *
     * @see https://www.postgresql.org/docs/18/runtime-config-connection.html#GUC-CLIENT-CONNECTION-CHECK-INTERVAL
     */
-  def withClientConnectionCheckInterval(
+  private[config] def withClientConnectionCheckInterval(
       dbConfig: DbConfig,
-      interval: FiniteDuration = 5.seconds,
+      interval: FiniteDuration,
   ): DbConfig =
     dbConfig match {
       case pg: DbConfig.Postgres if interval.toMillis > 0 =>

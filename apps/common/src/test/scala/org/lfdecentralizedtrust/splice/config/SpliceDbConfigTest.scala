@@ -12,6 +12,10 @@ import org.scalatest.wordspec.AnyWordSpec
 import scala.concurrent.duration.*
 
 class SpliceDbConfigTest extends AnyWordSpec with BaseTest {
+  import SpliceDbConfig.{
+    withClientConnectionCheckInterval,
+    withConfiguredPostgresConnectionSettings,
+  }
 
   private def pgConfig(extraEntries: String = "") =
     DbConfig.Postgres(
@@ -39,40 +43,30 @@ class SpliceDbConfigTest extends AnyWordSpec with BaseTest {
 
   "SpliceDbConfig.withClientConnectionCheckInterval" should {
     "add connectionInitSql to a Postgres config" in {
-      val result = SpliceDbConfig.withClientConnectionCheckInterval(pgConfig())
+      val result = withClientConnectionCheckInterval(pgConfig(), 6.seconds)
       result match {
         case pg: DbConfig.Postgres =>
           pg.config.getString("connectionInitSql") shouldBe
-            "SET client_connection_check_interval TO '5000 ms'"
+            "SET client_connection_check_interval TO '6000 ms'"
         case other => fail(s"Expected Postgres, got $other")
       }
     }
 
     "prepend to existing connectionInitSql" in {
-      val result = SpliceDbConfig.withClientConnectionCheckInterval(
-        pgConfig("""connectionInitSql = "SET statement_timeout TO '30s'" """)
+      val result = withClientConnectionCheckInterval(
+        pgConfig("""connectionInitSql = "SET statement_timeout TO '30s'" """),
+        7.seconds,
       )
       result match {
         case pg: DbConfig.Postgres =>
           pg.config.getString("connectionInitSql") shouldBe
-            "SET client_connection_check_interval TO '5000 ms'; SET statement_timeout TO '30s'"
-        case other => fail(s"Expected Postgres, got $other")
-      }
-    }
-
-    "use a custom interval" in {
-      val result =
-        SpliceDbConfig.withClientConnectionCheckInterval(pgConfig(), interval = 10.seconds)
-      result match {
-        case pg: DbConfig.Postgres =>
-          pg.config.getString("connectionInitSql") shouldBe
-            "SET client_connection_check_interval TO '10000 ms'"
+            "SET client_connection_check_interval TO '7000 ms'; SET statement_timeout TO '30s'"
         case other => fail(s"Expected Postgres, got $other")
       }
     }
 
     "use the shared Splice Postgres config" in {
-      val result = SpliceDbConfig.withConfiguredPostgresConnectionSettings(
+      val result = withConfiguredPostgresConnectionSettings(
         pgConfig(),
         SplicePostgresConfig(
           clientConnectionCheckInterval = NonNegativeFiniteDuration.ofSeconds(10)
@@ -88,7 +82,7 @@ class SpliceDbConfigTest extends AnyWordSpec with BaseTest {
 
     "return H2 config unchanged" in {
       val h2 = h2Config
-      val result = SpliceDbConfig.withClientConnectionCheckInterval(h2)
+      val result = withClientConnectionCheckInterval(h2, 5.seconds)
       result shouldBe h2
     }
 
