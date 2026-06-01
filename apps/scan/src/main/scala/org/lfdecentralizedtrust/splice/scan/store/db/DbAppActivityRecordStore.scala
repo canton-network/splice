@@ -100,6 +100,7 @@ class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -170,7 +171,13 @@ class DbAppActivityRecordStore(
               and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
-    )
+    ).map {
+      // The first SV has complete history from genesis, so round 0 is always
+      // the earliest complete round. The query still runs to confirm ingestion
+      // has started (returns None if no meta row or no activity records).
+      case Some(_) if isFirstSv => Some(0L)
+      case other => other
+    }
   }
 
   /** Find the latest round with complete app activity.

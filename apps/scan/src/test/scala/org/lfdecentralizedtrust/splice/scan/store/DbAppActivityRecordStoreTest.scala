@@ -417,6 +417,121 @@ class DbAppActivityRecordStoreTest
         result shouldBe None
       }
     }
+
+    "return round 0 on first SV when ingestion started from genesis" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-0", 0L),
+          ("round-1", 1L),
+        )
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        result.value shouldBe 0L
+      }
+    }
+
+    "not return round 0 on first SV until the next round exists" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+        _ <- insertRecordsForRounds(store, historyId, baseTs, ("round-0", 0L))
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        result shouldBe None
+      }
+    }
+
+    "return round 0 on first SV even when ingestion started after genesis" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L, None)
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-10", 10L),
+          ("round-11", 11L),
+        )
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        result.value shouldBe 0L
+      }
+    }
+  }
+
+  "assertCompleteActivity" should {
+
+    "accept round 0 on first SV (no prior round needed)" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-0", 0L),
+          ("round-1", 1L),
+        )
+        _ <- store.assertCompleteActivity(0L)
+      } yield succeed
+    }
+
+    "reject round 0 on non-first SV (no prior round exists)" in {
+      for {
+        (store, historyId) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-0", 0L),
+          ("round-1", 1L),
+        )
+        result <- store.assertCompleteActivity(0L).failed
+      } yield {
+        result.getMessage should include("Incomplete app activity for round 0")
+      }
+    }
+
+    "accept round with no prior records on first SV" in {
+      for {
+        (store, historyId) <- newStore(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-5", 5L),
+          ("round-6", 6L),
+        )
+        _ <- store.assertCompleteActivity(5L)
+      } yield succeed
+    }
+
+    "reject round with no prior records on non-first SV" in {
+      for {
+        (store, historyId) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- insertRecordsForRounds(
+          store,
+          historyId,
+          baseTs,
+          ("round-5", 5L),
+          ("round-6", 6L),
+        )
+        result <- store.assertCompleteActivity(5L).failed
+      } yield {
+        result.getMessage should include("Incomplete app activity for round 5")
+      }
+    }
   }
 
   "lookupActivityRecordMeta" should {
@@ -780,7 +895,8 @@ class DbAppActivityRecordStoreTest
     */
   private def newStore(
       versions: DbAppActivityRecordStore.IngestionVersions =
-        DbAppActivityRecordStore.IngestionVersions(1, 0)
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
+      isFirstSv: Boolean = false,
   ): Future[(DbAppActivityRecordStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
@@ -801,6 +917,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         versions,
+        isFirstSv,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -810,7 +927,9 @@ class DbAppActivityRecordStoreTest
   /** Creates both an app activity record store and a verdict store backed by
     * the same UpdateHistory, for testing insertVerdictsWithAppActivityRecords.
     */
-  private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
+  private def newStores(
+      isFirstSv: Boolean = false
+  ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
@@ -829,6 +948,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
