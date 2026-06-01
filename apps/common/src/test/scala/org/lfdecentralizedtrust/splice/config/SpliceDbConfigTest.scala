@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.config
 
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.DbConfig
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.typesafe.config.ConfigFactory
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -68,6 +69,26 @@ class SpliceDbConfigTest extends AnyWordSpec with BaseTest {
             "SET client_connection_check_interval TO '10000 ms'"
         case other => fail(s"Expected Postgres, got $other")
       }
+    }
+
+    "use the shared Splice Postgres config" in {
+      val result = SpliceDbConfig.withConfiguredPostgresConnectionSettings(
+        pgConfig(),
+        SplicePostgresConfig(
+          clientConnectionCheckInterval = NonNegativeFiniteDuration.ofSeconds(10)
+        ),
+      )
+      result match {
+        case pg: DbConfig.Postgres =>
+          pg.config.getString("connectionInitSql") shouldBe
+            "SET client_connection_check_interval TO '10000 ms'"
+        case other => fail(s"Expected Postgres, got $other")
+      }
+    }
+
+    "default the shared Splice Postgres config to the existing interval" in {
+      SplicePostgresConfig().clientConnectionCheckInterval.toInternal.toScala shouldBe
+        SpliceDbConfig.defaultClientConnectionCheckInterval
     }
 
     "return H2 config unchanged" in {

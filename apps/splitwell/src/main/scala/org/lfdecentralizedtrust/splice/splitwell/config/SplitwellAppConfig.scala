@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceParametersConfig,
   ParticipantClientConfig,
+  SplicePostgresConfig,
   SynchronizerConfig,
   HttpClientConfig,
   NetworkAppClientConfig,
@@ -34,6 +35,7 @@ case class SplitwellDomains(
 case class SplitwellAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     providerUser: String,
     participantClient: ParticipantClientConfig,
     scanClient: ScanAppClientConfig,

@@ -17,6 +17,15 @@ object SpliceDbConfig {
     */
   val defaultClientConnectionCheckInterval: FiniteDuration = 5.seconds
 
+  def withConfiguredPostgresConnectionSettings(
+      dbConfig: DbConfig,
+      postgresConfig: SplicePostgresConfig,
+  ): DbConfig =
+    withClientConnectionCheckInterval(
+      dbConfig,
+      postgresConfig.clientConnectionCheckInterval.toInternal.toScala,
+    )
+
   /** Return a copy of `dbConfig` whose underlying Slick/HikariCP `connectionInitSql`
     * includes a `SET client_connection_check_interval` statement. For non-Postgres
     * configs the input is returned unchanged.
