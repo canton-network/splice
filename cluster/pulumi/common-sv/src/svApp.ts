@@ -92,10 +92,20 @@ export function valuesForSvApp(
           },
         ]
       : [];
+  const brokenAmuletVersionsConfig =
+    config.svApp?.brokenAmuletVersions && config.svApp.brokenAmuletVersions.length > 0
+      ? [
+          {
+            name: 'ADDITIONAL_CONFIG_BROKEN_AMULET_VERSIONS',
+            value: `canton.sv-apps.sv.broken-amulet-versions = [${config.svApp.brokenAmuletVersions.map(v => JSON.stringify(v)).join(', ')}]`,
+          },
+        ]
+      : [];
   const additionalEnvVars = (config.svApp?.additionalEnvVars || [])
     .concat(bftSequencerConnectionEnvVars)
     .concat(mediatorPruningConfig)
-    .concat(additionalPackagesToUnvetConfig);
+    .concat(additionalPackagesToUnvetConfig)
+    .concat(brokenAmuletVersionsConfig);
 
   const synchronizerValues: { synchronizers: object } = {
     synchronizers: {

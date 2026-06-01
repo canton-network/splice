@@ -400,6 +400,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -474,6 +477,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -548,6 +554,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -622,6 +631,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -696,6 +708,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -770,6 +785,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -844,6 +862,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -918,6 +939,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -992,6 +1016,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1066,6 +1093,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1140,6 +1170,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1214,6 +1247,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1288,6 +1324,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1362,6 +1401,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1436,6 +1478,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1510,6 +1555,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1584,6 +1632,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'
@@ -1664,6 +1715,9 @@ svs:
     svApp:
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
+      brokenAmuletVersions:
+        - '0.1.15'
+        - '0.1.16'
       resources:
         limits:
           cpu: '3'

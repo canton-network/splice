@@ -102,6 +102,8 @@ const SvAppConfigSchema = z
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),
     resources: K8sResourceSchema,
+    // List of amulet package versions considered broken (expiry will skip and ignore parties)
+    brokenAmuletVersions: z.array(z.string()).optional(),
   })
   .strict();
 const BulkStorageConfigSchema = z.object({

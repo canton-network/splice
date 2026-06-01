@@ -22,6 +22,10 @@ participant:
       memory: '18Gi'
   additionalEnvVars:
     - !include(./participant_pruning.yaml)
+svApp:
+  brokenAmuletVersions:
+    - "0.1.15"
+    - "0.1.16"
 validatorApp:
   additionalEnvVars:
     # enable https://github.com/canton-network/splice/pull/2499
