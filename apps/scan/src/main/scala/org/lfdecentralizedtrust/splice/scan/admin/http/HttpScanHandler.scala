@@ -35,6 +35,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -2190,9 +2191,14 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[ScanResource.LookupDsoRulesBeforeResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.lookupDsoRulesBefore") { _ => _ =>
-      val before = body.before.toInstant
+      val before = CantonTimestamp.assertFromInstant(body.before.toInstant)
       for {
-        dsoRules <- store.lookupDsoRulesBefore(before, updateHistory)
+        dsoRules <- store.lookupContractByRecordTime(
+          DsoRules.COMPANION,
+          updateHistory,
+          before,
+          SortOrder.Descending,
+        )
       } yield ScanResource.LookupDsoRulesBeforeResponse.OK(
         definitions.LookupDsoRulesBeforeResponse(dsoRules.map(_.toHttp))
       )

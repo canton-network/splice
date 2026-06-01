@@ -25,7 +25,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -668,17 +667,6 @@ class DbScanStore(
     } yield ResultsPage(recentVoteResults, afterToken)
   }
 
-  override def lookupDsoRulesBefore(
-      before: Instant,
-      updateHistory: UpdateHistory,
-  )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
-    lookupContractNearestRecordTime(
-      DsoRules.COMPANION,
-      updateHistory,
-      CantonTimestamp.assertFromInstant(before),
-      SortOrder.Descending,
-    )
-
   override def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId],
       limit: Limit,
@@ -754,16 +742,6 @@ class DbScanStore(
 
   // TODO (#934): this method probably belongs in UpdateHistory instead
   override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]] =
-    lookupContractNearestRecordTime(companion, updateHistory, recordTime, SortOrder.Ascending)
-
-  private def lookupContractNearestRecordTime[C, TCId <: ContractId[?], T](
       companion: C,
       updateHistory: UpdateHistory,
       recordTime: CantonTimestamp,

@@ -516,7 +516,7 @@ abstract class ScanStoreTest
       }
     }
 
-    "lookupDsoRulesBefore" should {
+    "lookupContractByRecordTime" should {
 
       def ingestDsoRulesWithSvWeight(
           updateHistory: UpdateHistory,
@@ -542,7 +542,12 @@ abstract class ScanStoreTest
           updateHistory: UpdateHistory,
       ): Future[Option[Long]] =
         store
-          .lookupDsoRulesBefore(before.toInstant, updateHistory)
+          .lookupContractByRecordTime(
+            DsoRules.COMPANION,
+            updateHistory,
+            before,
+            SortOrder.Descending,
+          )
           .map(
             _.flatMap(dsoRules =>
               Option(dsoRules.payload.svs.get(sv.toProtoPrimitive)).map(_.svRewardWeight.toLong)
@@ -1087,6 +1092,7 @@ abstract class ScanStoreTest
             DsoRules.COMPANION,
             updateHistory,
             firstRecordTime.plusSeconds(1),
+            SortOrder.Ascending,
           )
         } yield {
           result.value should not be firstDsoRules
@@ -1128,6 +1134,7 @@ abstract class ScanStoreTest
             AmuletRules.COMPANION,
             updateHistory,
             firstRecordTime.plusSeconds(1),
+            SortOrder.Ascending,
           )
         } yield {
           result.value should not be firstAmuletRules

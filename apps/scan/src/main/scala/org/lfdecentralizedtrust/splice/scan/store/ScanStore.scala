@@ -228,18 +228,12 @@ trait ScanStore
   def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
       companion: C,
       updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp = CantonTimestamp.MinValue,
+      recordTime: CantonTimestamp,
+      sortOrder: SortOrder,
   )(implicit
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
-
-  def lookupDsoRulesBefore(
-      before: Instant,
-      updateHistory: UpdateHistory,
-  )(implicit
-      tc: TraceContext
-  ): Future[Option[Contract[splice.dsorules.DsoRules.ContractId, splice.dsorules.DsoRules]]]
 }
 
 object ScanStore {

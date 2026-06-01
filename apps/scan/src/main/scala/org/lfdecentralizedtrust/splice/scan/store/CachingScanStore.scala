@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -207,6 +206,7 @@ class CachingScanStore(
       companion: C,
       updateHistory: UpdateHistory,
       recordTime: CantonTimestamp,
+      sortOrder: SortOrder,
   )(implicit
       companionClass: MultiDomainAcsStore.ContractCompanion[C, TCId, T],
       tc: TraceContext,
@@ -214,17 +214,8 @@ class CachingScanStore(
     companion,
     updateHistory,
     recordTime,
+    sortOrder,
   )
-
-  override def lookupDsoRulesBefore(
-      before: Instant,
-      updateHistory: UpdateHistory,
-  )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
-    getCache[Instant, Option[Contract[DsoRules.ContractId, DsoRules]]](
-      "lookupDsoRulesBefore",
-      cacheConfig.voteRequests,
-      { t => store.lookupDsoRulesBefore(t, updateHistory) },
-    ).get(before)
 
   override def listVoteRequestResults(
       actionName: Option[String],
