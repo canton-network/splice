@@ -672,38 +672,12 @@ class DbScanStore(
       before: Instant,
       updateHistory: UpdateHistory,
   )(implicit tc: TraceContext): Future[Option[Contract[DsoRules.ContractId, DsoRules]]] =
-    lookupContractByRecordTimeBefore(
+    lookupContractNearestRecordTime(
       DsoRules.COMPANION,
       updateHistory,
       CantonTimestamp.assertFromInstant(before),
+      SortOrder.Descending,
     )
-
-  private def lookupContractByRecordTimeBefore[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      before: CantonTimestamp,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]] = {
-    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
-      companionClass.packageQualifiedName(companion)
-    for {
-      row <- storage
-        .querySingle(
-          selectFromUpdateCreatesTableResult(
-            updateHistory.historyId,
-            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
-              and template_id_entity_name = ${lengthLimited(entityName)}
-              and package_name = ${lengthLimited(packageName)}
-              and record_time < $before""",
-            orderLimit = sql"""order by record_time desc, row_id desc limit 1""",
-          ).headOption,
-          s"lookupBefore[$pqn]",
-        )
-        .value
-    } yield row.map(contractFromEvent(companion)(_))
-  }
 
   override def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId],
@@ -786,25 +760,41 @@ class DbScanStore(
   )(implicit
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
+  ): Future[Option[Contract[TCId, T]]] =
+    lookupContractNearestRecordTime(companion, updateHistory, recordTime, SortOrder.Ascending)
+
+  private def lookupContractNearestRecordTime[C, TCId <: ContractId[?], T](
+      companion: C,
+      updateHistory: UpdateHistory,
+      recordTime: CantonTimestamp,
+      sortOrder: SortOrder,
+  )(implicit
+      companionClass: ContractCompanion[C, TCId, T],
+      tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]] = {
     val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
       companionClass.packageQualifiedName(companion)
+    // Literal comparison/sort order since Postgres complains when trying to bind it to a parameter.
+    val (compareRecordTime, orderLimit, spanLabel) = sortOrder match {
+      case SortOrder.Ascending =>
+        (sql" > ", sql"order by record_time asc, row_id asc limit 1", "lookup")
+      case SortOrder.Descending =>
+        (sql" < ", sql"order by record_time desc, row_id desc limit 1", "lookupBefore")
+    }
     for {
       row <- storage
         .querySingle(
           selectFromUpdateCreatesTableResult(
             updateHistory.historyId,
-            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
+            where = (sql"""template_id_module_name = ${lengthLimited(moduleName)}
               and template_id_entity_name = ${lengthLimited(entityName)}
               and package_name = ${lengthLimited(packageName)}
-              and record_time > $recordTime""",
-            orderLimit = sql"""order by record_time asc, row_id asc limit 1""",
+              and record_time""" ++ compareRecordTime ++ sql"$recordTime").toActionBuilder,
+            orderLimit = orderLimit,
           ).headOption,
-          s"lookup[$pqn]",
+          s"$spanLabel[$pqn]",
         )
         .value
-    } yield {
-      row.map(contractFromEvent(companion)(_))
-    }
+    } yield row.map(contractFromEvent(companion)(_))
   }
 }
