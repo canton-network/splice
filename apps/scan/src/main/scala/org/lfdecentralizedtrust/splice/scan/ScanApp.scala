@@ -599,8 +599,15 @@ class ScanApp(
           loggerFactory,
         )
         .flatMap { peerScanConnection =>
-          peerScanConnection
-            .getMigrationId()
+          retryProvider
+            .getValueWithRetries(
+              RetryFor.WaitingOnInitDependency,
+              "migration_id_from_peers",
+              "domain migration id from peer scans",
+              peerScanConnection
+                .getMigrationId(),
+              logger,
+            )
             .transform { result =>
               peerScanConnection.close()
               result
