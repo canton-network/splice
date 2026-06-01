@@ -230,7 +230,6 @@ export class InStackCometBftDecentralizedSynchronizerNode
       mediatorPostgres: Postgres;
     },
     active: boolean,
-    runningMigration: boolean,
     onboardingName: string,
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
@@ -246,7 +245,6 @@ export class InStackCometBftDecentralizedSynchronizerNode
       svConfig,
       migrationId,
       active,
-      runningMigration,
       version,
       cometbft.enableStateSync,
       cometbft.enableTimeoutCommit,

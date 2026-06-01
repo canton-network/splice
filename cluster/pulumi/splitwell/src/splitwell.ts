@@ -139,7 +139,6 @@ export async function installSplitwell(
     xns,
     extraDependsOn,
     dependencies: [],
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     additionalUsers: [
       auth0UserNameEnvVar('splitwell'),
       { name: 'CN_APP_SPLITWELL_PROVIDER_WALLET_USER_NAME', value: providerWalletUser },

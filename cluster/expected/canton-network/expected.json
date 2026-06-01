@@ -3031,9 +3031,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
           "onboardingName": "Digital-Asset-2",
@@ -3244,9 +3241,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
           "participantAddress": "participant",
@@ -4128,9 +4122,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
@@ -4320,9 +4311,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "participantAddress": "participant",

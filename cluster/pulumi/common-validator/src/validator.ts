@@ -10,7 +10,6 @@ import {
   CnInput,
   config,
   daContactPoint,
-  DomainMigrationIndex,
   ExactNamespace,
   failOnAppVersionMismatch,
   fetchAndInstallParticipantBootstrapDump,
@@ -94,9 +93,6 @@ export type ValidatorInstallConfig = BasicValidatorConfig & {
   onboardingSecret: string;
   svSponsorAddress?: string;
   participantBootstrapDump?: BootstrappingDumpConfig;
-  migration: {
-    id: DomainMigrationIndex;
-  };
 };
 
 export type AutoAcceptTransfersConfig = {
@@ -114,9 +110,6 @@ export function autoAcceptTransfersConfigFromEnv(
 type SvValidatorConfig = BasicValidatorConfig & {
   svValidator: true;
   decentralizedSynchronizerUrl?: string;
-  migration: {
-    id: DomainMigrationIndex;
-  };
 };
 
 export async function installValidatorApp(
@@ -185,7 +178,6 @@ export async function installValidatorApp(
     `validator-${config.xns.logicalName}`,
     'splice-validator',
     {
-      migration: config.migration,
       additionalUsers: config.additionalUsers || [],
       additionalEnvVars: config.additionalEnvVars || undefined,
       // TODO(tech-debt) there should be a way to pass arbitrary new values here via the `config`

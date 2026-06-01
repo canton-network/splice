@@ -225,12 +225,6 @@ async function installValidator(
 
   const validatorValues: ChartValues = {
     ...validatorValuesFromYamlFiles,
-    migration: {
-      ...validatorValuesFromYamlFiles.migration,
-      migrating: DecentralizedSynchronizerUpgradeConfig.isRunningMigration()
-        ? true
-        : validatorValuesFromYamlFiles.migration.migrating,
-    },
     scanClient: validatorConfig.validatorApp?.scanClient ?? validatorValuesFromYamlFiles.scanClient,
     synchronizer:
       validatorConfig.validatorApp?.synchronizer ?? validatorValuesFromYamlFiles.synchronizer,

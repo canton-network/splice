@@ -1153,9 +1153,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "splitwell",
           "onboardingSecretFrom": {
             "secretKeyRef": {
