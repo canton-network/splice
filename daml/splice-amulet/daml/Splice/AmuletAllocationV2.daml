@@ -42,12 +42,11 @@ template AmuletAllocationV2
       -- Empty if the net fund movement is positive.
     settlement : V2.SettlementInfo
     allocation : V2.AllocationSpecification
-    dso : Party
     expiresAt : Time
     numIterations : Int
     createdAt : Time
   where
-    signatory dso, allocation.authorizer.owner
+    signatory allocation.admin, allocation.authorizer.owner
     observer settlement.executors
 
     ensure
@@ -78,7 +77,7 @@ template AmuletAllocationV2
       allocation_withdrawExtraObservers _arg = settlement.executors
 
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
-        archiveAndCheckActors self arg.actors [[accountPrincipal dso allocation.authorizer]]
+        archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
         pure V2.AllocationResult with
@@ -93,7 +92,7 @@ template AmuletAllocationV2
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
-        archiveAndCheckActors self arg.actors [dso :: settlement.executors]
+        archiveAndCheckActors self arg.actors [allocation.admin :: settlement.executors]
         forA_ allocation.settlementDeadline $ \deadline ->
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
@@ -108,29 +107,29 @@ template AmuletAllocationV2
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 
         -- archive the locked tokens
-        let authorizer = accountPrincipal dso allocation.authorizer
+        let authorizer = accountPrincipal allocation.admin allocation.authorizer
         (inputFundingAmount, inputTokenCids) <-
           case lockedAmulet of
             None -> pure (0.0, [])
             Some lockedAmuletCid -> do
-              lockedAmulet <- fetchAndArchive (ForOwner with dso = dso; owner = authorizer) lockedAmuletCid
+              lockedAmulet <- fetchAndArchive (ForOwner with dso = allocation.admin; owner = authorizer) lockedAmuletCid
               pure (lockedAmulet.amulet.amount.initialAmount, [toInterfaceContractId lockedAmuletCid])
 
         -- compute total funds to move
-        let netTransferAmount = netAmuletCreditAmount dso (basicAccount authorizer) actualTransferLegSides
+        let netTransferAmount = netAmuletCreditAmount allocation.admin (basicAccount authorizer) actualTransferLegSides
         let inputAmount = inputFundingAmount + netTransferAmount
         let payoutAmount = inputAmount - outputFundingAmount
         require' ("inputAmount", inputAmount) isGreaterOrEqualR ("minimal outputAmount", outputFundingAmount)
 
         -- read reference data
-        (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+        (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext allocation.admin arg.extraArgs.context
         let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
 
         -- create the payout
         payoutHoldingCids <-
           if payoutAmount <= 0.0 then pure [] else do
             amuletCid <- create Amulet with
-              dso
+              dso = allocation.admin
               owner = authorizer
               amount = expiringAmount configAmulet.holdingFee payoutAmount configState.holdingFeesOpenRoundNumber
             pure [toInterfaceContractId amuletCid]
@@ -143,11 +142,11 @@ template AmuletAllocationV2
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
               lock = TimeLock with
-                holders = [authorizer, dso]
+                holders = [authorizer, allocation.admin]
                 expiresAt = newExpiresAt
                 optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement)
               amulet = Amulet with
-                dso
+                dso = allocation.admin
                 owner = authorizer
                 amount = expiringAmount configAmulet.holdingFee outputFundingAmount configState.holdingFeesOpenRoundNumber
             pure (Some lockedAmuletCid)
@@ -161,7 +160,6 @@ template AmuletAllocationV2
               allocation = this.allocation with
                 transferLegSides = []
                 nextIterationFunding = arg.nextIterationFunding
-              dso
               expiresAt = newExpiresAt
               numIterations = numIterations + 1
               createdAt
@@ -226,4 +224,4 @@ computeAllocationExpiry transferConfig now settlementDeadline = do
 ------------
 
 instance HasCheckedFetch AmuletAllocationV2 ForDso where
-  contractGroupId AmuletAllocationV2{..} = ForDso with dso
+  contractGroupId AmuletAllocationV2{..} = ForDso with dso = allocation.admin

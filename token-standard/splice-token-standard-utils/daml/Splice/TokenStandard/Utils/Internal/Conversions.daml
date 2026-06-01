@@ -214,7 +214,7 @@ ensureNoAccountMeta path fieldName meta = do
   where
     check k = case TextMap.lookup k meta.values of
       None -> pure ()
-      Some v -> fail $ "Unexpected account information in metadata on v2 choice for '" <> path <> fieldName <> "': " <> show v
+      Some v -> fail $ "Unexpected account information in metadata of '" <> path <> "' in metadata key '" <> k <> "': " <> show v
 
 ensureBasicAccount : Text -> HoldingV2.Account -> Update ()
 ensureBasicAccount fieldName account = do

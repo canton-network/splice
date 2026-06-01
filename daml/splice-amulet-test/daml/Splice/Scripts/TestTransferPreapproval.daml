@@ -299,8 +299,9 @@ testTransferCommand = script do
   -- fails with out of funds
   let expect = expectFailureStatus \fs ->
         fs.errorId == "splice.lfdecentralizedtrust.org/insufficient-funds" && fs.meta == TextMap.fromList [("requiredAmount", "33.0")]
-  submitMultiMustFail'' expect [aliceValidator.primaryParty] [alice.primaryParty, app.dso]  $ exerciseCmd transferCmd TransferCommand_Send
-    with
+  submitMustFail'' expect
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty <> readAs app.dso) $
+    exerciseCmd transferCmd TransferCommand_Send with
       context = context
       inputs = map (InputAmulet . fst) allAmulets
       transferPreapprovalCidO = Some transferPreapprovalCid
@@ -361,7 +362,9 @@ testTransferCommand = script do
 
   amulets <- fmap fst <$> query @Amulet alice.primaryParty
 
-  submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds") [aliceValidator.primaryParty] [alice.primaryParty, app.dso] $
+  submitMustFail''
+    (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty <> readAs app.dso) $
     exerciseCmd transferCmd TransferCommand_Send
       with
         context = context

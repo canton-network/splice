@@ -453,8 +453,8 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
   let superfluousAuthorizations = allocatedAuthorizationsSet `Set.difference` requiredAuthorizations
   let missingAuthorizations = requiredAuthorizations `Set.difference` allocatedAuthorizationsSet
 
-  require' ("superfluous authorizations", superfluousAuthorizations) isEqualR ("empty set", Set.empty)
   require' ("missing authorizations", missingAuthorizations) isEqualR ("empty set", Set.empty)
+  require' ("superfluous authorizations", superfluousAuthorizations) isEqualR ("empty set", Set.empty)
 
   pure allocations
 

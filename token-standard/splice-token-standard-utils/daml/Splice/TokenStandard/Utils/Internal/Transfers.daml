@@ -220,8 +220,8 @@ transferFactory_v2_senderActor_transferImpl
   -> TransferInstructionV2.TransferFactory_Transfer
   -> Update TransferInstructionV2.TransferInstructionResult
 transferFactory_v2_senderActor_transferImpl self arg = do
-  ensureNoAccountMeta "transfer." "sender" arg.transfer.meta
-  ensureNoAccountMeta "transfer." "receiver" arg.transfer.meta
+  ensureNoAccountMeta "transfer" "sender" arg.transfer.meta
+  ensureNoAccountMeta "transfer" "receiver" arg.transfer.meta
   let admin = arg.transfer.instrumentId.admin
   checkActors arg.actors [[accountPrincipal admin arg.transfer.sender]]
   upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferFactory) self) TransferInstructionV1.TransferFactory_Transfer with
