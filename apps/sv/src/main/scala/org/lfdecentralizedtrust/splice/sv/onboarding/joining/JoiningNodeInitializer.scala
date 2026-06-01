@@ -39,6 +39,8 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   TopologyTransactionType,
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, DomainTimeSynchronization}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
@@ -107,6 +109,25 @@ class JoiningNodeInitializer(
       "An onboarding config is required."
     )
   )
+
+  /** Reads the current migration id from the SV's own scan. Used as a fallback when the
+    * local update history does not yet know about any migration id.
+    */
+  private def migrationIdFromScan(): Future[Long] =
+    ScanConnection
+      .singleUncached(
+        ScanAppClientConfig(NetworkAppClientConfig(config.scan.internalUrl)),
+        upgradesConfig,
+        clock,
+        retryProvider,
+        loggerFactory,
+        retryConnectionOnInitialFailure = true,
+      )
+      .flatMap { scanConnection =>
+        scanConnection
+          .getMigrationId()
+          .andThen { _ => scanConnection.close() }
+      }
 
   def joinDsoAndOnboardNodes(): Future[
     (
@@ -192,15 +213,16 @@ class JoiningNodeInitializer(
         participantAdminConnection,
       )
       storeKey = SvStore.Key(svParty, dsoPartyId)
+      domainMigrationId <- resolveDomainMigrationId(migrationIdFromScan())
       svStore = newSvStore(
         storeKey,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore = newDsoStore(
         svStore.key,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -258,7 +280,7 @@ class JoiningNodeInitializer(
               clock,
               retryProvider,
               loggerFactory,
-              config.domainMigrationId,
+              domainMigrationId,
               config.scan,
             )
             dsoAutomation =
@@ -833,6 +855,7 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
+                domainMigrationId <- resolveDomainMigrationId(migrationIdFromScan())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
@@ -840,7 +863,7 @@ class JoiningNodeInitializer(
                   clock,
                   retryProvider,
                   loggerFactory,
-                  config.domainMigrationId,
+                  domainMigrationId,
                   config.scan,
                 )
                 dsoAutomation = newSvDsoAutomationService(

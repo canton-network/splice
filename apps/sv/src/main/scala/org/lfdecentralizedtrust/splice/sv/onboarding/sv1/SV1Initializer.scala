@@ -246,15 +246,16 @@ class SV1Initializer(
         ),
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
+      domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
       svStore = newSvStore(
         storeKey,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore = newDsoStore(
         svStore.key,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -323,7 +324,7 @@ class SV1Initializer(
           clock,
           retryProvider,
           loggerFactory,
-          config.domainMigrationId,
+          domainMigrationId,
           config.scan,
         ),
       )
@@ -333,6 +334,7 @@ class SV1Initializer(
         dsoAutomation,
         decentralizedSynchronizer,
         packageVersionSupport,
+        domainMigrationId,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -587,6 +589,7 @@ class SV1Initializer(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
       synchronizerId: SynchronizerId,
       packageVersionSupport: PackageVersionSupport,
+      domainMigrationId: Long,
   ) {
 
     private val dsoStore = dsoStoreWithIngestion.store
@@ -598,7 +601,7 @@ class SV1Initializer(
       clock = clock,
       retryProvider = retryProvider,
       versionSupport = packageVersionSupport,
-      migrationId = config.domainMigrationId,
+      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -682,7 +685,7 @@ class SV1Initializer(
                     config.scan,
                     synchronizerId,
                     clock,
-                    config.domainMigrationId,
+                    domainMigrationId,
                   )
                   _ = logger
                     .info(

@@ -124,11 +124,6 @@ services:
         ADDITIONAL_CONFIG_TRUST_SINGLE_SCAN=
             canton.validator-apps.validator_backend.scan-client.type = "trust-single"
             canton.validator-apps.validator_backend.scan-client.url = "http://scan:5012"
-      - |
-        ADDITIONAL_CONFIG_MIGRATION_ID=
-            canton.validator-apps.validator_backend {
-              domain-migration-id = 0
-            }
       - SPLICE_APP_VALIDATOR_WALLET_USER_NAME=administrator
       - SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME=administrator
       - SPLICE_APP_SV_LEDGER_API_AUTH_USER_NAME=administrator
@@ -240,7 +235,6 @@ services:
       - SPLICE_APP_SV_ONBOARDING_TYPE=found-dso
       - SPLICE_APP_SV_ONBOARDING_NAME=sv
       - SPLICE_APP_SV_SV1_REWARD_WEIGHT=10000
-      - ADDITIONAL_CONFIG_MIGRATION_ID=canton.sv-apps.sv.domain-migration-id = 0
       - |
         ADDITIONAL_CONFIG_SV_DOMAIN=
                 canton.sv-apps.sv.local-synchronizer-nodes.current {

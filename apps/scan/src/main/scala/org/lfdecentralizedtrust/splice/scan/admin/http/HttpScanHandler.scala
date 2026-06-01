@@ -2098,6 +2098,19 @@ class HttpScanHandler(
     }
   }
 
+  override def getMigrationId(
+      respond: ScanResource.GetMigrationIdResponse.type
+  )()(extracted: TraceContext): Future[ScanResource.GetMigrationIdResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getMigrationId") { _ => _ =>
+      Future.successful(
+        ScanResource.GetMigrationIdResponse.OK(
+          definitions.GetMigrationIdResponse(updateHistory.domainMigrationId)
+        )
+      )
+    }
+  }
+
   override def getSpliceInstanceNames(
       respond: ScanResource.GetSpliceInstanceNamesResponse.type
   )()(extracted: TraceContext): Future[ScanResource.GetSpliceInstanceNamesResponse] = {

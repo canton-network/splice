@@ -337,6 +337,12 @@ class BftScanConnection(
     bftCall(_.getMigrationSchedule().value, "getMigrationSchedule")
   )
 
+  override def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    bftCall(_.getMigrationId(), "getMigrationId")
+
   private case class MigrationInfoResponses(
       withData: Map[SingleScanConnection, SourceMigrationInfo],
       withoutData: Set[SingleScanConnection],
