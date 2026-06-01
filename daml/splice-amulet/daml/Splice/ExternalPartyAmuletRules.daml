@@ -478,11 +478,6 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
 
   -- == validate each field of the requested allocation
 
-  -- allocation.settlementDeadline:
-  whenSome allocation.settlementDeadline \d -> do
-    assertWithinDeadline "Allocation.settlementDeadline" d
-    -- TODO(#5752): double-check that allocation deadline timing conforms to SHOUD/MUST guidance on the interface
-
   -- settlement.executors: no check
   -- settlement.id: no check
   -- settlement.cid: no check
@@ -491,7 +486,11 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- note: nextIterationFunding is validated in `amulet_allocationFactoryV2_allocateImpl`,
   -- as it is only supported for V2 factories
 
-  -- transferLegs:
+  -- allocation.settlementDeadline:
+  whenSome allocation.settlementDeadline \d -> do
+    assertWithinDeadline "Allocation.settlementDeadline" d
+
+  -- allocation.transferLegSides:
   let transferLegSides = allocation.transferLegSides
   requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
   unless (isSome allocation.nextIterationFunding) $
@@ -546,6 +545,12 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   -- validate call to factory and retrieve context
   let dso = externalAmuletRules.dso
   requireExpectedAdminMatch arg.expectedAdmin dso
+
+  -- validate allocateBefore
+  let settlement = arg.allocation.settlement
+  assertWithinDeadline "allocation.settlement.allocateBefore" settlement.allocateBefore
+  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessR
+    ("allocation.settlement.settleBefore", settlement.settleBefore)
 
   -- call V2 body with explicitly computed funding amount, which matters
   -- as V2 uses net amounts and V1 uses gross amounts, which are different for self-transfers
