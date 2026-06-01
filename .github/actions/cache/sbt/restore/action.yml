@@ -1,0 +1,27 @@
+name: "Restore SBT Cacht"
+description: "Restore the SBT cache"
+inputs:
+  cache_version:
+    description: "Version of the cache"
+    required: true
+  splice_root:
+    description: "Path to splice repo"
+    default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
+outputs:
+  cache_hit:
+    description: "Cache hit"
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Restore SBT cache
+      id: restore
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: |
+          /github/home/.ivy2/cache
+          /github/home/.sbt
+        key: sbt-${{ inputs.cache_version }} job=${{ github.job }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}-${{ hashFiles(format('{0}/project/BuildCommon.scala', inputs.splice_root), format('{0}/project/build.properties', inputs.splice_root), format('{0}/project/Houserules.scala', inputs.splice_root), format('{0}/project/plugins.sbt', inputs.splice_root), format('{0}/build.sbt', inputs.splice_root)) }}
+        restore-keys: |
+          sbt-${{ inputs.cache_version }} job=${{ github.job }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}

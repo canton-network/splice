@@ -1,0 +1,56 @@
+name: "Cleanup Nix Cache"
+description: "Prune old nix cache directories and binary cache entries on self-hosted runners"
+inputs:
+  max_age_days:
+    description: "Delete cache entries older than this many days"
+    required: false
+    default: "30"
+  workload_identity_provider:
+    description: "Google Workload Identity Provider for failure notifications"
+    required: true
+  failure_notifications_sa:
+    description: "Service account for failure notifications"
+    required: true
+  failure_notifications_url:
+    description: "URL for failure notifications"
+    required: true
+  failure_notifications_slack_channel:
+    description: "Slack channel for failure notifications"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Prune nix cache directories
+      shell: bash
+      run: |
+        set -euxo pipefail
+
+        max_age="${{ inputs.max_age_days }}"
+
+        echo "Pruning nix cache directories older than ${max_age} days"
+
+        if [ -d /cache/nix ]; then
+          echo "Pruning /cache/nix top-level entries"
+          find /cache/nix -mindepth 1 -maxdepth 1 -type d -mtime "+${max_age}" -print -exec sudo rm -rf {} \;
+        fi
+
+        if [ -d /cache/nix/binary_cache/nar ]; then
+          echo "Pruning /cache/nix/binary_cache/nar entries"
+          find /cache/nix/binary_cache/nar -mindepth 1 -maxdepth 1 -mtime "+${max_age}" -print -exec sudo rm -rf {} \;
+        fi
+
+        if [ -d /cache/nix/binary_cache ]; then
+          echo "Pruning /cache/nix/binary_cache entries"
+          find /cache/nix/binary_cache -mindepth 1 -maxdepth 1 -mtime "+${max_age}" -print -exec sudo rm -rf {} \;
+        fi
+
+        echo "Nix cache cleanup complete"
+    - name: Report Failures on Slack & Github
+      if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
+      uses: ./.github/actions/tests/failure_notifications
+      with:
+        workload_identity_provider: '${{ inputs.workload_identity_provider }}'
+        service_account: '${{ inputs.failure_notifications_sa }}'
+        notifications_url: '${{ inputs.failure_notifications_url }}'
+        slack_channel: '${{ inputs.failure_notifications_slack_channel }}'
