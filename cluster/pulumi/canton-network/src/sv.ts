@@ -375,7 +375,7 @@ async function installValidator(
     validatorWalletUsers: svUserIds(svConfig.auth0Client.getCfg()).apply(ids =>
       ids.concat(svConfig.validatorWalletUser ? [svConfig.validatorWalletUser] : [])
     ),
-    dependencies: sv.participant.asDependencies,
+    dependencies: [],
     disableAllocateLedgerApiUserParty: true,
     topupConfig: svConfig.topupConfig,
     backupConfig:
@@ -522,10 +522,7 @@ function installSvApp(
     svValues,
     config.version,
     {
-      dependsOn: dependsOn
-        .concat([postgres])
-        .concat(participant.asDependencies)
-        .concat(allSynchronizerDependencies),
+      dependsOn: dependsOn.concat([postgres]).concat(allSynchronizerDependencies),
     },
     undefined,
     appsAffinityAndTolerations
@@ -542,7 +539,6 @@ function installScan(
   postgres: Postgres
 ) {
   const useCantonBft = decentralizedSynchronizerMigrationConfig.active.sequencer.enableBftSequencer;
-  const lsuEnabled = decentralizedSynchronizerMigrationConfig.lsuEnabled;
   const { active, participant } = synchronizerNodes;
   const scanDbName = `scan_${sanitizedForPostgres(config.nodeName)}`;
 
@@ -554,42 +550,37 @@ function installScan(
     };
   };
 
-  const synchronizerValues = lsuEnabled
-    ? {
-        synchronizers: {
-          current: {
-            sequencer: active.namespaceInternalSequencerAddress,
-            mediator: active.namespaceInternalMediatorAddress,
-            ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
-          },
-          ...(synchronizerNodes.upgrade
-            ? {
-                successor: {
-                  sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
-                  mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
-                  ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                    ? bftSequencerConfigFor(synchronizerNodes.upgrade)
-                    : {}),
-                },
-              }
-            : {}),
-          ...(synchronizerNodes.legacy
-            ? {
-                legacy: {
-                  sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
-                  mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
-                  ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                    ? bftSequencerConfigFor(synchronizerNodes.legacy)
-                    : {}),
-                },
-              }
-            : {}),
-        },
-      }
-    : {
-        sequencerAddress: active.namespaceInternalSequencerAddress,
-        mediatorAddress: active.namespaceInternalMediatorAddress,
-      };
+  const synchronizerValues = {
+    synchronizers: {
+      current: {
+        sequencer: active.namespaceInternalSequencerAddress,
+        mediator: active.namespaceInternalMediatorAddress,
+        ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
+      },
+      ...(synchronizerNodes.upgrade
+        ? {
+            successor: {
+              sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
+              mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
+              ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
+                ? bftSequencerConfigFor(synchronizerNodes.upgrade)
+                : {}),
+            },
+          }
+        : {}),
+      ...(synchronizerNodes.legacy
+        ? {
+            legacy: {
+              sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
+              mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
+              ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
+                ? bftSequencerConfigFor(synchronizerNodes.legacy)
+                : {}),
+            },
+          }
+        : {}),
+    },
+  };
 
   const scanValues = {
     ...spliceInstanceNames,
@@ -637,7 +628,7 @@ function installScan(
       .concat(
         spliceConfig.pulumiProjectConfig.interAppsDependencies && !useCantonBft
           ? [svApp]
-          : participant.asDependencies.concat([postgres])
+          : [postgres]
       ),
   });
 }

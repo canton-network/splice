@@ -8,8 +8,6 @@ import { http, HttpHandler, HttpResponse } from 'msw';
 import {
   ErrorResponse,
   GetAmuletRulesResponse,
-  GetRewardsCollectedResponse,
-  GetRoundOfLatestDataResponse,
   GetDsoPartyIdResponse,
   ListActivityResponse,
   LookupEntryByPartyResponse,
@@ -390,12 +388,6 @@ export const buildScanMock = (baseScanUrl: string): HttpHandler[] => {
           },
         ],
       });
-    }),
-    http.get(`${scanUrl}/v0/round-of-latest-data`, () => {
-      return HttpResponse.json<GetRoundOfLatestDataResponse>({ round: 1, effectiveAt: new Date() });
-    }),
-    http.get(`${scanUrl}/v0/rewards-collected`, () => {
-      return HttpResponse.json<GetRewardsCollectedResponse>({ amount: '0.0' });
     }),
     http.post(`${scanUrl}/v0/amulet-rules`, () => {
       return HttpResponse.json<GetAmuletRulesResponse>(getAmuletRulesResponse(true));

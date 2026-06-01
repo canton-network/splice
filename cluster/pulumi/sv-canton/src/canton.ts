@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as pulumi from '@pulumi/pulumi';
 import {
   Auth0Client,
   auth0UserNameEnvVarSource,
@@ -9,11 +8,9 @@ import {
   ExactNamespace,
   installLedgerApiUserSecret,
   SpliceCustomResourceOptions,
-  withAddedDependencies,
 } from '@canton-network/splice-pulumi-common';
 import {
   InstalledMigrationSpecificSv,
-  installParticipant,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
 } from '@canton-network/splice-pulumi-common-sv';
@@ -105,77 +102,43 @@ export async function installCantonComponents(
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
-  const { chart: participant, db: participantDb } =
-    !migrationInfo.enableLogicalSynchronizerDeploymentMode
-      ? await installParticipant(
-          {
-            xns,
-            participant: svConfig.participant,
-            logging: svConfig.logging,
-            version,
-            auth0: auth0Config,
-            existingDb: dbs?.participant,
-            disableProtection,
-            participantAdminUserNameFrom: ledgerApiUserSecretSource,
-            imagePullServiceAccountName,
-            migration: {
-              id: migrationId,
-              isStillRunning: migrationStillRunning,
-            },
-            retainDbResourcesOnDelete: migrationInfo.migrateParticipantsFromSvCantonToSv,
-          },
-          withAddedDependencies(opts, ledgerApiUserSecret ? [ledgerApiUserSecret] : [])
-        )
-      : { chart: undefined, db: undefined };
   if (migrationStillRunning) {
     const decentralizedSynchronizerNode = migrationInfo.sequencer.enableBftSequencer
       ? new InStackCantonBftDecentralizedSynchronizerNode(
-          svConfig,
-          migrationId,
-          svConfig.ingressName,
-          xns,
-          {
-            sequencerPostgres: sequencerPostgres,
-            mediatorPostgres: mediatorPostgres,
-            setCoreDbNames: svConfig.isCoreSv,
-          },
-          version,
-          imagePullServiceAccountName,
-          opts
-        )
+        svConfig,
+        migrationId,
+        svConfig.ingressName,
+        xns,
+        {
+          sequencerPostgres: sequencerPostgres,
+          mediatorPostgres: mediatorPostgres,
+          setCoreDbNames: svConfig.isCoreSv,
+        },
+        version,
+        imagePullServiceAccountName,
+        opts
+      )
       : new InStackCometBftDecentralizedSynchronizerNode(
-          svConfig,
-          cometbft,
-          migrationId,
-          xns,
-          {
-            sequencerPostgres: sequencerPostgres,
-            mediatorPostgres: mediatorPostgres,
-            setCoreDbNames: svConfig.isCoreSv,
-          },
-          isActiveMigration,
-          migrationConfig.isRunningMigration(),
-          svConfig.onboardingName,
-          version,
-          imagePullServiceAccountName,
-          disableProtection,
-          migrationInfo.cometbft?.volumeSize,
-          opts
-        );
+        svConfig,
+        cometbft,
+        migrationId,
+        xns,
+        {
+          sequencerPostgres: sequencerPostgres,
+          mediatorPostgres: mediatorPostgres,
+          setCoreDbNames: svConfig.isCoreSv,
+        },
+        isActiveMigration,
+        migrationConfig.isRunningMigration(),
+        svConfig.onboardingName,
+        version,
+        imagePullServiceAccountName,
+        disableProtection,
+        migrationInfo.cometbft?.volumeSize,
+        opts
+      );
     return {
       decentralizedSynchronizer: decentralizedSynchronizerNode,
-      participant:
-        participant !== undefined
-          ? {
-              asDependencies: [participant],
-              internalClusterAddress: participant.name,
-              databaseId: participantDb.databaseId,
-              databaseSecretName: participantDb.secretName,
-            }
-          : {
-              asDependencies: [],
-              internalClusterAddress: pulumi.output('participant'),
-            },
     };
   } else {
     return undefined;

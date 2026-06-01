@@ -39,7 +39,7 @@ async function runAllStacksUp() {
     false
   );
   operations = operations.concat(cantonStacks);
-  const svStacks = runSvProjectForAllSvsIfLsu(
+  const svStacks = runSvProjectForAllSvs(
     'up',
     stack => {
       return upStack(stack, abortController);
@@ -61,7 +61,7 @@ async function runAllStacksUp() {
 runAllStacksUp().catch((err: unknown) => {
   console.error(
     `\nPulumi up finished with errors. See the summary above for details.\n` +
-      (err instanceof Error ? err.message : String(err))
+    (err instanceof Error ? err.message : String(err))
   );
   process.exit(1);
 });

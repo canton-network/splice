@@ -54,13 +54,7 @@ export class SynchronizerNodes {
     const activeMigrationId = decentralizedSynchronizerMigrationConfig.active.id;
 
     this.participant = {
-      asDependencies: [],
-      internalClusterAddress: decentralizedSynchronizerMigrationConfig.active
-        .enableLogicalSynchronizerDeploymentMode
-        ? pulumi.output('participant')
-        : pulumi.output(
-            `participant-${decentralizedSynchronizerMigrationConfig.lsuEnabled ? decentralizedSynchronizerMigrationConfig.frozenMigrationId : activeMigrationId}`
-          ),
+      internalClusterAddress: pulumi.output('participant'),
     };
 
     this.active = buildDecentralizedSynchronizerNode(
