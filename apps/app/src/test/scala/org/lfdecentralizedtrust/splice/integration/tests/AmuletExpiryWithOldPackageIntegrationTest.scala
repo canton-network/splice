@@ -42,7 +42,7 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
   override protected def runTokenStandardCliSanityCheck: Boolean = false
   override protected def runUpdateHistorySanityCheck: Boolean = false
 
-  protected val brokenAmuletVersions: Set[String] = Set.empty
+  protected val ignoredAmuletVersions: Set[String] = Set.empty
 
   protected def packagesToUnvetOnAlice(
       packages: Seq[DarResource]
@@ -97,7 +97,7 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
       )
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
-          _.copy(brokenAmuletVersions = brokenAmuletVersions)
+          _.copy(ignoredAmuletVersions = ignoredAmuletVersions)
         )(c)
       )
 
@@ -224,12 +224,12 @@ class AmuletExpiryWithMinimalPackageIntegrationTest
 }
 
 /** Tests that expiry triggers skip amulets when the owner's preferred package version
-  * is listed in `brokenAmuletVersions`, adding the party to the ignored-parties store.
+  * is listed in `ignoredAmuletVersions`, adding the party to the ignored-parties store.
   */
 class AmuletExpiryWithBrokenPackageIntegrationTest
     extends AmuletExpiryWithOldPackageIntegrationTestBase {
 
-  override val brokenAmuletVersions: Set[String] = Set(
+  override val ignoredAmuletVersions: Set[String] = Set(
     DarResources.amulet_0_1_15.metadata.version.toString
   )
 
@@ -247,7 +247,7 @@ class AmuletExpiryWithBrokenPackageIntegrationTest
           }
         },
       )(
-        "Dust amulets remain because preferred version 0.1.15 is in brokenAmuletVersions",
+        "Dust amulets remain because preferred version 0.1.15 is in ignoredAmuletVersions",
         _ => {
           sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should contain(
             aliceParty

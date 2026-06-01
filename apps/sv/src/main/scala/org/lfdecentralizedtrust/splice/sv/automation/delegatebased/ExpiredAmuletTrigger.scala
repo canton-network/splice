@@ -48,22 +48,27 @@ class ExpiredAmuletTrigger(
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] =
-    completeWithBrokenVersionCheck(
+  ): Future[TaskOutcome] = {
+    val informees =
+      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.owner)).toSet
+    completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.owner)),
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+      informees,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
 
-  private def completeExpiryTaskAsDsoDelegate(task: Task, controller: String)(implicit
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+      informees: Set[PartyId],
+  )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.owner))
-      .toSet + store.key.dsoParty
+    val allParties = informees + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        informees.toSeq,
+        allParties.toSeq,
         Seq(store.key.dsoParty),
         context.clock.now,
       )

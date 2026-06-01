@@ -12,7 +12,7 @@ class IgnoredPartiesStore(initialParties: Set[PartyId]) {
 
   private val parties: ConcurrentHashMap.KeySetView[PartyId, java.lang.Boolean] = {
     val set = ConcurrentHashMap.newKeySet[PartyId]()
-    initialParties.foreach(set.add)
+    set.addAll(initialParties.asJava)
     set
   }
 

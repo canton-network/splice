@@ -55,25 +55,24 @@ class ExpiredAmuletTransferInstructionTrigger(
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] =
-    completeWithBrokenVersionCheck(
+  ): Future[TaskOutcome] = {
+    val informees = task.work.expiredContracts
+      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.sender))
+      .toSet ++ task.work.expiredContracts
+      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.receiver))
+      .toSet
+    completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      task.work.expiredContracts
-        .map(c =>
-          PartyId.tryFromProtoPrimitive(c.payload.transfer.sender)
-        ) ++ task.work.expiredContracts
-        .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.receiver)),
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+      informees,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
+      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = task.work.expiredContracts.flatMap { contract =>
-      val sender = PartyId.tryFromProtoPrimitive(contract.payload.transfer.sender)
-      val receiver = PartyId.tryFromProtoPrimitive(contract.payload.transfer.receiver)
-      Seq(sender, receiver)
-    }.toSet + store.key.dsoParty
+    val allParties = informees + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(

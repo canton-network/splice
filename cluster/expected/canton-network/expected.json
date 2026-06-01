@@ -2893,10 +2893,6 @@
             {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
               "value": "canton.sv-apps.sv.additional-packages-to-unvet.\"splice-wallet-payments\" = [\"0.1.15\", \"0.1.16\"]\ncanton.sv-apps.sv.additional-packages-to-unvet.\"splice-amulet\" = [\"0.1.15\"]"
-            },
-            {
-              "name": "ADDITIONAL_CONFIG_BROKEN_AMULET_VERSIONS",
-              "value": "canton.sv-apps.sv.broken-amulet-versions = [\"0.1.15\", \"0.1.16\"]"
             }
           ],
           "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1 -DcustomSvAppJvmFlag",
@@ -4020,10 +4016,6 @@
             {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
               "value": "canton.sv-apps.sv.additional-packages-to-unvet.\"splice-wallet-payments\" = [\"0.1.15\", \"0.1.16\"]\ncanton.sv-apps.sv.additional-packages-to-unvet.\"splice-amulet\" = [\"0.1.15\"]"
-            },
-            {
-              "name": "ADDITIONAL_CONFIG_BROKEN_AMULET_VERSIONS",
-              "value": "canton.sv-apps.sv.broken-amulet-versions = [\"0.1.15\", \"0.1.16\"]"
             }
           ],
           "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1 -DcustomSvAppJvmFlag",

@@ -101,7 +101,7 @@ case class AutomationConfig(
       * before we consider the trigger to be in an unhealthy state.
       */
     futureCompletionGracePeriod: PositiveFiniteDuration = PositiveFiniteDuration.ofSeconds(1L),
-    ignoredUnavailablePartyIds: Set[PartyId] = Set.empty,
+    ignoredPartyIds: Set[PartyId] = Set.empty,
     ignoredExpiredRewardsPartyIds: Set[PartyId] = Set.empty,
     ignoredFeaturedAppActivityMarkerPartyIds: Set[PartyId] = Set.empty,
     ingestion: IngestionConfig = IngestionConfig(),

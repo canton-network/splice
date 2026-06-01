@@ -107,3 +107,11 @@
           - ``/v0/round-totals``
           - ``/v0/aggregated-rounds``
           - ``/v0/round-of-latest-data``
+
+    - SV app
+
+      - Amulet-based expiry triggers now skip batches whose jointly preferred package version
+        is listed in the ``ignored-amulet-versions`` configuration. Parties from skipped batches are added
+        to an in-memory ignore list to avoid repeated failures. This allows sv-1 to handle
+        participants that have not yet vetted the latest amulet package.
+

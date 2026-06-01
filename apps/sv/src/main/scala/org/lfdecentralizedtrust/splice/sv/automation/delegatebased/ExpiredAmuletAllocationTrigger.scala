@@ -56,29 +56,25 @@ class ExpiredAmuletAllocationTrigger(
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] =
-    completeWithBrokenVersionCheck(
-      task.work.vettedVersion.toString,
-      task.work.expiredContracts
-        .map(c =>
-          PartyId.tryFromProtoPrimitive(c.payload.allocation.transferLeg.sender)
-        ) ++ task.work.expiredContracts
-        .map(c =>
-          PartyId.tryFromProtoPrimitive(c.payload.allocation.transferLeg.receiver)
-        ) ++ task.work.expiredContracts
-        .map(c => PartyId.tryFromProtoPrimitive(c.payload.allocation.settlement.executor)),
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
-
-  private def completeExpiryTaskAsDsoDelegate(
-      task: Task,
-      controller: String,
-  )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = task.work.expiredContracts.flatMap { contract =>
+  ): Future[TaskOutcome] = {
+    val informees = task.work.expiredContracts.flatMap { contract =>
       val sender = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.sender)
       val receiver = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.receiver)
       val executor = PartyId.tryFromProtoPrimitive(contract.payload.allocation.settlement.executor)
       Seq(sender, receiver, executor)
-    }.toSet + store.key.dsoParty
+    }.toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.work.vettedVersion.toString,
+      informees,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+      informees: Set[PartyId],
+  )(implicit tc: TraceContext): Future[TaskOutcome] = {
+    val allParties = informees + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireAmuletAllocations(

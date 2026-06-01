@@ -50,27 +50,30 @@ class ExpiredLockedAmuletTrigger(
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] =
-    completeWithBrokenVersionCheck(
-      task.work.vettedVersion.toString,
-      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.amulet.owner)),
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
-
-  private def completeExpiryTaskAsDsoDelegate(
-      task: Task,
-      controller: String,
-  )(implicit tc: TraceContext): Future[TaskOutcome] = {
+  ): Future[TaskOutcome] = {
     val informees = task.work.expiredContracts
       .flatMap(c =>
         PartyId.tryFromProtoPrimitive(
           c.payload.amulet.owner
         ) +: c.payload.lock.holders.asScala.toSeq.map(PartyId.tryFromProtoPrimitive(_))
       )
-      .toSet + store.key.dsoParty
+      .toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.work.vettedVersion.toString,
+      informees,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+      informees: Set[PartyId],
+  )(implicit tc: TraceContext): Future[TaskOutcome] = {
+    val allParties = informees.toSet + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        informees.toSeq,
+        allParties.toSeq,
         Seq(store.key.dsoParty),
         context.clock.now,
       )
