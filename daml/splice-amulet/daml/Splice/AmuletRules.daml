@@ -1535,8 +1535,7 @@ summarizeTransfer : Party -> Round -> Decimal -> TransferConfigV2 Amulet -> Tran
 summarizeTransfer sender openRoundNumber amuletPrice transferConfigAmulet inp preprocessedOutputs = do
     -- Holding fees are only charged on `Amulet_Expire`
     require "totalHoldingFees == 0" (inp.totalHoldingFees == 0.0)
-    -- These traces are shown in the tx view in Daml studio, and greatly aid debugging fee calculations
-    trace summary $ trace preprocessedOutputs $ trace inp $ pure summary
+    pure summary
   where
     amuletAsOfRoundZeroAdjustment = intToDecimal openRoundNumber.number * transferConfigAmulet.holdingFee.rate
     outputBalanceChange preprocessedOutput =

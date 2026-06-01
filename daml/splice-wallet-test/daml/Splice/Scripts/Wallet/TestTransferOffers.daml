@@ -112,7 +112,7 @@ testTransferOffers = script do
   tap app alice 100.0  -- chosen such that all amulets of alice are consumed
   [(amulet, _)] <- queryFilter @Amulet alice.primaryParty (\c -> c.amount.initialAmount >= 100.0)
   WalletAppInstall_ExecuteBatchResult { outcomes } <- completeTransfer accepted amulet transferContext
-  trace outcomes $ pure ()
+  debug outcomes
   [COO_CompleteAcceptedTransfer _] <- pure outcomes
 
   aliceAmuletsAfter <- query @Amulet alice.primaryParty
