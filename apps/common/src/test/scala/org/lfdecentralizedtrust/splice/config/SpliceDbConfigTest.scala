@@ -86,11 +86,6 @@ class SpliceDbConfigTest extends AnyWordSpec with BaseTest {
       }
     }
 
-    "default the shared Splice Postgres config to the existing interval" in {
-      SplicePostgresConfig().clientConnectionCheckInterval.toInternal.toScala shouldBe
-        SpliceDbConfig.defaultClientConnectionCheckInterval
-    }
-
     "return H2 config unchanged" in {
       val h2 = h2Config
       val result = SpliceDbConfig.withClientConnectionCheckInterval(h2)

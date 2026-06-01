@@ -35,8 +35,7 @@ abstract class GrpcClientConfig extends NodeConfig {}
 abstract class HttpClientConfig extends NetworkAppNodeConfig {}
 
 final case class SplicePostgresConfig(
-    clientConnectionCheckInterval: NonNegativeFiniteDuration =
-      NonNegativeFiniteDuration.tryFromDuration(SpliceDbConfig.defaultClientConnectionCheckInterval)
+    clientConnectionCheckInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration ofSeconds 5
 )
 
 final case class CircuitBreakerConfig(
