@@ -279,7 +279,6 @@ function _assert_lock() {
                 _error "Could not determine approver for CI workflow"
             fi
         fi
-        
         if [[ -n "$approver" ]]; then
             local -a names
             readarray -t names < <( _get_holder_names "$approver" )
