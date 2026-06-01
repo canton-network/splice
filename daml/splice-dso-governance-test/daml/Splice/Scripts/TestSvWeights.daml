@@ -5,6 +5,7 @@ module Splice.Scripts.TestSvWeights where
 
 import DA.Assert
 import DA.Action (void)
+import DA.Foldable (forA_)
 import DA.List (sort)
 import DA.Map qualified as Map
 import DA.Optional (fromOptional)
@@ -14,8 +15,12 @@ import Daml.Script
 import Splice.Amulet
 import Splice.Round
 import Splice.Scripts.Util
+import Splice.CometBft
 import Splice.DsoRules
 import Splice.DSO.SvState
+import Splice.DSO.DecentralizedSynchronizer
+import Splice.SvOnboarding
+
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
 
@@ -43,8 +48,8 @@ test_SvWeightsFullyOnledger = do
       hostedSvWeight = totalWeight hostedSvBeneficiaries
 
 
-  -- Onboarding an SV node
-  -------------------------
+  -- Onboarding an SV node (quick onboarding - check test bellow for real onboarding)
+  -----------------------------------------------------------------------------------
 
   [(_, round), _, _] <- getActiveOpenRoundsSorted app.dso
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
@@ -432,6 +437,134 @@ test_SvWeightsMigration = do
   checkSvCouponBeneficariesBySv ghostSv round ghostSvBeneficiaries
 
   pure ()
+
+
+testSvNodeOnboarding : Script ()
+testSvNodeOnboarding = do
+  (app, dso, (_, sv2, sv3, sv4)) <- initMainNet
+  -- we now have enough SVs to achieve BFT for f = 1
+
+  -- a new sv prepares his participant
+  svX <- allocateParty "svX"
+
+  -- we can't test token validity in Daml (it's a JWT)
+  let token = "mock-token"
+
+  -- sv2 (not the DSO delegate) initiates the onboarding of the new sv
+  svSubmits app sv2 $ \cid -> exerciseCmd cid $
+    DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" token sv2
+
+  -- an onboarding request for svX has been created
+  [(_, svOnboardingRequest)] <- query @SvOnboardingRequest dso
+  svOnboardingRequest === SvOnboardingRequest with
+    candidateName = "svX"
+    candidateParty = svX
+    candidateParticipantId = "svX-participant-id"
+    token
+    sponsor = sv2
+    dso
+    expiresAt = svOnboardingRequest.expiresAt
+
+  -- svX collects three confirmations which is enough to onboard him
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  forA_ [sv2, sv3, sv4] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_ConfirmSvOnboarding_V2 $ DsoRules_ConfirmSvOnboarding_V2 with
+          newSvOperatorParty = svX
+          newSvNodeName = "svX"
+          newNodeParticipantId = "svX-participant-id"
+          reason = "because"
+  executeAllConfirmedActions app
+
+  -- svX is now a confirmed SV
+  [(svOnboardingConfirmedCid, svOnboardingConfirmed)] <- query @SvOnboardingConfirmed_V2 dso
+  svOnboardingConfirmed === SvOnboardingConfirmed_V2 with
+    svOperatorParty = svX
+    svNodeName = "svX"
+    svNodeParticipantId = "svX-participant-id"
+    reason = "because"
+    dso
+    expiresAt = svOnboardingConfirmed.expiresAt
+
+  -- once svX becomes able to read as DSO party (e.g., after party migration to svX's participant)...
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- onboarding fails if the time expired
+  now <- getTime
+  setTime svOnboardingConfirmed.expiresAt
+
+  submitMustFail (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSv_V2 with
+    sv = svX
+    svOnboardingConfirmedCid
+
+  -- reset the time to now
+  setTime now
+
+  -- svX completes its own onboarding by adding itself to the DsoRules
+  submit (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSv_V2 with
+    sv = svX
+    svOnboardingConfirmedCid
+
+  checkSvStatusReports app
+
+  [(_, dsoRules)] <- query @DsoRules dso
+
+  now <- getTime
+  -- now that svX is a sv it can set its CometBFT config to become a CometBFT  validator
+  -- TODO(M3-59): add negative tests for limits enforced on config values (manual testing showed they work)
+  let cometBftConfig = CometBftConfig with
+        nodes = Map.fromList
+          [ ( "svX-node-id-1"
+            , CometBftNodeConfig with
+                validatorPubKey = "==base-64-validator-pub-key-1"
+                votingPower = 0
+            )
+          , ( "svX-node-id-2"
+            , CometBftNodeConfig with
+                validatorPubKey = "==base-64-validator-pub-key-1"
+                votingPower = 1
+            )
+          ]
+        governanceKeys = [GovernanceKeyConfig with pubKey = "==base-64-pubKey-1"]
+        sequencingKeys = []
+
+  let sequencerConfig = Some SequencerConfig with
+        migrationId = 0
+        sequencerId = "sequencer-id"
+        url = "sequencer.address:1234"
+        availableAfter = Some now
+
+  let sequencerIdentityConfig = Some SequencerIdentityConfig with
+        sequencerId = "sequencer-id"
+        availableAfter = Some now
+
+  let mediatorConfig = Some MediatorConfig with
+        mediatorId = "mediator-id"
+
+  let scanConfig = Some ScanConfig with
+        publicUrl = "https://scan1234.example.com"
+
+  let newNodeConfig = SynchronizerNodeConfig with
+        cometBft = cometBftConfig
+        sequencer = sequencerConfig
+        sequencerIdentity = sequencerIdentityConfig
+        mediator = mediatorConfig
+        scan = scanConfig
+        legacySequencerConfig = None
+        physicalSynchronizers = None
+
+  setSynchronizerNodeConfig app svX dsoRules.config.decentralizedSynchronizer.lastSynchronizerId newNodeConfig
+
+  -- check that the config was actually set
+  (_, nodeState) <- getSvNodeState app svX
+  let actualConfig =
+        Map.lookup dsoRules.config.decentralizedSynchronizer.lastSynchronizerId nodeState.state.synchronizerNodes
+  actualConfig === Some newNodeConfig
+
+  pure ()
+
 
 
 -- Helpers
