@@ -43,7 +43,7 @@ class ExpiredAmuletTrigger(
       c => Seq(c.dso, c.owner).map(PartyId.tryFromProtoPrimitive(_)),
     )
     with SvTaskBasedTrigger[Task]
-    with BrokenAmuletVersionGuard {
+    with IgnoredAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit

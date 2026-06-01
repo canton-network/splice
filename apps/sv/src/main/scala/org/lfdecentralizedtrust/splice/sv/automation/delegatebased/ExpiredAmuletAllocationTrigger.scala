@@ -50,7 +50,7 @@ class ExpiredAmuletAllocationTrigger(
         ).map(PartyId.tryFromProtoPrimitive),
     )
     with SvTaskBasedTrigger[Task]
-    with BrokenAmuletVersionGuard {
+    with IgnoredAmuletVersionGuard {
 
   private val store = svTaskContext.dsoStore
 

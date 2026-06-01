@@ -400,9 +400,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -477,9 +474,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -554,9 +548,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -631,9 +622,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -708,9 +696,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -785,9 +770,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -862,9 +844,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -939,9 +918,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1016,9 +992,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1093,9 +1066,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1170,9 +1140,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1247,9 +1214,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1324,9 +1288,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1401,9 +1362,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1478,9 +1436,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1555,9 +1510,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1632,9 +1584,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       resources:
         limits:
           cpu: '3'
@@ -1713,9 +1662,6 @@ svs:
           memory: '2Gi'
     subdomain: 'sv-1'
     svApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_IGNORED_AMULET_VERSIONS'
-          value: "canton.sv-apps.sv.ignored-amulet-versions = [\"0.1.15\", \"0.1.16\"]\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
       resources:

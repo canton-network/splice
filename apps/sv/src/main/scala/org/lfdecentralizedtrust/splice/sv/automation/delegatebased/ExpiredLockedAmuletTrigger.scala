@@ -45,7 +45,7 @@ class ExpiredLockedAmuletTrigger(
           .map(PartyId.tryFromProtoPrimitive(_)),
     )
     with SvTaskBasedTrigger[Task]
-    with BrokenAmuletVersionGuard {
+    with IgnoredAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
@@ -69,7 +69,7 @@ class ExpiredLockedAmuletTrigger(
       controller: String,
       informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees.toSet + store.key.dsoParty
+    val allParties = informees + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
