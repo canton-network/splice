@@ -59,14 +59,11 @@ export class DecentralizedSynchronizerMigrationConfig {
   migratingNodeConfig(): {
     migration: {
       id: DomainMigrationIndex;
-      migrating: boolean;
-      legacyId?: DomainMigrationIndex;
     };
   } {
     return {
       migration: {
-        id: this.frozenMigrationId!,
-        migrating: false,
+        id: this.frozenMigrationId,
       },
     };
   }

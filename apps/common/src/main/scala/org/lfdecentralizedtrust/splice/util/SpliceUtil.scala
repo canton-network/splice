@@ -367,6 +367,7 @@ object SpliceUtil {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
+      initialRewardConfig: Option[splice.amuletconfig.RewardConfig] = None,
   ): splice.amuletconfig.AmuletConfig[splice.amuletconfig.USD] =
     new splice.amuletconfig.AmuletConfig(
       // transferConfig
@@ -395,6 +396,7 @@ object SpliceUtil {
       initialExternalPartyConfigStateTickDuration
         .map(t => new RelTime(TimeUnit.NANOSECONDS.toMicros(t.duration.toNanos)))
         .toJava,
+      initialRewardConfig.toJava,
     )
 
   def defaultAnsConfig(

@@ -7,7 +7,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.FrontendIntegrationTest
 import org.lfdecentralizedtrust.splice.util.DataExportTestUtil
 import org.lfdecentralizedtrust.splice.util.FrontendLoginUtil
 
-import scala.util.Try
+import java.time.Instant
 
 abstract class SvNonDevNetPreflightIntegrationTestBase
     extends FrontendIntegrationTest("sv")
@@ -122,28 +122,14 @@ final class Sv1NonDevNetPreflightIntegrationTest extends SvNonDevNetPreflightInt
 
   override protected def svNumber = 1
 
-  "Check that sv-1 responds with a recent aggregated round" in { implicit env =>
+  "Check that sv-1 responds with recent open rounds" in { implicit env =>
     eventually() {
-      val initialRound = svScanClient.getDsoInfo().initialRound.getOrElse("0").toLong
-      val (openRounds, issuingRounds) = svScanClient.getOpenAndIssuingMiningRounds()
-      if (openRounds.exists(_.contract.payload.round.number == initialRound)) {
-        logger.info(s"Initial round $initialRound is still open, not expecting an aggregate")
-      } else if (issuingRounds.exists(_.contract.payload.round.number == initialRound)) {
-        logger.info(s"Initial round $initialRound is still issuing, not expecting an aggregate")
-      } else {
-        val latestOpenMiningRound =
-          Try(
-            svScanClient
-              .getLatestOpenMiningRound(env.environment.clock.now)
-              .contract
-              .payload
-              .round
-              .number
-          ).getOrElse(fail("Could not get latest open mining round from sv-1"))
-        val latestAggregatedRound = Try(svScanClient.getRoundOfLatestData()._1)
-          .getOrElse(fail("Could not get round of latest data from sv-1"))
-        latestOpenMiningRound - latestAggregatedRound should be <= 7L
-      }
+      val openRounds = svScanClient.getOpenAndIssuingMiningRounds()._1
+      openRounds should not be empty withClue "open mining rounds must never be empty"
+      val latestRound = openRounds.maxBy(_.contract.payload.round.number)
+      latestRound.contract.payload.targetClosesAt shouldBe >=(
+        Instant.now()
+      ) withClue "latest open round must have a target close time in the future"
     }
   }
 }

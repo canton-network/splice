@@ -1684,6 +1684,7 @@
         },
         "db": {
           "pvcName": "cometbft-migration-9-hd-pvc",
+          "volumeSize": "42Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "genesis": {
@@ -4845,6 +4846,7 @@
         },
         "db": {
           "pvcName": "cometbft-migration-9-hd-pvc",
+          "volumeSize": "42Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "genesis": {
@@ -5180,6 +5182,7 @@
         },
         "db": {
           "pvcName": "cometbft-migration-9-hd-pvc",
+          "volumeSize": "42Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "genesis": {

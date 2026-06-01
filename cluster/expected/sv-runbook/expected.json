@@ -652,8 +652,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2,
-          "migrating": false
+          "id": 2
         },
         "participantAddress": "participant",
         "persistence": {
@@ -877,10 +876,6 @@
           "name": "validator-licenses",
           "type": "unlimited"
         },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
-        },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
           "type": "banned"
@@ -965,25 +960,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -1322,8 +1301,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2,
-          "migrating": false
+          "id": 2
         },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",

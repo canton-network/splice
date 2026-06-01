@@ -15,11 +15,7 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -54,7 +50,6 @@ class ScanAutomationService(
     svParty: PartyId,
     svName: String,
     upgradesConfig: UpgradesConfig,
-    initialRound: Long,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -66,7 +61,6 @@ class ScanAutomationService(
       clock,
       // scan only does reads so no need to block anything.
       DomainTimeSynchronization.Noop,
-      DomainUnpausedSynchronization.Noop,
       store,
       ledgerClient,
       retryProvider,
@@ -76,21 +70,21 @@ class ScanAutomationService(
       : org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService.type =
     ScanAutomationService
 
-  registerTrigger(new ScanAggregationTrigger(store, triggerContext))
-  registerTrigger(
-    new ScanBackfillAggregatesTrigger(store, triggerContext, initialRound)
-  )
-  for {
-    appRewardsStore <- appRewardsStoreO
-    appActivityStore <- appActivityStoreO
-  } registerTrigger(
-    new RewardComputationTrigger(
-      appRewardsStore,
-      appActivityStore,
-      updateHistory,
-      triggerContext,
+  def registerRewardComputationTrigger(
+      rewardsReferenceStore: ScanRewardsReferenceStore
+  ): Unit =
+    for {
+      appRewardsStore <- appRewardsStoreO
+      appActivityStore <- appActivityStoreO
+    } registerTrigger(
+      new RewardComputationTrigger(
+        appRewardsStore,
+        appActivityStore,
+        rewardsReferenceStore,
+        updateHistory,
+        triggerContext,
+      )
     )
-  )
 
   registerUpdateHistoryIngestion(updateHistory)
 

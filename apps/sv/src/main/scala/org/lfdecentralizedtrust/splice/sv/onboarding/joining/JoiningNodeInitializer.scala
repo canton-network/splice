@@ -39,12 +39,7 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   TopologyTransactionType,
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.store.{
-  AppStoreWithIngestion,
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, DomainTimeSynchronization}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
@@ -66,12 +61,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.
 }
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
-import org.lfdecentralizedtrust.splice.util.{
-  Contract,
-  PackageVetting,
-  SynchronizerMigrationUtil,
-  TemplateJsonDecoder,
-}
+import org.lfdecentralizedtrust.splice.util.{Contract, PackageVetting, TemplateJsonDecoder}
 
 import java.security.interfaces.ECPrivateKey
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -88,7 +78,6 @@ class JoiningNodeInitializer(
     override protected val participantAdminConnection: ParticipantAdminConnection,
     override protected val clock: Clock,
     override protected val domainTimeSync: DomainTimeSynchronization,
-    override protected val domainUnpausedSync: DomainUnpausedSynchronization,
     override protected val storage: DbStorage,
     override val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
@@ -203,15 +192,15 @@ class JoiningNodeInitializer(
         participantAdminConnection,
       )
       storeKey = SvStore.Key(svParty, dsoPartyId)
-      migrationInfo =
-        DomainMigrationInfo(
-          currentMigrationId = config.domainMigrationId,
-          migrationTimeInfo = None, // This SV doesn't know about any migrations
-        )
-      svStore = newSvStore(storeKey, migrationInfo, participantId, svAcsStoreDescriptorUserVersion)
+      svStore = newSvStore(
+        storeKey,
+        config.domainMigrationId,
+        participantId,
+        svAcsStoreDescriptorUserVersion,
+      )
       dsoStore = newDsoStore(
         svStore.key,
-        migrationInfo,
+        config.domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -223,11 +212,6 @@ class JoiningNodeInitializer(
         synchronizerNodeService,
       )
       connection = svAutomation.connection(SpliceLedgerConnectionPriority.Low)
-      _ <- DomainMigrationInfo.saveToUserMetadata(
-        connection,
-        config.ledgerApiUser,
-        migrationInfo,
-      )
       _ <- joiningConfig.fold(Future.unit)(onboardingConfig =>
         SetupUtil.ensureSvNameMetadataAnnotation(
           connection,
@@ -270,7 +254,6 @@ class JoiningNodeInitializer(
             synchronizerNodeReconciler = new SynchronizerNodeReconciler(
               dsoStore,
               connection,
-              config.legacyMigrationId,
               packageVersionSupport,
               clock,
               retryProvider,
@@ -402,7 +385,6 @@ class JoiningNodeInitializer(
       dsoAutomationService: SvDsoAutomationService,
       svSvAutomationService: SvSvAutomationService,
       skipTrafficReconciliationTriggers: Boolean = false,
-      unpauseSynchronizer: Boolean = false,
   ): Future[Unit] = {
     val dsoStore = dsoAutomationService.store
     val dsoPartyId = dsoStore.key.dsoParty
@@ -426,15 +408,6 @@ class JoiningNodeInitializer(
       participantReportedPSid <- participantAdminConnection.getPhysicalSynchronizerId(
         config.domains.global.alias
       )
-      _ <-
-        // Unpause the synchronizer after the post onboarding triggers are started
-        // that start the BFT peer reconciliation
-        if (unpauseSynchronizer)
-          SynchronizerMigrationUtil.ensureSynchronizerIsUnpaused(
-            participantAdminConnection,
-            decentralizedSynchronizer,
-          )
-        else Future.unit
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
       // It is important to wait only here since at this point we may have been added
       // to the decentralized namespace so we depend on our own automation promoting us to
@@ -863,7 +836,6 @@ class JoiningNodeInitializer(
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-                  config.legacyMigrationId,
                   packageVersionSupport,
                   clock,
                   retryProvider,

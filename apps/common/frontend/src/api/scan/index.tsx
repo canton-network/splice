@@ -8,7 +8,6 @@ import useDsoInfo from './useDsoInfo';
 import useGetAmuletRules from './useGetAmuletRules';
 import useGetAnsRules, { useGetAnsRulesFromResponse } from './useGetAnsRules';
 import useGetDsoPartyId from './useGetDsoPartyId';
-import useGetRoundOfLatestData from './useGetRoundOfLatestData';
 import useListAnsEntries, { useListAnsEntriesFromResponse } from './useListAnsEntries';
 import useLookupAnsEntryByName, {
   useLookupAnsEntryByNameFromResponse,
@@ -20,7 +19,6 @@ import useLookupFeaturedAppRight, {
   useLookupFeaturedAppRightBuilder,
 } from './useLookupFeaturedAppRight';
 import useOpenRounds from './useOpenRounds';
-import useTotalRewards from './useTotalRewards';
 
 export {
   useScanClient,
@@ -31,12 +29,10 @@ export {
   useGetAmuletRules,
   useGetAnsRules,
   useGetAnsRulesFromResponse,
-  useGetRoundOfLatestData,
   useGetDsoPartyId,
   useLookupFeaturedAppRight,
   useLookupFeaturedAppRightBuilder,
   useActivity,
-  useTotalRewards,
   useListAnsEntries,
   useListAnsEntriesFromResponse,
   useLookupAnsEntryByName,

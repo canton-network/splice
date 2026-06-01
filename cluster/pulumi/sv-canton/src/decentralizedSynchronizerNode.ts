@@ -235,6 +235,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     disableProtection?: boolean,
+    cometbftPvcSize?: string,
     opts?: SpliceCustomResourceOptions
   ) {
     super(migrationId, xns, version);
@@ -249,6 +250,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
       version,
       cometbft.enableStateSync,
       cometbft.enableTimeoutCommit,
+      cometbftPvcSize,
       imagePullServiceAccountName,
       disableProtection,
       {

@@ -35,7 +35,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.
   SubscriptionRequest,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{ContractCompanion, QueryResult}
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFromAcsTableResult}
 import org.lfdecentralizedtrust.splice.store.db.{
@@ -78,7 +77,7 @@ class DbSvDsoStore(
     storage: DbStorage,
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -94,7 +93,7 @@ class DbSvDsoStore(
       // Any change in the store descriptor will lead to previously deployed applications
       // forgetting all persisted data once they upgrade to the new version.
       acsStoreDescriptor = StoreDescriptor(
-        version = 2,
+        version = 3,
         name = "DbSvDsoStore",
         party = key.dsoParty,
         participant = participantId,
@@ -104,7 +103,7 @@ class DbSvDsoStore(
         ),
         userVersion = acsStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with SvDsoStore
@@ -129,8 +128,6 @@ class DbSvDsoStore(
   }
 
   import multiDomainAcsStore.waitUntilAcsIngested
-
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
 
@@ -278,6 +275,29 @@ class DbSvDsoStore(
           "listConfirmations",
         )
       limited = applyLimit("listConfirmations", limit, result)
+    } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
+  }
+
+  override def listConfirmationsByConfirmer(
+      confirmer: PartyId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[Confirmation.ContractId, Confirmation]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            Confirmation.COMPANION,
+            where = sql"""confirmer = $confirmer""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listConfirmationsByConfirmer",
+        )
+      limited = applyLimit("listConfirmationsByConfirmer", limit, result)
     } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
   }
 
@@ -690,6 +710,140 @@ class DbSvDsoStore(
         )
       limited = applyLimit("listOldestSummarizingMiningRounds", limit, result)
     } yield limited.map(assignedContractFromRow(SummarizingMiningRound.COMPANION)(_))
+
+  override def listCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
+            orderLimit = sql"""order by mining_round limit ${sqlLimit(limit)}""",
+          ),
+          "listCalculateRewardsV2",
+        )
+      limited = applyLimit("listCalculateRewardsV2", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(_)
+    )
+
+  override def listProcessRewardsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
+            orderLimit = sql"""order by mining_round limit ${sqlLimit(limit)}""",
+          ),
+          "listProcessRewardsV2",
+        )
+      limited = applyLimit("listProcessRewardsV2", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+    )
+
+  override def listRewardCouponsV2(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.RewardCouponV2.ContractId,
+      splice.amulet.RewardCouponV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.RewardCouponV2.COMPANION,
+            orderLimit = sql"""order by reward_round limit ${sqlLimit(limit)}""",
+          ),
+          "listRewardCouponsV2",
+        )
+      limited = applyLimit("listRewardCouponsV2", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.RewardCouponV2.COMPANION)(_)
+    )
+
+  override def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.CalculateRewardsV2,
+        ]],
+        Seq[AssignedContract[
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+          splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+        ]],
+    )
+  ] = {
+    if (rounds.isEmpty)
+      Future.successful((Seq.empty, Seq.empty))
+    else {
+      val roundsClause = inClause("mining_round", rounds)
+      val calculateRewardsF = storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
+            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+          ),
+          "listDryRunCalculateRewardsV2ByRounds",
+        )
+        .map(
+          _.map(
+            assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
+              _
+            )
+          ).filter(_.payload.dryRun)
+        )
+      val processRewardsF = storage
+        .query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
+            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+          ),
+          "listDryRunProcessRewardsV2ByRounds",
+        )
+        .map(
+          _.map(
+            assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+          ).filter(_.payload.dryRun)
+        )
+      for {
+        calculateRewards <- calculateRewardsF
+        processRewards <- processRewardsF
+      } yield (calculateRewards, processRewards)
+    }
+  }
 
   override def lookupConfirmationByActionWithOffset(
       confirmer: PartyId,
