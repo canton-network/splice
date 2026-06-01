@@ -1,0 +1,36 @@
+name: Cleanup Nix Cache
+
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        description: "Runner label to use (must be a self-hosted runner with /cache/nix)"
+        type: string
+        required: true
+      image:
+        description: "Container image to use for the job"
+        type: string
+        required: false
+        default: "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12"
+      max_age_days:
+        description: "Delete cache entries older than this many days"
+        type: string
+        required: false
+        default: "30"
+
+jobs:
+  cleanup:
+    runs-on: ${{ inputs.runs_on }}
+    container:
+      image: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/nix/cleanup_nix_cache
+        with:
+          max_age_days: ${{ inputs.max_age_days }}
+          workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          failure_notifications_sa: ${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}
+          failure_notifications_url: ${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}
+          failure_notifications_slack_channel: ${{ secrets.FAILURE_NOTIFICATIONS_SLACK_CHANNEL }}
