@@ -15,14 +15,14 @@ declare -a plugins
 plugins=(
   # currently used
   "pulumi/command=1.2.1"
-  "pulumi/gcp=9.18.0"
-  "pulumi/kubernetes=4.28.0"
-  "pulumi/random=4.19.2"
+  "pulumi/gcp=9.25.0"
+  "pulumi/kubernetes=4.31.1"
+  "pulumi/random=4.21.0"
   "pulumi/std=2.3.2"
   "pulumi/auth0=3.39.0"
   "pulumi/command=1.1.3"
   "pulumi/kubernetes-cert-manager=0.2.0"
-  "pulumi/github=6.13.1"
+  "pulumi/github=6.14.0"
   "pulumiverse/grafana=0.16.3"
   # old versions so that old pulumi state can be interpreted
   # each can be removed once MainNet uses a newer version
@@ -33,6 +33,10 @@ plugins=(
   "pulumi/command=1.1.0"
   "pulumi/gcp=8.32.1"
   # Post upgrade
+  "pulumi/gcp=9.18.0"
+  "pulumi/kubernetes=4.28.0"
+  "pulumi/random=4.19.2"
+  "pulumi/github=6.13.1"
   "pulumi/gcp=9.17.0"
   "pulumi/auth0=3.38.0"
   "pulumi/gcp=9.15.0"
