@@ -84,7 +84,7 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
       noTracingLogger,
     )
 
-  def config: Config = currentConfig.get()
+  final def config: Config = currentConfig.get()
   def pokeOrUpdateConfig(
       newConfig: Option[Either[String, Config]]
   )(implicit traceContext: TraceContext): Unit = {
@@ -643,14 +643,14 @@ trait EnvironmentFactory[C <: SharedCantonConfig[C], E <: Environment[C]] {
 }
 
 class CantonEnvironment(
-    override val config: CantonConfig,
+    initialConfig: CantonConfig,
     override val testingConfig: TestingConfigInternal,
     participantNodeFactory: ParticipantNodeBootstrapFactory,
     sequencerNodeFactory: SequencerNodeBootstrapFactory,
     mediatorNodeFactory: MediatorNodeBootstrapFactory,
     override val loggerFactory: NamedLoggerFactory,
 ) extends Environment[CantonConfig](
-      config,
+      initialConfig,
       testingConfig,
       participantNodeFactory,
       sequencerNodeFactory,
