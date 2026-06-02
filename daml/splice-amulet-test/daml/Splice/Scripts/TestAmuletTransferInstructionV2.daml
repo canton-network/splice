@@ -100,7 +100,7 @@ test_transfer_TransferV2_inputHoldingCids_wrongAdmin = test_transfer_negative_ge
         transfer = transferV2 with
           inputHoldingCids = inputHoldingCids
   pure $ (,) choiceArg $
-    expectMessageContains "Contract group identifier mismatch" -- Due to using checked fetch with `ForOwner`
+    expectMessageContains "Contract group identifier mismatch" -- Due to using fetchAndArchive with `ForOwner`
 
 test_transfer_TransferV2_inputHoldingCids_wrongOwner : Script ()
 test_transfer_TransferV2_inputHoldingCids_wrongOwner = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -110,7 +110,7 @@ test_transfer_TransferV2_inputHoldingCids_wrongOwner = test_transfer_negative_ge
         transfer = transferV2 with
           inputHoldingCids = bobHoldingCids
   pure $ (,) choiceArg $
-    expectMessageContains "Contract group identifier mismatch" -- Due to using checked fetch with `ForOwner`
+    expectMessageContains "Contract group identifier mismatch" -- Due to using fetchAndArchive with `ForOwner`
 
 test_transfer_sender_nonBasic : Script ()
 test_transfer_sender_nonBasic = test_transfer_negative_generic $ \TestEnv {..} -> do

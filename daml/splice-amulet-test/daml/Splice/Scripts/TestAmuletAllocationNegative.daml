@@ -114,7 +114,7 @@ test_allocateV1_inputHoldingCids_wrongAdmin = test_allocateV1_generic $ \TestEnv
         inputHoldingCids = map TSU.downcast inputHoldingCids
         requestedAt = now
         extraArgs = emptyExtraArgs
-  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using checked fetch with `ForOwner`
+  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using fetchAndArchive with `ForOwner`
 
 test_allocateV1_inputHoldingCids_wrongOwner : Script ()
 test_allocateV1_inputHoldingCids_wrongOwner = test_allocateV1_generic $ \TestEnv {..} -> do
@@ -126,7 +126,7 @@ test_allocateV1_inputHoldingCids_wrongOwner = test_allocateV1_generic $ \TestEnv
         inputHoldingCids = map TSU.downcast inputHoldingCids
         requestedAt = now
         extraArgs = emptyExtraArgs
-  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using checked fetch with `ForOwner`
+  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using fetchAndArchive with `ForOwner`
 
 test_allocateV1_allocation_wrongAdmin : Script ()
 test_allocateV1_allocation_wrongAdmin = test_allocateV1_generic $ \TestEnv {..} -> do
@@ -255,7 +255,7 @@ test_allocateV2_inputHoldingCids_wrongAdmin = test_allocateV2_generic $ \TestEnv
         requestedAt = now
         extraArgs = emptyExtraArgs
         actors = [alice]
-  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using checked fetch with `ForOwner`
+  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using fetchAndArchive with `ForOwner`
 
 test_allocateV2_inputHoldingCids_wrongOwner : Script ()
 test_allocateV2_inputHoldingCids_wrongOwner = test_allocateV2_generic $ \TestEnv {..} -> do
@@ -268,7 +268,7 @@ test_allocateV2_inputHoldingCids_wrongOwner = test_allocateV2_generic $ \TestEnv
         requestedAt = now
         extraArgs = emptyExtraArgs
         actors = [alice]
-  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using checked fetch with `ForOwner`
+  pure (choiceArg, expectMessageContains "Contract group identifier mismatch") -- Due to using fetchAndArchive with `ForOwner`
 
 test_allocateV2_allocation_wrongAdmin : Script ()
 test_allocateV2_allocation_wrongAdmin = test_allocateV2_generic $ \TestEnv {..} -> do
