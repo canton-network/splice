@@ -412,7 +412,6 @@ class AllocationsFrontendIntegrationTest
         browseToAllocationsPage()
 
         val nextIterationAmount = "100"
-        val amuletInstrumentKey = amuletInstrumentIdName
 
         actAndCheck(
           "create prefunded allocation", {
@@ -432,11 +431,12 @@ class AllocationsFrontendIntegrationTest
               element.underlying.click()
             }
 
-            // Set next iteration funding: key = amulet instrument id, value = 100
-            eventuallyClickOn(id("create-allocation-next-iteration-funding-add-meta"))
-            textField("create-allocation-next-iteration-funding-meta-key-0").underlying
-              .sendKeys(amuletInstrumentKey)
-            textField("create-allocation-next-iteration-funding-meta-value-0").underlying
+            // Allow iterated settlement and set funding amount.
+            inside(find(id("create-allocation-allow-iterated-settlement"))) { case Some(element) =>
+              element.underlying.click()
+            }
+            textField("create-allocation-next-iteration-funding-amount").underlying.clear()
+            textField("create-allocation-next-iteration-funding-amount").underlying
               .sendKeys(nextIterationAmount)
 
             eventuallyClickOn(id("create-allocation-submit-button"))

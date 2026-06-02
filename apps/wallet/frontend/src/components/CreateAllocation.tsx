@@ -20,6 +20,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import BigNumber from 'bignumber.js';
 import { DisableConditionally } from '@lfdecentralizedtrust/splice-common-frontend';
 import BftAnsField from './BftAnsField';
 import AmountInput from './AmountInput';
@@ -282,17 +283,39 @@ const CreateAllocation: React.FC = () => {
               }
               idPrefix="create-allocation"
             />
-            <Typography variant="body2">Next iteration funding (optional)</Typography>
-            <TextMapEditor
-              meta={allocation.next_iteration_funding}
-              setTextMap={next_iteration_funding =>
-                setAllocation({
-                  ...allocation,
-                  next_iteration_funding,
-                })
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="create-allocation-allow-iterated-settlement"
+                  checked={allocation.allow_iterated_settlement}
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      allow_iterated_settlement: event.target.checked,
+                    })
+                  }
+                />
               }
-              idPrefix="create-allocation-next-iteration-funding"
+              label="Allow iterated settlement"
             />
+            {allocation.allow_iterated_settlement && (
+              <>
+                <Typography variant="body2">Funding amount (Amulet)</Typography>
+                <TextField
+                  id="create-allocation-next-iteration-funding-amount"
+                  value={allocation.next_iteration_funding_amount}
+                  error={
+                    !isValidNextIterationFundingAmount(allocation.next_iteration_funding_amount)
+                  }
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      next_iteration_funding_amount: event.target.value,
+                    })
+                  }
+                />
+              </>
+            )}
 
             <DisableConditionally
               conditions={[
@@ -341,7 +364,8 @@ interface PartialAllocateAmuletV2Request {
   transfer_legs: PartialTransferLeg[];
   committed: boolean;
   meta: TextMap;
-  next_iteration_funding: TextMap;
+  allow_iterated_settlement: boolean;
+  next_iteration_funding_amount: string;
 }
 
 function emptyTransferLeg(): PartialTransferLeg {
@@ -358,8 +382,18 @@ function emptyForm(): PartialAllocateAmuletV2Request {
     transfer_legs: [],
     committed: false,
     meta: {},
-    next_iteration_funding: {},
+    allow_iterated_settlement: false,
+    next_iteration_funding_amount: '0',
   };
+}
+
+function isValidNextIterationFundingAmount(amount: string): boolean {
+  const value = amount.trim();
+  if (!value) {
+    return false;
+  }
+  const amountNumber = new BigNumber(value);
+  return amountNumber.isFinite() && amountNumber.gte(0);
 }
 
 function validatedForm(
@@ -397,9 +431,16 @@ function validatedForm(
       amount: leg.amount,
     });
   }
-  // You must specify either transfger legs, or the next iteration funding
-  if (validLegSides.length === 0 && Object.keys(partial.next_iteration_funding).length === 0)
+  if (
+    partial.allow_iterated_settlement &&
+    !isValidNextIterationFundingAmount(partial.next_iteration_funding_amount)
+  ) {
     return null;
+  }
+
+  // You must specify either transfer legs, or iterated settlement funding.
+  if (validLegSides.length === 0 && !partial.allow_iterated_settlement) return null;
+
   return {
     settlement: {
       executors: partial.settlement.executors,
@@ -414,9 +455,8 @@ function validatedForm(
     transfer_leg_sides: validLegSides,
     committed: partial.committed,
     meta: partial.meta,
-    next_iteration_funding:
-      Object.keys(partial.next_iteration_funding).length > 0
-        ? partial.next_iteration_funding
-        : undefined,
+    next_iteration_funding: partial.allow_iterated_settlement
+      ? { ['Amulet']: partial.next_iteration_funding_amount.trim() }
+      : undefined,
   };
 }
