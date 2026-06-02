@@ -6,8 +6,13 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  AppRewardCoupon,
+  FeaturedAppActivityMarker,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -22,8 +27,10 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
+  ExpireRewardCouponsTrigger,
   ExpiredAmuletTrigger,
   ExpiredLockedAmuletTrigger,
+  FeaturedAppActivityMarkerTrigger,
   UpdateExternalPartyConfigStateTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.*
@@ -83,6 +90,8 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[AdvanceOpenMiningRoundTrigger]
             .withPausedTrigger[UpdateExternalPartyConfigStateTrigger]
+            .withPausedTrigger[ExpireRewardCouponsTrigger]
+            .withPausedTrigger[FeaturedAppActivityMarkerTrigger]
         )(c)
       )
       .addConfigTransforms((_, c) =>
@@ -101,7 +110,7 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
         )(c)
       )
 
-  def setupAliceWithDustAmulets()(implicit env: SpliceTestConsoleEnvironment) = {
+  def setupAliceWithDustAmulets()(implicit env: SpliceTestConsoleEnvironment): PartyId = {
     val synchronizerId = decentralizedSynchronizerId
 
     clue("aliceValidator has not vetted splice-amulet 0.1.17 and 0.1.18") {
@@ -223,19 +232,53 @@ class AmuletExpiryWithMinimalPackageIntegrationTest
   }
 }
 
-/** Tests that expiry triggers skip amulets when the owner's preferred package version
+/** Tests that expiry triggers skip batches when the task's amulet preferred package version
   * is listed in `ignoredAmuletVersions`, adding the party to the ignored-parties store.
   */
-class AmuletExpiryWithBrokenPackageIntegrationTest
+class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
     extends AmuletExpiryWithOldPackageIntegrationTestBase {
 
   override val ignoredAmuletVersions: Set[String] = Set(
     DarResources.amulet_0_1_15.metadata.version.toString
   )
 
-  "Amulet expiry skips parties when their preferred package version is marked as broken" in {
+  "Triggers expiring amulet, locked amulet, and reward coupons and featured app markers skip parties when their preferred amulet package version is marked as ignored" in {
     implicit env =>
-      val aliceParty = setupAliceWithDustAmulets()
+      val aliceParty: PartyId = setupAliceWithDustAmulets()
+      advanceRoundsByOneTickViaAutomation()
+      advanceRoundsByOneTickViaAutomation()
+
+      val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+      val currentRound = openRounds.toList.headOption.value.payload.round
+
+      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitWithResult(
+          userId = sv1Backend.config.ledgerApiUser,
+          actAs = Seq(dsoParty),
+          readAs = Seq.empty,
+          update = new AppRewardCoupon(
+            dsoParty.toProtoPrimitive,
+            aliceParty.toProtoPrimitive,
+            false,
+            BigDecimal(10.0).bigDecimal,
+            currentRound,
+            java.util.Optional.empty(),
+          ).create,
+        )
+
+      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitWithResult(
+          userId = sv1Backend.config.ledgerApiUser,
+          actAs = Seq(dsoParty),
+          readAs = Seq.empty,
+          update = new FeaturedAppActivityMarker(
+            dsoParty.toProtoPrimitive,
+            aliceParty.toProtoPrimitive,
+            aliceParty.toProtoPrimitive,
+            BigDecimal(1.0).bigDecimal,
+          ).create,
+        )
+
       actAndCheck(timeUntilSuccess = 60.seconds)(
         "Advance 4 rounds and resume expiry triggers", {
           (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
@@ -244,10 +287,12 @@ class AmuletExpiryWithBrokenPackageIntegrationTest
           env.svs.local.foreach { sv =>
             sv.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
             sv.dsoDelegateBasedAutomation.trigger[ExpiredLockedAmuletTrigger].resume()
+            sv.dsoDelegateBasedAutomation.trigger[ExpireRewardCouponsTrigger].resume()
+            sv.dsoDelegateBasedAutomation.trigger[FeaturedAppActivityMarkerTrigger].resume()
           }
         },
       )(
-        "Dust amulets remain because preferred version 0.1.15 is in ignoredAmuletVersions",
+        "Dust contracts remain because preferred version 0.1.15 is in ignoredAmuletVersions",
         _ => {
           sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should contain(
             aliceParty
@@ -256,6 +301,16 @@ class AmuletExpiryWithBrokenPackageIntegrationTest
           aliceWalletClient
             .list()
             .lockedAmulets should have length 2L withClue "locked amulets should remain"
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .filterJava(AppRewardCoupon.COMPANION)(
+              dsoParty,
+              co => co.data.provider == aliceParty.toProtoPrimitive,
+            ) should have size 1L withClue "app reward coupon should remain"
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .filterJava(FeaturedAppActivityMarker.COMPANION)(
+              dsoParty,
+              co => co.data.provider == aliceParty.toProtoPrimitive,
+            ) should have size 1L withClue "featured app activity marker should remain"
         },
       )
   }
