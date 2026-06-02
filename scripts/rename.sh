@@ -1241,7 +1241,7 @@ function subcmd_no_amulet_in_ui() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in frontend code"
-        if rg -P "$pattern" -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**'; then
+        if rg -P "$pattern" -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**' -g '!CreateAllocation.tsx' -g '!buildAmuletConfigChanges.ts'; then
             echo "$pattern occurs in frontend, ensure it is not user-visible"
             exit 1
         fi

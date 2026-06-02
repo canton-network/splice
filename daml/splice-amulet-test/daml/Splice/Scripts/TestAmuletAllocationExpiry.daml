@@ -146,7 +146,7 @@ setTokenStandardTTL env newTTL = do
 
 testExpiresAfter : TestEnv -> RelTime -> Script ()
 testExpiresAfter TestEnv {..} allocationTTL = do
-  -- DSO expires
+  -- DSO party expires
   let dso = instrId.admin
   registry <- MultiRegistry.getRegistryApiV2 registries dso
   [(allocCid, Some allocView)] <- queryInterface @V2.Allocation dso
