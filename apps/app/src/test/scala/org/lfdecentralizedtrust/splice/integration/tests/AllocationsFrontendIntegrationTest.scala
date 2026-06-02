@@ -95,8 +95,7 @@ class AllocationsFrontendIntegrationTest
           validatorPartyId.toProtoPrimitive,
           validatorPartyId.toProtoPrimitive,
         )
-        // Add n (-1 because one is already there) forms for transfer legs
-        wantedTransferLegs.drop(1).foreach { _ =>
+        wantedTransferLegs.foreach { _ =>
           eventuallyClickOn(id("add-transfer-leg"))
         }
         wantedTransferLegs.zipWithIndex.foreach { case (transferLeg, index) =>
@@ -623,9 +622,12 @@ class AllocationsFrontendIntegrationTest
         eventuallyClickOn(id("navlink-allocations"))
       },
     )(
-      "allocations page is shown",
+      "allocations page and create form is shown",
       _ => {
         currentUrl should endWith("/allocations")
+        find(id("create-allocation-settlement-ref-id")).valueOrFail(
+          "Could not find create allocation form"
+        )
       },
     )
   }
