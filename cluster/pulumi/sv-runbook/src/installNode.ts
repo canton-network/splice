@@ -66,10 +66,7 @@ import {
   valuesForSvValidatorApp,
 } from '@canton-network/splice-pulumi-common-sv';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@canton-network/splice-pulumi-common/src/postgres';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';

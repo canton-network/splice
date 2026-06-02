@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { PollingStrategy } from '@canton-network/splice-common-frontend-utils';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
-import {
-  ApiException,
-  AnsEntry,
-  LookupEntryByPartyResponse,
-} from '@canton-network/scan-openapi';
+import { ApiException, AnsEntry, LookupEntryByPartyResponse } from '@canton-network/scan-openapi';
 
 import { useScanClient } from './ScanClientContext';
 

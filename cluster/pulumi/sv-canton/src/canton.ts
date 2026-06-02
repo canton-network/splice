@@ -105,38 +105,38 @@ export async function installCantonComponents(
   if (migrationStillRunning) {
     const decentralizedSynchronizerNode = migrationInfo.sequencer.enableBftSequencer
       ? new InStackCantonBftDecentralizedSynchronizerNode(
-        svConfig,
-        migrationId,
-        svConfig.ingressName,
-        xns,
-        {
-          sequencerPostgres: sequencerPostgres,
-          mediatorPostgres: mediatorPostgres,
-          setCoreDbNames: svConfig.isCoreSv,
-        },
-        version,
-        imagePullServiceAccountName,
-        opts
-      )
+          svConfig,
+          migrationId,
+          svConfig.ingressName,
+          xns,
+          {
+            sequencerPostgres: sequencerPostgres,
+            mediatorPostgres: mediatorPostgres,
+            setCoreDbNames: svConfig.isCoreSv,
+          },
+          version,
+          imagePullServiceAccountName,
+          opts
+        )
       : new InStackCometBftDecentralizedSynchronizerNode(
-        svConfig,
-        cometbft,
-        migrationId,
-        xns,
-        {
-          sequencerPostgres: sequencerPostgres,
-          mediatorPostgres: mediatorPostgres,
-          setCoreDbNames: svConfig.isCoreSv,
-        },
-        isActiveMigration,
-        migrationConfig.isRunningMigration(),
-        svConfig.onboardingName,
-        version,
-        imagePullServiceAccountName,
-        disableProtection,
-        migrationInfo.cometbft?.volumeSize,
-        opts
-      );
+          svConfig,
+          cometbft,
+          migrationId,
+          xns,
+          {
+            sequencerPostgres: sequencerPostgres,
+            mediatorPostgres: mediatorPostgres,
+            setCoreDbNames: svConfig.isCoreSv,
+          },
+          isActiveMigration,
+          migrationConfig.isRunningMigration(),
+          svConfig.onboardingName,
+          version,
+          imagePullServiceAccountName,
+          disableProtection,
+          migrationInfo.cometbft?.volumeSize,
+          opts
+        );
     return {
       decentralizedSynchronizer: decentralizedSynchronizerNode,
     };

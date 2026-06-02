@@ -21,10 +21,7 @@ import {
   GitFluxRef,
   StackFromRef,
 } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@canton-network/splice-pulumi-common/src/operator/stack';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 function isVersionAtLeastOrSnapshot(version: CnChartVersion, minVersion: string): boolean {
   if (version.type === 'local') {

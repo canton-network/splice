@@ -4,10 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse, PathParams } from 'msw';
 import { mockAllIsIntersecting } from 'react-intersection-observer/test-utils';
-import {
-  CreateVoteRequest,
-  ListDsoRulesVoteRequestsResponse,
-} from '@canton-network/sv-openapi';
+import { CreateVoteRequest, ListDsoRulesVoteRequestsResponse } from '@canton-network/sv-openapi';
 import { test, expect, describe } from 'vitest';
 
 import App from '../App';
@@ -16,10 +13,7 @@ import { onboardingInfo } from '../components/ValidatorOnboardingSecrets';
 import { svPartyId, voteRequests } from './mocks/constants';
 import { server, svUrl } from './setup/setup';
 import { changeAction, navigateToLegacyGovernancePage } from './helpers';
-import {
-  dateTimeFormatISO,
-  getUTCWithOffset,
-} from '@canton-network/splice-common-frontend-utils';
+import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 

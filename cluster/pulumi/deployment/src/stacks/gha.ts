@@ -7,10 +7,7 @@ import {
   GitFluxRef,
   StackFromRef,
 } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@canton-network/splice-pulumi-common/src/operator/stack';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 export function getGithubActionsStackFromMainReference(): Array<StackFromRef> {
   if (deploymentConf.projectsToDeploy.has('gha')) {

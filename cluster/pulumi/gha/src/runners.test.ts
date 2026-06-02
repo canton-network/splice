@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { expect, jest, test } from '@jest/globals';
 import { collectResources } from '@canton-network/splice-pulumi-common/src/test';
+import { expect, jest, test } from '@jest/globals';
 import { z } from 'zod';
 
 import { installRunnerScaleSets } from './runners';

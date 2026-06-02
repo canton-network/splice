@@ -29,10 +29,7 @@ import { useValidatorOnboardings } from '../hooks/useValidatorOnboardings';
 import { useSvConfig } from '../utils';
 import { useNetworkInstanceName } from '../hooks';
 import dayjs from 'dayjs';
-import {
-  dateTimeFormatISO,
-  getUTCWithOffset,
-} from '@canton-network/splice-common-frontend-utils';
+import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 
 const VALID_PARTY_ID_REGEX = /^[^-]+-[^-]+-\d+$/;
 

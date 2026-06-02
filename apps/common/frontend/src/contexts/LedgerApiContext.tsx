@@ -1,10 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useUserState } from '@canton-network/splice-common-frontend';
-import {
-  callWithLogging,
-  fireAuthExpired,
-} from '@canton-network/splice-common-frontend-utils';
+import { callWithLogging, fireAuthExpired } from '@canton-network/splice-common-frontend-utils';
 import React, { useContext } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 

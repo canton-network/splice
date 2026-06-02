@@ -1,11 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  DateDisplay,
-  DsoInfo,
-  Loading,
-  PartyId,
-} from '@canton-network/splice-common-frontend';
+import { DateDisplay, DsoInfo, Loading, PartyId } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { InfiniteData, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import React, { useEffect } from 'react';

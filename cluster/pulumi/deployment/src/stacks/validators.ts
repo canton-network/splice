@@ -7,10 +7,7 @@ import {
 } from '@canton-network/splice-pulumi-common-validator';
 import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
 import { GitFluxRef } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@canton-network/splice-pulumi-common/src/operator/stack';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 import { config } from '../../../common';
 

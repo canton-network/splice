@@ -17,10 +17,7 @@ import {
   gitRepoForRef,
   StackFromRef,
 } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@canton-network/splice-pulumi-common/src/operator/stack';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 export function getMigrationSpecificStacksFromMainReference(): StackFromRef[] {
   if (deploymentConf.projectsToDeploy.has('sv-canton')) {

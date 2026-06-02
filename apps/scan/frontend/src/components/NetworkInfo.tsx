@@ -8,10 +8,7 @@ import {
   Loading,
 } from '@canton-network/splice-common-frontend';
 import { microsecondsToMinutes } from '@canton-network/splice-common-frontend-utils';
-import {
-  useGetAmuletRules,
-  useOpenRounds,
-} from '@canton-network/splice-common-frontend/scan-api';
+import { useGetAmuletRules, useOpenRounds } from '@canton-network/splice-common-frontend/scan-api';
 import BigNumber from 'bignumber.js';
 import { formatDistanceToNow } from 'date-fns';
 import dayjs from 'dayjs';

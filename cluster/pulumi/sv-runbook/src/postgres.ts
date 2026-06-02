@@ -10,10 +10,7 @@ import {
   supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@canton-network/splice-pulumi-common/src/postgres';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installPostgres(
   xns: ExactNamespace,

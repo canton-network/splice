@@ -9,10 +9,7 @@ import {
   VotesHooksContext,
 } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
-import {
-  dsoInfo,
-  getDsoSvOffboardingAction,
-} from '@canton-network/splice-common-test-handlers';
+import { dsoInfo, getDsoSvOffboardingAction } from '@canton-network/splice-common-test-handlers';
 import { QueryClient, QueryClientProvider, useQuery, UseQueryResult } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import dayjs from 'dayjs';
