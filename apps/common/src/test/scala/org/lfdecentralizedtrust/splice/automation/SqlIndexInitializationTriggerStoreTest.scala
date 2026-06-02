@@ -60,7 +60,6 @@ class SqlIndexInitializationTriggerStoreTest
           "updt_hist_crea_hi_mi_ci_import_updates",
           "updt_hist_tran_hi_eth",
           "scan_txlog_store_sid_en_vot",
-          "updt_hist_crea_hi_tidmn_tiden_pn_rt_rid",
         )
       }
     }

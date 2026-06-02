@@ -255,14 +255,6 @@ object SqlIndexInitializationTrigger {
           where entry_type = 'vot'
         """,
       ),
-    IndexAction
-      .Create(
-        indexName = "updt_hist_crea_hi_tidmn_tiden_pn_rt_rid",
-        createAction = sqlu"""
-          create index concurrently if not exists updt_hist_crea_hi_tidmn_tiden_pn_rt_rid
-          on update_history_creates (history_id, template_id_module_name, template_id_entity_name, package_name, record_time, row_id)
-        """,
-      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting
