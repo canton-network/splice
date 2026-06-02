@@ -312,6 +312,7 @@ val todoStyleExcludePrefixes =
     "experiments/",
     "CONTRIBUTING.md",
     "token-standard/dependencies",
+    ".github/actions/tests/split_tests/dist/"
   )
 val todoStyleExcludeSuffixes =
   Seq("/checkTodos.sc", "/build.static_tests.yml", "/migrate-github-issues.py")

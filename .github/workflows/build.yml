@@ -71,7 +71,7 @@ jobs:
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check if static only
-        uses: ./splice-shared-gha/.github/actions/tests/skip_on_static
+        uses: ./.github/actions/tests/skip_on_static
         id: static_only
         with:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
@@ -413,7 +413,7 @@ jobs:
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check if static only
-        uses: ./splice-shared-gha/.github/actions/tests/skip_on_static
+        uses: ./.github/actions/tests/skip_on_static
         id: static_only
         with:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
