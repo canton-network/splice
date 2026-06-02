@@ -58,6 +58,7 @@ export function amuletRules(zeroTransferFees: boolean): any {
           },
           extraFeaturedAppRewardAmount: '1.0',
           maxNumLockHolders: '50',
+          tokenStandardMaxTTL: null,
           transferFee: {
             initialRate: zeroTransferFees ? '0.0' : '0.01',
             steps: transferFeeSteps,

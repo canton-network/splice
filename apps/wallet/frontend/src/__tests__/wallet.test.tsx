@@ -1498,6 +1498,7 @@ function getAllocationV1(
 ): AmuletAllocationV1 {
   return {
     lockedAmulet: `lockedamulet${settlementId}` as ContractId<LockedAmulet>,
+    expiresAt: null,
     allocation: {
       transferLegId,
       transferLeg: {
