@@ -81,6 +81,9 @@ class PackageVetting(
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationV2,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationRequestV2,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationInstructionV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferEventsV2,
+        PackageIdResolver.Package.TokenStandard.SpliceTokenStandardUtils,
+        PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
         PackageIdResolver.Package.SpliceUtilBatchedMarkers,
       ).flatMap(pkg =>
         DarResourcesUtil

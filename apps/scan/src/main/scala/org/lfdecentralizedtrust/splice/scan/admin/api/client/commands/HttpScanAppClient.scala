@@ -51,7 +51,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
   CompactJsonScanHttpEncodings,
   ProtobufJsonScanHttpEncodings,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -706,42 +705,6 @@ object HttpScanAppClient {
     }
   }
 
-  case class GetRoundOfLatestData()
-      extends InternalBaseCommand[http.GetRoundOfLatestDataResponse, (Long, Instant)] {
-
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetRoundOfLatestDataResponse] =
-      client.getRoundOfLatestData(headers)
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetRoundOfLatestDataResponse.OK(response) =>
-        Right((response.round, response.effectiveAt.toInstant))
-      case http.GetRoundOfLatestDataResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
-  case class GetRewardsCollected(round: Option[Long])
-      extends InternalBaseCommand[http.GetRewardsCollectedResponse, BigDecimal] {
-
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetRewardsCollectedResponse] =
-      client.getRewardsCollected(round, headers)
-
-    override protected def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetRewardsCollectedResponse.OK(response) =>
-        for {
-          amount <- Codec.decode(Codec.BigDecimal)(response.amount)
-        } yield amount
-      case http.GetRewardsCollectedResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
   case class GetMemberTrafficStatus(synchronizerId: SynchronizerId, memberId: Member)
       extends ExternalBaseCommand[
         http.GetMemberTrafficStatusResponse,
@@ -1285,69 +1248,6 @@ object HttpScanAppClient {
         Right(Some(value))
       case http.GetHoldingsSummaryAtV1Response.NotFound(_) =>
         Right(None)
-    }
-  }
-
-  object GetAggregatedRounds
-      extends InternalBaseCommand[http.GetAggregatedRoundsResponse, Option[
-        ScanAggregator.RoundRange
-      ]] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.GetAggregatedRoundsResponse] = {
-      client.getAggregatedRounds(headers)
-    }
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.GetAggregatedRoundsResponse.OK(response) =>
-        Right(Some(ScanAggregator.RoundRange(response.start, response.end)))
-      case http.GetAggregatedRoundsResponse.NotFound(_) =>
-        Right(None)
-    }
-  }
-  case class ListRoundTotals(start: Long, end: Long)
-      extends InternalBaseCommand[
-        http.ListRoundTotalsResponse,
-        Seq[definitions.RoundTotals],
-      ] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.ListRoundTotalsResponse] = {
-      client.listRoundTotals(definitions.ListRoundTotalsRequest(start, end), headers)
-    }
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.ListRoundTotalsResponse.OK(response) =>
-        Right(response.entries)
-    }
-  }
-
-  case class ListRoundPartyTotals(start: Long, end: Long)
-      extends InternalBaseCommand[
-        http.ListRoundPartyTotalsResponse,
-        Seq[definitions.RoundPartyTotals],
-      ] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.ListRoundPartyTotalsResponse] = {
-      client.listRoundPartyTotals(definitions.ListRoundPartyTotalsRequest(start, end), headers)
-    }
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.ListRoundPartyTotalsResponse.OK(response) =>
-        Right(response.entries)
     }
   }
 

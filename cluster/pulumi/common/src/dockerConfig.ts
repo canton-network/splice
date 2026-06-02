@@ -22,10 +22,16 @@ export class DockerConfig {
       'us-central1-artifact-reader-key'
     );
     this.jsonConfig = pulumi.all([jfrogCreds, googleCreds]).apply(([jfrog, google]) => {
+      const artifactoryAuth = DockerConfig.toAuthField(jfrog);
       const googleAuth = DockerConfig.toAuthField(google);
       const conf = Buffer.from(
         JSON.stringify({
           auths: {
+            'digitalasset-canton-enterprise-docker.jfrog.io': {
+              auth: artifactoryAuth,
+              username: jfrog.username,
+              password: jfrog.password,
+            },
             'us-central1-docker.pkg.dev': {
               auth: googleAuth,
               username: google.username,

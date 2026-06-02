@@ -32,7 +32,6 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfig
-import org.lfdecentralizedtrust.splice.validator.migration.DomainMigrationDumpGenerator
 import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
 import org.lfdecentralizedtrust.splice.validator.util.ValidatorUtil
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -58,7 +57,6 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.auth.AdminAuthExtractor.AdminUserRequest
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
-import java.time.Instant
 import java.util.Base64
 import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, Future}
@@ -89,13 +87,6 @@ class HttpValidatorAdminHandler(
 
   private val workflowId = this.getClass.getSimpleName
   private val store = storeWithIngestion.store
-  private val dumpGenerator = new DomainMigrationDumpGenerator(
-    storeWithIngestion.connection(SpliceLedgerConnectionPriority.Medium),
-    participantAdminConnection,
-    retryProvider,
-    loggerFactory,
-    config.parameters.enabledFeatures,
-  )
 
   private def requireWalletEnabled[T](handleRequest: UserWalletManager => T): T = {
     walletManagerOpt.fold(
@@ -159,37 +150,6 @@ class HttpValidatorAdminHandler(
       for {
         response <- identitiesStore.getNodeIdentitiesDump()
       } yield v0.ValidatorAdminResource.DumpParticipantIdentitiesResponse.OK(response.toHttp)
-    }
-  }
-
-  override def getValidatorDomainDataSnapshot(
-      respond: v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse.type
-  )(timestamp: String, migrationId: Option[Long], force: Option[Boolean])(
-      tuser: AdminUserRequest
-  ): Future[v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse] = {
-    implicit val AdminUserRequest(tracedContext) = tuser
-    withSpan(s"$workflowId.getValidatorDomainDataSnapshot") { _ => _ =>
-      for {
-        synchronizerId <- getAmuletRulesDomain()(tracedContext)
-        res <- dumpGenerator
-          .getDomainDataSnapshot(
-            Instant.parse(timestamp),
-            synchronizerId,
-            // TODO(DACH-NY/canton-network-node#9731): get migration id from scan instead of configuring here
-            migrationId getOrElse (config.domainMigrationId + 1),
-            force.getOrElse(false),
-          )
-          .map { response =>
-            v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse.OK(
-              definitions
-                // DR dumps don't separate output files
-                .GetValidatorDomainDataSnapshotResponse(
-                  response.toHttp(outputDirectory = None),
-                  response.migrationId,
-                )
-            )
-          }
-      } yield res
     }
   }
 

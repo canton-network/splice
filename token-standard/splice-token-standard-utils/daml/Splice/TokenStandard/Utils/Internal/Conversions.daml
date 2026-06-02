@@ -30,6 +30,7 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   reasonFromMeta,
   reasonToMeta,
   mkMetaTransferFrom,
+  v1HistoryTagAsUnlockV1,
 
   -- * Account utils
   accountPrincipal,
@@ -289,6 +290,10 @@ mkMetaTransferFrom : Party -> Text -> Metadata
 mkMetaTransferFrom sender reason =
   reasonToMeta reason $ Metadata with
     values = TextMap.fromList [(txKindMetaKey, "transfer"), (senderMetaKey, partyToText sender)]
+
+-- | Tag a holdings change as an unlock for V1 tx history parsers.
+v1HistoryTagAsUnlockV1 : Metadata -> Metadata
+v1HistoryTagAsUnlockV1 (Metadata meta) = Metadata $ TextMap.insert txKindMetaKey "unlock" meta
 
 
 -- Class based conversion

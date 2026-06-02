@@ -32,10 +32,7 @@ import org.apache.pekko.http.scaladsl.server.directives.BasicDirectives
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.auth.*
-import org.lfdecentralizedtrust.splice.automation.{
-  DomainParamsAutomationService,
-  DomainTimeAutomationService,
-}
+import org.lfdecentralizedtrust.splice.automation.DomainTimeAutomationService
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, SharedSpliceAppParameters}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
@@ -48,19 +45,13 @@ import org.lfdecentralizedtrust.splice.http.v0.validator_admin.ValidatorAdminRes
 import org.lfdecentralizedtrust.splice.http.v0.validator_public.ValidatorPublicResource
 import org.lfdecentralizedtrust.splice.http.v0.wallet.WalletResource as InternalWalletResource
 import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesStore
-import org.lfdecentralizedtrust.splice.migration.{
-  DomainDataRestorer,
-  DomainMigrationInfo,
-  MigrationTimeInfo,
-  ParticipantUsersDataRestorer,
-}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   BftScanConnection,
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.setup.{NodeInitializer, ParticipantInitializer}
+import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
@@ -74,10 +65,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
 import org.lfdecentralizedtrust.splice.validator.config.*
 import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
-import org.lfdecentralizedtrust.splice.validator.migration.{
-  DomainMigrationDump,
-  ParticipantPartyMigrator,
-}
+import org.lfdecentralizedtrust.splice.validator.migration.ParticipantPartyMigrator
 import org.lfdecentralizedtrust.splice.validator.store.{
   ValidatorConfigProvider,
   ValidatorInternalStore,
@@ -100,7 +88,6 @@ import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStand
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
 
 /** Class representing a Validator app instance. */
 class ValidatorApp(
@@ -140,46 +127,34 @@ class ValidatorApp(
       traceContext: TraceContext
   ): Future[Unit] = for {
     _ <- withParticipantAdminConnection { participantAdminConnection =>
-      readRestoreDump match {
-        case Some(migrationDump) =>
-          logger.info(
-            "We're restoring from a migration dump, ensuring participant is initialized"
+      UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
+        case Some(migrationId) if !config.svValidator && migrationId < config.domainMigrationId =>
+          throw Status.INVALID_ARGUMENT
+            .withDescription(
+              s"Migration ID was incremented (to ${config.domainMigrationId}) but no migration dump for restoring from was specified."
+            )
+            .asRuntimeException()
+        case _ =>
+          val cantonIdentifierConfig =
+            ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
+          val participantInitializer = new ParticipantInitializer(
+            cantonIdentifierConfig.participant,
+            config.participantBootstrappingDump,
+            loggerFactory,
+            retryProvider,
+            participantAdminConnection,
           )
-          val nodeInitializer =
-            new NodeInitializer(participantAdminConnection, retryProvider, loggerFactory)
-          nodeInitializer.initializeFromDumpAndWait(
-            migrationDump.participant
-          )
-        case None =>
-          UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
-            case Some(migrationId)
-                if !config.svValidator && migrationId < config.domainMigrationId =>
-              throw Status.INVALID_ARGUMENT
-                .withDescription(
-                  s"Migration ID was incremented (to ${config.domainMigrationId}) but no migration dump for restoring from was specified."
-                )
-                .asRuntimeException()
-            case _ =>
-              val cantonIdentifierConfig =
-                ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
-              val participantInitializer = new ParticipantInitializer(
-                cantonIdentifierConfig.participant,
-                config.participantBootstrappingDump,
-                loggerFactory,
-                retryProvider,
-                participantAdminConnection,
-              )
-              if (config.svValidator) {
-                logger.info("Waiting for the participant to be initialized by the SV app")
-                participantInitializer.waitForNodeInitialized()
-              } else {
-                logger.info(
-                  "Ensuring participant is initialized"
-                )
-                participantInitializer.ensureInitializedWithExpectedId()
-              }
+          if (config.svValidator) {
+            logger.info("Waiting for the participant to be initialized by the SV app")
+            participantInitializer.waitForNodeInitialized()
+          } else {
+            logger.info(
+              "Ensuring participant is initialized"
+            )
+            participantInitializer.ensureInitializedWithExpectedId()
           }
       }
+
     }
   } yield ()
 
@@ -238,68 +213,16 @@ class ValidatorApp(
             // even if we have already registered which could be an issue after a restart.
             // For now this seems acceptable.
             initialSynchronizerTime = Option.when(!domainAlreadyRegistered)(now)
-            _ <- readRestoreDump match {
-              case Some(migrationDump) =>
-                for {
-                  allSequencerConnections <- domainConnector
-                    .getDecentralizedSynchronizerSequencerConnections(clock)
-                  sequencerConnections = allSequencerConnections.values.toSeq match {
-                    case Seq() =>
-                      sys.error("Expected at least one sequencer connection but got 0")
-                    case Seq(connections) => connections
-                    // TODO (DACH-NY/canton-network-node#13301) handle this in a cleaner way (or just drop hard domain migration support at some point)
-                    case _ =>
-                      sys.error(
-                        s"Hard domain migrations and soft domain migrations are incompatible, got sequencer connections: $allSequencerConnections"
-                      )
-                  }
-                  _ <- appInitStep("Connecting domain and restoring data") {
-                    val decentralizedSynchronizerInitializer = new DomainDataRestorer(
-                      participantAdminConnection,
-                      config.timeTrackerMinObservationDuration,
-                      config.timeTrackerObservationLatency,
-                      config.parameters.enabledFeatures.reconnectOnSynchronizerConfigurationChange,
-                      loggerFactory,
-                    )
-                    decentralizedSynchronizerInitializer.connectDomainAndRestoreData(
-                      config.domains.global.alias,
-                      migrationDump.domainId,
-                      sequencerConnections,
-                      migrationDump.dars,
-                      migrationDump.acsSnapshot,
-                    )
-                  }
-                  _ <- appInitStep("Restoring participant users data") {
-                    val readWriteConnection = ledgerClient.connection(
-                      this.getClass.getSimpleName,
-                      loggerFactory,
-                      SpliceCircuitBreaker(
-                        "restore",
-                        config.parameters.circuitBreakers.mediumPriority,
-                        clock,
-                        loggerFactory,
-                      )(ac.scheduler, implicitly),
-                    )
-                    val participantUsersDataRestorer = new ParticipantUsersDataRestorer(
-                      readWriteConnection,
-                      loggerFactory,
-                    )
-                    participantUsersDataRestorer.restoreParticipantUsersData(
-                      migrationDump.participantUsers
-                    )
-                  }
-                } yield ()
-              case None =>
-                if (config.svValidator && config.disableSvValidatorBftSequencerConnection)
-                  appInitStep("Ensuring decentralized synchronizer already registered") {
-                    domainConnector.waitForDecentralizedSynchronizerIsRegisteredAndConnected()
-                  }
-                else
-                  appInitStep("Ensuring decentralized synchronizer registered") {
-                    domainConnector
-                      .ensureDecentralizedSynchronizerRegisteredAndConnectedWithCurrentConfig(clock)
-                  }
-            }
+            _ <-
+              if (config.svValidator && config.disableSvValidatorBftSequencerConnection)
+                appInitStep("Ensuring decentralized synchronizer already registered") {
+                  domainConnector.waitForDecentralizedSynchronizerIsRegisteredAndConnected()
+                }
+              else
+                appInitStep("Ensuring decentralized synchronizer registered") {
+                  domainConnector
+                    .ensureDecentralizedSynchronizerRegisteredAndConnectedWithCurrentConfig(clock)
+                }
             _ <- appInitStep("Ensuring extra domains registered") {
               domainConnector.ensureExtraDomainsRegistered()
             }
@@ -455,29 +378,6 @@ class ValidatorApp(
           } yield initialSynchronizerTime
         }
     } yield initialSynchronizerTime
-
-  private def readRestoreDump: Option[DomainMigrationDump] = config.restoreFromMigrationDump.map {
-    path =>
-      if (config.svValidator)
-        throw Status.INVALID_ARGUMENT
-          .withDescription("SV Validator should not be configured with a dump file")
-          .asRuntimeException()
-
-      val migrationDump = BackupDump.readFromPath[DomainMigrationDump](path) match {
-        case Failure(exception) =>
-          throw Status.INVALID_ARGUMENT
-            .withDescription(s"Failed to read migration dump from $path: ${exception.getMessage}")
-            .asRuntimeException()
-        case Success(value) => value
-      }
-      if (migrationDump.migrationId != config.domainMigrationId)
-        throw Status.INVALID_ARGUMENT
-          .withDescription(
-            s"Migration id from the dump ${migrationDump.migrationId} does not match the configured migration id in the validator ${config.domainMigrationId}. Please check if the validator app is configured with the correct migration id"
-          )
-          .asRuntimeException()
-      migrationDump
-  }
 
   private def getAcsSnapshotFromSingleScan(
       scanConfig: ScanAppClientConfig,
@@ -734,50 +634,18 @@ class ValidatorApp(
         validatorParty = validatorParty,
         dsoParty = dsoParty,
       )
-      domainMigrationInfo <-
-        if (config.svValidator) {
-          appInitStep(s"Get domain migration info from ${config.svUser}") {
-            DomainMigrationInfo.loadFromUserMetadata(
-              readOnlyLedgerConnection,
-              config.svUser.getOrElse(throw new Exception("svUser is required for an sv Validator")),
-            )
-          }
-        } else {
-          val dump = readRestoreDump
-          Future.successful(
-            // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-            DomainMigrationInfo(
-              config.domainMigrationId,
-              dump.map(d =>
-                MigrationTimeInfo(
-                  CantonTimestamp.assertFromInstant(d.acsTimestamp),
-                  d.synchronizerWasPaused,
-                )
-              ),
-            )
-          )
-        }
-
       store = ValidatorStore(
         key,
         storage,
         loggerFactory,
         retryProvider,
-        domainMigrationInfo,
+        config.domainMigrationId,
         participantId,
         config.automation.ingestion,
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
       )
       domainTimeAutomationService = new DomainTimeAutomationService(
-        config.domains.global.alias,
-        participantAdminConnection,
-        config.automation,
-        clock,
-        retryProvider,
-        loggerFactory,
-      )
-      domainParamsAutomationService = new DomainParamsAutomationService(
         config.domains.global.alias,
         participantAdminConnection,
         config.automation,
@@ -820,11 +688,10 @@ class ValidatorApp(
             config.automation,
             clock,
             domainTimeAutomationService.domainTimeSync,
-            domainParamsAutomationService.domainUnpausedSync,
             storage,
             retryProvider,
             loggerFactory,
-            domainMigrationInfo,
+            config.domainMigrationId,
             participantId,
             config.parameters,
             scanConnection,
@@ -837,14 +704,13 @@ class ValidatorApp(
             config.automation,
             clock,
             domainTimeAutomationService.domainTimeSync,
-            domainParamsAutomationService.domainUnpausedSync,
             config.treasury,
             storage,
             retryProvider,
             scanConnection,
             packageVersionSupport,
             loggerFactory,
-            domainMigrationInfo,
+            config.domainMigrationId,
             participantId,
             validatorTopupConfig,
             config.walletSweep,
@@ -867,7 +733,6 @@ class ValidatorApp(
         config.svValidator,
         clock,
         domainTimeAutomationService.domainTimeSync,
-        domainParamsAutomationService.domainUnpausedSync,
         walletManagerOpt,
         store,
         storage,
@@ -1294,7 +1159,6 @@ class ValidatorApp(
         participantAdminConnection,
         storage,
         domainTimeAutomationService,
-        domainParamsAutomationService,
         store,
         configProvider,
         automation,
@@ -1316,7 +1180,6 @@ object ValidatorApp {
       participantAdminConnection: ParticipantAdminConnection,
       storage: Storage,
       domainTimeAutomationService: DomainTimeAutomationService,
-      domainParamsAutomationService: DomainParamsAutomationService,
       store: ValidatorStore,
       configProvider: ValidatorConfigProvider,
       automation: ValidatorAutomationService,
@@ -1325,7 +1188,7 @@ object ValidatorApp {
       logger: TracedLogger,
   ) extends AutoCloseable
       with HasHealth {
-    override def isHealthy: Boolean = storage.isActive && automation.isHealthy
+    override def isHealthy: Boolean = storage.isActive
 
     override def close(): Unit =
       LifeCycle.close(
@@ -1339,7 +1202,6 @@ object ValidatorApp {
           storage,
           scanConnection,
           domainTimeAutomationService,
-          domainParamsAutomationService,
         ))*
       )(logger)
   }

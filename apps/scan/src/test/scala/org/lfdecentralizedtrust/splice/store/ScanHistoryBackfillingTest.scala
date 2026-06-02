@@ -267,7 +267,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
     val backfiller = new ScanHistoryBackfilling(
       connection = connection,
       destinationHistory = destination.destinationHistory,
-      currentMigrationId = destination.domainMigrationInfo.currentMigrationId,
+      currentMigrationId = destination.domainMigrationId,
       batchSize = 1,
       loggerFactory = loggerFactory,
     )

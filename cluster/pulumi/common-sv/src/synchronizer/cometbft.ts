@@ -76,6 +76,7 @@ export function installCometBftNode(
   version: CnChartVersion = activeVersion,
   enableStateSync: boolean = svConfiguration.cometbft?.enableStateSync ?? false,
   enableTimeoutCommit: boolean = false,
+  pvcSize?: string,
   imagePullServiceAccountName?: string,
   disableProtection?: boolean,
   opts?: SpliceCustomResourceOptions
@@ -158,7 +159,7 @@ export function installCometBftNode(
       labels: [{ key: 'active_migration', value: isActiveDomain }],
     },
     db: {
-      volumeSize: clusterSmallDisk ? '240Gi' : svsConfig?.cometbft?.volumeSize,
+      volumeSize: clusterSmallDisk ? '240Gi' : pvcSize || svsConfig?.cometbft?.volumeSize,
       ...hyperdiskDbValues,
     },
     extraLogLevelFlags: svConfiguration.logging?.cometbftExtraLogLevelFlags,

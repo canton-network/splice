@@ -5,10 +5,7 @@ import { CLUSTER_HOSTNAME, DomainMigrationIndex } from '@lfdecentralizedtrust/sp
 import { Resource } from '@pulumi/pulumi';
 
 export interface SvParticipant {
-  readonly asDependencies: pulumi.Resource[];
   readonly internalClusterAddress: pulumi.Output<string>;
-  readonly databaseId?: pulumi.Output<string>;
-  readonly databaseSecretName?: pulumi.Output<string>;
 }
 
 export interface CantonBftSynchronizerNode {
@@ -29,7 +26,6 @@ export interface DecentralizedSynchronizerNode {
 
 export type InstalledMigrationSpecificSv = {
   decentralizedSynchronizer: DecentralizedSynchronizerNode;
-  participant: SvParticipant;
 };
 
 export class CrossStackDecentralizedSynchronizerNode

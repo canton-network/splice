@@ -34,6 +34,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  rewardaccountingv2 as rewardAccountingCodegen
+}
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ActiveContract,
@@ -282,6 +285,8 @@ abstract class StoreTestBase
       SpliceUtil.defaultTransferConfig(10, holdingFee),
       SpliceUtil.issuanceConfig(10.0, 10.0, 10.0),
       new RelTime(1_000_000),
+      Optional.empty(), // trafficPrice
+      Optional.empty(), // rewardConfig
     )
 
     contract(
@@ -325,6 +330,25 @@ abstract class StoreTestBase
     contract(
       roundCodegen.ClosedMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
       new roundCodegen.ClosedMiningRound.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def calculateRewardsV2(
+      dso: PartyId,
+      round: Long,
+      dryRun: Boolean = true,
+  ) = {
+    val template = new rewardAccountingCodegen.CalculateRewardsV2(
+      dso.toProtoPrimitive,
+      new Round(round),
+      Instant.now().truncatedTo(ChronoUnit.MICROS),
+      new RelTime(600_000_000L),
+      dryRun,
+    )
+    contract(
+      rewardAccountingCodegen.CalculateRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new rewardAccountingCodegen.CalculateRewardsV2.ContractId(nextCid()),
       template,
     )
   }

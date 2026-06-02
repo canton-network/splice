@@ -17,7 +17,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   validatorlicense as validatorLicenseCodegen,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
@@ -48,7 +47,7 @@ class DbValidatorStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -74,7 +73,7 @@ class DbValidatorStore(
         ),
         userVersion = acsStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = domainMigrationId,
       ingestionConfig,
     )
     with ValidatorStore
@@ -97,7 +96,6 @@ class DbValidatorStore(
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   override def lookupInstallByParty(
       endUserParty: PartyId

@@ -18,9 +18,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SequencerPruningMe
 import org.lfdecentralizedtrust.splice.sv.automation.{
   AmuletPriceMetricsTrigger,
   ReportSvStatusMetricsExportTrigger,
+  RewardProcessingMetrics,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
-import org.lfdecentralizedtrust.splice.store.{DomainParamsStore, HistoryMetrics, StoreMetrics}
+import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreMetrics}
 import org.lfdecentralizedtrust.splice.validator.metrics.TopologyMetrics
 import org.lfdecentralizedtrust.splice.wallet.metrics.AmuletMetrics
 
@@ -78,7 +79,6 @@ object MetricsDocs {
     val svParty = PartyId.tryFromProtoPrimitive("sv::namespace")
     val generator = new MetricsDocGenerator()
     // common
-    new DomainParamsStore.Metrics(generator)
     new HistoryMetrics(generator)(MetricsContext.Empty)
     new StoreMetrics(generator)(MetricsContext.Empty)
     new DamlGrpcClientMetrics(generator, "")
@@ -103,6 +103,7 @@ object MetricsDocs {
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
+    new RewardProcessingMetrics(generator)
     val svMetrics = generator.getAll()
     generator.reset()
     // scan

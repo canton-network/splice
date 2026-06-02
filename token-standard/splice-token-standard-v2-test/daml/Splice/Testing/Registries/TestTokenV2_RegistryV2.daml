@@ -73,6 +73,7 @@ instance RegistryApiV1.RegistryApi TestTokenV2Registry where
   getAllocationFactory = registryApi_getAllocationFactoryV1
   getAllocation_WithdrawContext = registryApi_getWithdrawContextV1
   getAllocation_CancelContext = registryApi_getCancelContextV1
+  getAllocationInstruction_WithdrawContext = registryApi_getAllocationInstructionContextV1
   getAllocation_TransferContext = registryApi_getAllocationTransferContextV1
   getTransferInstruction_AcceptContext = registryApi_getTransferOfferContextV1
   getTransferInstruction_RejectContext = registryApi_getTransferOfferContextV1
@@ -279,6 +280,10 @@ registryApi_getTransferOfferContextV2 registry instrCid _meta = do
   pure OpenApiChoiceContext with
     disclosures = disclosures <> mconcat lockedDs
     choiceContext = context
+
+registryApi_getAllocationInstructionContextV1 : TestTokenV2Registry -> ContractId V1.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
+registryApi_getAllocationInstructionContextV1 registry instrCid meta = do
+  registryApi_getAllocationInstructionContextV2 registry (coerceContractId instrCid) meta
 
 registryApi_getAllocationInstructionContextV2 : TestTokenV2Registry -> ContractId V2.AllocationInstruction -> Metadata -> Script OpenApiChoiceContext
 registryApi_getAllocationInstructionContextV2 registry instrCid _meta = do

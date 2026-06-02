@@ -27,7 +27,6 @@ import org.lfdecentralizedtrust.splice.validator.config.{
   ValidatorAppBackendConfig,
   ValidatorAppClientConfig,
 }
-import org.lfdecentralizedtrust.splice.validator.migration.DomainMigrationDump
 import org.lfdecentralizedtrust.splice.validator.{ValidatorApp, ValidatorAppBootstrap}
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.tokenstandard.{metadata, transferinstruction}
@@ -44,7 +43,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommandCounter
 
-import java.time.Instant
 import scala.concurrent.Future
 
 /** Console commands that can be executed either through client or backend reference.
@@ -159,23 +157,6 @@ abstract class ValidatorAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpValidatorAdminAppClient.DumpParticipantIdentities()
-      )
-    }
-  }
-
-  @Help.Summary("Extract validator data snapshot")
-  def getValidatorDomainDataSnapshot(
-      timestamp: String,
-      migrationId: Option[Long] = None,
-      force: Boolean = false,
-  ): DomainMigrationDump = {
-    consoleEnvironment.run {
-      httpCommand(
-        HttpValidatorAdminAppClient.GetValidatorDomainDataSnapshot(
-          Instant.parse(timestamp),
-          migrationId = migrationId,
-          force = force,
-        )
       )
     }
   }

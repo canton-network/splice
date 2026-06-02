@@ -19,10 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -47,7 +44,6 @@ class ScanVerdictAutomationService(
       config.automation,
       clock,
       DomainTimeSynchronization.Noop,
-      DomainUnpausedSynchronization.Noop,
       retryProvider,
     ) {
 

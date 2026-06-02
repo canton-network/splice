@@ -63,9 +63,14 @@ setupOtcTrade  = do
   let yId = InstrumentId with admin = registry.admin; id = "Y"
   let xId = InstrumentId with admin = registry.admin; id = "X"
 
-  alice <- allocatePartyExact "alice"
-  bob <- allocatePartyExact "bob"
-  bobProvider <- allocatePartyExact "bob-provider"
+  let mkParty name = do
+        p <- allocatePartyExact name
+        WalletClientV2.createBatchingUtility p
+        pure p
+
+  alice <- mkParty "alice"
+  bob <- mkParty "bob"
+  bobProvider <- mkParty "bob-provider"
   let aliceAccount = V2.Account with owner = Some alice; provider = None; id = "alice-account-1"
   let bobSendAccount = V2.Account with owner = Some bob; provider = Some bobProvider; id = "bob-account-joint-control"
   let bobReceiveAccount = V2.Account with owner = Some bob; provider = Some bobProvider; id = "bob-account-owner-control"

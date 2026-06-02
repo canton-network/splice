@@ -9,7 +9,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext, SynchronizerAlias}
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
   Limit,
@@ -156,10 +155,7 @@ class DbExternalPartyWalletStoreTest
       loggerFactory = loggerFactory,
       retryProvider =
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       participantId = mkParticipantId("ExternalPartyWalletStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
