@@ -1102,8 +1102,10 @@ class UserWalletTxLogParser(
           // because that one does not (easily) include the transfer legs whereas this one does
           case SettlementFactorySettle(node) =>
             now {
+              // Note we only need to parse the `transferLegs`, as they cover exactly the transfers being settled.
               node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
                 case (stateAcc, transferLeg) =>
+                  // Not all transfer legs are relevant to the txlog's user, so we filter down to the ones that are
                   if (
                     transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner.toScala
                       .contains(endUserPartyProtoPrimitive) || transferLeg.sender.owner.toScala
