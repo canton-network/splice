@@ -1,20 +1,29 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as _ from 'lodash';
 import {
+  DecentralizedSynchronizerUpgradeConfig,
+  EnvVarConfigSchema,
   KmsConfigSchema,
   LogLevelSchema,
-  CloudSqlConfigSchema,
   K8sResourceSchema,
 } from '@lfdecentralizedtrust/splice-pulumi-common';
 import { ValidatorAppConfigSchema } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/config';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
 import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { mergeConfigFragments } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configLoader';
 import { CnChartVersionSchema } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/versionSchema';
-import { merge } from 'lodash';
 import util from 'node:util';
 import { z } from 'zod';
 
 import { TopologySnapshotSchema } from './config';
+import {
+  CloudSqlWithOverrideConfigSchema,
+  PhysicalSynchronizersConfigOverridesSchema,
+  SvMediatorConfig,
+  SvMediatorConfigSchema,
+  SvSequencerConfig,
+  SvSequencerConfigSchema,
+} from './physicalSynchronizerConfig';
 
 const SvCometbftConfigSchema = z
   .object({
@@ -36,11 +45,6 @@ const SvCometbftConfigSchema = z
     additionalHelmValues: z.record(z.string(), z.any()).optional(),
   })
   .strict();
-const EnvVarConfigSchema = z.object({
-  name: z.string(),
-  value: z.string(),
-});
-export type EnvVarConfig = z.infer<typeof EnvVarConfigSchema>;
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -49,25 +53,6 @@ const CantonPruningSchema = z
     retentionPeriod: z.string().optional(),
   })
   .optional();
-const CloudSqlWithOverrideConfigSchema = CloudSqlConfigSchema.partial()
-  .default(spliceConfig.pulumiProjectConfig.cloudSql)
-  .transform(sqlConfig => merge({}, spliceConfig.pulumiProjectConfig.cloudSql, sqlConfig));
-const SvMediatorConfigSchema = z
-  .object({
-    additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
-    additionalJvmOptions: z.string().optional(),
-    cloudSql: CloudSqlWithOverrideConfigSchema,
-    resources: K8sResourceSchema,
-  })
-  .strict();
-const SvSequencerConfigSchema = z
-  .object({
-    additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
-    additionalJvmOptions: z.string().optional(),
-    cloudSql: CloudSqlWithOverrideConfigSchema,
-    resources: K8sResourceSchema,
-  })
-  .strict();
 const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
@@ -149,8 +134,9 @@ const SingleSvConfigSchema = z
     subdomain: z.string().optional(),
     cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
-    sequencer: SvSequencerConfigSchema.optional(),
-    mediator: SvMediatorConfigSchema.optional(),
+    sequencer: SvSequencerConfigSchema.prefault({}),
+    mediator: SvMediatorConfigSchema.prefault({}),
+    physicalSynchronizerOverrides: PhysicalSynchronizersConfigOverridesSchema.prefault({}),
     appsPg: AppsPgConfigSchema.optional(),
     svApp: SvAppConfigSchema.optional(),
     scanApp: ScanAppConfigSchema.optional(),
@@ -188,7 +174,30 @@ const SingleSvConfigSchema = z
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })
-  .strict();
+  .strict()
+  .transform(({ physicalSynchronizerOverrides, sequencer, mediator, ...svConfig }) => {
+    // Implicit config merging is confusing but for now I don't really see a better way of introducting these overrides.
+    // Perhaps a proper revisit of the synchronizerMigration config structure will lead to a better solution here.
+    const physicalSynchronizers = DecentralizedSynchronizerUpgradeConfig.allMigrations.map(
+      migration => [
+        migration.id,
+        {
+          mediator: mergeConfigFragments(
+            mediator,
+            physicalSynchronizerOverrides[migration.id]?.mediator || {}
+          ) as SvMediatorConfig,
+          sequencer: mergeConfigFragments(
+            sequencer,
+            physicalSynchronizerOverrides[migration.id]?.sequencer || {}
+          ) as SvSequencerConfig,
+        },
+      ]
+    );
+    return {
+      ...svConfig,
+      physicalSynchronizers: _.fromPairs(physicalSynchronizers),
+    };
+  });
 const AllSvsConfigurationSchema = z.record(z.string(), SingleSvConfigSchema);
 const SvsConfigurationSchema = z.object({
   svs: AllSvsConfigurationSchema,
