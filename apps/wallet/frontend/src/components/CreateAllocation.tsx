@@ -254,9 +254,6 @@ const CreateAllocation: React.FC = () => {
             <Button id="add-transfer-leg" startIcon={<Add />} onClick={addLeg}>
               Add Transfer Leg
             </Button>
-
-            <Divider />
-            <Typography variant="h5">Iterated Settlement Options</Typography>
             <FormControlLabel
               control={
                 <Checkbox
@@ -283,6 +280,10 @@ const CreateAllocation: React.FC = () => {
               }
               idPrefix="create-allocation"
             />
+
+            <Divider />
+
+            <Typography variant="h5">Iterated Settlement Options</Typography>
             <FormControlLabel
               control={
                 <Checkbox
