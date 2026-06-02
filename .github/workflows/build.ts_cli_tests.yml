@@ -23,7 +23,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if static only
-        uses: ./splice-shared-gha/.github/actions/tests/skip_on_static
+        uses: ./.github/actions/tests/skip_on_static
         id: skip
         with:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
@@ -39,7 +39,7 @@ jobs:
       - name: Setup
         id: setup
         if: steps.skip.outputs.skip != 'true'
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
           test_name: ts_cli
@@ -47,7 +47,7 @@ jobs:
 
       - name: Run Token Standard CLI tests
         if: steps.skip.outputs.skip != 'true'
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         with:
           cmd: "token-standard-cli/npmTest"
           fail_on_error_in_output: true
@@ -55,7 +55,7 @@ jobs:
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
-        uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
+        uses: ./.github/actions/tests/failure_notifications
         with:
           workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
           service_account: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}'
