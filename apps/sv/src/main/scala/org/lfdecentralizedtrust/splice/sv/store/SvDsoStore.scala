@@ -1522,6 +1522,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
         )
@@ -1531,6 +1532,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
         )

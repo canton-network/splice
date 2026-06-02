@@ -116,6 +116,13 @@
           - properly classify the burn of ANS in the V2 token standard transaction history
           - change ``V1.AllocationFactory_Allocate`` to enforce that ```settlement.allocateBefore``
             is strictly before ``settlement.settleBefore``
+          - introduce ``AmuletConfig.tokenStandardMaxTTL`` config parameter
+            with a default value of 90 days
+          - limit the maximum life-time of transfer instructions to ``tokenStandardMaxTTL``
+            to prevent excessively long-lived transfer instructions
+          - allow the DSO to expire both V1 and V2 amulet allocations older than
+            ``tokenStandardMaxTTL``, even if the settlement deadline has not yet passed
+
 
       - Add preview of the V2 token standard APIs and implement them for Amulet
 

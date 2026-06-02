@@ -221,3 +221,4 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   aid in creating metadata for V1 transaction history parsing for `V2.TransferInstruction_Accept` choices.
 - Replace `allocationV2_cancelDefaultImplUsingV1` with `allocationV2_cancelDefaultImpl`, which requires only
   `exeuctors` authority and allows the `admin` to cancel expired allocations
+- Remove `BackwardsCompatible V1.AllocationView` instance in favor of the more precise `upcast_v1_v2_AllocationView`

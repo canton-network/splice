@@ -324,20 +324,16 @@ test_refresh_and_withdrawal TestCase {..} = do
         Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
         pure (aliceAllocationCid, aliceAllocView)
 
-  -- immediate refresh should work and not bump expiry
+  -- immediate refresh should work and bump expiry
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid0
-  aliceAllocView0.expiresAt === aliceAllocView1.expiresAt
+  (fmap (`addRelTime` days 90) aliceAllocView0.expiresAt) === aliceAllocView1.expiresAt
   checkAllocationsAndHoldingExpiryAgree admin
 
-  -- refresh after 45 days still does not bump expiry
-  passTime (days 45)
+  -- a refresh works even after the current expiry, as long as the new expiry is in the future.
+  -- This is OK, as the only thing that matters is that the DSO party CAN expire the allocation.
+  passTime (days 181)
   (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid1
-  aliceAllocView0.expiresAt === aliceAllocView1.expiresAt
-
-  -- refresh after 45 days and 1 microsecond should bump expiry
-  passTime (microseconds 1)
-  (aliceAllocationCid1, aliceAllocView1) <- refreshAllocation aliceAllocationCid1
-  (fmap (`addRelTime` days 45) aliceAllocView0.expiresAt) === aliceAllocView1.expiresAt
+  (fmap (`addRelTime` days 180) aliceAllocView0.expiresAt) === aliceAllocView1.expiresAt
   checkAllocationsAndHoldingExpiryAgree admin
 
   -- withdrawing Alice's allocation after the settlement deadline must succeed

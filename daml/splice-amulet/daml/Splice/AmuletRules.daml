@@ -1681,6 +1681,7 @@ scaleFees s c = TransferConfig with
     maxNumInputs = c.maxNumInputs
     maxNumOutputs = c.maxNumOutputs
     maxNumLockHolders = c.maxNumLockHolders
+    tokenStandardMaxTTL = c.tokenStandardMaxTTL
 
 -- | Scale the 'TranserConfigV2' such that the fees charged are scaled by the same scale factor.
 scaleFees2 : Decimal -> TransferConfigV2 Unit.USD -> TransferConfigV2 Amulet
@@ -1689,6 +1690,7 @@ scaleFees2 s c = TransferConfigV2 with
     maxNumInputs = c.maxNumInputs
     maxNumOutputs = c.maxNumOutputs
     maxNumLockHolders = c.maxNumLockHolders
+    tokenStandardMaxTTL = c.tokenStandardMaxTTL
 
 transferConfigAmuletFromOpenRound : OpenMiningRound -> TransferConfig Amulet
 transferConfigAmuletFromOpenRound openRound = scaleFees (1.0 / openRound.amuletPrice) openRound.transferConfigUsd

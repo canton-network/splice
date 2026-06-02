@@ -109,6 +109,7 @@ export const buildScanMock = (baseScanUrl: string): HttpHandler[] => {
                       ],
                     },
                     maxNumOutputs: '100',
+                    tokenStandardMaxTTL: null,
                   },
                   targetClosesAt: '2025-02-03T14:03:37.895871Z',
                   round: {
@@ -180,6 +181,7 @@ export const buildScanMock = (baseScanUrl: string): HttpHandler[] => {
                       ],
                     },
                     maxNumOutputs: '100',
+                    tokenStandardMaxTTL: null,
                   },
                   targetClosesAt: '2025-02-03T14:14:09.430298Z',
                   round: {
@@ -251,6 +253,7 @@ export const buildScanMock = (baseScanUrl: string): HttpHandler[] => {
                       ],
                     },
                     maxNumOutputs: '100',
+                    tokenStandardMaxTTL: null,
                   },
                   targetClosesAt: '2025-02-03T14:24:37.024279Z',
                   round: {

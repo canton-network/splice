@@ -9,6 +9,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
+import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
@@ -21,6 +22,7 @@ import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
 import Splice.Amulet
+import Splice.AmuletConfig (getTokenStandardMaxTTL)
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer
 import Splice.AmuletAllocation as AmuletAllocationV1
@@ -355,13 +357,16 @@ amulet_transferFactory_transferImpl this _self arg = do
   -- amount:
   require "Amount must be positive" (transfer.amount > 0.0)
   -- requestedAt:
-  assertDeadlineExceeded "Transfer.requestedAt" transfer.requestedAt
-  -- executeBefore:
-  assertWithinDeadline "Transfer.executeBefore" transfer.executeBefore
+  assertDeadlineExceeded "transfer.requestedAt" transfer.requestedAt
+  -- executeBefore: must be in the future, but not too far
+  assertWithinDeadline "transfer.executeBefore" transfer.executeBefore
+  (_, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+  let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
+  let transferLifetime = transfer.executeBefore `subTime` transfer.requestedAt
+  require' ("transferLifetime", transferLifetime) isLessOrEqualR
+    ("tokenStandardMaxTTL", getTokenStandardMaxTTL configAmulet)
   -- inputHoldingCids: note that their detailed validation is done in the transfer itself
   require "At least one holding must be provided" (not $ null transfer.inputHoldingCids)
-
-  -- TODO(#4665): limit time between requestedAt and executeBefore, i.e., max lock duration (and add to release notes)
 
   -- execute the right direction of transfer
   case optPreapprovalCid of
@@ -510,8 +515,12 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- requestedAt (of the allocation instruction itself):
   assertDeadlineExceeded "requestedAt" requestedAt
 
+  -- compute the allocation expiry time
+  (_, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+  let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
+  expiresAt <- computeAllocationExpiry configAmulet requestedAt allocation.settlementDeadline
+
   -- create locked amulet if required
-  let expiresAt = computeAllocationExpiry requestedAt allocation.settlementDeadline
   if fundingAmount <= 0.0
   then do
     -- return input cids as change, so they can be reused on chaining
@@ -561,8 +570,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
         inputHoldingCids = map upcast arg.inputHoldingCids
         actors = [arg.allocation.transferLeg.sender]
         extraArgs = arg.extraArgs
-  -- TODO(#4665): use `expiresAt` below and enforce max lock duration and add early expiry to V1 allocation
-  (optLockedAmulet, senderChangeCids, _expiresAt, meta) <-
+  (optLockedAmulet, senderChangeCids, expiresAt, meta) <-
     amulet_allocationFactoryV2_allocateImplCore externalAmuletRules argV2 fundingAmount
 
   -- create the amulet allocation
@@ -570,6 +578,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   allocationCid <- toInterfaceContractId <$> create AmuletAllocation with
     allocation = arg.allocation
     lockedAmulet
+    expiresAt = Some expiresAt
   pure V1.AllocationInstructionResult with
     senderChangeCids
     output = V1.AllocationInstructionResult_Completed with allocationCid

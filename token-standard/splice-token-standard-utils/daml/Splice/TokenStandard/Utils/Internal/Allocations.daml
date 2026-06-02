@@ -532,14 +532,6 @@ instance BackwardCompatible AllocationV1.AllocationSpecification AllocationV2.Al
       committed = False
       meta = emptyMetadata
 
--- | Use this instance only if your allocation:
---   - does not evolve over time, as the upcast always uses `None` for the `originalAllocationCid`
---   - does not use a an expiry time shorter than the settlement deadline, as the upcast uses the settlement deadline as the expiry time.
-instance BackwardCompatible AllocationV1.AllocationView AllocationV2.AllocationView where
-  upcast thisView =
-    let expiresAt = Some thisView.allocation.settlement.settleBefore in
-    upcast_v1_v2_AllocationView None expiresAt (allocationV1_availableActionsDefault thisView) thisView
-
 -- | Generic method that allows to upcast a V1 allocation specification to a V2 one with custom available actions,
 -- and a custom `originalAllocationCid`.
 upcast_v1_v2_AllocationView
@@ -756,7 +748,7 @@ tryDowncast_v2_v1_AllocationView allocateBefore v2View = do
       transferLegId = v2TransferLeg.transferLegId
       transferLeg = downcast_v2_v1_TransferLeg v2View.allocation.admin v2TransferLeg
     holdingCids = map downcast v2View.holdingCids
-    meta = v2View.meta
+    meta = expiresAtToMeta v2View.expiresAt v2View.meta
 
 -- | Adapter to implement `V1.Allocation_Cancel` using the body of the V2 choice.
 --

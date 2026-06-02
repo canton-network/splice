@@ -1,0 +1,178 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestAmuletAllocationExpiry where
+
+import DA.Assert
+import DA.Foldable (forA_)
+import DA.Time
+import DA.TextMap qualified as TextMap
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.AllocationV2 qualified as V2
+
+import Splice.ExternalPartyConfigState
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Utils
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as RegistryApiV2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+
+-- Test expiry of V1 and V2 amulet allocations
+----------------------------------------------
+
+test_AmuletAllocationV2_DsoExpire : Script ()
+test_AmuletAllocationV2_DsoExpire = do
+  env@(TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+  testExpiresAfter env (days 90)
+
+test_AmuletAllocationV1_DsoExpire : Script ()
+test_AmuletAllocationV1_DsoExpire = do
+  env@(TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1
+  testExpiresAfter env (days 90)
+
+test_AmuletAllocationV2_DsoExpire_non_default_ttl : Script ()
+test_AmuletAllocationV2_DsoExpire_non_default_ttl = do
+  env@(TestEnv {..}) <- setupTest
+  let newTTL = days 120
+  setTokenStandardTTL env newTTL
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+  testExpiresAfter env newTTL
+
+test_AmuletAllocationV1_DsoExpire_non_default_ttl : Script ()
+test_AmuletAllocationV1_DsoExpire_non_default_ttl = do
+  env@(TestEnv {..}) <- setupTest
+  let newTTL = days 120
+  setTokenStandardTTL env newTTL
+  WalletClientV2.allocateV1 registries allocationV1
+  testExpiresAfter env newTTL
+
+
+-- Shared test setup
+--------------------
+
+data TestEnv = TestEnv with
+  registries : MultiRegistry.MultiRegistry
+  alice : Party
+  aliceAccount : V2.Account
+  bob : Party
+  provider : Party
+  instrId : V2.InstrumentId
+  settlementV2 : V2.SettlementInfo
+  allocationV2 : V2.AllocationSpecification
+  allocationV1 : V1.AllocationSpecification
+
+
+setupTest : Script TestEnv
+setupTest = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registries = env.registries
+  let instrId = env.amuletV2.instrumentId
+
+  alice <- allocatePartyExact "alice"
+  bob <- allocatePartyExact "bob"
+  provider <- allocatePartyExact "provider"
+
+  let mkAccount = TSU.basicAccount
+
+  -- setup alice
+  WalletClientV2.createBatchingUtility alice
+  AmuletRegistryV2.tapFaucet env.amuletV2 alice 1000.0
+
+  now <- getTime
+  pure TestEnv with
+    registries
+    alice
+    aliceAccount = mkAccount alice
+    bob
+    provider
+    instrId
+
+    settlementV2 = V2.SettlementInfo with
+      executors = [provider]
+      id = "settlement1"
+      cid = None
+      meta = emptyMetadata
+    allocationV2 = V2.AllocationSpecification with
+      admin = instrId.admin
+      authorizer = mkAccount alice
+      transferLegSides = []
+      committed = False
+      nextIterationFunding = Some $ TextMap.fromList [(instrId.id, 10.0)]
+      settlementDeadline = None
+      meta = emptyMetadata
+
+    allocationV1 = V1.AllocationSpecification with
+      settlement = V1.SettlementInfo with
+        executor = provider
+        settlementRef = V1.Reference with
+          id = "settlement1"
+          cid = None
+        requestedAt = now
+        allocateBefore = now `addRelTime` days 7
+        settleBefore = now `addRelTime` days 365
+        meta = emptyMetadata
+      transferLegId = "leg1"
+      transferLeg = TSU.downcast_v2_v1_TransferLeg instrId.admin $ V2.TransferLeg with
+        transferLegId = "leg1"
+        sender = mkAccount alice
+        receiver = mkAccount bob
+        amount = 10.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+
+
+setTokenStandardTTL : TestEnv -> RelTime -> Script ()
+setTokenStandardTTL env newTTL = do
+  let dso = env.instrId.admin
+  configStates <- query @ExternalPartyConfigState dso
+  forA_ configStates $ \(cid, state) -> do
+    submit dso $ exerciseCmd cid Archive
+    submit dso $ createCmd state with
+      transferConfig = state.transferConfig with
+        tokenStandardMaxTTL = Some newTTL
+
+
+testExpiresAfter : TestEnv -> RelTime -> Script ()
+testExpiresAfter TestEnv {..} allocationTTL = do
+  -- DSO party expires
+  let dso = instrId.admin
+  registry <- MultiRegistry.getRegistryApiV2 registries dso
+  [(allocCid, Some allocView)] <- queryInterface @V2.Allocation dso
+  context <- RegistryApiV2.getAllocation_CancelContext registry allocCid emptyMetadata
+
+  -- expiry is 90 days in the future
+  now <- getTime
+  let expectedExpiresAt = now `addRelTime` allocationTTL
+  allocView.expiresAt === Some expectedExpiresAt
+
+  let cancelCmd = exerciseCmd allocCid V2.Allocation_Cancel with
+        actors = [dso]
+        extraArgs = ExtraArgs with
+          context = context.choiceContext
+          meta = emptyMetadata
+
+  -- cancel fails if we are before the expiry time
+  submitMustFail dso cancelCmd
+
+  -- cancel succeeds after expiry time
+  setTime expectedExpiresAt
+  result <- submit dso cancelCmd
+  TSU.reasonFromMeta result.meta === "cancelled expired allocation"
+
+  -- the allocation is gone
+  [] <- queryInterface @V2.Allocation dso
+
+  pure ()
+

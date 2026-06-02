@@ -104,7 +104,7 @@ instance ForwardCompatible TransferInstructionV1.TransferInstructionView Transfe
       originalInstructionCid = fmap downcast v2.originalInstructionCid
       transfer = v1Transfer
       status
-      meta = v2.meta
+      meta = expiresAtToMeta v2.expiresAt v2.meta
     where
       v1Transfer = downcast v2.transfer
       status = case Map.lookup TransferInstructionV2.TIA_Accept (v2.availableActions) of

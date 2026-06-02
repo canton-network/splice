@@ -130,6 +130,7 @@ export function getAmuletRulesConfig(
         fee: createFee,
       },
       maxNumLockHolders: '50',
+      tokenStandardMaxTTL: null,
       transferFee: {
         initialRate: '0.01',
         steps: [
@@ -309,7 +310,10 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
             class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
           class="jsondiffpatch-unchanged" data-key="maxNumLockHolders"><div
             class="jsondiffpatch-property-name">maxNumLockHolders</div><div
-            class="jsondiffpatch-value"><pre>"50"</pre></div></li></ul></li><li
+            class="jsondiffpatch-value"><pre>"50"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="tokenStandardMaxTTL"><div
+            class="jsondiffpatch-property-name">tokenStandardMaxTTL</div><div
+            class="jsondiffpatch-value"><pre>null</pre></div></li></ul></li><li
       class="jsondiffpatch-unchanged" data-key="issuanceCurve"><div
         class="jsondiffpatch-property-name">issuanceCurve</div><div
         class="jsondiffpatch-value"><pre>{

@@ -22,6 +22,7 @@ import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils hiding (require)
 
 import Splice.Amulet
+import Splice.AmuletConfig (TransferConfigV2, getTokenStandardMaxTTL)
 import Splice.AmuletRules
 import Splice.AmuletAllocation qualified as AmuletAllocationV1
 import Splice.Amulet.TwoStepTransfer
@@ -134,8 +135,10 @@ template AmuletAllocationV2
               amount = expiringAmount configAmulet.holdingFee payoutAmount configState.holdingFeesOpenRoundNumber
             pure [toInterfaceContractId amuletCid]
 
-        -- create the locked amulet for the next iteration, if needed
-        newExpiresAt <- bumpAllocationExpiry expiresAt allocation.settlementDeadline
+        -- Bump the allocation expiry using the old `expiresAt` as the "current time",
+        -- which is safe to do as the traffic spend to iterate the allocation covers
+        -- the cost of storing the allocation for the longer period.
+        newExpiresAt <- computeAllocationExpiry configAmulet expiresAt allocation.settlementDeadline
         lockedAmulet <-
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
@@ -210,27 +213,13 @@ validateAmuletTransferLegs transferLegs = do
     requireMatchExpected ("transferLeg.instrumentId", leg.instrumentId) amuletInstrumentIdName
     require' ("transferLeg.amount", leg.amount) isGreaterOrEqualR ("zero", 0.0)
 
--- | Minimum time-to-live for an amulet allocation. The maximum is then twice that much.
--- TODO(#4665): make max duration configurable; and also implement for transfer instructions
-minAmuletAllocationTTL : RelTime
-minAmuletAllocationTTL = days 45
+computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
+computeAllocationExpiry transferConfig now settlementDeadline = do
+  let expiresAt = optional identity min settlementDeadline $
+        now `addRelTime` getTokenStandardMaxTTL transferConfig
+  assertWithinDeadline "allocation.expiresAt" expiresAt
+  pure expiresAt
 
-maxAmuletAllocationTTL : RelTime
-maxAmuletAllocationTTL = minAmuletAllocationTTL + minAmuletAllocationTTL
-
-computeAllocationExpiry : Time -> Optional Time -> Time
-computeAllocationExpiry now settlementDeadline =
-  optional identity min settlementDeadline $
-  now `addRelTime` maxAmuletAllocationTTL
-
--- | Bump the allocation expiry such that the allocation has an expiry
--- time between `minAmuletAllocationTTL` and `maxAmuletAllocationTTL` from now.
-bumpAllocationExpiry : Time -> Optional Time -> Update Time
-bumpAllocationExpiry currentExpiresAt settlementDeadline = do
-  dontBump <- isLedgerTimeLE (currentExpiresAt `addRelTime` negate minAmuletAllocationTTL)
-  pure $ if dontBump then currentExpiresAt else
-    optional identity min settlementDeadline $
-    addRelTime currentExpiresAt minAmuletAllocationTTL
 
 
 -- instances

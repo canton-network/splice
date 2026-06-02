@@ -30,6 +30,8 @@ data TransferConfig unit = TransferConfig with
     maxNumInputs : Int -- ^ Maximum number of batch inputs for a transfer.
     maxNumOutputs : Int -- ^ Maximum number of batch outputs for a transfer.
     maxNumLockHolders : Int -- ^ Maximum number of lock holders allowed for a locked amulet.
+    tokenStandardMaxTTL : Optional RelTime
+      -- ^ Maximum time to live for token standard state contracts (allocations and transfer instructions).  Defaults to 90 days.
   deriving (Eq, Show)
 
 transferConfigToTransferConfigV2 : TransferConfig unit -> TransferConfigV2 unit
@@ -38,6 +40,7 @@ transferConfigToTransferConfigV2 tc = TransferConfigV2 with
     maxNumInputs = tc.maxNumInputs
     maxNumOutputs = tc.maxNumOutputs
     maxNumLockHolders = tc.maxNumLockHolders
+    tokenStandardMaxTTL = tc.tokenStandardMaxTTL
 
 -- | Stripped down TransferConfig after CIP 78 removed fees.
 data TransferConfigV2 unit = TransferConfigV2 with
@@ -45,7 +48,12 @@ data TransferConfigV2 unit = TransferConfigV2 with
     maxNumInputs : Int
     maxNumOutputs : Int
     maxNumLockHolders : Int
+    tokenStandardMaxTTL : Optional RelTime
   deriving (Eq, Show)
+
+-- | Get the TTL for token standard state contracts, falling back to a default if not specified.
+getTokenStandardMaxTTL : TransferConfigV2 unit -> RelTime
+getTokenStandardMaxTTL config = fromOptional (days 90) config.tokenStandardMaxTTL
 
 
 -- Reward configuration
@@ -210,6 +218,7 @@ instance Patchable (TransferConfig USD) where
     maxNumInputs = patch new.maxNumInputs base.maxNumInputs current.maxNumInputs
     maxNumOutputs = patch new.maxNumOutputs base.maxNumOutputs current.maxNumOutputs
     maxNumLockHolders = patch new.maxNumLockHolders base.maxNumLockHolders current.maxNumLockHolders
+    tokenStandardMaxTTL = patch new.tokenStandardMaxTTL base.tokenStandardMaxTTL current.tokenStandardMaxTTL
 
 instance Patchable PackageConfig where
   patch new base current = PackageConfig with

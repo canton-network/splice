@@ -490,6 +490,9 @@ object SpliceUtil {
       // Chosen conservatively, but high enough to invite thinking about what's possible.
       50,
       // 2.5 min default duration
+
+      // token standard state TTL
+      java.util.Optional.empty(),
     )
 
   def baseRateLimits(baseRateBurstAmount: Long, baseRateBurstWindow: NonNegativeFiniteDuration) = {

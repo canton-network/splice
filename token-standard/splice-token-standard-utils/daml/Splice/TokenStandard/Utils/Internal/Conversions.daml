@@ -16,6 +16,7 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   -- * Metadata conversion
   timeToMeta,
   timeFromMeta,
+  expiresAtToMeta,
   maxTime,
   partiesFromMeta,
   partiesToMeta,
@@ -248,6 +249,11 @@ partiesFromMeta field meta =
     tryPartyFromText p = case partyFromText p of
       None -> error $ "Invalid party in metadata field '" <> field <> "': " <> p
       Some party -> party
+
+-- | Report early expiry of instructions or allocations in the V1 metadata.
+expiresAtToMeta : Optional Time -> Metadata -> Metadata
+expiresAtToMeta None meta = meta
+expiresAtToMeta (Some t) meta = timeToMeta "expiresAt" t meta
 
 
 -- Holding change metadata
