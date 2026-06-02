@@ -141,7 +141,7 @@ setTokenStandardTTL env newTTL = do
     submit dso $ exerciseCmd cid Archive
     submit dso $ createCmd state with
       transferConfig = state.transferConfig with
-        tokenStandardStateTTL = Some newTTL
+        tokenStandardMaxTTL = Some newTTL
 
 
 testExpiresAfter : TestEnv -> RelTime -> Script ()

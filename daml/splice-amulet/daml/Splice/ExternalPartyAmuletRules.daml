@@ -22,7 +22,7 @@ import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
 import Splice.Amulet
-import Splice.AmuletConfig (getTokenStandardStateTTL)
+import Splice.AmuletConfig (getTokenStandardMaxTTL)
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer
 import Splice.AmuletAllocation as AmuletAllocationV1
@@ -364,7 +364,7 @@ amulet_transferFactory_transferImpl this _self arg = do
   let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
   let transferLifetime = transfer.executeBefore `subTime` transfer.requestedAt
   require' ("transferLifetime", transferLifetime) isLessOrEqualR
-    ("tokenStandardStateTTL", getTokenStandardStateTTL configAmulet)
+    ("tokenStandardMaxTTL", getTokenStandardMaxTTL configAmulet)
   -- inputHoldingCids: note that their detailed validation is done in the transfer itself
   require "At least one holding must be provided" (not $ null transfer.inputHoldingCids)
 

@@ -52,7 +52,7 @@ defaultTransferConfig = TransferConfig with
 
     -- Time to live for token standard state contracts (allocations and transfer instructions).
     -- Not set by default so that default is used and downgrades are possible.
-    tokenStandardStateTTL = None
+    tokenStandardMaxTTL = None
 
 -- | Decentralized synchronizer config to use for testing.
 defaultAmuletDecentralizedSynchronizerConfig : AmuletDecentralizedSynchronizerConfig

@@ -22,7 +22,7 @@ import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils hiding (require)
 
 import Splice.Amulet
-import Splice.AmuletConfig (TransferConfigV2, getTokenStandardStateTTL)
+import Splice.AmuletConfig (TransferConfigV2, getTokenStandardMaxTTL)
 import Splice.AmuletRules
 import Splice.AmuletAllocation qualified as AmuletAllocationV1
 import Splice.Amulet.TwoStepTransfer
@@ -216,7 +216,7 @@ validateAmuletTransferLegs transferLegs = do
 computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
 computeAllocationExpiry transferConfig now settlementDeadline = do
   let expiresAt = optional identity min settlementDeadline $
-        now `addRelTime` getTokenStandardStateTTL transferConfig
+        now `addRelTime` getTokenStandardMaxTTL transferConfig
   assertWithinDeadline "allocation.expiresAt" expiresAt
   pure expiresAt
 
