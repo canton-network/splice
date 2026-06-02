@@ -60,7 +60,7 @@ object PackageIdResolver {
       case TokenStandard.SpliceApiTokenAllocationInstructionV2 =>
         DarResources.TokenStandard.apiTokenAllocationInstructionV2.latest.metadata.version
           .toString()
-      case TokenStandard.SpliceApiTokenStandardEventsV2 =>
+      case TokenStandard.SpliceApiTokenTransferEventsV2 =>
         DarResources.TokenStandard.apiTokenTransferEventsV2.latest.metadata.version.toString()
       case TokenStandard.SpliceTokenStandardUtils =>
         DarResources.TokenStandard.tokenStandardUtils.latest.metadata.version.toString()
@@ -115,7 +115,7 @@ object PackageIdResolver {
       final case object SpliceApiTokenAllocationV2 extends Package
       final case object SpliceApiTokenAllocationRequestV2 extends Package
       final case object SpliceApiTokenAllocationInstructionV2 extends Package
-      final case object SpliceApiTokenStandardEventsV2 extends Package
+      final case object SpliceApiTokenTransferEventsV2 extends Package
 
       final case object SpliceTokenStandardUtils extends Package
       final case object SpliceUtilTokenStandardWallet extends Package
