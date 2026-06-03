@@ -115,7 +115,13 @@ class SplitwellApp(
     }
     storeKey = SplitwellStore.Key(providerParty = partyId)
     domainMigrationId <- appInitStep(s"Resolving domain migration id") {
-      scanConnection.getMigrationId()
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "splitwell_domain_migration_id",
+        s"Wait for splitwell domain migration id to be available",
+        scanConnection.getMigrationId(),
+        logger,
+      )
     }
     store = SplitwellStore(
       storeKey,
