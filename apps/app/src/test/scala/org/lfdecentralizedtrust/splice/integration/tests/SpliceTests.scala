@@ -62,7 +62,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
   type SharedSpliceEnvironment =
     BaseSharedEnvironment[SpliceConfig, SpliceEnvironment]
   type IsolatedSpliceEnvironments =
-    IsolatedEnvironments[SpliceConfig, SpliceEnvironment]
+    BaseIsolatedEnvironments[SpliceConfig, SpliceEnvironment]
 
   trait IntegrationTestWithIsolatedEnvironment
       extends BaseIntegrationTest[SpliceConfig, SpliceEnvironment]
