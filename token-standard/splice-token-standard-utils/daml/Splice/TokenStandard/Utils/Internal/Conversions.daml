@@ -237,12 +237,12 @@ partiesToMeta field parties meta
   | null parties = meta
   | otherwise =
       Metadata $
-      TextMap.insert (tokenStandardV2Namespace <> field) (T.intercalate "," (map partyToText parties)) $
+      TextMap.insert field (T.intercalate "," (map partyToText parties)) $
       meta.values
 
 partiesFromMeta : Text -> Metadata -> [Party]
 partiesFromMeta field meta =
-    case TextMap.lookup (tokenStandardV2Namespace <> field) meta.values of
+    case TextMap.lookup field meta.values of
       None -> []
       Some txt -> map tryPartyFromText (T.splitOn "," txt)
   where

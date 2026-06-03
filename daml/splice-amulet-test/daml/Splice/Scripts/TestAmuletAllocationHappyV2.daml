@@ -13,6 +13,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (sort)
 import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
 import DA.Time
 
 import Daml.Script
@@ -209,17 +210,41 @@ test_withdrawCancel_generic mkTest = do
   mkTest testEnv allocCid
   checkReset
 
-test_allocation_WithdrawV2_committed_availableActions : Script ()
-test_allocation_WithdrawV2_committed_availableActions = do
+test_allocationV1_WithdrawV2_multiExecutors_availableActions : Script ()
+test_allocationV1_WithdrawV2_multiExecutors_availableActions = do
   (TestEnv {..}) <- setupTest
-  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
-    settlementDeadline = None
-    committed = True
+  provider2 <- allocatePartyExact "provider2"
+  WalletClientV2.allocateV1 registries allocationV1 with
+    transferLeg = allocationV1.transferLeg with
+      meta = Metadata with
+        values = TextMap.fromList
+          [ (TSU.extraExecutorsMetaField, partyToText provider2)
+          ]
+  [(_, allocV2)] <- query @AmuletAllocation alice
+  let allocView = view (toInterface @V2.Allocation allocV2)
+  let expectedActions = Map.fromList
+        -- TODO(#4517): also test available actions with sender accounts
+        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider, provider2]])
+        , (V2.AA_Withdraw, [[alice]])
+        ]
+  checkEq "availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+test_allocationV2_WithdrawV2_committed_availableActions : Script ()
+test_allocationV2_WithdrawV2_committed_availableActions = do
+  (TestEnv {..}) <- setupTest
+  provider2 <- allocatePartyExact "provider2"
+  WalletClientV2.allocateV2 registries alice
+    settlementV2 with
+      executors = [provider, provider2]
+    allocationV2 with
+      settlementDeadline = None
+      committed = True
   [(_, allocV2)] <- query @AmuletAllocationV2 alice
   let allocView = view (toInterface @V2.Allocation allocV2)
   let expectedActions = Map.fromList
-        [ (V2.AA_Settle, [sort [provider, instrId.admin]])
-        , (V2.AA_Cancel, [[provider]])
+        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider, provider2]])
           -- No withdraw for a fully committed allocation.
         ]
   checkEq "committed.availableActions" expectedActions (map sort <$> allocView.availableActions)

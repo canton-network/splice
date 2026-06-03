@@ -41,6 +41,10 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
   tryDowncast_v2_v1_AllocationView,
 
+  -- FIXME: naming
+  extraExecutorsMetaField,
+  executorsFromSettlementInfoV1,
+
   -- ** Choice implementations
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImpl,
@@ -460,13 +464,16 @@ transferLegSidesWithAuthorizer : AllocationV2.TransferLeg -> [(HoldingV2.Account
 transferLegSidesWithAuthorizer leg = [(leg.sender, senderSide leg), (leg.receiver, receiverSide leg)]
 
 
-
 -- Allocation casts
 -------------------
 
 -- TODO(#4517): test the round-tripping of 'extra-executors' in the metadata.
 extraExecutorsMetaField : Text
-extraExecutorsMetaField = "extra-executors"
+extraExecutorsMetaField = tokenStandardV2Namespace <> "extra-executors"
+
+executorsFromSettlementInfoV1 : AllocationV1.SettlementInfo -> [Party]
+executorsFromSettlementInfoV1 info =
+    info.executor :: partiesFromMeta extraExecutorsMetaField info.meta
 
 downcast_v2_v1_TransferLeg : Party -> AllocationV2.TransferLeg -> AllocationV1.TransferLeg
 downcast_v2_v1_TransferLeg admin (AllocationV2.TransferLeg with sender, receiver, amount, instrumentId, meta) =
@@ -495,10 +502,10 @@ instance ForwardCompatible AllocationV1.Reference AllocationV2.SettlementInfo wh
   downcast info = AllocationV1.Reference with id = info.id; cid = info.cid
 
 instance BackwardCompatible AllocationV1.SettlementInfo AllocationV2.SettlementInfo where
-  upcast (AllocationV1.SettlementInfo with executor, settlementRef, requestedAt, allocateBefore, settleBefore, meta) =
+  upcast info@(AllocationV1.SettlementInfo with executor, settlementRef, requestedAt, allocateBefore, settleBefore, meta) =
 
     AllocationV2.SettlementInfo with
-      executors = executor :: partiesFromMeta extraExecutorsMetaField meta
+      executors = executorsFromSettlementInfoV1 info
       id = settlementRef.id
       cid = settlementRef.cid
       meta = dropMeta extraExecutorsMetaField meta
@@ -550,12 +557,14 @@ upcast_v1_v2_AllocationView originalAllocationCid expiresAt availableActions (Al
 -- and it is not expected to be executed via a token standard wallet.
 allocationV1_availableActionsDefault : AllocationV1.AllocationView -> Map.Map AllocationV2.AllocationAction [[Party]]
 allocationV1_availableActionsDefault allocView = Map.fromList
-  [ (AllocationV2.AA_Withdraw, [[leg.sender]])
-  , (AllocationV2.AA_Settle, [[allocation.settlement.executor, leg.instrumentId.admin]])
-  , (AllocationV2.AA_Cancel, [[allocation.settlement.executor]])
-
+  [ (AllocationV2.AA_Withdraw, [[accountPrincipal admin sender]])
+  , (AllocationV2.AA_Settle, [admin :: executors])
+  , (AllocationV2.AA_Cancel, [executors])
   ]
   where
+    admin = leg.instrumentId.admin
+    sender = accountFromMeta leg.sender "sender" leg.meta
+    executors = executorsFromSettlementInfoV1 allocView.allocation.settlement
     allocation = allocView.allocation
     leg = allocation.transferLeg
 

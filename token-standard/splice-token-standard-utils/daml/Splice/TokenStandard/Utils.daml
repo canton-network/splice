@@ -20,6 +20,8 @@ module Splice.TokenStandard.Utils (
   ensureNoAccountMeta,
   accountFromMeta,
   accountToMeta,
+  partiesFromMeta,
+  partiesToMeta,
 
   -- ** Requirements checking
   require,
@@ -136,6 +138,9 @@ module Splice.TokenStandard.Utils (
   downcast_v2_v1_SettlementInfo,
   upcast_v1_v2_AllocationView,
   tryDowncast_v2_v1_AllocationView,
+
+  extraExecutorsMetaField,
+  executorsFromSettlementInfoV1,
 
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
