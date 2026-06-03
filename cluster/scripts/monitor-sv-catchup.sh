@@ -44,8 +44,11 @@ _info "Caught-up when: seq<=${seq_delay_ok}s, participant<=${part_delay_ok}s, me
 _info "Timeout: ${timeout_hours}h"
 
 function query_prom() {
+  local ts
+  ts=$(date -d '2 minutes ago' +%s) # starting the monitoring takes some time
   curl -ksf "${PROM}/api/v1/query" \
     --data-urlencode "query=${1}" \
+    --data-urlencode "time=${ts}" \
  | jq -r '.data.result[0].value[1] // "999999"'
 }
 
