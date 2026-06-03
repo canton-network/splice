@@ -325,4 +325,8 @@ class CachingScanStore(
   }
 
   def defaultLimit: Limit = store.defaultLimit
+
+  // TODO(DACH-NY/canton-network-internal#2982) Remove this testing endpoint
+  override def dangerousSleep(lookForInLogs: String)(implicit tc: TraceContext): Future[Unit] =
+    store.dangerousSleep(lookForInLogs)
 }

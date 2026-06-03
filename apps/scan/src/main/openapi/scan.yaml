@@ -1767,9 +1767,42 @@ paths:
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 
+  /v42/dangerous-sleep:
+    # TODO(DACH-NY/canton-network-internal#2982) Remove this testing endpoint
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getDangerousSleep"
+      description: |
+        **For testing only** - This endpoint is used to test database connection handling
+        under long-running queries. It will sleep for 5 minutes.
+      parameters:
+        - name: "lookForInLogs"
+          in: "query"
+          required: true
+          schema:
+            type: string
+          description: A parameter value that will be incorporated into the SQL query for CloudSQL log inspection
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DangerousSleepResponse"
 
 components:
   schemas:
+    DangerousSleepResponse:
+      type: object
+      required:
+        - slept_seconds
+      properties:
+        slept_seconds:
+          type: integer
+          format: int64
+          description: The number of seconds the endpoint slept
+
     GetSpliceInstanceNamesResponse:
       type: object
       required:
