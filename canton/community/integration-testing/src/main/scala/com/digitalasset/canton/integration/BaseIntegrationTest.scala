@@ -13,8 +13,8 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
-import com.digitalasset.canton.config.SharedCantonConfig
-import com.digitalasset.canton.environment.Environment
+import com.digitalasset.canton.config.{CantonConfig, SharedCantonConfig}
+import com.digitalasset.canton.environment.{CantonEnvironment, Environment}
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
@@ -26,9 +26,9 @@ import scala.jdk.CollectionConverters.*
 /** A highly opinionated base trait for writing integration tests interacting with a canton
   * environment using console commands. Tests must mixin a further [[EnvironmentSetup]]
   * implementation to define when the canton environment is setup around the individual tests:
-  *   - [[IsolatedEnvironments]] will construct a fresh environment for each test.
-  *   - [[SharedEnvironment]] will construct only a single environment and reuse this for each test
-  *     executed in the test class.
+  *   - [[BaseIsolatedEnvironments]] will construct a fresh environment for each test.
+  *   - [[BaseSharedEnvironment]] will construct only a single environment and reuse this for each
+  *     test executed in the test class.
   *
   * Test classes must override [[HasEnvironmentDefinition.environmentDefinition]] to describe how
   * they would like their environment configured.
@@ -200,4 +200,8 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
         .flatMap(_.asScalaProtoCreated)
         .toList
   }
+}
+
+object BaseIntegrationTest {
+  type Canton = BaseIntegrationTest[CantonConfig, CantonEnvironment]
 }

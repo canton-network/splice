@@ -14,6 +14,7 @@ package object integration {
   type TestConsoleEnvironment = BaseTestConsoleEnvironment[CantonConfig, CantonEnvironment]
   type EnvironmentSetupPlugin = BaseEnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
   type SharedEnvironment = BaseSharedEnvironment[CantonConfig, CantonEnvironment]
+  type IsolatedEnvironments = BaseIsolatedEnvironments[CantonConfig, CantonEnvironment]
   type ConfigTransform = CantonConfig => CantonConfig
   type StorageConfigTransform =
     (ConfigNodeType, String, StorageConfig) => StorageConfig

@@ -351,7 +351,7 @@ trait BaseSharedEnvironment[C <: SharedCantonConfig[C], E <: Environment[C]]
   * Try to use SharedEnvironment instead to avoid the cost of frequently creating environments in
   * CI.
   */
-trait IsolatedEnvironments[C <: SharedCantonConfig[C], E <: Environment[C]]
+trait BaseIsolatedEnvironments[C <: SharedCantonConfig[C], E <: Environment[C]]
     extends EnvironmentSetup[C, E] {
   this: Suite with NamedLogging =>
 

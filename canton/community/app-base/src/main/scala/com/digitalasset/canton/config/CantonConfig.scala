@@ -377,6 +377,12 @@ final case class CantonFeatures(
                                                                  else Seq())).toSet
 }
 
+/** The commonality between [[CantonConfig]] and `SpliceConfig` in the Splice repo, so that either
+  * Canton or Splice can initialize Canton components that require these configuration elements.
+  *
+  * Prefer accepting this type over [[CantonConfig]] if possible. `SharedCantonConfig[?]` is
+  * frequently a specific-enough type.
+  */
 trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self] { self: Self =>
   def portDescription: String
   def sequencers: Map[InstanceName, SequencerNodeConfig]
