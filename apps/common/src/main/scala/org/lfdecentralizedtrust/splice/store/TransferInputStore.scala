@@ -119,7 +119,7 @@ trait TransferInputStore extends AppStore with LimitHelpers {
   /** Returns assigned RewardCouponV2 sorted by round ascending, amount descending.
     * Only includes coupons with an assigned beneficiary from the given `activeIssuingRounds`.
     */
-  def listSortedRewardCouponsV2(
+  def listSortedAssignedRewardCouponV2s(
       issuingRoundsMap: Map[Round, IssuingMiningRound],
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
@@ -130,7 +130,7 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         RewardCouponV2.COMPANION
       )
     } yield applyLimit(
-      "listSortedRewardCouponsV2",
+      "listSortedAssignedRewardCouponV2s",
       limit,
       rewards
         .filter { rw =>

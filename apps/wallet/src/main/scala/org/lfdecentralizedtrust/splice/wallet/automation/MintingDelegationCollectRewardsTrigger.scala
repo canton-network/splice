@@ -284,7 +284,7 @@ class MintingDelegationCollectRewardsTrigger(
         Some(issuingRoundsMap.keySet.map(_.number))
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
-      rewardCouponsV2WithQuantity <- store.listSortedRewardCouponsV2(issuingRoundsMap)
+      rewardCouponsV2WithQuantity <- store.listSortedAssignedRewardCouponV2s(issuingRoundsMap)
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
     } yield CouponsData(

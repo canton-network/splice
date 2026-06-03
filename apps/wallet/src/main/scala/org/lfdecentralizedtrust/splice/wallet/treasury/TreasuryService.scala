@@ -1091,8 +1091,8 @@ class TreasuryService(
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
     for {
-      rewardCouponV2Inputs <- userStore.listSortedRewardCouponsV2(
       // TODO(#5787): eventually support mint of unassigned, unshared RewardCouponV2
+      rewardCouponV2Inputs <- userStore.listSortedAssignedRewardCouponV2s(
         issuingRoundsMap,
         PageLimit.tryCreate(maxNumInputs),
       )

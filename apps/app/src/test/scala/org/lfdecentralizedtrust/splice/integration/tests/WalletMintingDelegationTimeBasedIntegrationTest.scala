@@ -586,7 +586,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               .listDevelopmentFundCoupons()
               .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
             externalPartyWallet.store
-              .listSortedRewardCouponsV2(issuingRoundsMap)
+              .listSortedAssignedRewardCouponV2s(issuingRoundsMap)
               .futureValue shouldBe empty withClue "RewardCouponV2"
           }
         }
