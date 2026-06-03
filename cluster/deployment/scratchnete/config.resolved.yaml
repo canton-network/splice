@@ -376,7 +376,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -450,7 +450,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -524,7 +524,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -598,7 +598,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -672,7 +672,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -746,7 +746,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -820,7 +820,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -894,7 +894,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -968,7 +968,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1042,7 +1042,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1073,6 +1073,18 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+    testing:
+      catchup:
+        enabled: true
+        thresholds:
+          caughtUpThresholds:
+            mediatorDelaySeconds: 30
+            participantDelaySeconds: 30
+            sequencerBlockDelaySeconds: 30
+          mediatorMinCatchupRatio: 3
+          minBackupAgeHours: 0
+          participantMinCatchupRatio: 10
+          sequencerMinEventsPerSecond: 800
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
@@ -1116,7 +1128,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1190,7 +1202,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1264,7 +1276,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1338,7 +1350,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1412,7 +1424,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1486,7 +1498,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1560,7 +1572,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true
@@ -1636,7 +1648,7 @@ svs:
           memory: '12Gi'
     pruning:
       cometbft:
-        retainBlocks: 2000
+        retainBlocks: 20000
       participant:
         cron: '0 /10 * * * ?'
         enabled: true

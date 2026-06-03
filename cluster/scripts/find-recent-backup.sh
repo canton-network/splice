@@ -11,7 +11,10 @@ source "${TOOLS_LIB}/libcli.source"
 source "${SPLICE_ROOT}/cluster/scripts/utils.source"
 
 function usage() {
-  _info "Usage: $0 <namespace> <migration_id>"
+  _info "Usage: $0 <namespace> <migration_id> [<before_timestamp>]"
+  _info "  before_timestamp: unix timestamp — finds the most recent full backup BEFORE this time."
+  _info "                    If omitted, reads minBackupAgeHours from config (testing.catchup.thresholds)."
+  _info "                    Defaults to now if neither is set."
 }
 
 function is_full_backup_kube() {
@@ -41,13 +44,14 @@ function latest_full_backup_run_id_kube() {
   local migration_id=$2
   local is_sv=$3
   local expected_components=$4
+  local before_timestamp=$5
   if [ "$is_sv" == "true" ]; then
       expected_components="$expected_components cometbft"
   fi
 
   local all_run_ids
   # get all run id postgres
-  all_run_ids=$(kubectl get volumesnapshot -n "$namespace" --sort-by=.metadata.creationTimestamp -o json | jq "[.items[] | select(.metadata.annotations[\"migrationId\"] == \"$migration_id\")]" | jq -r '.[].metadata.name // empty' | grep -o '[^-]*$' | sort -rn | uniq )
+  all_run_ids=$(kubectl get volumesnapshot -n "$namespace" --sort-by=.metadata.creationTimestamp -o json | jq "[.items[] | select(.metadata.annotations[\"migrationId\"] == \"$migration_id\")]" | jq -r '.[].metadata.name // empty' | grep -o '[^-]*$' | awk -v ts="$before_timestamp" '$1 <= ts' | sort -rn | uniq )
 
   while read -r run_id; do
     component_backup_names=$(get_component_backup_names_kube "$migration_id" "$run_id")
@@ -64,6 +68,7 @@ function latest_full_backup_run_id_gcloud() {
   local migration_id=$2
   local is_sv=$3
   local expected_components=$4
+  local before_timestamp=$5
   local num_components
   num_components=$(echo "$expected_components" | wc -w)
   local stack
@@ -79,12 +84,12 @@ function latest_full_backup_run_id_gcloud() {
     cloudsql_id=$(get_cloudsql_id "$full_component_instance" "$stack")
     # We always create backups with a description field while this field could be missing for automated backups done by Google Cloud.
     # So we filter those out while looking for the most recent backup.
-    mapfile -t run_ids < <(gcloud sql backups list --instance "$cloudsql_id" --filter=type="ON_DEMAND" --format=json | jq -r '.[] | select(has("description")) | .description')
+    mapfile -t run_ids < <(gcloud sql backups list --instance "$cloudsql_id" --filter=type="ON_DEMAND" --format=json | jq -r --argjson ts "$before_timestamp" '.[] | select(has("description")) | select(.description | tonumber <= $ts) | .description')
     run_ids_dict[$component]="${run_ids[*]}"
   done
 
   if [ "$is_sv" == "true" ]; then
-    mapfile -t cometbft_run_ids < <(kubectl get volumesnapshot -n "$namespace" --sort-by=.metadata.creationTimestamp -o json | jq "[.items[] | select(.metadata.annotations[\"migrationId\"] == \"$migration_id\") | select(.metadata.name | contains(\"cometbft\"))]" | jq -r '.[].metadata.name // empty' | grep -o '[^-]*$' | sort -rn | uniq )
+    mapfile -t cometbft_run_ids < <(kubectl get volumesnapshot -n "$namespace" --sort-by=.metadata.creationTimestamp -o json | jq "[.items[] | select(.metadata.annotations[\"migrationId\"] == \"$migration_id\") | select(.metadata.name | contains(\"cometbft\"))]" | jq -r '.[].metadata.name // empty' | grep -o '[^-]*$' | awk -v ts="$before_timestamp" '$1 <= ts' | sort -rn | uniq )
     run_ids_dict["cometbft"]="${cometbft_run_ids[*]}"
     ((num_components++))
   fi
@@ -117,8 +122,29 @@ function main() {
   local namespace=$1
   local migration_id=$2
 
+  # Determine before_timestamp:
+  # 1. Explicit 3rd argument takes priority
+  # 2. Otherwise read minBackupAgeHours from config (used by catchup test)
+  # 3. Default to now (= latest backup)
+  local before_timestamp
+  if [ "$#" -ge 3 ] && [ -n "$3" ]; then
+    before_timestamp=$3
+  else
+    local config
+    config=$(get_resolved_config)
+    local min_backup_age_hours
+    min_backup_age_hours=$(echo "$config" \
+      | yq ".svs.${namespace}.testing.catchup.thresholds.minBackupAgeHours // 0")
+    if [ "$min_backup_age_hours" -gt 0 ]; then
+      before_timestamp=$(( $(date +%s) - min_backup_age_hours * 3600 ))
+      _info "Using minBackupAgeHours=${min_backup_age_hours} → before_timestamp=${before_timestamp}" >&2
+    else
+      before_timestamp=$(date +%s)
+    fi
+  fi
+
   case "$namespace" in
-      sv-1|sv-2|sv-3|sv-4|sv-da-1)
+      sv|sv-[0-9]|sv-[0-9][0-9]|sv-da-*)
           is_sv=true
           full_instance="$namespace-cn-apps-pg"
           expected_components="cn-apps sequencer participant mediator"
@@ -135,10 +161,10 @@ function main() {
   type=$(get_postgres_type "$full_instance" "$stack")
   # We only check the postgres type of one component and assume other components have the same type.
   if [ "$type" == "canton:network:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components")
+    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
     echo "$backup_run_id"
   elif [ "$type" == "canton:cloud:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components")
+    backup_run_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
     echo "$backup_run_id"
   elif [ -z "$type" ]; then
     _error "No postgres instance $full_instance found in stack ${stack}. Is the cluster deployed with split DB instances?"
