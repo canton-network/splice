@@ -36,7 +36,7 @@ export function installInfo(
 
   const infoValues = {
     runtimeDetails: {
-      migrationId: decentralizedSynchronizerMigrationConfig.active.id,
+      synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
       scanUrl: scanUrl,
     },
     deploymentDetails: {
@@ -55,9 +55,10 @@ export function installInfo(
         },
       },
       synchronizer: {
-        active: {
+        current: {
           chainIdSuffix: getChainIdSuffix(),
-          migrationId: decentralizedSynchronizerMigrationConfig.active.id,
+          migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+          synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
           version: CnChartVersion.stringify(
             decentralizedSynchronizerMigrationConfig.active.version
           ),
@@ -65,16 +66,18 @@ export function installInfo(
         legacy: decentralizedSynchronizerMigrationConfig.legacy
           ? {
               chainIdSuffix: getChainIdSuffix(),
-              migrationId: decentralizedSynchronizerMigrationConfig.legacy.id,
+              migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+              synchronizerSerialId: decentralizedSynchronizerMigrationConfig.legacy.id,
               version: CnChartVersion.stringify(
                 decentralizedSynchronizerMigrationConfig.legacy.version
               ),
             }
           : null,
-        staging: decentralizedSynchronizerMigrationConfig.upgrade
+        successor: decentralizedSynchronizerMigrationConfig.upgrade
           ? {
               chainIdSuffix: getChainIdSuffix(),
-              migrationId: decentralizedSynchronizerMigrationConfig.upgrade.id,
+              migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+              synchronizerSerialId: decentralizedSynchronizerMigrationConfig.upgrade.id,
               version: CnChartVersion.stringify(
                 decentralizedSynchronizerMigrationConfig.upgrade.version
               ),

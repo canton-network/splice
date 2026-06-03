@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SV_METRICS_URL="${SV_METRICS_URL:-http://sv-app:10013/metrics}"
-SEQUENCER_METRICS_URL="${SEQUENCER_METRICS_URL:-http://global-domain-$MIGRATION_ID-sequencer:10013/metrics}"
+SEQUENCER_METRICS_URL="${SEQUENCER_METRICS_URL:-http://global-domain-$SERIAL_ID-sequencer:10013/metrics}"
 SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
 SV_THRESHOLD="${SV_THRESHOLD:-600}"

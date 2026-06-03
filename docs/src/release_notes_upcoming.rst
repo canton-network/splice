@@ -90,6 +90,13 @@
       - Changed the default JVM args from ``-Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8`` to  ``-Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12``
         for the participant, mediator, sequencer, sv app and scan app deployments.
 
+      - Changes to splice-info:
+
+        - ``deploymentDetails`` require specifying ``synchronizerSerialId`` in addition to a frozen ``migrationId``
+        - ``deploymentDetails`` has ``active`` renamed to ``current`` and ``staging`` to ``successor``
+        - ``runtimeDetails`` reqires specifying ``synchronizerSerialId`` instead of ``migrationId``
+        - ``scanUrl`` under ``runtimeDetails`` is now optional
+
     - Observability
 
       - The automation background services no longer affect the ``/readyz`` endpoint

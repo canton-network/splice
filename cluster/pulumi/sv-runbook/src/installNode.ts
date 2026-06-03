@@ -535,6 +535,7 @@ function installInfoEndpoint(
     {
       TARGET_CLUSTER: clusterNetwork,
       MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+      SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
       MD5_HASH_OF_ALLOWED_IP_RANGES: `"${createHash('md5')
         .update(readFileOrEmptyString(externalIpRangesFile()))
         .digest('hex')}"`,
