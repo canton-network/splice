@@ -1092,6 +1092,7 @@ class TreasuryService(
   ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
     for {
       rewardCouponV2Inputs <- userStore.listSortedRewardCouponsV2(
+      // TODO(#5787): eventually support mint of unassigned, unshared RewardCouponV2
         issuingRoundsMap,
         PageLimit.tryCreate(maxNumInputs),
       )
