@@ -96,6 +96,7 @@ class UserWalletService(
     walletManager,
     retryProvider,
     scanConnection,
+    hasRewardSharing = rewardSharing.isDefined,
     loggerFactory,
   )
 

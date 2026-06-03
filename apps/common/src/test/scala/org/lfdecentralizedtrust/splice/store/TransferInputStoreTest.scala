@@ -102,7 +102,7 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
-  "listSortedAssignedRewardCouponV2s" should {
+  "listSortedMintableRewardCouponV2s" should {
     "return correct results" in {
       for {
         store <- mkTransferInputStore(user)
@@ -131,24 +131,34 @@ abstract class TransferInputStoreTest extends StoreTestBase {
             )(store.multiDomainAcsStore)
           } yield ()
         )
-        // unassigned coupon in round 2 — should be excluded from results
+        // unassigned coupon in round 2 — should be excluded when includeUnassigned is false
         _ <- dummyDomain.create(
           rewardCouponV2(round = 2, provider = user, amount = numeric(20), beneficiary = None),
           createdEventSignatories = Seq(dsoParty),
           createdEventObservers = Seq(user),
         )(store.multiDomainAcsStore)
       } yield {
-        store.listSortedAssignedRewardCouponV2s(Map.empty).futureValue shouldBe empty
+        store
+          .listSortedMintableRewardCouponV2s(Map.empty, includeUnassigned = false)
+          .futureValue shouldBe empty
         val roundsToFilter = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
+        val issuingMap = roundsToFilter.map(r => r.payload.round -> r.payload).toMap
         // assigned coupons listed in ascending round order, descending amount per round;
         // the unassigned coupon (amount=20) in round 2 is excluded
         store
-          .listSortedAssignedRewardCouponV2s(
-            roundsToFilter.map(r => r.payload.round -> r.payload).toMap
-          )
+          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = false)
           .futureValue
           .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
           4.0, 2.0, // round 2 (unassigned 20.0 excluded)
+          6.0, 3.0, // round 3
+          8.0, 4.0, // round 4
+        )
+        // with includeUnassigned, the unassigned coupon (20.0) appears in round 2
+        store
+          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = true)
+          .futureValue
+          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          20.0, 4.0, 2.0, // round 2 (unassigned 20.0 included)
           6.0, 3.0, // round 3
           8.0, 4.0, // round 4
         )

@@ -284,7 +284,11 @@ class MintingDelegationCollectRewardsTrigger(
         Some(issuingRoundsMap.keySet.map(_.number))
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
-      rewardCouponsV2WithQuantity <- store.listSortedAssignedRewardCouponV2s(issuingRoundsMap)
+      // TODO(#5787): use sharing config to decide includeUnassigned
+      rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
+        issuingRoundsMap,
+        includeUnassigned = true,
+      )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
     } yield CouponsData(
