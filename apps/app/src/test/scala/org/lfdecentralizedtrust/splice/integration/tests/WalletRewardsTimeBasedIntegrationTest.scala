@@ -6,6 +6,7 @@ import org.lfdecentralizedtrust.splice.util.{SpliceUtil, TimeTestUtil, WalletTes
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
+  RewardCouponV2,
   ValidatorRewardCoupon,
 }
 
@@ -28,6 +29,7 @@ class WalletRewardsTimeBasedIntegrationTest
   override protected lazy val sanityChecksIgnoredRootCreates = Seq(
     AppRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
     ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
+    RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID,
   )
 
   "A wallet" should {
@@ -122,6 +124,29 @@ class WalletRewardsTimeBasedIntegrationTest
             walletUsdToAmulet(0.5 + faucetCouponAmountUsd),
           ),
         )
+      }
+
+      // Mint RewardCouponV2: create an assigned V2 coupon,
+      // advance past the next issuing round, and verify it gets collected.
+      val balanceBeforeV2 = bobValidatorWalletClient.balance().unlockedQty
+      clue("Create assigned RewardCouponV2 for bob's validator") {
+        createRewardCouponsV2(
+          Seq((bobValidatorParty, BigDecimal(0.5), bobValidatorParty))
+        )
+      }
+
+      // 3 ticks for the coupon's round to become an IssuingMiningRound
+      advanceRoundsToNextRoundOpening
+      advanceRoundsToNextRoundOpening
+      advanceRoundsToNextRoundOpening
+      advanceTimeForRewardAutomationToRunForCurrentRound
+
+      clue("RewardCouponV2 is collected and balance increases") {
+        eventually() {
+          val balanceAfterV2 = bobValidatorWalletClient.balance().unlockedQty
+          // V2 coupon is 0.5 CC, minus transfer fees
+          (balanceAfterV2 - balanceBeforeV2) should be >= BigDecimal(0.4)
+        }
       }
     }
   }
