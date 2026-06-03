@@ -58,7 +58,6 @@ class HttpSvOperatorHandler(
     override protected val timeouts: ProcessingTimeout,
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
-    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -225,9 +224,7 @@ class HttpSvOperatorHandler(
           dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
           (permissions, nextPageToken) <- SvApp.listValidatorPermissions(
             svParty,
-            dsoRules.domain,
             dsoStoreWithIngestion.store,
-            participantAdminConnection,
             after,
             pageLimit,
           )

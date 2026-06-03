@@ -528,7 +528,6 @@ class SvApp(
         timeouts,
         loggerFactory,
         amuletAppParameters.upgradesConfig,
-        participantAdminConnection,
       )
 
       adminHandler = new HttpSvAdminHandler(
@@ -815,9 +814,7 @@ object SvApp {
 
   def listValidatorPermissions(
       svParty: PartyId,
-      synchronizerId: SynchronizerId,
       dsoStore: SvDsoStore,
-      participantAdminConnection: ParticipantAdminConnection,
       after: Option[Long],
       limit: PageLimit,
   )(implicit
@@ -830,20 +827,12 @@ object SvApp {
         after,
         limit,
       )
-      topologyPermissions <- participantAdminConnection.listParticipantSynchronizerPermission(
-        synchronizerId,
-        "",
-      )
     } yield {
-      val activeParticipantIds =
-        topologyPermissions.map(_.mapping.participantId.toProtoPrimitive).toSet
-
-      val confirmed = validatorPermissions
+      val permissions = validatorPermissions
         .map(_.payload)
-        .filter(p => activeParticipantIds.contains(p.validatorParticipantId))
         .map(p => (p.validator, p.validatorParticipantId))
 
-      (confirmed, nextPageToken)
+      (permissions, nextPageToken)
     }
   }
 
