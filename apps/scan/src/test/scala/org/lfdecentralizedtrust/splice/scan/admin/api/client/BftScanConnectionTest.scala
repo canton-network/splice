@@ -250,9 +250,12 @@ class BftScanConnectionTest
       } yield dsoPartyId should be(partyIdA)
     }
 
-    "return the agreed migration id when all agree" in {
+    "return the agreed migration id when 2f+1 agree" in {
       val connections = getMockedConnections(n = 4)
-      connections.foreach(makeMockReturnMigrationId(_, 3L))
+      val disagreeing = connections.head
+      makeMockReturnMigrationId(disagreeing, 5L)
+      val agreeing = connections.drop(1)
+      agreeing.foreach(makeMockReturnMigrationId(_, 3L))
       val bft = getBft(connections)
 
       for {
