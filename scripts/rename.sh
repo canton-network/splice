@@ -1199,7 +1199,7 @@ function subcmd_no_illegal_daml_references() {
       svc SVC Svc   # to avoid conflict with PerSvContracts
       '(?<![a-z])cc(?!(e233922|ou|ept|essor|g[.]github))'
       'global(?!(ly|[.]))' # TODO (DACH-NY/canton-network-node#17137): revisit
-      CC
+      'CC(?!(OUNT))'
       '(?<!(Map|Set)[.])(?<!sequencer )member(?!(ship| of"|Id|.*[tT]raffic))'
       # Allow only Dso as in DsoRules in comments
       '[-][-] .*Dso(?!(Rules))'
