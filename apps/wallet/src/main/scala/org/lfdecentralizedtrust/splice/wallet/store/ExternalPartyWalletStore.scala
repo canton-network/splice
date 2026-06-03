@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   DevelopmentFundCoupon,
   LockedAmulet,
+  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -172,6 +173,13 @@ object ExternalPartyWalletStore {
         mkFilter(AppRewardCoupon.COMPANION) { co =>
           co.payload.dso == dso &&
           co.payload.provider == externalParty
+        }(co =>
+          ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
+        ),
+        mkFilter(RewardCouponV2.COMPANION) { co =>
+          co.payload.dso == dso &&
+          (co.payload.beneficiary == java.util.Optional.of(externalParty) ||
+            (co.payload.beneficiary.isEmpty && co.payload.provider == externalParty))
         }(co =>
           ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
         ),
