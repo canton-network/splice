@@ -202,6 +202,7 @@ class FeaturedAppActivityMarkerTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      enableUnresponsivePartiesAutoIgnore = false,
     )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 

@@ -169,6 +169,7 @@ class ExpireRewardCouponsTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      enableUnresponsivePartiesAutoIgnore = false,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
