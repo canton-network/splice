@@ -78,4 +78,79 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Right[?, ?]]
     }
   }
+
+  "rewardSharingByParty" should {
+
+    def mkSharingConfig(beneficiaries: String): String =
+      s"""
+        |canton.validator-apps.aliceValidator.reward-sharing-by-party = {
+        |  "alice::1220abc" = {
+        |    beneficiaries = [$beneficiaries]
+        |    min-ttl-after-sharing = 30h
+        |  }
+        |}
+        """.stripMargin
+
+    def mkBeneficiary(name: String, percentage: String): String =
+      s"""{ beneficiary = "$name::1220", percentage = $percentage }"""
+
+    Seq(
+      ("two beneficiaries", "0.3, 0.2"),
+      ("single beneficiary", "0.5"),
+      ("small percentage", "0.01"),
+      ("percentage exactly 1.0", "1.0"),
+      ("near-total split", "0.5, 0.49"),
+      ("exact total split", "0.6, 0.4"),
+      ("three-way even split", "0.33, 0.33, 0.33"),
+      ("high precision", "0.123456789, 0.876543210"),
+      ("ten decimal places", "0.0000000001"),
+      ("empty beneficiaries", ""),
+    ).foreach { case (desc, percentages) =>
+      val beneficiaries = percentages
+        .split(",")
+        .map(_.trim)
+        .filter(_.nonEmpty)
+        .zipWithIndex
+        .map { case (pct, i) => mkBeneficiary(s"party$i", pct) }
+        .mkString(", ")
+
+      s"accept $desc ($percentages)" in {
+        val overwrite = ConfigFactory.parseString(mkSharingConfig(beneficiaries))
+        val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+        SpliceConfig.loadAndValidate(validConfig) shouldBe a[Right[?, ?]]
+      }
+    }
+
+    Seq(
+      ("percentage > 1.0", "1.5", "must be in (0.0, 1.0]"),
+      ("percentage = 0", "0.0", "must be in (0.0, 1.0]"),
+      ("negative percentage", "-0.1", "must be in (0.0, 1.0]"),
+    ).foreach { case (desc, percentage, expectedError) =>
+      s"reject $desc" in {
+        val overwrite =
+          ConfigFactory.parseString(mkSharingConfig(mkBeneficiary("charlie", percentage)))
+        val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+        SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(expectedError)
+      }
+    }
+
+    Seq(
+      ("sum > 1.0", "0.6, 0.5"),
+    ).foreach { case (desc, percentages) =>
+      val beneficiaries = percentages
+        .split(",")
+        .map(_.trim)
+        .zipWithIndex
+        .map { case (pct, i) => mkBeneficiary(s"party$i", pct) }
+        .mkString(", ")
+
+      s"reject percentages with $desc" in {
+        val overwrite = ConfigFactory.parseString(mkSharingConfig(beneficiaries))
+        val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+        SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(
+          "must sum to at most 1.0"
+        )
+      }
+    }
+  }
 }

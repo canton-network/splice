@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.wallet.config
 
 import org.lfdecentralizedtrust.splice.config.{HttpClientConfig, NetworkAppClientConfig}
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.topology.PartyId
 
@@ -41,4 +42,14 @@ final case class WalletSweepConfig(
 
 final case class AutoAcceptTransfersConfig(
     fromParties: Seq[PartyId] = Seq()
+)
+
+final case class AppRewardBeneficiaryConfig(
+    beneficiary: PartyId,
+    percentage: BigDecimal,
+)
+
+final case class RewardSharingConfig(
+    minTtlAfterSharing: NonNegativeFiniteDuration,
+    beneficiaries: Seq[AppRewardBeneficiaryConfig],
 )
