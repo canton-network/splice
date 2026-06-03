@@ -27,10 +27,7 @@ import com.digitalasset.canton.console.{
   InstanceReference,
   TestConsoleOutput,
 }
-import com.digitalasset.canton.environment.{
-  CantonEnvironment,
-  CantonNode,
-}
+import com.digitalasset.canton.environment.{CantonEnvironment, CantonNode}
 import com.digitalasset.canton.integration.bootstrap.{
   InitializedSynchronizer,
   NetworkBootstrapper,

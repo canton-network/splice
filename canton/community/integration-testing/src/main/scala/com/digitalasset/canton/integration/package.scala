@@ -10,7 +10,8 @@ import com.digitalasset.canton.integration.ConfigTransforms.ConfigNodeType
 package object integration {
   type BaseTestConsoleEnvironment[C <: SharedCantonConfig[C], +E <: Environment[C]] =
     E#Console & TestEnvironment[? <: C]
-  type AnyTestConsoleEnvironment = BaseTestConsoleEnvironment[? <: SharedCantonConfig[?], ? <: Environment[?]]
+  type AnyTestConsoleEnvironment =
+    BaseTestConsoleEnvironment[? <: SharedCantonConfig[?], ? <: Environment[?]]
   type TestConsoleEnvironment = BaseTestConsoleEnvironment[CantonConfig, CantonEnvironment]
   type EnvironmentSetupPlugin = BaseEnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
   type SharedEnvironment = BaseSharedEnvironment[CantonConfig, CantonEnvironment]
