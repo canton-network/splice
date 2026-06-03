@@ -3,6 +3,7 @@ name: splice-validator
 volumes:
   postgres-splice:
   domain-upgrade-dump:
+  heap-dumps:
 
 networks:
   splice_validator:
@@ -38,7 +39,13 @@ services:
 
   participant:
     image: "${IMAGE_REPO}canton-participant:${IMAGE_TAG}"
+    deploy:
+      resources:
+        limits:
+          cpus: "${PARTICIPANT_CPUS:-2}"
+          memory: "${PARTICIPANT_MEMORY:-20G}"
     environment:
+      - JAVA_TOOL_OPTIONS=${PARTICIPANT_JVM_OPTS:--XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/heap-dumps}
       - LOG_LEVEL_STDOUT=${LOG_LEVEL:-INFO}
       - LOG_LEVEL_CANTON=${LOG_LEVEL:-INFO}
       - AUTH_JWKS_URL=${AUTH_JWKS_URL}
@@ -56,6 +63,8 @@ services:
     restart: always
     networks:
       - ${DOCKER_NETWORK:-splice_validator}
+    volumes:
+      - heap-dumps:/heap-dumps
 
   chown-domain-upgrade-dump:
     image: busybox:1.37.0
@@ -65,7 +74,13 @@ services:
 
   validator:
     image: "${IMAGE_REPO}validator-app:${IMAGE_TAG}"
+    deploy:
+      resources:
+        limits:
+          cpus: "${VALIDATOR_CPUS:-1}"
+          memory: "${VALIDATOR_MEMORY:-8G}"
     environment:
+      - JAVA_TOOL_OPTIONS=${VALIDATOR_JVM_OPTS:--XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/heap-dumps}
       - LOG_LEVEL_STDOUT=${LOG_LEVEL:-INFO}
       - LOG_LEVEL_CANTON=${LOG_LEVEL:-INFO}
       - SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_URL=${AUTH_WELLKNOWN_URL}
@@ -123,6 +138,7 @@ services:
       - ${DOCKER_NETWORK:-splice_validator}
     volumes:
       - domain-upgrade-dump:/domain-upgrade-dump
+      - heap-dumps:/heap-dumps
 
   wallet-web-ui:
     image: "${IMAGE_REPO}wallet-web-ui:${IMAGE_TAG}"

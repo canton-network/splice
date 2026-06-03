@@ -109,6 +109,8 @@ class DsoDelegateBasedAutomationService(
       new ExpireRewardCouponsTrigger(
         triggerContext,
         svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+        config,
       )
     )
 
@@ -131,6 +133,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
+        expiredAmuletIgnoredPartiesStore,
       )
     )
 

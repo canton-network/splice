@@ -244,7 +244,7 @@ class ValidatorApp(
                 extraSynchronizerAliases: Set[SynchronizerAlias] = config.domains.extra
                   .map(_.alias)
                   .toSet
-                allConnectedSynchronizers <- participantAdminConnection.listConnectedDomains()
+                allConnectedSynchronizers <- participantAdminConnection.listConnectedSynchronizers()
                 extraSynchronizerIds: Seq[SynchronizerId] = allConnectedSynchronizers
                   .filter(result => extraSynchronizerAliases.contains(result.synchronizerAlias))
                   .map(_.physicalSynchronizerId.logical)

@@ -324,16 +324,14 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
               // You cannot reset session storage of about:blank so
               // we exclude this.
               if (currentUrl != "about:blank") {
-                actAndCheck(
-                  "Clear session storage",
-                  webDriver.executeScript("""sessionStorage.clear()"""),
-                )(
-                  "Session storage is now empty",
-                  _ =>
-                    webDriver.executeScript(
-                      """return sessionStorage.length"""
-                    ) shouldBe 0,
-                )
+                // Execute session storage clear and check atomically (DACH-NY/cn-test-failures#8586)
+                clue("Clear session storage and verify it is empty") {
+                  val remaining = webDriver
+                    .executeScript(
+                      """sessionStorage.clear(); return sessionStorage.length;"""
+                    )
+                  remaining shouldBe 0
+                }
               }
             }
         }
