@@ -276,7 +276,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             sv2Db
               .update_(
                 sqlu"update app_activity_record_meta set earliest_ingested_round = $round",
-                "test.raiseEarliestIngestedRound",
+                "test.increaseAppActivityMeta_EarliestIngestedRound",
               )
               .futureValueUS
           },
