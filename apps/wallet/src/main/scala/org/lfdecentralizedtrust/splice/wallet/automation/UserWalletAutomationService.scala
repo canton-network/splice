@@ -60,6 +60,7 @@ class UserWalletAutomationService(
       ledgerClient,
       retryProvider,
       paramsConfig,
+      packageVersionSupport,
     ) {
 
   override protected def metricsContext: MetricsContext =

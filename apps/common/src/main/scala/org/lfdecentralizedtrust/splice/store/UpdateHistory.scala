@@ -144,6 +144,7 @@ class UpdateHistory(
     new MultiDomainAcsStore.IngestionSink {
       override def ingestionFilter: IngestionFilter = IngestionFilter(
         primaryParty = updateStreamParty,
+        includeTemplates = Seq.empty,
         includeInterfaces = Seq.empty,
         includeCreatedEventBlob = false,
       )

@@ -14,7 +14,11 @@ import com.digitalasset.canton.util.ShowUtil.*
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  RetryProvider,
+  SpliceLedgerClient,
+}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, LimitHelpers}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
@@ -38,6 +42,7 @@ class ExternalPartyWalletManager(
     participantId: ParticipantId,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -166,6 +171,7 @@ class ExternalPartyWalletManager(
       participantId,
       params,
       scanConnection,
+      packageVersionSupport,
     )
     (externalPartyRetryProvider, walletService)
   }

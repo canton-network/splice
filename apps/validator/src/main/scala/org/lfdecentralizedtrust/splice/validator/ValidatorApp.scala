@@ -713,6 +713,7 @@ class ValidatorApp(
             participantId,
             config.parameters,
             scanConnection,
+            packageVersionSupport,
           )
           val walletManager = new UserWalletManager(
             ledgerClient,
@@ -780,6 +781,7 @@ class ValidatorApp(
         config.additionalPackagesToUnvet,
         config.domains.global.alias,
         loggerFactory,
+        packageVersionSupport,
       )
       _ <- MonadUtil.sequentialTraverse_(config.appInstances.toList)({ case (name, instance) =>
         appInitStep(s"Set up app instance $name") {

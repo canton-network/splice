@@ -97,6 +97,7 @@ class SvDsoAutomationService(
       ledgerClient,
       retryProvider,
       config.parameters,
+      packageVersionSupport,
     ) {
 
   override def companion

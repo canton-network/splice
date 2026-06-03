@@ -29,6 +29,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
   DarResources,
   Node,
+  PackageVersionSupport,
   ParticipantAdminConnection,
   RetryFor,
   SpliceLedgerClient,
@@ -134,6 +135,20 @@ class SplitwellApp(
       config.automation.ingestion,
       config.parameters.defaultLimit,
     )
+    amuletRules <- scanConnection.getAmuletRules()
+    synchronizerId = SynchronizerId.tryFromString(
+      amuletRules.payload.configSchedule.initialValue.decentralizedSynchronizer.activeSynchronizer
+    )
+    readOnlyLedgerConnection = ledgerClient
+      .readOnlyConnection(
+        this.getClass.getSimpleName,
+        loggerFactory,
+      )
+    packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+      synchronizerId,
+      readOnlyLedgerConnection,
+      loggerFactory,
+    )
     // splitwell does not need to have UpdateHistory
     automation = new SplitwellAutomationService(
       config.automation,
@@ -145,6 +160,7 @@ class SplitwellApp(
       retryProvider,
       config.parameters,
       loggerFactory,
+      packageVersionSupport,
     )
     preferred <- appInitStep(s"Wait for preferred domain connection") {
       store.domains.waitForDomainConnection(config.domains.splitwell.preferred.alias)
