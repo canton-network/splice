@@ -171,7 +171,7 @@ abstract class InStackDecentralizedSynchronizerNode
             },
           },
           livenessProbeInitialDelaySeconds: domainLivenessProbeInitialDelaySeconds,
-          // These are used both for sequencer and mediator. This is probably wrong, isn't it?
+          // TODO(#5805): These are used both for sequencer and mediator while the mediator config is ignored.
           additionalJvmOptions: getAdditionalJvmOptions(
             physicalSynchronizerConfig.sequencer.additionalJvmOptions
           ),
