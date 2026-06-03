@@ -38,7 +38,7 @@ final case class RollForwardLsuTrigger(
     scanConnection.lookupRollForwardLsu().flatMap {
       case None => Future.successful(Seq.empty)
       case Some(rollForward) =>
-        participantAdminConnection.listConnectedDomains().flatMap { connections =>
+        participantAdminConnection.listConnectedSynchronizers().flatMap { connections =>
           connections
             .find(_.physicalSynchronizerId == rollForward.currentPhysicalSynchronizerId) match {
             case None => Future.successful(Seq.empty)
@@ -72,7 +72,7 @@ final case class RollForwardLsuTrigger(
       task: RollForwardLsu
   )(implicit tc: TraceContext): Future[Boolean] =
     for {
-      connections <- participantAdminConnection.listConnectedDomains()
+      connections <- participantAdminConnection.listConnectedSynchronizers()
     } yield connections.find(_.physicalSynchronizerId == task.currentPhysicalSynchronizerId).isEmpty
 
   private def getUsableNewSequencers(alias: SynchronizerAlias, rollForward: RollForwardLsu)(implicit

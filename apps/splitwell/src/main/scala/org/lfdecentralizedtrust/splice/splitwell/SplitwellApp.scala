@@ -35,7 +35,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerConnection,
 }
 import org.lfdecentralizedtrust.splice.http.v0.splitwell.SplitwellResource
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.splitwell.admin.api.client.commands.HttpSplitwellAppClient.SplitwellDomains
 import org.lfdecentralizedtrust.splice.splitwell.admin.http.HttpSplitwellHandler
@@ -116,17 +115,13 @@ class SplitwellApp(
     }
     storeKey = SplitwellStore.Key(providerParty = partyId)
     // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    migrationInfo = DomainMigrationInfo(
-      config.domainMigrationId,
-      None,
-    )
     store = SplitwellStore(
       storeKey,
       storage,
       config.domains,
       loggerFactory,
       retryProvider,
-      migrationInfo,
+      config.domainMigrationId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,
@@ -259,7 +254,7 @@ object SplitwellApp {
       timeouts: ProcessingTimeout,
   ) extends AutoCloseable
       with HasHealth {
-    override def isHealthy: Boolean = storage.isActive && automation.isHealthy
+    override def isHealthy: Boolean = storage.isActive
 
     override def close(): Unit =
       LifeCycle.close(

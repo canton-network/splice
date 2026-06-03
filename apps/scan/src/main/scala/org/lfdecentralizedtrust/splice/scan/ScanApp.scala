@@ -19,7 +19,6 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.cors.scaladsl.CorsDirectives.cors
 import org.apache.pekko.http.cors.scaladsl.settings.CorsSettings
 import org.apache.pekko.http.scaladsl.server.Directives.*
-import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round as roundCodegen
@@ -39,7 +38,6 @@ import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchro
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.http.v0.scanStream.ScanStreamResource
 import org.lfdecentralizedtrust.splice.http.HttpRateLimiter
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
   HttpScanHandler,
   HttpScanStreamHandler,
@@ -71,8 +69,6 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
-  ScanAggregatesReader,
-  ScanAggregatesReaderContext,
 }
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
@@ -183,17 +179,6 @@ class ScanApp(
         appInitConnection.getInitialRoundFromUserMetadata(config.svUser)
       }
       _ = logger.debug(s"Started with initial round $initialRound")
-      scanAggregatesReaderContext = new ScanAggregatesReaderContext(
-        clock,
-        ledgerClient,
-        amuletAppParameters.upgradesConfig,
-        loggerFactory,
-        retryProvider,
-        ec,
-        Materializer(ac),
-        httpClient,
-        templateDecoder,
-      )
       participantAdminConnection = new ParticipantAdminConnection(
         config.participantClient.adminApi,
         amuletAppParameters.loggingConfig.api,
@@ -204,44 +189,26 @@ class ScanApp(
       participantId <- appInitStep("Get participant id") {
         participantAdminConnection.getParticipantId()
       }
-      migrationInfo <- appInitStep(s"Get domain migration info from ${config.svUser}") {
-        DomainMigrationInfo.loadFromUserMetadata(
-          appInitConnection,
-          config.svUser,
-        )
-      }
       svName <- appInitStep(s"Get SV name from ${config.svUser}") {
         appInitConnection.getSvNameFromUserMetadata(config.svUser)
-      }
-      _ = if (config.domainMigrationId != migrationInfo.currentMigrationId) {
-        throw Status.INVALID_ARGUMENT
-          .withDescription(
-            s"Migration id ${migrationInfo.currentMigrationId} from the the SV user metadata does not match the configured migration id ${config.domainMigrationId} in the scan app. Please check if the scan app is configured with the correct migration id"
-          )
-          .asRuntimeException()
       }
       store = ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
         storage,
-        isFirstSv = config.isFirstSv,
         loggerFactory,
         retryProvider,
-        { store =>
-          ScanAggregatesReader(store, scanAggregatesReaderContext)
-        },
-        migrationInfo,
+        config.domainMigrationId,
         participantId,
         config.cache,
         nodeMetrics.dbScanStore,
         config.automation.ingestion,
-        initialRound.toLong,
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
       )
       updateHistory = new UpdateHistory(
         storage,
-        migrationInfo,
+        config.domainMigrationId,
         store.storeName,
         participantId,
         store.acsContractFilter.ingestionFilter.primaryParty,
@@ -255,7 +222,7 @@ class ScanApp(
         storage,
         updateHistory,
         dsoParty,
-        migrationInfo.currentMigrationId,
+        config.domainMigrationId,
         loggerFactory,
       )
       syncNodes = LocalSynchronizerNodes(
@@ -280,7 +247,7 @@ class ScanApp(
         config.bulkStorage,
         acsSnapshotStore,
         updateHistory,
-        currentMigrationId = migrationInfo.currentMigrationId,
+        currentMigrationId = config.domainMigrationId,
         kvProvider,
         retryProvider.metricsFactory,
         config.automation,
@@ -321,7 +288,6 @@ class ScanApp(
         serviceUserPrimaryParty,
         svName,
         amuletAppParameters.upgradesConfig,
-        initialRound.toLong,
       )
       scanVerdictStore = DbScanVerdictStore(
         storage,
@@ -386,12 +352,13 @@ class ScanApp(
             storage,
             loggerFactory,
             retryProvider,
-            migrationInfo,
+            config.domainMigrationId,
             participantId,
             config.automation.ingestion,
             config.parameters.defaultLimit,
           )
           automation.registerRewardsReferenceStoreIngestion(rewardsStore)
+          automation.registerRewardComputationTrigger(rewardsStore)
           Some(rewardsStore)
         } else None
       verdictAutomation = new ScanVerdictAutomationService(
@@ -402,7 +369,7 @@ class ScanApp(
         loggerFactory,
         nodeMetrics.grpcClientMetrics,
         scanVerdictStore,
-        migrationInfo.currentMigrationId,
+        config.domainMigrationId,
         synchronizerId,
         nodeMetrics.verdictIngestion,
         rewardsReferenceStoreO,
@@ -579,7 +546,7 @@ object ScanApp {
   ) extends AutoCloseable
       with HasHealth {
     override def isHealthy: Boolean =
-      storage.isActive && automation.isHealthy && verdictAutomation.isHealthy
+      storage.isActive
 
     override def close(): Unit = {
       LifeCycle.close(bftSequencersAdminConnections*)(logger)

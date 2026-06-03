@@ -33,6 +33,7 @@ object DarResourcesGenerator {
     "splice-api-token-allocation-request-v1" -> "1.0.0",
     "splice-api-token-allocation-instruction-v1" -> "1.0.0",
     "splice-token-test-trading-app" -> "1.0.0",
+    "splice-api-reward-assignment-v1" -> "1.0.0",
   )
 
   // fix the order to reduce the diff to the existing status quo
@@ -46,6 +47,7 @@ object DarResourcesGenerator {
     "splice-wallet-payments",
     "splitwell",
     "splice-validator-lifecycle",
+    "splice-api-reward-assignment-v1",
   )
   private val tokenStandardProductionPackageOrder: Seq[String] = Seq(
     "splice-api-token-metadata-v1",

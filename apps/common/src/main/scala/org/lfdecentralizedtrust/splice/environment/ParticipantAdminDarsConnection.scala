@@ -60,7 +60,7 @@ trait ParticipantAdminDarsConnection {
         Seq(UploadablePackage.fromByteString(path.getFileName.toString, darFile)),
         retryFor,
       )
-      domains <- listConnectedDomains().map(_.map(_.synchronizerId))
+      domains <- listConnectedSynchronizers().map(_.map(_.synchronizerId))
       darResource = DarResource(path)
       _ <- MonadUtil.sequentialTraverse(domains) { domainId =>
         vetDars(domainId.logical, Seq(darResource), None, maxVettingDelay = None)

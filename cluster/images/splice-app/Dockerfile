@@ -1,34 +1,20 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# docker run --rm -it eclipse-temurin:21-jdk-noble java -version
-# openjdk version "21.0.10" 2026-01-20 LTS
-# OpenJDK 64-Bit Server VM Temurin-21.0.10+7 (build 21.0.10+7-LTS, mixed mode, sharing)
-FROM eclipse-temurin:21-jdk-noble@sha256:efec1fca48fed530d4727c1ecd9c48d955153bad24067ee43ccf55e6e0d727c7
+FROM europe-docker.pkg.dev/da-images/public/docker/da-base-image:full-1.0.8@sha256:18dc65a7e20b9289d817cab3c718bd9160a234aae1b56d9128404b2ad4ff51e5
 
-# Install:
-# - screen for running the console in a headless server
-# - tini for handling signals and reaping zombie processes
-# - libjemalloc2 for debugging memory issues
-RUN apt-get update \
-   && DEBIAN_FRONTEND=noninteractive apt-get install -y screen tini libjemalloc2 \
-   && apt-get clean \
-   && rm -rf /var/lib/apt/lists/*
-
-# create and switch to a working directory
-RUN mkdir /app
 WORKDIR /app
 
 # move tarball to a static name
 ADD target/splice-node.tar.gz .
 
 COPY target/storage.conf target/monitoring.conf target/parameters.conf target/entrypoint.sh target/bootstrap-entrypoint.sc target/tools.sh target/logback.xml target/LICENSE /app/
+
+USER root
 RUN mkdir -p /app/splice-node/docs/html/cn-release-bundles
 
 RUN ln -s splice-node/bin/splice-node splice-image-bin
 
-RUN addgroup --gid 1001 nonroot && adduser --uid 1001 --gid 1001 nonroot
-RUN chown -R nonroot:nonroot /app
 RUN chown nonroot:nonroot splice-image-bin
 USER nonroot
 

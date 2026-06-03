@@ -239,14 +239,6 @@ object SqlIndexInitializationTrigger {
       ),
     IndexAction
       .Create(
-        indexName = "round_party_totals_sid_pid_cr",
-        createAction = sqlu"""
-          create index concurrently if not exists round_party_totals_sid_pid_cr
-          on round_party_totals (store_id, party, closed_round desc)
-        """,
-      ),
-    IndexAction
-      .Create(
         indexName = "updt_hist_tran_hi_eth",
         createAction = sqlu"""
           create index concurrently if not exists updt_hist_tran_hi_eth

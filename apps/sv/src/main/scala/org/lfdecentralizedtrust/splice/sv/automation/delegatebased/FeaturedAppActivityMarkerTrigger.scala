@@ -28,6 +28,7 @@ import scala.jdk.OptionConverters.*
 import FeaturedAppActivityMarkerTrigger.{CrossVersionBatch, Task}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import java.util.Optional
 import scala.util.Random
@@ -35,14 +36,16 @@ import scala.util.Random
 class FeaturedAppActivityMarkerTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
     // This is a polling trigger as we usually expect to be able to batch together the conversion
 ) extends PollingParallelTaskExecutionTrigger[Task]
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with IgnoredAmuletVersionGuard {
 
   private val rng: Random = new Random()
 
@@ -64,7 +67,7 @@ class FeaturedAppActivityMarkerTrigger(
     store
       .featuredAppActivityMarkerCountAboveOrEqualTo(
         activityMarkerCatchupModeThreshold,
-        context.config.ignoredFeaturedAppActivityMarkerPartyIds,
+        ignoredPartiesStore.getAll,
       )
       .flatMap {
         case false =>
@@ -179,7 +182,7 @@ class FeaturedAppActivityMarkerTrigger(
         hashMinBoundIncl,
         hashMaxBoundIncl,
         numMarkers,
-        context.config.ignoredFeaturedAppActivityMarkerPartyIds,
+        ignoredPartiesStore.getAll,
       )
       .map(markers =>
         markers
@@ -189,23 +192,37 @@ class FeaturedAppActivityMarkerTrigger(
       )
   }
 
-  override def completeTaskAsDsoDelegate(
+  override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    val informees = task.markers
+      .flatMap(m => Seq(m.payload.provider, m.payload.beneficiary))
+      .map(PartyId.tryFromProtoPrimitive)
+      .toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.vettedAmuletVersion.toString,
+      informees,
+      // ignoring a party would mean their featured app activity markers do not get converted into rewards
+      enableUnresponsivePartiesAutoIgnore = false,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
+      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
-      informees = (dsoRules.payload.dso +: task.markers.flatMap(m =>
-        Seq(m.payload.provider, m.payload.beneficiary)
-      )).toSet
+      allParties = informees + PartyId.tryFromProtoPrimitive(dsoRules.payload.dso)
       supportsConvertFeaturedAppActivityMarkerObservers <-
         if (svConfig.convertFeaturedAppActivityMarkerObservers) {
           svTaskContext.packageVersionSupport
             .supportsConvertFeaturedAppActivityMarkerObservers(
-              informees.map(PartyId.tryFromProtoPrimitive(_)).toSeq,
+              allParties.toSeq,
               context.clock.now,
             )
             .map(_.supported)
@@ -223,7 +240,7 @@ class FeaturedAppActivityMarkerTrigger(
             Option
               .when(
                 supportsConvertFeaturedAppActivityMarkerObservers
-              )(informees.toSeq.asJava)
+              )(allParties.toSeq.map(_.toProtoPrimitive).asJava)
               .toJava,
           ),
           Optional.of(controller),

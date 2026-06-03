@@ -46,7 +46,7 @@ spec:
         {{- end }}
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+          value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         - name: CANTON_PARTICIPANT_POSTGRES_SERVER
           value: {{ .Values.persistence.host }}
         - name: CANTON_PARTICIPANT_POSTGRES_PORT
@@ -129,9 +129,13 @@ spec:
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- if or (and .Values.extraVolumeMounts (gt (len .Values.extraVolumeMounts) 0)) .Values.pvc }}
         volumeMounts:
-          {{- range .Values.extraVolumeMounts }}
+          - name: logback-config
+            # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+            # would not receive configmap updates.
+            # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+            mountPath: /app/logback
+        {{- range .Values.extraVolumeMounts }}
           - name: {{ .name }}
             mountPath: {{ .mountPath }}
             {{- if .subPath }}
@@ -140,11 +144,10 @@ spec:
             {{- if .readOnly }}
             readOnly: {{ .readOnly }}
             {{- end }}
-          {{- end }}
+        {{- end }}
         {{- if .Values.pvc }}
           - name: participant-volume
             mountPath: /persistent-data
-        {{- end }}
         {{- end }}
       {{- if or (.Values.persistence.enablePgInitContainer) (.Values.extraInitContainers) }}
       initContainers:
@@ -187,8 +190,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or (and .Values.extraVolumes (gt (len .Values.extraVolumes) 0)) .Values.pvc }}
       volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-participant-logback-config
         {{- range .Values.extraVolumes }}
         - name: {{ .name }}
           {{- if .secret }}
@@ -205,7 +210,6 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-participant-pvc
         {{- end }}
-      {{- end }}
 ---
 {{-  if .Values.pvc }}
 apiVersion: v1
@@ -252,6 +256,15 @@ spec:
   - name: json-api
     port: 7575
     protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-participant-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}

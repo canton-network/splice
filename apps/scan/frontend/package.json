@@ -50,8 +50,7 @@
     "msw": "^2.14.2",
     "typescript": "5.8.3",
     "typescript-eslint": "^8.30.1",
-    "vite": "^8.0.7",
-    "vite-tsconfig-paths": "^6.1.1"
+    "vite": "^8.0.7"
   },
   "eslintConfig": {
     "extends": [

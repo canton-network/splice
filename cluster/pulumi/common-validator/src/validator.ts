@@ -96,7 +96,6 @@ export type ValidatorInstallConfig = BasicValidatorConfig & {
   participantBootstrapDump?: BootstrappingDumpConfig;
   migration: {
     id: DomainMigrationIndex;
-    migrating: boolean;
   };
 };
 

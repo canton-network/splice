@@ -44,19 +44,12 @@ spec:
           {{- end }}
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+              value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
             {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens) | indent 12}}
             {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator") | indent 12}}
             - name: SPLICE_APP_SV_PARTICIPANT_ADDRESS
               value: {{ .Values.participantAddress | quote }}
-            {{- if .Values.migration.migrating }}
-            - name: ADDITIONAL_CONFIG_SV_ONBOARDING
-              value: |
-                _onboarding {
-                  type = "domain-migration"
-                  dump-file-path = "/domain-upgrade-dump/domain_migration_dump.json"
-                }
-            {{- else if .Values.joinWithKeyOnboarding }}
+            {{- if .Values.joinWithKeyOnboarding }}
             - name: ADDITIONAL_CONFIG_SV_ONBOARDING
               value: |
                 _onboarding {
@@ -186,13 +179,6 @@ spec:
                 canton.sv-apps.sv {
                   domain-migration-id = {{ .Values.migration.id }}
                 }
-            {{ if hasKey .Values.migration "legacyId" }}
-            - name: ADDITIONAL_CONFIG_LEGACY_MIGRATION_ID
-              value: |
-                canton.sv-apps.sv {
-                  legacy-migration-id = {{ .Values.migration.legacyId }}
-                }
-            {{ end }}
             - name: ADDITIONAL_CONFIG_GLOBAL_DOMAIN_UPGRADE_DUMP_PATH
               value: |
                 canton.sv-apps.sv.domain-migration-dump-path = "/domain-upgrade-dump/domain_migration_dump.json"
@@ -556,8 +542,13 @@ spec:
             periodSeconds: 5
             failureThreshold: 5
             timeoutSeconds: 10
-          {{- if or .Values.participantIdentitiesDumpImport .Values.migration.attachPvc }}
           volumeMounts:
+            - name: logback-config
+              # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+              # would not receive configmap updates.
+              # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+              mountPath: /app/logback
+          {{- if or .Values.participantIdentitiesDumpImport .Values.migration.attachPvc }}
           {{- with .Values.participantIdentitiesDumpImport }}
             - name: participant-bootstrapping-dump-volume
               mountPath: /participant-bootstrapping-dump
@@ -594,6 +585,9 @@ spec:
                 sleep 2;
               done
       volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-sv-app-logback-config
       {{- with .Values.participantIdentitiesDumpImport }}
         - name: participant-bootstrapping-dump-volume
           secret:
@@ -652,6 +646,15 @@ spec:
       storage: 20G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
 {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-sv-app-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}

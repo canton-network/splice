@@ -23,7 +23,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
           test_name: deployment_test
@@ -31,12 +31,12 @@ jobs:
           target: 'oss'
 
       - name: Helm tests
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: make cluster/helm/test
 
       - name: Pulumi tests
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd_retry_count: 5 # Retry in case of dependency download errors
           cmd: make cluster/pulumi/test
@@ -44,7 +44,7 @@ jobs:
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
-        uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
+        uses: ./.github/actions/tests/failure_notifications
         with:
           job_subname: "deployment_test"
           workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'

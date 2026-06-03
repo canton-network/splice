@@ -1,0 +1,17 @@
+{
+  "name": "split_tests",
+  "version": "1.0.0",
+  "main": "dist/split_tests.js",
+  "scripts": {
+    "build": "npx tsc --noEmit && npx esbuild src/split_tests.ts --bundle --platform=node --format=cjs --outfile=dist/index.js"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "fast-xml-parser": "^5.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "typescript": "^6.0.3",
+    "esbuild": "^0.28.0"
+  }
+}

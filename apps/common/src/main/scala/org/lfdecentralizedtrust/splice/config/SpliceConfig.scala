@@ -87,6 +87,8 @@ final case class EnabledFeaturesConfig(
     // On 3.5 we should be able to set it to false.
     reconnectOnSynchronizerConfigurationChange: Boolean = true,
     enableUnsupportedDarsUnvetting: Boolean = true,
+    ignorePartyIdWithIgnoredAmulet: Boolean = true,
+    naiveUnresponsivePartiesAutoIgnore: Boolean = true,
 )
 
 final case class SpliceCachingConfigs(

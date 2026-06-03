@@ -12,7 +12,6 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics, ScanTables}
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, MultiDomainAcsStore}
@@ -57,20 +56,14 @@ class ScanStoreIngestionPerformanceTest(
     new DbScanStore(
       ScanStore.Key(dsoParty),
       storage,
-      isFirstSv = true,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
         NoReportingTracerProvider.tracer
       ),
-      _ => throw new RuntimeException("Scan Aggregates do not matter for this test."),
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
-      0L,
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
     )(ec, templateJsonDecoder, closeContext).multiDomainAcsStore
   }
