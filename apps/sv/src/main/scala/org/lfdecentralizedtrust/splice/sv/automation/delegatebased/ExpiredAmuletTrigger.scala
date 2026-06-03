@@ -15,14 +15,16 @@ import ExpiredAmuletTrigger.*
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 
 class ExpiredAmuletTrigger(
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -34,25 +36,39 @@ class ExpiredAmuletTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletBatchSize,
-      svTaskContext.dsoStore.listExpiredAmulets(context.config.ignoredExpiredAmuletPartyIds),
+      svTaskContext.dsoStore.listExpiredAmulets(ignoredPartiesStore.getAll),
       splice.amulet.Amulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       c => Seq(c.dso, c.owner).map(PartyId.tryFromProtoPrimitive(_)),
     )
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with IgnoredAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.owner))
-      .toSet + store.key.dsoParty
+    val informees =
+      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.owner)).toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.work.vettedVersion.toString,
+      informees,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+      informees: Set[PartyId],
+  )(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    val allParties = informees + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        informees.toSeq,
+        allParties.toSeq,
         Seq(store.key.dsoParty),
         context.clock.now,
       )

@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
-      - uses: ./splice-shared-gha/.github/actions/nix/cleanup_nix_cache
+      - uses: ./.github/actions/nix/cleanup_nix_cache
         with:
           max_age_days: ${{ inputs.max_age_days || '30' }}
           workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
