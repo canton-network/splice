@@ -31,6 +31,7 @@ import com.digitalasset.canton.sequencing.{
   SequencerConnection,
   SequencerConnections,
 }
+import com.digitalasset.canton.sequencing.protocol.TrafficState
 import com.digitalasset.canton.topology.{
   NodeIdentity,
   ParticipantId,
@@ -269,6 +270,13 @@ class ParticipantAdminConnection(
   def getParticipantId()(implicit traceContext: TraceContext): Future[ParticipantId] =
     getId().map(ParticipantId(_))
 
+  def getParticipantTrafficState(
+      synchronizerId: SynchronizerId
+  )(implicit traceContext: TraceContext): Future[TrafficState] = {
+    runCmd(
+      ParticipantAdminCommands.TrafficControl.GetTrafficControlState(synchronizerId)
+    )
+  }
   def ensureInitialPartyToParticipant(
       store: TopologyStoreId,
       partyId: PartyId,

@@ -10,7 +10,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
-import com.digitalasset.canton.sequencing.protocol.TrafficState
 import com.digitalasset.canton.topology.{
   ConfiguredPhysicalSynchronizerId,
   KnownPhysicalSynchronizerId,
@@ -125,17 +124,6 @@ trait ParticipantAdminSynchronizerConnection {
     )
   } yield ()
 
-  private def registerSynchronizer(config: SynchronizerConnectionConfig, handshakeOnly: Boolean)(
-      implicit traceContext: TraceContext
-  ): Future[Unit] =
-    runCmd(
-      ParticipantAdminCommands.SynchronizerConnectivity.RegisterSynchronizer(
-        config,
-        handshakeOnly,
-        SequencerConnectionValidation.ThresholdActive,
-      )
-    )
-
   def connectSynchronizer(alias: SynchronizerAlias)(implicit
       traceContext: TraceContext
   ): Future[Unit] =
@@ -159,24 +147,7 @@ trait ParticipantAdminSynchronizerConnection {
   ): Future[Unit] =
     runCmd(ParticipantAdminCommands.SynchronizerConnectivity.DisconnectSynchronizer(alias))
 
-  def ensureSynchronizerRegistered(
-      config: SynchronizerConnectionConfig,
-      retryFor: RetryFor,
-  )(implicit traceContext: TraceContext): Future[Unit] = {
-    for {
-      _ <- retryProvider
-        .ensureThat(
-          retryFor,
-          "synchronizer_registered_handshake",
-          s"participant registered ${config.synchronizerAlias} with handshake only",
-          lookupSynchronizerConnectionConfig(config.synchronizerAlias).map(_.toRight(())),
-          (_: Unit) => registerSynchronizer(config, handshakeOnly = true),
-          logger,
-        )
-    } yield ()
-  }
-
-  def ensureSynchronizerRegisteredNoHandshake(
+  def ensureSynchronizerRegisteredWithManualConnect(
       config: SynchronizerConnectionConfig,
       retryFor: RetryFor,
   )(implicit traceContext: TraceContext): Future[Unit] = {
@@ -191,7 +162,7 @@ trait ParticipantAdminSynchronizerConnection {
           "synchronizer_registered_no_handshake",
           s"participant registered ${config.synchronizerAlias}",
           lookupSynchronizerConnectionConfig(config.synchronizerAlias).map(_.toRight(())),
-          (_: Unit) => registerSynchronizer(config, handshakeOnly = false),
+          (_: Unit) => registerSynchronizer(config),
           logger,
         )
     } yield ()
@@ -223,7 +194,7 @@ trait ParticipantAdminSynchronizerConnection {
           existingConfig match {
             case None =>
               logger.info(s"Registering new synchronizer with config $config")
-              registerSynchronizer(config, handshakeOnly = false)
+              registerSynchronizer(config)
             case Some(_) =>
               modifySynchronizerConnectionConfigAndReconnect(
                 config.synchronizerAlias,
@@ -237,6 +208,17 @@ trait ParticipantAdminSynchronizerConnection {
     _ <- connectSynchronizer(config.synchronizerAlias)
   } yield ()
 
+  private def registerSynchronizer(config: SynchronizerConnectionConfig)(implicit
+      traceContext: TraceContext
+  ): Future[Unit] =
+    runCmd(
+      ParticipantAdminCommands.SynchronizerConnectivity.RegisterSynchronizer(
+        config,
+        performHandshake = false,
+        SequencerConnectionValidation.ThresholdActive,
+      )
+    )
+
   private def reconnectSynchronizer(alias: SynchronizerAlias)(implicit
       traceContext: TraceContext
   ): Future[Unit] = for {
@@ -248,14 +230,6 @@ trait ParticipantAdminSynchronizerConnection {
     )
     _ <- connectSynchronizer(alias)
   } yield ()
-
-  def getParticipantTrafficState(
-      synchronizerId: SynchronizerId
-  )(implicit traceContext: TraceContext): Future[TrafficState] = {
-    runCmd(
-      ParticipantAdminCommands.TrafficControl.GetTrafficControlState(synchronizerId)
-    )
-  }
 
   def lookupSynchronizerConnectionConfig(
       synchronizerAlias: SynchronizerAlias
@@ -280,17 +254,6 @@ trait ParticipantAdminSynchronizerConnection {
       )
     )
 
-  private def setSynchronizerConnectionConfig(config: SynchronizerConnectionConfig)(implicit
-      traceContext: TraceContext
-  ): Future[Unit] =
-    runCmd(
-      ParticipantAdminCommands.SynchronizerConnectivity.ModifySynchronizerConnection(
-        None,
-        config,
-        SequencerConnectionValidation.ThresholdActive,
-      )
-    )
-
   def modifySynchronizerConnectionConfig(
       synchronizer: SynchronizerAlias,
       f: SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig],
@@ -306,12 +269,26 @@ trait ParticipantAdminSynchronizerConnection {
             logger.trace("No update to synchronizer connection config required")
             Future.successful(false)
           case Some(config) =>
-            logger.info(
-              s"Updating to new synchronizer connection config for synchronizer $synchronizer. Old config: $oldConfig, new config: $config"
-            )
-            for {
-              _ <- setSynchronizerConnectionConfig(config)
-            } yield true
+            if (
+              oldConfig.synchronizerId
+                .exists(oldPsid => config.synchronizerId.exists(psid => psid != oldPsid))
+            ) {
+              Future.failed(
+                Status.INVALID_ARGUMENT
+                  .withDescription(
+                    s"New config physical synchronizer id ${config.synchronizerId} cannot be different from the old one ${oldConfig.synchronizerId} for synchronizer $synchronizer"
+                  )
+                  .asRuntimeException()
+              )
+            } else {
+
+              logger.info(
+                s"Updating to new synchronizer connection config for synchronizer $synchronizer. Old config: $oldConfig, new config: $config"
+              )
+              for {
+                _ <- setSynchronizerConnectionConfig(config)
+              } yield true
+            }
         }
       } yield configModified,
       logger,
@@ -381,4 +358,14 @@ trait ParticipantAdminSynchronizerConnection {
         } else Future.unit
     } yield ()
 
+  private def setSynchronizerConnectionConfig(config: SynchronizerConnectionConfig)(implicit
+      traceContext: TraceContext
+  ): Future[Unit] =
+    runCmd(
+      ParticipantAdminCommands.SynchronizerConnectivity.ModifySynchronizerConnection(
+        None,
+        config,
+        SequencerConnectionValidation.ThresholdActive,
+      )
+    )
 }
