@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.store
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
+  RewardCouponV2,
   ValidatorRewardCoupon,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet
@@ -109,6 +110,38 @@ trait TransferInputStore extends AppStore with LimitHelpers {
           Ordering[(Long, BigDecimal)].on(
             (x: (
                 Contract.Has[AppRewardCoupon.ContractId, AppRewardCoupon],
+                BigDecimal,
+            )) => (x._1.payload.round.number, -x._2)
+          )
+        ),
+    )
+
+  /** Returns assigned RewardCouponV2 sorted by round ascending, amount descending.
+    * Only includes coupons with an assigned beneficiary from the given `activeIssuingRounds`.
+    */
+  def listSortedRewardCouponsV2(
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    (Contract[RewardCouponV2.ContractId, RewardCouponV2], BigDecimal)
+  ]] =
+    for {
+      rewards <- multiDomainAcsStore.listContracts(
+        RewardCouponV2.COMPANION
+      )
+    } yield applyLimit(
+      "listSortedRewardCouponsV2",
+      limit,
+      rewards
+        .filter { rw =>
+          rw.payload.beneficiary.isPresent &&
+          issuingRoundsMap.contains(rw.payload.round)
+        }
+        .map(rw => (rw.contract, BigDecimal(rw.payload.amount)))
+        .sorted(
+          Ordering[(Long, BigDecimal)].on(
+            (x: (
+                Contract.Has[RewardCouponV2.ContractId, RewardCouponV2],
                 BigDecimal,
             )) => (x._1.payload.round.number, -x._2)
           )

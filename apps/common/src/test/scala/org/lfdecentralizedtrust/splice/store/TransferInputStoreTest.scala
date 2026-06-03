@@ -102,6 +102,77 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
+  "listSortedRewardCouponsV2" should {
+
+    "return empty when no issuing rounds match" in {
+      for {
+        store <- mkTransferInputStore(user)
+        _ <- MonadUtil.sequentialTraverse(1 to 3)(n =>
+          dummyDomain.create(
+            rewardCouponV2(round = n, provider = user, amount = numeric(n), beneficiary = Some(user)),
+            createdEventSignatories = Seq(dsoParty),
+            createdEventObservers = Seq(user),
+          )(store.multiDomainAcsStore)
+        )
+      } yield {
+        store.listSortedRewardCouponsV2(Map.empty).futureValue shouldBe empty
+      }
+    }
+
+    "return assigned coupons sorted by round asc, amount desc" in {
+      for {
+        store <- mkTransferInputStore(user)
+        _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
+          for {
+            _ <- dummyDomain.create(
+              rewardCouponV2(round = n, provider = user, amount = numeric(n), beneficiary = Some(user)),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(
+              rewardCouponV2(round = n, provider = user, amount = numeric(2 * n), beneficiary = Some(user)),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+          } yield ()
+        )
+      } yield {
+        val roundsToFilter = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
+        store
+          .listSortedRewardCouponsV2(roundsToFilter.map(r => r.payload.round -> r.payload).toMap)
+          .futureValue
+          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          4.0, 2.0, // round 2
+          6.0, 3.0, // round 3
+          8.0, 4.0, // round 4
+        )
+      }
+    }
+
+    "exclude unassigned coupons" in {
+      for {
+        store <- mkTransferInputStore(user)
+        _ <- dummyDomain.create(
+          rewardCouponV2(round = 1, provider = user, amount = numeric(10), beneficiary = Some(user)),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(
+          rewardCouponV2(round = 1, provider = user, amount = numeric(20), beneficiary = None),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        val roundsToFilter = Seq(issuingMiningRound(dsoParty, 1L))
+        val results = store
+          .listSortedRewardCouponsV2(roundsToFilter.map(r => r.payload.round -> r.payload).toMap)
+          .futureValue
+        results should have size 1
+        results.head._1.payload.amount.doubleValue() shouldBe 10.0
+      }
+    }
+  }
+
   /** A AmuletRules_Mint exercise event with one child Amulet create event */
   protected def mintTransaction(
       receiver: PartyId,

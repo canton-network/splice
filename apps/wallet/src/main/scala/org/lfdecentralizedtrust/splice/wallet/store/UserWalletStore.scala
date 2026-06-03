@@ -673,6 +673,13 @@ object UserWalletStore {
             rewardCouponWeight = Some(co.payload.weight),
           )
         ),
+        mkFilter(amuletCodegen.RewardCouponV2.COMPANION)(co =>
+          co.payload.dso == dso &&
+            (co.payload.beneficiary == java.util.Optional.of(endUser) ||
+              (co.payload.beneficiary.isEmpty && co.payload.provider == endUser))
+        )(co =>
+          UserWalletAcsStoreRowData(co, None, rewardCouponRound = Some(co.payload.round.number))
+        ),
         mkFilter(amuletCodegen.UnclaimedActivityRecord.COMPANION)(co =>
           co.payload.dso == dso &&
             co.payload.beneficiary == endUser
