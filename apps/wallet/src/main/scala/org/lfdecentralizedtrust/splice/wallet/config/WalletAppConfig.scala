@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.wallet.config
 
 import org.lfdecentralizedtrust.splice.config.{HttpClientConfig, NetworkAppClientConfig}
+import org.lfdecentralizedtrust.splice.util.SpliceUtil
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
@@ -52,4 +53,16 @@ final case class AppRewardBeneficiaryConfig(
 final case class RewardSharingConfig(
     minTtlAfterSharing: NonNegativeFiniteDuration,
     beneficiaries: Seq[AppRewardBeneficiaryConfig],
-)
+) {
+  def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
+
+  def allBeneficiaries(provider: PartyId): Seq[AppRewardBeneficiaryConfig] = {
+    val remainder = providerRemainder
+    beneficiaries ++
+      (if (remainder > 0) Seq(AppRewardBeneficiaryConfig(provider, remainder))
+       else Seq.empty)
+  }
+
+  def allDamlBeneficiaries(provider: PartyId): Seq[(PartyId, java.math.BigDecimal)] =
+    allBeneficiaries(provider).map(b => (b.beneficiary, SpliceUtil.damlDecimal(b.percentage)))
+}

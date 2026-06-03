@@ -5,6 +5,13 @@ import com.digitalasset.canton.config.CantonConfig
 import com.typesafe.config.ConfigFactory
 import org.scalatest.wordspec.AsyncWordSpec
 
+import org.lfdecentralizedtrust.splice.wallet.config.{
+  AppRewardBeneficiaryConfig,
+  RewardSharingConfig,
+}
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.topology.PartyId
+
 class SpliceConfigTest extends AsyncWordSpec with BaseTest {
   private implicit val elc: com.digitalasset.canton.logging.ErrorLoggingContext = SpliceConfig.elc
   val config = ConfigFactory.parseFile(
@@ -79,6 +86,103 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
   }
 
+  "RewardSharingConfig.providerRemainder" should {
+    def mkConfig(percentages: BigDecimal*): RewardSharingConfig =
+      RewardSharingConfig(
+        minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
+        beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
+          AppRewardBeneficiaryConfig(
+            PartyId.tryFromProtoPrimitive(s"party$i::1220"),
+            pct,
+          )
+        },
+      )
+
+    Seq(
+      ("no beneficiaries", Seq.empty[BigDecimal], BigDecimal(1.0)),
+      ("single beneficiary", Seq(BigDecimal(0.3)), BigDecimal(0.7)),
+      ("two beneficiaries", Seq(BigDecimal(0.3), BigDecimal(0.2)), BigDecimal(0.5)),
+      ("full allocation", Seq(BigDecimal(1.0)), BigDecimal(0.0)),
+      ("near-total", Seq(BigDecimal(0.5), BigDecimal(0.49)), BigDecimal(0.01)),
+    ).foreach { case (desc, percentages, expected) =>
+      s"return $expected for $desc" in {
+        mkConfig(percentages*).providerRemainder shouldBe expected
+      }
+    }
+  }
+
+  "RewardSharingConfig.allBeneficiaries" should {
+    def mkConfig(percentages: BigDecimal*): RewardSharingConfig =
+      RewardSharingConfig(
+        minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
+        beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
+          AppRewardBeneficiaryConfig(
+            PartyId.tryFromProtoPrimitive(s"party$i::1220"),
+            pct,
+          )
+        },
+      )
+
+    val provider = PartyId.tryFromProtoPrimitive("provider::1220")
+
+    "include provider with remainder" in {
+      val all = mkConfig(BigDecimal(0.3), BigDecimal(0.2)).allBeneficiaries(provider)
+      all should have size 3
+      all.last.beneficiary shouldBe provider
+      all.last.percentage shouldBe BigDecimal(0.5)
+    }
+
+    "exclude provider when fully allocated" in {
+      val all = mkConfig(BigDecimal(1.0)).allBeneficiaries(provider)
+      all should have size 1
+      all.headOption.value.beneficiary shouldBe PartyId.tryFromProtoPrimitive("party0::1220")
+    }
+
+    "return only provider when no beneficiaries" in {
+      val all = mkConfig().allBeneficiaries(provider)
+      all should have size 1
+      all.headOption.value.beneficiary shouldBe provider
+      all.headOption.value.percentage shouldBe BigDecimal(1.0)
+    }
+  }
+
+  "RewardSharingConfig.allDamlBeneficiaries" should {
+    def mkConfig(percentages: BigDecimal*): RewardSharingConfig =
+      RewardSharingConfig(
+        minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
+        beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
+          AppRewardBeneficiaryConfig(
+            PartyId.tryFromProtoPrimitive(s"party$i::1220"),
+            pct,
+          )
+        },
+      )
+
+    val provider = PartyId.tryFromProtoPrimitive("provider::1220")
+
+    "convert percentages to Daml Decimal scale 10" in {
+      val all = mkConfig(BigDecimal(0.3), BigDecimal(0.2)).allDamlBeneficiaries(provider)
+      all should have size 3
+      all.map(_._2.scale()) shouldBe Seq(10, 10, 10)
+    }
+
+    Seq(
+      ("two-way split", Seq(BigDecimal(0.3), BigDecimal(0.2))),
+      ("three-way split", Seq(BigDecimal(0.33), BigDecimal(0.33), BigDecimal(0.33))),
+      ("high precision", Seq(BigDecimal(0.123456789), BigDecimal(0.876543210))),
+      ("single beneficiary", Seq(BigDecimal(0.5))),
+      ("full allocation", Seq(BigDecimal(1.0))),
+      ("near-total", Seq(BigDecimal(0.5), BigDecimal(0.49))),
+      ("no beneficiaries", Seq.empty[BigDecimal]),
+    ).foreach { case (desc, percentages) =>
+      s"$desc sums to exactly 1.0 at Daml precision" in {
+        val all = mkConfig(percentages*).allDamlBeneficiaries(provider)
+        val sum = all.map(_._2).foldLeft(java.math.BigDecimal.ZERO)(_.add(_))
+        sum.compareTo(java.math.BigDecimal.ONE) shouldBe 0
+      }
+    }
+  }
+
   "rewardSharingByParty" should {
 
     def mkSharingConfig(beneficiaries: String): String =
@@ -135,7 +239,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
 
     Seq(
-      ("sum > 1.0", "0.6, 0.5"),
+      ("sum > 1.0", "0.6, 0.5")
     ).foreach { case (desc, percentages) =>
       val beneficiaries = percentages
         .split(",")
