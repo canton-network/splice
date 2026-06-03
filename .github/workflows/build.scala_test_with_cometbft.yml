@@ -48,7 +48,7 @@ jobs:
 
       - name: Split tests
         id: prep
-        uses: ./splice-shared-gha/.github/actions/tests/pre_scala_test
+        uses: ./.github/actions/tests/pre_scala_test
         with:
           parallelism: ${{ inputs.parallelism }}
           test_names_file: ${{ inputs.test_names_file }}
@@ -118,7 +118,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
-        uses: ./splice-shared-gha/.github/actions/tests/scala_test
+        uses: ./.github/actions/tests/scala_test
         with:
           cache_version: 8
           start_canton_options: -F -w

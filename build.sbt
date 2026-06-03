@@ -1926,7 +1926,7 @@ checkErrors := {
     val ignorePatternsFilenames = ignorePatterns.map(ignorePatternsFilename)
     val cmd =
       Seq(
-        "splice-shared-gha/.github/actions/scripts/check-logs.sh",
+        ".github/actions/scripts/check-logs.sh",
         logFileName,
       ) ++ ignorePatternsFilenames
     if (cmd.! != 0) {
@@ -1944,7 +1944,7 @@ checkErrors := {
 
     // Note that this will split the given file and then delete it, so it is idempotent.
     Seq(
-      "splice-shared-gha/.github/actions/scripts/split-canton-logs.sh",
+      ".github/actions/scripts/split-canton-logs.sh",
       logFile,
       logFileBefore,
       logFileAfter,
