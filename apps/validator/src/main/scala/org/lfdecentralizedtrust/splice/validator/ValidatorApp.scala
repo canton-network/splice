@@ -73,7 +73,6 @@ import org.lfdecentralizedtrust.splice.validator.store.{
   ValidatorInternalStore,
   ValidatorStore,
 }
-import org.lfdecentralizedtrust.splice.validator.store.db.ValidatorTables
 import org.lfdecentralizedtrust.splice.validator.util.{ValidatorScanConnection, ValidatorUtil}
 import org.lfdecentralizedtrust.splice.wallet.admin.http.{
   HttpExternalWalletHandler,
@@ -535,9 +534,9 @@ class ValidatorApp(
   private def resolveDomainMigrationId(
       scanConnection: ScanConnection
   )(implicit traceContext: TraceContext): Future[Long] =
-    DbAppStore.getHighestKnownMigrationId(storage, ValidatorTables.acsTableName).flatMap {
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
       case Some(migrationId) =>
-        logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
         Future.successful(migrationId)
       case None =>
         retryProvider.getValueWithRetries(

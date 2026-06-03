@@ -99,9 +99,9 @@ class DbMultiDomainAcsStoreTest
     }
 
     "getHighestKnownMigrationId" should {
-      "return None when the ACS table is empty" in {
+      "return None when there are no ingested offsets" in {
         DbAppStore
-          .getHighestKnownMigrationId(storage, "acs_store_template")
+          .getHighestKnownMigrationId(storage)
           .map(_ shouldBe None)
       }
 
@@ -110,7 +110,7 @@ class DbMultiDomainAcsStoreTest
         for {
           _ <- initWithAcs()(store)
           _ <- d1.create(c(1))(store)
-          migrationId <- DbAppStore.getHighestKnownMigrationId(storage, "acs_store_template")
+          migrationId <- DbAppStore.getHighestKnownMigrationId(storage)
         } yield migrationId shouldBe Some(3L)
       }
 
@@ -122,7 +122,7 @@ class DbMultiDomainAcsStoreTest
           _ <- d1.create(c(1))(store1)
           _ <- initWithAcs()(store2)
           _ <- d1.create(c(2))(store2)
-          migrationId <- DbAppStore.getHighestKnownMigrationId(storage, "acs_store_template")
+          migrationId <- DbAppStore.getHighestKnownMigrationId(storage)
         } yield migrationId shouldBe Some(2L)
       }
     }

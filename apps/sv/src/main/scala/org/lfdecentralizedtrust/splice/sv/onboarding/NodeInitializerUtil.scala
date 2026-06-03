@@ -41,7 +41,6 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvCantonIdentifierConfig}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
-import org.lfdecentralizedtrust.splice.sv.store.db.DsoTables
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -66,9 +65,9 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       closeContext: CloseContext,
       tc: TraceContext,
   ): Future[Long] =
-    DbAppStore.getHighestKnownMigrationId(storage, DsoTables.acsTableName).flatMap {
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
       case Some(migrationId) =>
-        logger.info(s"Resolved domain migration id $migrationId from the local ACS store")
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
         Future.successful(migrationId)
       case None =>
         scanFallback.map { migrationId =>
