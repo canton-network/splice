@@ -439,7 +439,6 @@ class DevelopmentFundCouponIntegrationTest
     val beneficiary = bobParty
     val initialUnclaimedDevelopmentFundCouponAmount = 1000.0
     val developmentFundCouponAmount = 40.0
-    val expiresAt = CantonTimestamp.now().plus(Duration.ofSeconds(5))
     val reason = "Bob has contributed to the Daml repo"
 
     val bobUserName = bobWalletClient.config.ledgerApiUser
@@ -480,6 +479,9 @@ class DevelopmentFundCouponIntegrationTest
       ) {
         actAndCheck(
           "Allocate one development fund coupon", {
+            // Note that we sample the expiry right before allocating here to avoid it being expired
+            // before we could check its existence.
+            val expiresAt = CantonTimestamp.now().plus(Duration.ofSeconds(5))
             aliceValidatorWalletClient.allocateDevelopmentFundCoupon(
               beneficiary,
               developmentFundCouponAmount,

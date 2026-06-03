@@ -167,7 +167,7 @@ class SV1Initializer(
           bootstrapDomain(synchronizerNodeService.nodes.current)
         }
       _ = logger.info("Domain is bootstrapped, connecting sv1 participant to domain")
-      _ <- participantAdminConnection.ensureDomainRegisteredAndConnected(
+      _ <- participantAdminConnection.ensureSynchronizerRegisteredAndConnected(
         SynchronizerConnectionConfig(
           config.domains.global.alias,
           sequencerConnections = SequencerConnections.tryMany(

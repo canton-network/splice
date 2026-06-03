@@ -45,6 +45,12 @@ class DbSvSvStore(
       interfaceViewsTableNameOpt = None,
       // Any change in the store descriptor will lead to previously deployed applications
       // forgetting all persisted data once they upgrade to the new version.
+      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+      // and notify the person coordinating the deployment.
       acsStoreDescriptor = StoreDescriptor(
         version = 2,
         name = "DbSvSvStore",
