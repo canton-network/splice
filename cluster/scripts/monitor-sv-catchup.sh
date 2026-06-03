@@ -49,7 +49,7 @@ function query_prom() {
   curl -ksf "${PROM}/api/v1/query" \
     --data-urlencode "query=${1}" \
     --data-urlencode "time=${ts}" \
- | jq -r '.data.result[0].value[1] // "999999"'
+ | jq -r '.data.result[0].value[1] // "180"' # default to value higher than threshold but less than expected max
 }
 
 function query_seq_delay() {
