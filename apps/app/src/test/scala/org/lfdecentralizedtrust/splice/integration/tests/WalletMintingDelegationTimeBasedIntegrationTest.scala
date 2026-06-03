@@ -7,6 +7,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
   DevelopmentFundCoupon,
+  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -439,6 +440,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val unclaimedActivityAmount = BigDecimal(200.0)
       val validatorRewardAmount = BigDecimal(500.0)
       val developmentFundAmount = BigDecimal(300.0)
+      val rewardCouponV2Amount = BigDecimal(0.5)
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
@@ -540,6 +542,23 @@ class WalletMintingDelegationTimeBasedIntegrationTest
                 "test development fund coupon",
               ).create,
             )
+
+          // Create RewardCouponV2 (assigned to beneficiary)
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = sv1Backend.config.ledgerApiUser,
+              actAs = Seq(dsoParty),
+              readAs = Seq.empty,
+              update = new RewardCouponV2(
+                dsoParty.toProtoPrimitive,
+                beneficiaryParty.party.toProtoPrimitive,
+                issuingRound.round,
+                rewardCouponV2Amount.bigDecimal,
+                env.environment.clock.now.plus(Duration.ofDays(1)).toInstant,
+                true,
+                java.util.Optional.of(beneficiaryParty.party.toProtoPrimitive),
+              ).create,
+            )
         }
 
         // Advance time to collect all rewards
@@ -566,6 +585,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             externalPartyWallet.store
               .listDevelopmentFundCoupons()
               .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
+            externalPartyWallet.store
+              .listSortedRewardCouponsV2(issuingRoundsMap)
+              .futureValue shouldBe empty withClue "RewardCouponV2"
           }
         }
       }
@@ -581,7 +603,8 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           )) +
           (validatorRewardAmount * BigDecimal(issuingRound.issuancePerValidatorRewardCoupon)) +
           unclaimedActivityAmount +
-          developmentFundAmount
+          developmentFundAmount +
+          rewardCouponV2Amount
 
       actualIncrease shouldBe expectedTotalReward
 
