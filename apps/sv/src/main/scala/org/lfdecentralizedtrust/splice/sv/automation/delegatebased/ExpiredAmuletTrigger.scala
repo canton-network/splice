@@ -66,7 +66,7 @@ class ExpiredAmuletTrigger(
       tc: TraceContext
   ): Future[TaskOutcome] = {
     val allParties = informees + store.key.dsoParty
-    (for {
+    for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
         allParties.toSeq,
@@ -127,7 +127,7 @@ class ExpiredAmuletTrigger(
         .withPreferredPackage(preferredPackageIds)
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
-    } yield TaskSuccess("archived expired amulet"))
+    } yield TaskSuccess("archived expired amulet")
   }
 }
 

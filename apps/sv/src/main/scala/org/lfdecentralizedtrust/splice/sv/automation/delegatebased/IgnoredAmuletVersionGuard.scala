@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.base.error.utils.ErrorDetails.ErrorInfoDetail
+import com.digitalasset.canton.error.MediatorError
 import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
@@ -60,12 +61,12 @@ trait IgnoredAmuletVersionGuard {
     val statusProto = StatusProto.fromThrowable(ex)
     val errorDetails = ErrorDetails.from(statusProto)
     errorDetails
-      .collectFirst { case ErrorInfoDetail("MEDIATOR_SAYS_TX_TIMED_OUT", metadata) =>
+      .collectFirst { case ErrorInfoDetail(MediatorError.Timeout.id, metadata) =>
         metadata
           .get("unresponsiveParties")
           .toList
           .flatMap(
-            _.split(',').map(_.trim).filter(_.nonEmpty).flatMap { partyStr =>
+            _.split(',').filter(_.nonEmpty).flatMap { partyStr =>
               PartyId.fromProtoPrimitive(partyStr, "unresponsiveParties").toOption
             }
           )
