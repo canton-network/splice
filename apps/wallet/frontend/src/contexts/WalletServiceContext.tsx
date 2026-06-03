@@ -81,7 +81,7 @@ export function isV2AllocationRequest(payload: AllocationRequest): payload is Al
 }
 export type AmuletAllocation = AmuletAllocationV1 | AmuletAllocationV2;
 export function isV2Allocation(payload: AmuletAllocation): payload is AmuletAllocationV2 {
-  return 'numIterations' in payload;
+  return !!(payload as AmuletAllocationV2).numIterations;
 }
 
 const WalletContext = React.createContext<WalletClient | undefined>(undefined);
