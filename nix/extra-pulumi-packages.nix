@@ -20,6 +20,10 @@
         sha256 = "867823bc3df601aef41c068a9aa5673081eaae5aba28445f747d31890a78ddc1";
       }
       {
+        url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.44.0/pulumi-resource-auth0-v3.44.0-linux-amd64.tar.gz";
+        sha256 = "df1173985ab311a928e643e2d75f2ce9097a77f7a8ec724d2ec9902f050441c0";
+      }
+      {
         url = "https://github.com/pulumi/pulumi-command/releases/download/v1.1.0/pulumi-resource-command-v1.1.0-linux-amd64.tar.gz";
         sha256 = "2b4785052f935178cd471dde5eb3ad00d8d20cd5529218805ed127cf5aca236b";
       }
@@ -148,6 +152,10 @@
       {
         url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.39.0/pulumi-resource-auth0-v3.39.0-darwin-amd64.tar.gz";
         sha256 = "35491419ec777d264d47210336a275a431e0568fda88101bb7b41b5579445f38";
+      }
+      {
+        url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.44.0/pulumi-resource-auth0-v3.44.0-darwin-amd64.tar.gz";
+        sha256 = "1d154e08cae78ef9d5cd8aa7915a335e94988037f81fa9f585a8eb09483fc471";
       }
       {
         url = "https://github.com/pulumi/pulumi-command/releases/download/v1.1.0/pulumi-resource-command-v1.1.0-darwin-amd64.tar.gz";
@@ -280,6 +288,10 @@
         sha256 = "946a4f4e903e8d40e4159c3053bf10acef0c26da114c10c52b9f3a3e7c304abd";
       }
       {
+        url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.44.0/pulumi-resource-auth0-v3.44.0-linux-arm64.tar.gz";
+        sha256 = "37415cca5a743a17b0e91f7d5c4e6d4c81f637987f3b93bfe7cc72d15d7a0285";
+      }
+      {
         url = "https://github.com/pulumi/pulumi-command/releases/download/v1.1.0/pulumi-resource-command-v1.1.0-linux-arm64.tar.gz";
         sha256 = "13b2b8c5b3539bf3582f8e1bd4cb54744437ca7b7962ab3144c3fb46471d9661";
       }
@@ -408,6 +420,10 @@
       {
         url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.39.0/pulumi-resource-auth0-v3.39.0-darwin-arm64.tar.gz";
         sha256 = "a8f959c9d3763bd8c1cb00e76826e49c1d1d92fe119242486c7828e840bbf150";
+      }
+      {
+        url = "https://github.com/pulumi/pulumi-auth0/releases/download/v3.44.0/pulumi-resource-auth0-v3.44.0-darwin-arm64.tar.gz";
+        sha256 = "a5d6d5195803171ec0b853bb2f329164716855b7a117b113673b65c2888cd65e";
       }
       {
         url = "https://github.com/pulumi/pulumi-command/releases/download/v1.1.0/pulumi-resource-command-v1.1.0-darwin-arm64.tar.gz";
