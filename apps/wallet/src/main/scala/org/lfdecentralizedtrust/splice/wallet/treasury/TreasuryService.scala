@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferi
   InputAmulet,
   InputAppRewardCoupon,
   InputDevelopmentFundCoupon,
+  InputRewardCouponV2,
   InputSvRewardCoupon,
   InputUnclaimedActivityRecord,
   InputValidatorLivenessActivityRecord,
@@ -809,6 +810,11 @@ class TreasuryService(
         maxNumInputs,
         issuingRoundsMap,
       )
+      (rewardCouponV2TotalAmuletQuantity, rewardCouponV2Inputs) <-
+        getRewardCouponV2AndQuantity(
+          maxNumInputs,
+          issuingRoundsMap,
+        )
       (svRewardsTotalAmuletQuantity, svRewardInputs) <- getSvRewardCouponsAndQuantity(
         maxNumInputs,
         issuingRoundsMap,
@@ -824,7 +830,8 @@ class TreasuryService(
     } yield {
       if (
         isMergeOny && !shouldMergeOnlyTransferRun(
-          appRewardsTotalAmuletQuantity + validatorRewardsAmuletQuantity + validatorFaucetsAmuletQuantity +
+          appRewardsTotalAmuletQuantity + rewardCouponV2TotalAmuletQuantity +
+            validatorRewardsAmuletQuantity + validatorFaucetsAmuletQuantity +
             validatorLivenessActivityRecordsAmuletQuantity + svRewardsTotalAmuletQuantity +
             unclaimedActivityRecordsQuantity + developmentFundCouponsQuantity,
           amuletInputsAndQuantity,
@@ -837,6 +844,7 @@ class TreasuryService(
           amuletInputsAndQuantity.map(_._2),
           validatorRewardInputs,
           appRewardInputs,
+          rewardCouponV2Inputs,
           validatorFaucetInputs,
           validatorActivityRecordsInputs,
           svRewardInputs,
@@ -845,7 +853,9 @@ class TreasuryService(
           numTapOperations,
         )
         val rewardInputRounds =
-          appRewardInputs.map(_._1).toSet ++ validatorRewardInputs
+          appRewardInputs.map(_._1).toSet ++ rewardCouponV2Inputs
+            .map(_._1)
+            .toSet ++ validatorRewardInputs
             .map(_._1)
             .toSet ++ validatorFaucetInputs.map(_._1).toSet ++ validatorActivityRecordsInputs
             .map(_._1)
@@ -900,6 +910,7 @@ class TreasuryService(
       amuletInputs: Seq[InputAmulet],
       validatorRewardInputs: Seq[(Round, BigDecimal, InputValidatorRewardCoupon)],
       appRewardInputs: Seq[(Round, BigDecimal, InputAppRewardCoupon)],
+      rewardCouponV2Inputs: Seq[(Round, BigDecimal, InputRewardCouponV2)],
       validatorFaucetInputs: Seq[(Round, BigDecimal, ExtTransferInput)],
       validatorActivityRecordsInputs: Seq[
         (Round, BigDecimal, InputValidatorLivenessActivityRecord)
@@ -910,7 +921,7 @@ class TreasuryService(
       numTapOperations: Int,
   ): Seq[TransferInput] = {
     val sortedRewardInputs =
-      (validatorRewardInputs ++ appRewardInputs ++ validatorFaucetInputs ++ validatorActivityRecordsInputs ++ svRewardCouponInputs)
+      (validatorRewardInputs ++ appRewardInputs ++ rewardCouponV2Inputs ++ validatorFaucetInputs ++ validatorActivityRecordsInputs ++ svRewardCouponInputs)
         .sorted(
           // prioritize the soonest-to-expire, most-valuable rewards.
           Ordering[(Long, BigDecimal)].on((rw: (Round, BigDecimal, _)) => (rw._1.number, -rw._2))
@@ -1072,6 +1083,27 @@ class TreasuryService(
         )
       )
     } yield (appRewardsAmuletQuantity, appRewardInputs)
+
+  private def getRewardCouponV2AndQuantity(
+      maxNumInputs: Int,
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+  )(implicit
+      tc: TraceContext
+  ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
+    for {
+      rewardCouponV2Inputs <- userStore.listSortedRewardCouponsV2(
+        issuingRoundsMap,
+        PageLimit.tryCreate(maxNumInputs),
+      )
+      rewardCouponV2AmuletQuantity = rewardCouponV2Inputs.map(_._2).sum
+      inputs = rewardCouponV2Inputs.map(rw =>
+        (
+          rw._1.payload.round,
+          rw._2,
+          new InputRewardCouponV2(rw._1.contractId),
+        )
+      )
+    } yield (rewardCouponV2AmuletQuantity, inputs)
 
   private def getUnclaimedActivityRecordsAndQuantity(
       maxNumInputs: Int

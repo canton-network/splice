@@ -109,7 +109,12 @@ abstract class TransferInputStoreTest extends StoreTestBase {
         store <- mkTransferInputStore(user)
         _ <- MonadUtil.sequentialTraverse(1 to 3)(n =>
           dummyDomain.create(
-            rewardCouponV2(round = n, provider = user, amount = numeric(n), beneficiary = Some(user)),
+            rewardCouponV2(
+              round = n,
+              provider = user,
+              amount = numeric(n),
+              beneficiary = Some(user),
+            ),
             createdEventSignatories = Seq(dsoParty),
             createdEventObservers = Seq(user),
           )(store.multiDomainAcsStore)
@@ -125,12 +130,22 @@ abstract class TransferInputStoreTest extends StoreTestBase {
         _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
           for {
             _ <- dummyDomain.create(
-              rewardCouponV2(round = n, provider = user, amount = numeric(n), beneficiary = Some(user)),
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(n),
+                beneficiary = Some(user),
+              ),
               createdEventSignatories = Seq(dsoParty),
               createdEventObservers = Seq(user),
             )(store.multiDomainAcsStore)
             _ <- dummyDomain.create(
-              rewardCouponV2(round = n, provider = user, amount = numeric(2 * n), beneficiary = Some(user)),
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(2 * n),
+                beneficiary = Some(user),
+              ),
               createdEventSignatories = Seq(dsoParty),
               createdEventObservers = Seq(user),
             )(store.multiDomainAcsStore)
@@ -153,7 +168,12 @@ abstract class TransferInputStoreTest extends StoreTestBase {
       for {
         store <- mkTransferInputStore(user)
         _ <- dummyDomain.create(
-          rewardCouponV2(round = 1, provider = user, amount = numeric(10), beneficiary = Some(user)),
+          rewardCouponV2(
+            round = 1,
+            provider = user,
+            amount = numeric(10),
+            beneficiary = Some(user),
+          ),
           createdEventSignatories = Seq(dsoParty),
           createdEventObservers = Seq(user),
         )(store.multiDomainAcsStore)
