@@ -314,7 +314,7 @@ val todoStyleExcludePrefixes =
     "token-standard/dependencies",
     ".github/actions/tests/split_tests/dist/",
     "gha-scripts/actions/parse_backport_comments/",
-    "scripts/actions/backport_reminder/"
+    "gha-scripts/actions/backport_reminder"
   )
 val todoStyleExcludeSuffixes =
   Seq("/checkTodos.sc", "/build.static_tests.yml", "/migrate-github-issues.py")
