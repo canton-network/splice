@@ -885,13 +885,26 @@ class BftScanConnection(
   override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[GetRewardAccountingBatchResponse]] =
-    Future
-      .find(
-        scanList.scanConnections.open.toList
-          .map(_.getRewardAccountingBatch(roundNumber, batchHash))
-      )(_.isDefined)
-      .map(_.flatten)
+  ): Future[Option[GetRewardAccountingBatchResponse]] = {
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(None)
+    else
+      BftScanConnection
+        .executeCall[GetRewardAccountingBatchResponse, SingleScanConnection](
+          call = scan =>
+            scan.getRewardAccountingBatch(roundNumber, batchHash).map {
+              case Some(batch) => batch
+              case None =>
+                throw new RuntimeException(
+                  s"Scan does not have batch $batchHash for round $roundNumber"
+                )
+            },
+          requestFrom = callConfig.connections,
+          nTargetSuccess = callConfig.targetSuccess,
+          logger = logger,
+        )
+        .transform(tryBatch => Success(tryBatch.toOption))
+  }
 }
 trait HasUrl {
   def url: Uri
