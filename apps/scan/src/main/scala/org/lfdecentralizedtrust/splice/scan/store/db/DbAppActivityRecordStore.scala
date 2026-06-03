@@ -171,12 +171,17 @@ class DbAppActivityRecordStore(
               and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
-    ).map {
-      // The first SV has complete history from genesis, so round 0 is always
-      // the earliest complete round. The query still runs to confirm ingestion
-      // has started (returns None if no meta row or no activity records).
-      case Some(_) if isFirstSv => Some(0L)
-      case other => other
+    ).flatMap {
+      case Some(n) if isFirstSv =>
+        // First SV: round 0 unless a version bump occurred.
+        runQuerySingle(
+          hasPriorIngestionVersionDBIO.map(Some(_)),
+          "appActivity.hasPriorVersionMeta",
+        ).map {
+          case Some(true) => Some(n) // version bump — respect meta table
+          case _ => Some(0L) // fresh network — round 0
+        }
+      case other => Future.successful(other)
     }
   }
 
@@ -482,6 +487,21 @@ class DbAppActivityRecordStore(
             DBIO.successful(Checked(d): EnsureResult)
         }
       } yield result
+    }
+  }
+
+  /** True if a prior ingestion version exists (version bump occurred). */
+  private def hasPriorIngestionVersionDBIO: DBIOAction[Boolean, NoStream, Effect.Read] = {
+    val cv = ingestionVersions.code
+    val uv = ingestionVersions.user
+    sql"""select min(activity_ingestion_code_version),
+                 min(activity_ingestion_user_version)
+          from #${Tables.activityRecordMeta}
+          where history_id = $historyId
+    """.as[(Option[Int], Option[Int])].headOption.map {
+      case Some((Some(minCode), Some(minUser))) =>
+        minCode < cv || (minCode == cv && minUser < uv)
+      case _ => false
     }
   }
 
