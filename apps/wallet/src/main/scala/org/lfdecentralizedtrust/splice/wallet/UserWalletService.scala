@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker, Te
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TreasuryConfig,
   WalletSweepConfig,
 }
@@ -49,6 +50,7 @@ class UserWalletService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
+    rewardSharing: Option[RewardSharingConfig],
     dedupDuration: DedupDuration,
     params: SpliceParametersConfig,
 )(implicit
@@ -111,6 +113,7 @@ class UserWalletService(
     validatorTopupConfigO,
     walletSweep,
     autoAcceptTransfers,
+    rewardSharing,
     dedupDuration,
     params,
   )

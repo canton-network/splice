@@ -734,6 +734,7 @@ class ValidatorApp(
             validatorTopupConfig,
             config.walletSweep,
             config.autoAcceptTransfers,
+            config.rewardSharingByParty,
             dedupDuration,
             config.parameters,
           )
