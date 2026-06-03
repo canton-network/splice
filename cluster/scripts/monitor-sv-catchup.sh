@@ -129,6 +129,7 @@ while true; do
   med_rate_max=$(echo "if ($mr > $med_rate_max) $mr else $med_rate_max" | bc -l)
 
   _info "Delays — seq: ${seq_delay}s, participant: ${part_delay}s, mediator: ${med_delay}s (elapsed: ${elapsed}s)"
+  _info "Peak rates — seq: ${seq_rate_max} eps, participant: ${part_rate_max} eps, mediator: ${med_rate_max} eps"
 
   seq_caught=$(echo "$seq_delay  <= $seq_delay_ok" | bc -l)
   part_caught=$(echo "$part_delay <= $part_delay_ok" | bc -l)
@@ -152,6 +153,7 @@ sleep 60
 
 pr_end=$(query_part_rate)
 mr_end=$(query_med_rate)
+_info "Steady-state rates — participant: ${pr_end} eps, mediator: ${mr_end} eps"
 
 part_rate=$(echo "scale=1; ($part_rate_max) / $pr_end" | bc)
 med_rate=$(echo "scale=1; ($med_rate_max) / $mr_end" | bc)
