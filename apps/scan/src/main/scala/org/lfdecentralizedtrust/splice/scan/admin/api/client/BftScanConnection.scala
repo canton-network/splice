@@ -858,7 +858,13 @@ object BftScanConnection {
               (_, scans) => scan.url :: Option(scans).getOrElse(List.empty),
             )
 
-          if (agreements.size == nTargetSuccess) { // consensus has been reached
+          // Only a quorum of matching successful responses should decide the call; failures
+          // fall through to ConsensusNotReached.
+          val isSuccessfulResponse = key match {
+            case _: SuccessfulResponse[?] => true
+            case _ => false
+          }
+          if (isSuccessfulResponse && agreements.size == nTargetSuccess) { // consensus has been reached
             finalResponse.tryComplete(response): Unit
           }
 
