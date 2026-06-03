@@ -272,6 +272,27 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
                   s"CalculateRewardsV2 should exist for round $round"
               }
             }
+            // Test the archiveDryRunRewardAccountingContracts admin API
+            // by archiving a few early rounds. The remaining rounds are
+            // consumed by triggers naturally.
+            if (dryRunEnabled) {
+              clue("Archive dry-run CalculateRewardsV2 for rounds 0..2 via sv admin API") {
+                sv1Backend.archiveDryRunRewardAccountingContracts((0L to 2L).toSeq)
+              }
+              clue("CalculateRewardsV2 contracts for rounds 0..2 are gone") {
+                eventually() {
+                  val remaining = sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .map(_.payload.round.number)
+                    .toSet
+                  (0L to 2L).foreach { round =>
+                    remaining should not contain round withClue
+                      s"CalculateRewardsV2 for round $round should be archived"
+                  }
+                }
+              }
+            }
           }
 
           (id0, id1, id3, id4, id5, id6, id7, aliceCreateId, svExpireId)
