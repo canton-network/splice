@@ -38,7 +38,7 @@ trait IgnoredAmuletVersionGuard {
       )
     } else {
       val enableNaiveUnresponsivePartiesAutoIgnore =
-        svConfig.parameters.enabledFeatures.naiveUresponsivePartiesAutoIgnore && enableUnresponsivePartiesAutoIgnore
+        svConfig.parameters.enabledFeatures.naiveUnresponsivePartiesAutoIgnore && enableUnresponsivePartiesAutoIgnore
       fallback.recoverWith {
         case ex: StatusRuntimeException if enableNaiveUnresponsivePartiesAutoIgnore =>
           extractUnresponsiveParties(ex) match {

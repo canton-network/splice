@@ -88,7 +88,7 @@ final case class EnabledFeaturesConfig(
     reconnectOnSynchronizerConfigurationChange: Boolean = true,
     enableUnsupportedDarsUnvetting: Boolean = true,
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
-    naiveUresponsivePartiesAutoIgnore: Boolean = true,
+    naiveUnresponsivePartiesAutoIgnore: Boolean = true,
 )
 
 final case class SpliceCachingConfigs(

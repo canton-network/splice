@@ -115,4 +115,4 @@
         Parties from skipped batches are added to an in-memory ignore list. This allows sv-1 to better handle
         participants that have not yet vetted the latest amulet package and avoid repeated failures.
 
-      - Unavailable parties are now also skipped by the amulet-based expiry triggers and added to the in-memory ignore list.
+      - Unresponsive parties are now also skipped by the amulet-based expiry triggers and added to the in-memory ignore list.

@@ -26,7 +26,7 @@ import org.slf4j.event.Level
 import java.time.Duration
 import scala.concurrent.duration.*
 
-class AutoIgnoreUnavailablePartiesIntegrationTest
+class AutoIgnoreUnresponsivePartiesIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
