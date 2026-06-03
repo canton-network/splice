@@ -433,7 +433,14 @@ case class SvAppBackendConfig(
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
+    ignoredAmuletVersions: Set[String] = Set.empty,
 ) extends SpliceBackendConfig {
+
+  def allIgnoredAmuletVersions: Set[String] =
+    ignoredAmuletVersions ++ DarResources.amulet.all
+      .map(_.metadata.version)
+      .filter(_ < DarResources.amulet.minimumInitialization.metadata.version)
+      .map(_.toString)
 
   def shouldSkipSynchronizerInitialization: Boolean =
     skipSynchronizerInitialization &&

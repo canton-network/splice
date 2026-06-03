@@ -54,7 +54,7 @@ class DomainConnector(
         .flatMap {
           case Some(_) =>
             participantAdminConnection
-              .listConnectedDomains()
+              .listConnectedSynchronizers()
               .map(
                 _.find(_.synchronizerAlias == config.domains.global.alias).fold(
                   throw Status.FAILED_PRECONDITION
@@ -166,7 +166,7 @@ class DomainConnector(
       ),
     )
     logger.info(s"Ensuring domain $alias registered with config $domainConfig")
-    participantAdminConnection.ensureDomainRegisteredAndConnected(
+    participantAdminConnection.ensureSynchronizerRegisteredAndConnected(
       domainConfig,
       overwriteExistingConnection = true,
       reconnectOnSynchronizerConfigurationChange =

@@ -290,9 +290,7 @@
           "cometbft": {
             "volumeSize": "42Gi"
           },
-          "enableLogicalSynchronizerDeploymentMode": false,
           "id": 9,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -313,9 +311,7 @@
         },
         "additionalLegacy": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 7,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.20",
@@ -337,9 +333,7 @@
         ],
         "archived": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 5,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "981227e62011e386cca3cdb5f00b472cf05a12c4",
@@ -357,9 +351,7 @@
             }
           },
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 6,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.19",
@@ -379,9 +371,7 @@
         ],
         "frozenMigrationId": 2,
         "legacy": {
-          "enableLogicalSynchronizerDeploymentMode": false,
           "id": 8,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -400,11 +390,8 @@
             "version": "0.3.20"
           }
         },
-        "lsuEnabled": true,
         "upgrade": {
-          "enableLogicalSynchronizerDeploymentMode": true,
           "id": 10,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.21",
@@ -2823,7 +2810,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_1",
           "port": 5432,
@@ -3044,7 +3031,7 @@
           "onboardingName": "Digital-Asset-2",
           "onboardingRoundZeroDuration": "2 h",
           "onboardingType": "found-dso",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "periodicTopologySnapshotConfig": {
             "backupInterval": "12h",
             "location": {
@@ -3254,7 +3241,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -3942,7 +3929,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
           "port": 5432,
@@ -4139,7 +4126,7 @@
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "permissionedSynchronizer": false,
           "persistence": {
             "databaseName": "sv_sv_da_1",
@@ -4330,7 +4317,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

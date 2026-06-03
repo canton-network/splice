@@ -1,26 +1,5 @@
 # -*- shell-script -*-
 
-subcommand_whitelist[enable_logical_synchronizer_deployment]='Enable logical synchronizer deployment mode'
-
-function subcmd_enable_logical_synchronizer_deployment() {
-  local migration_type="${1:-active}"
-  if [ "$#" -gt 1 ]; then
-    _error "Usage: $SCRIPTNAME enable_logical_synchronizer_deployment [migration_type (Default: active)]"
-  fi
-  _update_cluster_config 'true' "synchronizerMigration.$migration_type.enableLogicalSynchronizerDeploymentMode"
-}
-
-subcommand_whitelist[freeze_migration]='Freeze migration with the given ID and enable LSU'
-
-function subcmd_freeze_migration() {
-  local migration_id="${1:-0}"
-  if [ "$#" -gt 1 ]; then
-    _error "Usage: $SCRIPTNAME freeze_migration [migration_id (Default: 0)]"
-  fi
-  _update_cluster_config 'true' 'synchronizerMigration.lsuEnabled'
-  _update_cluster_config "$migration_id" 'synchronizerMigration.frozenMigrationId'
-}
-
 subcommand_whitelist[vote_for_lsu]='Vote for logical synchronizer upgrade'
 
 function subcmd_vote_for_lsu() {
