@@ -1458,7 +1458,6 @@ function getAllocationV2(
 ): AmuletAllocationV2 {
   return {
     lockedAmulet: null as damlTypes.Optional<ContractId<LockedAmulet>>,
-    dso: dsoPartyId,
     createdAt: new Date().toISOString(),
     expiresAt: new Date().toISOString(),
     numIterations: '0',
