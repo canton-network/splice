@@ -117,7 +117,7 @@ import org.slf4j.event.Level
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
-import scala.util.control.NonFatal
+import scala.util.control.{NoStackTrace, NonFatal}
 import scala.util.{Failure, Random, Success, Try}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -851,14 +851,12 @@ class BftScanConnection(
       BftScanConnection
         .executeCall[String, SingleScanConnection](
           call = scan =>
-            scan.getRewardAccountingRootHash(roundNumber).map {
+            scan.getRewardAccountingRootHash(roundNumber).flatMap {
               case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                ok.rootHash
+                Future.successful(ok.rootHash)
               case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
                   _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
-                throw new RuntimeException(
-                  s"Scan response for round $roundNumber is not Ok"
-                )
+                Future.failed(BftScanConnection.IgnoreResponse(scan.url))
             },
           requestFrom = callConfig.connections,
           nTargetSuccess = callConfig.targetSuccess,
@@ -892,15 +890,12 @@ class BftScanConnection(
       BftScanConnection
         .executeCall[GetRewardAccountingBatchResponse, SingleScanConnection](
           call = scan =>
-            scan.getRewardAccountingBatch(roundNumber, batchHash).map {
-              case Some(batch) => batch
-              case None =>
-                throw new RuntimeException(
-                  s"Scan does not have batch $batchHash for round $roundNumber"
-                )
+            scan.getRewardAccountingBatch(roundNumber, batchHash).flatMap {
+              case Some(batch) => Future.successful(batch)
+              case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
             },
           requestFrom = callConfig.connections,
-          nTargetSuccess = callConfig.targetSuccess,
+          nTargetSuccess = 1,
           logger = logger,
         )
         .transform(tryBatch => Success(tryBatch.toOption))
@@ -1844,6 +1839,11 @@ object BftScanConnection {
         copy(amuletRulesCacheTimeToLive = ttl)
     }
   }
+
+  // url makes each abstention a distinct key, so abstentions never group into a deciding quorum
+  final case class IgnoreResponse(url: Uri)
+      extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
+      with NoStackTrace
 
   private sealed trait ScanResponse[+T]
   private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]
