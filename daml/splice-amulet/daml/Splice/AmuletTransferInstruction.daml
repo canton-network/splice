@@ -65,9 +65,9 @@ template AmuletTransferInstruction
       transferInstruction_rejectImpl = transferInstruction_v2_receiverActor_rejectDefaultImplUsingV1 transfer.receiver
       transferInstruction_withdrawImpl = transferInstruction_v2_senderActor_withdrawDefaultImplUsingV1 transfer.sender
 
-      transferInstruction_acceptExtraObservers = transferInstruction_acceptDefaultExtraObservers this
-      transferInstruction_rejectExtraObservers = transferInstruction_rejectDefaultExtraObservers this
-      transferInstruction_withdrawExtraObservers = transferInstruction_withdrawDefaultExtraObservers this
+      transferInstruction_acceptExtraObservers _arg = observer this
+      transferInstruction_rejectExtraObservers _arg = observer this
+      transferInstruction_withdrawExtraObservers _arg = observer this
 
 
 

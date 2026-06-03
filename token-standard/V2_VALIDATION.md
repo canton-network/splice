@@ -222,3 +222,6 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Replace `allocationV2_cancelDefaultImplUsingV1` with `allocationV2_cancelDefaultImpl`, which requires only
   `exeuctors` authority and allows the `admin` to cancel expired allocations
 - Remove `BackwardsCompatible V1.AllocationView` instance in favor of the more precise `upcast_v1_v2_AllocationView`
+- Remove the default observer implementations for `TransferInstruction`,`AllocationInstruction`, `Allocation`, and `AllocationRequest`
+  in favor of the uniform default to use `observer this` to mirror the default implementation of consuming choices.
+  (Note: the default implementations on the factories are kept, as they do allow saving extra views for public assets.)

@@ -71,9 +71,9 @@ template TokenTransferOffer with
           Some transfer.executeBefore
         meta = emptyMetadata
 
-      transferInstruction_acceptExtraObservers = transferInstruction_acceptDefaultExtraObservers this
-      transferInstruction_rejectExtraObservers = transferInstruction_rejectDefaultExtraObservers this
-      transferInstruction_withdrawExtraObservers = transferInstruction_withdrawDefaultExtraObservers this
+      transferInstruction_acceptExtraObservers _arg = observer this
+      transferInstruction_rejectExtraObservers _arg = observer this
+      transferInstruction_withdrawExtraObservers _arg = observer this
 
       transferInstruction_withdrawImpl = token_transferInstruction_withdrawImplV2 CalledFromV2 this
       transferInstruction_rejectImpl = token_transferInstruction_rejectImplV2 CalledFromV2 this

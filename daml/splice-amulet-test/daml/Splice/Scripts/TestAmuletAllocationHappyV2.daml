@@ -10,14 +10,20 @@
 module Splice.Scripts.TestAmuletAllocationHappyV2 where
 
 import DA.Assert
-import DA.Time
 import DA.Foldable (forA_)
+import DA.List (sort)
+import DA.Map qualified as Map
+import DA.Time
 
 import Daml.Script
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 
+import Splice.AmuletAllocation
+import Splice.AmuletAllocationV2
+import Splice.ExternalPartyAmuletRules
 import Splice.ExternalPartyConfigState
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -26,7 +32,7 @@ import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 
-import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest)
+import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
 
 
 -- TODO(#4517): also run these test cases for TestTokenV2
@@ -94,6 +100,41 @@ test_AmuletAllocationV1_DsoExpire_non_default_ttl = do
   testExpiresAfter env newTTL
 
 
+-- Extra observers for V2 factory choices
+-----------------------------------------
+
+test_AllocationFactory_Allocate_observers : Script ()
+test_AllocationFactory_Allocate_observers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @ExternalPartyAmuletRules instrId.admin
+  let allocFactory = toInterface @V2.AllocationFactory extRules
+  let allocArg = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2
+        inputHoldingCids = []
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+        actors = [alice]
+  -- Note: alice being an extra observer is not strictly required, but doesn't hurt.
+  checkEq "allocFactory.allocateExtraObservers" [provider, alice] $
+    V2.allocationFactory_allocateExtraObservers allocFactory allocArg
+
+test_SettlementFactory_Settle_observers : Script ()
+test_SettlementFactory_Settle_observers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @ExternalPartyAmuletRules instrId.admin
+  let settleFactory = toInterface @V2.SettlementFactory extRules
+  let settleArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations = []
+        extraArgs = emptyExtraArgs
+        actors = [alice]
+  -- Note: alice being an extra observer is not strictly required, but doesn't hurt.
+  checkEq "settleFactory.settleExtraObservers" [alice, bob] $
+    V2.settlementFactory_settleBatchExtraObservers settleFactory settleArg
+
+
 -- Shared test setup
 --------------------
 
@@ -154,6 +195,8 @@ test_withdrawCancel_generic mkTest = do
   WalletClientV2.allocateV1 registries allocationV1
   WalletClientV2.checkUnlockedBalance alice instrId 990.0
   [(allocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  Some allocV1 <- queryContractId @AmuletAllocation alice (coerceContractId allocCid)
+  checkAllocationActionsAndObservers "AmuletAllocation" testEnv (toInterface allocV1)
   mkTest testEnv allocCid
   checkReset
 
@@ -161,5 +204,52 @@ test_withdrawCancel_generic mkTest = do
   WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
   WalletClientV2.checkUnlockedBalance alice instrId 990.0
   [(allocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  Some allocV2 <- queryContractId @AmuletAllocationV2 alice (coerceContractId allocCid)
+  checkAllocationActionsAndObservers "AmuletAllocationV2" testEnv (toInterface allocV2)
   mkTest testEnv allocCid
   checkReset
+
+test_allocation_WithdrawV2_committed_availableActions : Script ()
+test_allocation_WithdrawV2_committed_availableActions = do
+  (TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
+    settlementDeadline = None
+    committed = True
+  [(_, allocV2)] <- query @AmuletAllocationV2 alice
+  let allocView = view (toInterface @V2.Allocation allocV2)
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, instrId.admin]])
+        , (V2.AA_Cancel, [[provider]])
+          -- No withdraw for a fully committed allocation.
+        ]
+  checkEq "committed.availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+checkAllocationActionsAndObservers : Text -> TestEnv -> V2.Allocation -> Script ()
+checkAllocationActionsAndObservers prefix (TestEnv {..}) alloc = do
+  let allocView = view alloc
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, instrId.admin]])
+        , (V2.AA_Cancel, [[provider]])
+        , (V2.AA_Withdraw, [[alice]])
+        ]
+  let checkEq' : (Eq a, Show a) => Text -> a -> a -> Script ()
+      checkEq' name = checkEq (prefix <> "." <> name)
+  checkEq' "availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+  -- We always require the provider as an extra observer to never have extra
+  -- views, independent of actors.
+  checkEq'  "settleExtraObservers" [provider] $
+    V2.allocation_settleExtraObservers alloc V2.Allocation_Settle with
+      actors = [provider, instrId.admin]
+      extraArgs = emptyExtraArgs
+      extraTransferLegSides = []
+      nextIterationFunding = None
+  checkEq' "cancelExtraObservers" [provider] $
+    V2.allocation_cancelExtraObservers alloc V2.Allocation_Cancel with
+      actors = [provider]
+      extraArgs = emptyExtraArgs
+  checkEq' "withdrawExtraObservers" [provider] $
+    V2.allocation_withdrawExtraObservers alloc V2.Allocation_Withdraw with
+      actors = [alice]
+      extraArgs = emptyExtraArgs
+

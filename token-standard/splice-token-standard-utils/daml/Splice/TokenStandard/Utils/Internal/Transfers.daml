@@ -20,10 +20,6 @@ module Splice.TokenStandard.Utils.Internal.Transfers (
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
   transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
 
-  -- ** TransferInstruction extra observers
-  transferInstruction_acceptDefaultExtraObservers,
-  transferInstruction_rejectDefaultExtraObservers,
-  transferInstruction_withdrawDefaultExtraObservers,
   -- ** Available actions
   transferInstructionV2_availableActionsDefault,
 
@@ -243,24 +239,6 @@ transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl arg =
     accountParties admin arg.transfer.sender
   where
     admin = arg.transfer.instrumentId.admin
-
--- | Default observers for the `V2.TransferInstruction_Accept` choice, which are
--- the observers of the instruction contract.
-transferInstruction_acceptDefaultExtraObservers
-  : HasObserver t => t -> TransferInstructionV2.TransferInstruction_Accept -> [Party]
-transferInstruction_acceptDefaultExtraObservers this _arg = observer this
-
--- | Default observers for the `V2.TransferInstruction_Reject` choice, which are
--- the observers of the instruction contract.
-transferInstruction_rejectDefaultExtraObservers
-  : HasObserver t => t -> TransferInstructionV2.TransferInstruction_Reject -> [Party]
-transferInstruction_rejectDefaultExtraObservers this _arg = observer this
-
--- | Default observers for the `V2.TransferInstruction_Withdraw` choice, which are
--- the observers of the instruction contract.
-transferInstruction_withdrawDefaultExtraObservers
-  : HasObserver t => t -> TransferInstructionV2.TransferInstruction_Withdraw -> [Party]
-transferInstruction_withdrawDefaultExtraObservers this _arg = observer this
 
 -- | Available actions for a V2 transfer that uses the default controllers for its actions.
 transferInstructionV2_availableActionsDefault : TransferInstructionV2.Transfer -> Map.Map [Party] [TransferInstructionV2.TransferInstructionAction]

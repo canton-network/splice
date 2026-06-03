@@ -371,8 +371,6 @@ multiDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
 
 -- TODO(#4517): add the example from the CIP, and test for corner cases like cyclic trades that fully net with the max Decimal amount
 
--- TODO(#4517): test available actions for allocations and check extra observers for the allocation
-
 -- TODO(#4517): test that duplicate allocations of the same leg cannot be settled
 
 -- TODO(#4515): test allocation workflow with different accounts for cash and security leg

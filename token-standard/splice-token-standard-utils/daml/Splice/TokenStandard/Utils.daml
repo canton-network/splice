@@ -185,10 +185,6 @@ module Splice.TokenStandard.Utils (
   allocationRequestV1_withdrawDefaultImpl,
 
   -- ** V2 defaults
-  allocationRequestV2_acceptDefaultExtraObservers,
-  allocationRequestV2_rejectDefaultExtraObservers,
-  allocationRequestV2_withdrawDefaultExtraObservers,
-
   allocationRequestV2_acceptDefaultImpl,
 
   -- ** V2 for dual version templates
@@ -235,10 +231,6 @@ module Splice.TokenStandard.Utils (
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
   transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
 
-  -- *** TransferInstruction extra observers
-  transferInstruction_acceptDefaultExtraObservers,
-  transferInstruction_rejectDefaultExtraObservers,
-  transferInstruction_withdrawDefaultExtraObservers,
 ) where
 
 

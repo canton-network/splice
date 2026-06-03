@@ -72,10 +72,10 @@ template TokenAllocationInstructionV2 with
           allocation.settlementDeadline
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocationInstruction_withdrawExtraObservers _arg = []
-      allocationInstruction_acceptExtraObservers _arg = []
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocationInstruction_withdrawExtraObservers _arg = observer this
+      allocationInstruction_acceptExtraObservers _arg = observer this
 
       allocationInstruction_withdrawImpl = token_allocationInstruction_withdrawImplV2 CalledFromV2 CreateV2Allocation this
       allocationInstruction_acceptImpl = token_allocationInstruction_acceptImplV2 CalledFromV2 CreateV2Allocation this
@@ -178,13 +178,11 @@ template TokenAllocationV2 with
         numIterations
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocation_settleExtraObservers _arg = []
-      allocation_cancelExtraObservers _arg = []
-
-      -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = settlement.executors
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocation_settleExtraObservers _arg = observer this
+      allocation_cancelExtraObservers _arg = observer this
+      allocation_withdrawExtraObservers _arg = observer this
 
       allocation_withdrawImpl = token_allocation_withdrawImplV2 CalledFromV2 CreateV2Allocation this
       allocation_cancelImpl = token_allocation_cancelImplV2 CalledFromV2 CreateV2Allocation this

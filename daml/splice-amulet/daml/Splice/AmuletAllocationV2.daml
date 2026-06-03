@@ -68,13 +68,11 @@ template AmuletAllocationV2
         availableActions = allocationV2_availableActionsDefault settlement.executors allocation
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocation_settleExtraObservers _arg = []
-      allocation_cancelExtraObservers _arg = []
-
-      -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = settlement.executors
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocation_settleExtraObservers _arg = observer this
+      allocation_cancelExtraObservers _arg = observer this
+      allocation_withdrawExtraObservers _arg = observer this
 
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
         archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]

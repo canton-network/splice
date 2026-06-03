@@ -7,6 +7,8 @@
 -- implementation of the V1 API.
 module Splice.Scripts.TestAmuletTransferInstructionV2 where
 
+import DA.List (sort)
+import DA.Map qualified as Map
 import DA.Time
 
 import Daml.Script
@@ -15,6 +17,8 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
+import Splice.AmuletTransferInstruction
+import Splice.ExternalPartyAmuletRules
 import Splice.TokenStandard.Utils qualified as TSU
 
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
@@ -22,8 +26,7 @@ import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 
-import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest)
-
+import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
 
 -- TODO(#4517): also run these test cases for TestTokenV2
 
@@ -38,6 +41,32 @@ test_happy_generic mkTest = do
   WalletClientV2.checkUnlockedBalance bob instrId 0.0
   [(instrCid, _)] <- WalletClientV2.listTransferInstructionsV2 bob instrId
   mkTest env instrCid
+
+test_availableActionsAndObservers : Script ()
+test_availableActionsAndObservers = test_happy_generic $ \TestEnv {..} instrCid -> do
+  Some instr0 <- queryContractId @AmuletTransferInstruction alice (coerceContractId instrCid)
+  let instr = toInterface @V2.TransferInstruction instr0
+  let expectedActions = Map.fromList
+        [ (V2.TIA_Accept, [[bob]])
+        , (V2.TIA_Reject, [[bob]])
+        , (V2.TIA_Withdraw, [[alice]])
+        ]
+  checkEq "availableActions" expectedActions (map sort <$> (view instr).availableActions)
+
+  -- We always require the provider as an extra observer to never have extra
+  -- views, independent of actors.
+  checkEq  "acceptExtraObservers" [bob] $
+    V2.transferInstruction_acceptExtraObservers instr V2.TransferInstruction_Accept with
+      actors = [bob]
+      extraArgs = emptyExtraArgs
+  checkEq "rejectExtraObservers" [bob] $
+    V2.transferInstruction_rejectExtraObservers instr V2.TransferInstruction_Reject with
+      actors = [bob]
+      extraArgs = emptyExtraArgs
+  checkEq "withdrawExtraObservers" [bob] $
+    V2.transferInstruction_withdrawExtraObservers instr V2.TransferInstruction_Withdraw with
+      actors = [alice]
+      extraArgs = emptyExtraArgs
 
 test_transfer_AcceptV2 : Script ()
 test_transfer_AcceptV2 = test_happy_generic $ \TestEnv {..} instrCid -> do
@@ -57,6 +86,15 @@ test_transfer_WithdrawV2 = test_happy_generic $ \TestEnv {..} instrCid -> do
   WalletClientV2.withdrawTransferInstructionV2 registries alice instrCid
   WalletClientV2.checkUnlockedBalance bob instrId 0.0
   WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
+test_transferFactory_TransferV2_extraObservers : Script ()
+test_transferFactory_TransferV2_extraObservers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @ExternalPartyAmuletRules instrId.admin
+  let transferFactory = toInterface @V2.TransferFactory extRules
+  -- Note: alice being an extra observer is not strictly required, but doesn't hurt.
+  checkEq "transferFactory.allocateExtraObservers" [alice, bob] $
+    V2.transferFactory_transferExtraObservers transferFactory transferArgV2
 
 
 -- Negative test cases for V2.TransferFactory_Transfer

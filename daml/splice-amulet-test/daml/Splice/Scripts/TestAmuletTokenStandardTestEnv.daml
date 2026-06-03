@@ -5,10 +5,13 @@
 module Splice.Scripts.TestAmuletTokenStandardTestEnv
   (
     TestEnv(..),
-    setupTest
+    setupTest,
+    checkEq,
   ) where
 
+import DA.Action (unless)
 import DA.Time
+import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
 
 import Daml.Script
@@ -138,3 +141,12 @@ setupTest = do
       actors = [alice]
       extraArgs = emptyExtraArgs
 
+
+checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
+checkEq prefix expected actual =
+  unless (actual == expected) $
+    fail $ T.unlines
+      [ prefix <> ": actual values do not match expected values"
+      , "  actual: " <> show actual
+      , "  expected: " <> show expected
+      ]
