@@ -144,7 +144,7 @@ class SvDsoAutomationService(
         case scala.util.Success(c) => scala.util.Try(c.close())
         case scala.util.Failure(_) => scala.util.Success(())
       },
-      NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
+      timeouts.shutdownNetwork,
     )
 
   private val packageVettingService = new PackageVettingLookupService(
