@@ -33,8 +33,8 @@ export const SvSequencerConfigSchema = z
 export type SvSequencerConfig = z.infer<typeof SvSequencerConfigSchema>;
 const PhysicalSynchronizerConfigOverridesSchema = z
   .object({
-    mediator: SvMediatorConfigSchema.partial().prefault({}),
-    sequencer: SvSequencerConfigSchema.partial().prefault({}),
+    mediator: SvMediatorConfigSchema.partial().optional(),
+    sequencer: SvSequencerConfigSchema.partial().optional(),
   })
   .strict();
 export const PhysicalSynchronizersConfigOverridesSchema = z
