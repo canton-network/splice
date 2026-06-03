@@ -5,7 +5,10 @@ import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2 as amuletallocationV2Codegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  holdingv1,
+  allocationinstructionv2,
   allocationrequestv2,
+  allocationv1,
   allocationv2,
   metadatav1,
 }
@@ -32,7 +35,6 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 import org.lfdecentralizedtrust.splice.codegen.java.da
 
 import scala.jdk.CollectionConverters.*
-import scala.util.Random
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
 class TokenStandardV2AllocationIntegrationTest
@@ -51,7 +53,6 @@ class TokenStandardV2AllocationIntegrationTest
           sv1ValidatorBackend,
           aliceValidatorBackend,
           bobValidatorBackend,
-          splitwellValidatorBackend,
         ).foreach { backend =>
           backend.participantClient.upload_dar_unless_exists(tokenStandardV2TestDarPath)
         }
@@ -74,10 +75,11 @@ class TokenStandardV2AllocationIntegrationTest
       venueParty,
       aliceParty,
       bobParty,
-      aliceAllocationRequestId,
+      aliceAllocationRequest,
       aliceAllocationId,
-      bobAllocationRequestId,
+      bobAllocationRequest,
       bobAllocationId,
+      bobTradeAgreement,
       otcTrade,
     ) = setupAllocatedOtcTrade()
     val allocations = Seq(aliceAllocationId, bobAllocationId)
@@ -108,28 +110,59 @@ class TokenStandardV2AllocationIntegrationTest
         settleBatch
       )
 
+    val bobMissingAllocationArgs = new allocationinstructionv2.AllocationFactory_Allocate(
+      bobAllocationRequest.payload.settlement,
+      bobAllocationRequest.payload.allocations.asScala
+        .map(allocation =>
+          new allocationv2.AllocationSpecification(
+            allocation.admin,
+            basicAccount(bobParty),
+            java.util.List.of(
+              allocation.transferLegSides.asScala
+                .find(_.side == allocationv2.TransferSide.RECEIVERSIDE)
+                .valueOrFail("Failed to find side where bob is receiver")
+            ),
+            allocation.settlementDeadline,
+            allocation.nextIterationFunding,
+            allocation.committed,
+            allocation.meta,
+          )
+        )
+        .loneElement,
+      bobAllocationRequest.payload.requestedAt,
+      java.util.List.of(),
+      emptyExtraArgs,
+      java.util.List.of(bobParty.toProtoPrimitive),
+    )
+    val allocationFactory = sv1ScanBackend.getAllocationFactoryV2(bobMissingAllocationArgs)
     val otcTradeSettleArgs = new tradingappv2.OTCTrade_Settle(
       Map[String, tradingappv2.SettlementBatch](
         dsoParty.toProtoPrimitive -> new tradingappv2.settlementbatch.SettlementBatchV2(
           allocations.asJava,
-          /*missingAllocations=*/ java.util.List.of(),
+          /*missingAllocations=*/ java.util.List.of(
+            new tradingappv2.MissingAllocation(
+              java.util.Optional.of(bobTradeAgreement),
+              allocationFactory.factoryId,
+              allocationFactory.args,
+            )
+          ),
           settlementFactoryWithDisclosures.factoryId,
           settlementFactoryWithDisclosures.args.extraArgs,
         )
       ).asJava,
       List(
         new tradingappv2.OTCTradeAllocationRequest.ContractId(
-          aliceAllocationRequestId.contractId
+          aliceAllocationRequest.contractId.contractId
         ),
         new tradingappv2.OTCTradeAllocationRequest.ContractId(
-          bobAllocationRequestId.contractId
+          bobAllocationRequest.contractId.contractId
         ),
       ).asJava,
     )
 
     actAndCheck(
       "Venue settles the trade", {
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
           .submitJava(
             actAs = Seq(venueParty),
             commands = otcTrade.id
@@ -137,13 +170,14 @@ class TokenStandardV2AllocationIntegrationTest
               .commands()
               .asScala
               .toSeq,
-            disclosedContracts = settlementFactoryWithDisclosures.disclosedContracts,
+            disclosedContracts =
+              settlementFactoryWithDisclosures.disclosedContracts ++ allocationFactory.disclosedContracts,
           )
       },
     )(
       "Alice and Bob's balance reflect the trade",
       _ => {
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
           .filterJava(tradingappv2.OTCTrade.COMPANION)(
             venueParty
           ) shouldBe empty withClue "OTCTrade"
@@ -249,17 +283,8 @@ class TokenStandardV2AllocationIntegrationTest
   private def setupAllocatedOtcTrade()(implicit env: SpliceTestConsoleEnvironment) = {
     val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
-    // Allocate venue on separate participant node, we still go through the validator API instead of parties.enable
-    // so we can use the standard wallet client APIs but give the party a more useful name than splitwell.
-    val venuePartyHint = s"venue-party-${Random.nextInt()}"
-    val venueParty = splitwellValidatorBackend.onboardUser(
-      splitwellWalletClient.config.ledgerApiUser,
-      Some(
-        PartyId.tryFromProtoPrimitive(
-          s"$venuePartyHint::${splitwellValidatorBackend.participantClient.id.namespace.toProtoPrimitive}"
-        )
-      ),
-    )
+    // We use the same venue party for bob so we can setup the TradeSettlementAgreement
+    val venueParty = bobValidatorBackend.getValidatorPartyId()
 
     // Setup funds for alice and bob
     actAndCheck("Setup funds for Alice", aliceWalletClient.tap(walletAmuletToUsd(tapAmount)))(
@@ -298,7 +323,7 @@ class TokenStandardV2AllocationIntegrationTest
         venueParty,
       )
 
-    def allocate(
+    def allocateV2(
         walletClient: WalletAppClientReference,
         allocationRequestView: allocationrequestv2.AllocationRequestView,
     ) = {
@@ -317,17 +342,85 @@ class TokenStandardV2AllocationIntegrationTest
       }
     }
 
-    val aliceAllocation = allocate(aliceWalletClient, aliceAllocationRequest.contract.payload)
-    val bobAllocation = allocate(bobWalletClient, bobAllocationRequest.contract.payload)
+    def allocateV1(
+        walletClient: WalletAppClientReference,
+        venue: PartyId,
+        allocationRequest: Contract[
+          allocationrequestv2.AllocationRequest.ContractId,
+          allocationrequestv2.AllocationRequestView,
+        ],
+    ) = {
+      clue(s"${walletClient.name} accepts the Allocation Request") {
+        val requestedAllocation = allocationRequest.payload.allocations.asScala.loneElement
+        val sender = walletClient.userStatus().party
+        val settlementDeadline =
+          requestedAllocation.settlementDeadline.get() // guaranteed to be there
+        val transferLegSide = requestedAllocation.transferLegSides.asScala
+          .filter(side =>
+            side.otherside.owner
+              .get() != sender && side.side == allocationv2.TransferSide.SENDERSIDE
+          )
+          .loneElement
+
+        val allocateResponse = walletClient.allocateAmulet(
+          new allocationv1.AllocationSpecification(
+            new allocationv1.SettlementInfo(
+              venue.toProtoPrimitive,
+              new allocationv1.Reference(
+                allocationRequest.payload.settlement.id,
+                allocationRequest.payload.settlement.cid,
+              ),
+              allocationRequest.payload.requestedAt,
+              allocationRequest.payload.settleAt.orElse(settlementDeadline),
+              settlementDeadline,
+              allocationRequest.payload.meta,
+            ),
+            transferLegSide.transferLegId,
+            new allocationv1.TransferLeg(
+              sender,
+              transferLegSide.otherside.owner.get(),
+              transferLegSide.amount,
+              new holdingv1.InstrumentId(requestedAllocation.admin, transferLegSide.instrumentId),
+              transferLegSide.meta,
+            ),
+          )
+        )
+
+        allocateResponse.output match {
+          case AllocationInstructionResultCompleted(completed) =>
+            new allocationv2.Allocation.ContractId(completed.allocationCid)
+          case _ =>
+            fail(s"Allocation for ${walletClient.name} was not completed: $allocateResponse")
+        }
+      }
+    }
+
+    // Pretend that alice uses a v2 wallet and bob a v1 wallet. The trade should still go through.
+    // For that to work, Bob needs to create a TradeSettlementAgreement
+    val aliceAllocation = allocateV2(aliceWalletClient, aliceAllocationRequest.contract.payload)
+    val bobTradeAgreement =
+      bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitWithResult(
+          userId = bobWalletClient.config.ledgerApiUser,
+          actAs = Seq(venueParty, bobParty),
+          readAs = Seq(bobParty),
+          update = new tradingappv2.TradeSettlementAgreement(
+            venueParty.toProtoPrimitive,
+            bobParty.toProtoPrimitive,
+          ).create(),
+        )
+    val bobAllocation =
+      allocateV1(bobWalletClient, venueParty, bobAllocationRequest.contract)
 
     AllocatedOtcTrade(
       venueParty,
       aliceParty,
       bobParty,
-      aliceAllocationRequest.contract.contractId,
+      aliceAllocationRequest.contract,
       aliceAllocation,
-      bobAllocationRequest.contract.contractId,
+      bobAllocationRequest.contract,
       bobAllocation,
+      bobTradeAgreement.contractId,
       otcTrade,
     )
   }
@@ -358,12 +451,12 @@ class TokenStandardV2AllocationIntegrationTest
             new da.types.Tuple2(allocatedOtcTrade.bobAllocationId, mkExtraArg(bobContext)),
           ),
           List(
-            allocatedOtcTrade.aliceAllocationRequestId,
-            allocatedOtcTrade.bobAllocationRequestId,
+            allocatedOtcTrade.aliceAllocationRequest.contractId,
+            allocatedOtcTrade.bobAllocationRequest.contractId,
           ).map(cid => new tradingappv2.OTCTradeAllocationRequest.ContractId(cid.contractId)).asJava,
         )
 
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
           .submitJava(
             Seq(allocatedOtcTrade.venueParty),
             commands = allocatedOtcTrade.otcTrade.id
@@ -382,7 +475,7 @@ class TokenStandardV2AllocationIntegrationTest
         aliceWalletClient
           .listAmuletAllocations() shouldBe empty withClue "Alice's AmuletAllocations"
         bobWalletClient.listAmuletAllocations() shouldBe empty withClue "Bob's AmuletAllocations"
-        splitwellValidatorBackend.participantClient.ledger_api.state.acs.of_party(
+        bobValidatorBackend.participantClient.ledger_api.state.acs.of_party(
           party = allocatedOtcTrade.venueParty,
           filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
             TemplateId(
@@ -423,7 +516,7 @@ class TokenStandardV2AllocationIntegrationTest
     actAndCheck(
       "Alice rejects the allocation request", {
         aliceWalletClient.rejectAllocationRequestV2(
-          allocatedOtcTrade.aliceAllocationRequestId
+          allocatedOtcTrade.aliceAllocationRequest.contractId
         )
       },
     )(
@@ -441,10 +534,17 @@ object TokenStandardV2AllocationIntegrationTest {
       venueParty: PartyId,
       aliceParty: PartyId,
       bobParty: PartyId,
-      aliceAllocationRequestId: allocationrequestv2.AllocationRequest.ContractId,
+      aliceAllocationRequest: Contract[
+        allocationrequestv2.AllocationRequest.ContractId,
+        allocationrequestv2.AllocationRequestView,
+      ],
       aliceAllocationId: allocationv2.Allocation.ContractId,
-      bobAllocationRequestId: allocationrequestv2.AllocationRequest.ContractId,
+      bobAllocationRequest: Contract[
+        allocationrequestv2.AllocationRequest.ContractId,
+        allocationrequestv2.AllocationRequestView,
+      ],
       bobAllocationId: allocationv2.Allocation.ContractId,
+      bobTradeAgreement: tradingappv2.TradeSettlementAgreement.ContractId,
       otcTrade: tradingappv2.OTCTrade.Contract,
   )
 

@@ -135,12 +135,16 @@ class HttpTokenStandardAllocationHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
-        // TODO (#4949): this only lists V2 allocations, but it should also do V1
-        allocations <- contractFetcher.lookupContractsById(
+        allocationsV2 <- contractFetcher.lookupContractsById(
           amuletallocationv2.AmuletAllocationV2.COMPANION
         )(settleBatch.allocations.asScala.toSeq.map(_.allocationCid))
+        allocationsV1 <- contractFetcher.lookupContractsById(
+          amuletallocationv1.AmuletAllocation.COMPANION
+        )(settleBatch.allocations.asScala.toSeq.map(_.allocationCid))
+        lockedAmuletCids = allocationsV2.flatMap(_.payload.lockedAmulet.toScala) ++
+          allocationsV1.map(_.payload.lockedAmulet)
         lockedAmulets <- contractFetcher.lookupContractsById(LockedAmulet.COMPANION)(
-          allocations.flatMap(_.payload.lockedAmulet.toScala)
+          lockedAmuletCids
         )
       } yield v2.Resource.GetSettlementFactoryResponseOK(
         v2.definitions
