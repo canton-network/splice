@@ -38,6 +38,12 @@ const AuthProvider: React.FC<AuthProviderProps> = ({
 
   return (
     <OidcAuthProvider
+      // The library's proactive timer-based silent renew is disabled. The
+      // 401-driven `renewOrSignout` handler in `UserProvider` is the only
+      // renewal path, so we get a single, single-flighted refresh per
+      // expiry rather than racing the library's timer against the handler
+      // (which can cause concurrent refresh-token grants and a spurious
+      // logout against IdPs that rotate refresh tokens).
       automaticSilentRenew={false}
       userStore={new WebStorageStateStore({ store: window.localStorage })}
       onSigninCallback={user => {

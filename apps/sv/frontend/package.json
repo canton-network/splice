@@ -23,6 +23,7 @@
     "@mui/x-data-grid": "^8.14.1",
     "@mui/x-date-pickers": "^8.14.1",
     "@tanstack/react-form": "^1.23.0",
+    "@tanstack/react-query": "5.90.20",
     "dayjs": "^1.11.9",
     "dompurify": "^3.4.2",
     "jose": "^4.15.9",
