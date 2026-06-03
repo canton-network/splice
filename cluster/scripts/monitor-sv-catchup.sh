@@ -44,12 +44,13 @@ _info "Caught-up when: seq<=${seq_delay_ok}s, participant<=${part_delay_ok}s, me
 _info "Timeout: ${timeout_hours}h"
 
 function query_prom() {
+  local default=${2:-"180"}
   local ts
   ts=$(date -d '2 minutes ago' +%s) # starting the monitoring takes some time
   curl -ksf "${PROM}/api/v1/query" \
     --data-urlencode "query=${1}" \
     --data-urlencode "time=${ts}" \
- | jq -r '.data.result[0].value[1] // "180"' # default to value higher than threshold but less than expected max
+ | jq -r ".data.result[0].value[1] // \"${default}\"" # default to value higher than threshold but less than expected max
 }
 
 function query_seq_delay() {
@@ -65,15 +66,15 @@ function query_med_delay() {
 }
 
 function query_seq_rate() {
-  query_prom "sum by(namespace, job) (rate(daml_sequencer_block_events_total{namespace=\"${namespace}\", job=~\"global-domain-.*-sequencer\"}[1m]))"
+  query_prom "sum by(namespace, job) (rate(daml_sequencer_block_events_total{namespace=\"${namespace}\", job=~\"global-domain-.*-sequencer\"}[1m]))" "0"
 }
 
 function query_part_rate() {
-  query_prom "sum by (namespace) (rate(daml_sequencer_client_handler_sequencer_events{namespace=\"${namespace}\",component=\"participant\"}[1m]))"
+  query_prom "sum by (namespace) (rate(daml_sequencer_client_handler_sequencer_events{namespace=\"${namespace}\",component=\"participant\"}[1m]))" "0"
 }
 
 function query_med_rate() {
-  query_prom "sum by (namespace) (rate(daml_sequencer_client_handler_sequencer_events{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"}[1m]))"
+  query_prom "sum by (namespace) (rate(daml_sequencer_client_handler_sequencer_events{namespace=\"${namespace}\",component=\"mediator\",job=~\"global-domain-.*-mediator\"}[1m]))" "0"
 }
 
 # Capture initial delays for catchup ratio computation
