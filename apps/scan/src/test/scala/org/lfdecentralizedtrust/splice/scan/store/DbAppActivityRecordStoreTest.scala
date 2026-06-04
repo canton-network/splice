@@ -418,7 +418,7 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "on first SV with no version bump" should {
+    "on first SV" should {
 
       "return round 0 when ingestion started from genesis" in {
         for {
@@ -450,7 +450,7 @@ class DbAppActivityRecordStoreTest
         }
       }
 
-      "return round 0 even when first activity is after round 0" in {
+      "not override when earliest_ingested_round > 0" in {
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
@@ -503,6 +503,7 @@ class DbAppActivityRecordStoreTest
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
           _ <- insertRecordsForRounds(
             store,
             historyId,
@@ -514,10 +515,11 @@ class DbAppActivityRecordStoreTest
         } yield succeed
       }
 
-      "accept round with no prior records" in {
+      "accept round with no prior records on fresh network" in {
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
           _ <- insertRecordsForRounds(
             store,
             historyId,
@@ -772,6 +774,32 @@ class DbAppActivityRecordStoreTest
         meta.value.earliestIngestedRound shouldBe 10L
       }
     }
+
+    "set earliest_ingested_round to 0 on fresh network when isFirstSv" in {
+      for {
+        (store, _) <- newStore(isFirstSv = true)
+        r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
+        meta <- store.lookupActivityRecordMeta(1, 0)
+      } yield {
+        r1 shouldBe Checked(InsertMeta)
+        meta.value.earliestIngestedRound shouldBe 0L
+      }
+    }
+
+    "not override earliest_ingested_round on version bump when isFirstSv" in {
+      for {
+        (store, _) <- newStore(
+          versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
+          isFirstSv = true,
+        )
+        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
+        r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
+        meta <- store.lookupActivityRecordMeta(2, 0)
+      } yield {
+        r1 shouldBe Checked(InsertMeta)
+        meta.value.earliestIngestedRound shouldBe 10L
+      }
+    }
   }
 
   "latestRoundWithCompleteAppActivity" should {
@@ -961,9 +989,7 @@ class DbAppActivityRecordStoreTest
   /** Creates both an app activity record store and a verdict store backed by
     * the same UpdateHistory, for testing insertVerdictsWithAppActivityRecords.
     */
-  private def newStores(
-      isFirstSv: Boolean = false
-  ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
+  private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
@@ -982,7 +1008,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv,
+        isFirstSv = false,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(

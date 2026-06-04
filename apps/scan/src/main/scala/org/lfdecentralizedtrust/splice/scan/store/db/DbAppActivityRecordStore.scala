@@ -171,17 +171,11 @@ class DbAppActivityRecordStore(
               and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
-    ).flatMap {
-      case Some(n) if isFirstSv =>
-        // First SV: round 0 unless a version bump occurred.
-        runQuerySingle(
-          hasPriorIngestionVersionDBIO.map(Some(_)),
-          "appActivity.hasPriorVersionMeta",
-        ).map {
-          case Some(true) => Some(n) // version bump — respect meta table
-          case _ => Some(0L) // fresh network — round 0
-        }
-      case other => Future.successful(other)
+    ).map {
+      // Some(1) means earliest_ingested_round = 0 (query returns 0 + 1).
+      // First SV has complete history, so round 0 is complete.
+      case Some(1L) if isFirstSv => Some(0L)
+      case other => other
     }
   }
 
@@ -467,11 +461,15 @@ class DbAppActivityRecordStore(
               case None =>
                 DBIO.successful(NotReady: EnsureResult)
               case Some((firstRecordTimeMicros, earliestRound)) =>
+                // First SV on fresh network: earliest complete round is
+                // always 0, so override the given value.
+                val adjustedEarliestRound =
+                  if (isFirstSv && maxVersions.isEmpty) 0L else earliestRound
                 insertActivityRecordMetaDBIO(
                   codeVersion,
                   userVersion,
                   firstRecordTimeMicros,
-                  earliestRound,
+                  adjustedEarliestRound,
                   lastArchivedRoundO,
                 ).map { _ =>
                   metaChecked.set(true)
@@ -487,21 +485,6 @@ class DbAppActivityRecordStore(
             DBIO.successful(Checked(d): EnsureResult)
         }
       } yield result
-    }
-  }
-
-  /** True if a prior ingestion version exists (version bump occurred). */
-  private def hasPriorIngestionVersionDBIO: DBIOAction[Boolean, NoStream, Effect.Read] = {
-    val cv = ingestionVersions.code
-    val uv = ingestionVersions.user
-    sql"""select min(activity_ingestion_code_version),
-                 min(activity_ingestion_user_version)
-          from #${Tables.activityRecordMeta}
-          where history_id = $historyId
-    """.as[(Option[Int], Option[Int])].headOption.map {
-      case Some((Some(minCode), Some(minUser))) =>
-        minCode < cv || (minCode == cv && minUser < uv)
-      case _ => false
     }
   }
 
