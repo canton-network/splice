@@ -119,6 +119,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to directly add a hosted SV.
   | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2 -- TODOV: rename
     -- ^ Voted action to update the weight of a hosted SV.
+  | SRARC_InstructOffboardHostedSv DsoRules_InstructOffboardHostedSv
+    -- ^ Voted action to instruct the offboarding of a hosted SV.
   | SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv
     -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
   | SRARC_OffboardHostedSv DsoRules_OffboardHostedSv
@@ -249,7 +251,10 @@ data DsoRules_UpdateSvRewardWeightResult = DsoRules_UpdateSvRewardWeightResult w
 data DsoRules_UpdateSvRewardWeight_V2Result = DsoRules_UpdateSvRewardWeight_V2Result with
     newDsoRules : ContractId DsoRules
 
-data DsoRules_RemoveHostedSvResult = DsoRules_RemoveHostedSvResult with
+data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSvResult with
+    instructionCid : ContractId OffboardHostedSvInstruction
+
+data DsoRules_OffboardHostedSvResult = DsoRules_OffboardHostedSvResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_UpdateSvOperatorForHostedSvResult = DsoRules_UpdateSvOperatorForHostedSvResult with
@@ -1200,14 +1205,8 @@ template DsoRules with
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
             pure DsoRules_UpdateSvRewardWeight_V2Result with newDsoRules
 
-    -- Note: Implement in phase 1
-    -- | Offboards a hosted SV.
-    --
-    -- Note: This choice does not archive the corresponding `SvRewardBeneficiaries`
-    -- contract. The offboarding process performs that as a separate step through
-    -- automation in the SV backend, which collects and archives
-    -- `SvRewardBeneficiaries` contracts whose `sv` appears in the `offboardedHostedSvs` map. -- TODOV
-    choice DsoRules_OffboardHostedSv : DsoRules_RemoveHostedSvResult
+    -- TODOV: doc
+    nonconsuming choice DsoRules_InstructOffboardHostedSv : DsoRules_InstructOffboardHostedSvResult
       with
         svParty : Party
       controller dso
@@ -1216,9 +1215,42 @@ template DsoRules with
         case Map.lookup svParty hostedSvsMap of
           None -> fail "SV party is not registered"
           _ -> do
-            let newHostedSvs = Map.delete svParty hostedSvsMap
+            instructionCid <- create OffboardHostedSvInstruction with svParty; dso
+            pure DsoRules_InstructOffboardHostedSvResult with instructionCid
+
+    -- Note: Implement in phase 1
+    -- | Offboards a hosted SV.
+    choice DsoRules_OffboardHostedSv : DsoRules_OffboardHostedSvResult
+      with
+        instructionCid : ContractId OffboardHostedSvInstruction
+        svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
+        svRewardStateCid : ContractId SvRewardState
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        let hostedSvsMap = fromOptional Map.empty hostedSvs
+        case Map.lookup instruction.svParty hostedSvsMap of
+          None -> fail "SV party is not registered"
+          Some hostedSvInfo -> do
+            -- Archive the SvRewardBeneficiaries contract
+            svRewardBeneficiaries <- fetchAndArchive (ForDso with dso) svRewardBeneficiariesCid
+            -- Archive the SvRewardState contract
+            svRewardState <- fetchAndArchive (ForDso with dso) svRewardStateCid
+            -- Sanity checks
+            require "The SV party in SvRewardBeneficiaries and OffboardHostedSvInstruction must match" $
+              svRewardBeneficiaries.sv == instruction.svParty
+            require "The SV operator in SvRewardBeneficiaries and the SV operator configured in DsoRules must match" $
+              svRewardBeneficiaries.svOperator == hostedSvInfo.svOperator
+            require "The SvRewardState contract belongs to the hosted SV to be offboarded" $
+              svRewardState.svName == hostedSvInfo.name
+
+            -- Delete the hosted SV
+            let newHostedSvs = Map.delete instruction.svParty hostedSvsMap
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
-            pure DsoRules_RemoveHostedSvResult with newDsoRules
+
+            pure DsoRules_OffboardHostedSvResult with newDsoRules
 
     -- TODOV: doc
     nonconsuming choice DsoRules_InstructUpdateSvOperatorForHostedSv : DsoRules_InstructUpdateSvOperatorForHostedSvResult
@@ -1255,7 +1287,7 @@ template DsoRules with
             -- Sanity checks
             require "The SV party in SvRewardBeneficiaries and UpdateSvOperatorForHostedSvInstruction must match" $
               svRewardBeneficiaries.sv == instruction.svParty
-            require "The SV operator in SvRewardBeneficiaries and the old SV operator configured in DsoRules must match" $
+            require "The SV operator in SvRewardBeneficiaries and the SV operator configured in DsoRules must match" $
               svRewardBeneficiaries.svOperator == hostedSvInfo.svOperator
 
             -- Update the SV operator
@@ -2252,6 +2284,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UpdateSvRewardWeight_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_OffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg

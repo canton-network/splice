@@ -97,6 +97,14 @@ template UpdateSvOperatorForHostedSvInstruction with
     signatory dso
 
 
+-- TODOV: doc
+template OffboardHostedSvInstruction with
+    svParty : Party
+    dso : Party
+  where
+    signatory dso
+
+
 -- instances
 ------------
 
@@ -118,3 +126,6 @@ instance HasCheckedFetch SvOnboardingRequest ForDso where
 
 instance HasCheckedFetch UpdateSvOperatorForHostedSvInstruction ForDso where
   contractGroupId UpdateSvOperatorForHostedSvInstruction {..} = ForDso with dso
+
+instance HasCheckedFetch OffboardHostedSvInstruction ForDso where
+  contractGroupId OffboardHostedSvInstruction {..} = ForDso with dso

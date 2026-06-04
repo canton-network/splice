@@ -59,8 +59,8 @@ test_SvWeightsFullyOnledger = do
         newSvNodeName = sv5NodeName
         newSvNodeParticipantId = sv5NodeParticipantId
 
-  checkDsoRulesSv app sv5 (mkSvInfo sv5NodeName round 0 sv5NodeParticipantId)
-  checkSvRewardStateDoesNotExists app sv5NodeName
+  assertSvInfoForParty app sv5 (mkSvInfo sv5NodeName round 0 sv5NodeParticipantId)
+  assertSvRewardStateIsAbsent app sv5NodeName
 
 
 
@@ -80,10 +80,10 @@ test_SvWeightsFullyOnledger = do
         joinedAsOfRound = hostedSvJoinedAsOfRound.round
         svOperator = sv5
 
-  checkDsoRulesHostedSv app hostedSv
+  assertHostedSvInfoForParty app hostedSv
     (mkHostedSvInfo hostedSvName round hostedSvWeight sv5)
 
-  checkSvRewardBeneficiaries app hostedSv sv5
+  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
     SvRewardBeneficiaries with
       dso
       sv = hostedSv
@@ -101,7 +101,7 @@ test_SvWeightsFullyOnledger = do
       newBeneficiaries = hostedSvExtraBeneficiaries
       svParty = hostedSv
 
-  checkSvRewardBeneficiaries app hostedSv sv5
+  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
     SvRewardBeneficiaries with
       dso
       sv = hostedSv
@@ -124,7 +124,7 @@ test_SvWeightsFullyOnledger = do
       sv = sv5
 
   let expectedHostedSvCoupons = expectedSvCoupons hostedSvWeight hostedSvBeneficiaries
-  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
+  assertSvCouponBeneficiariesForSv hostedSv round expectedHostedSvCoupons
 
   -- sv5 cannot create coupons using the legacy DsoRules_ReceiveSvRewardCoupon as
   -- there's no SvRewardState contract
@@ -157,7 +157,7 @@ test_SvWeightsFullyOnledger = do
         svParty = hostedSv
         newRewardWeight = updatedHostedSvWeight
 
-  checkDsoRulesHostedSv app hostedSv
+  assertHostedSvInfoForParty app hostedSv
     (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv5)
 
   -- Create SV coupons
@@ -171,7 +171,7 @@ test_SvWeightsFullyOnledger = do
       sv = sv5
 
   let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
-  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
+  assertSvCouponBeneficiariesForSv hostedSv round expectedHostedSvCoupons
 
 
   -- Updating the SV operator of a hosted SV
@@ -194,9 +194,9 @@ test_SvWeightsFullyOnledger = do
       svRewardBeneficiariesCid
       sv = sv1
 
-  checkDsoRulesHostedSv app hostedSv
+  assertHostedSvInfoForParty app hostedSv
     (mkHostedSvInfo hostedSvName hostedSvJoinedAsOfRound updatedHostedSvWeight sv1)
-  checkSvRewardBeneficiaries app hostedSv sv1
+  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv1
     SvRewardBeneficiaries with
       dso
       sv = hostedSv
@@ -215,7 +215,7 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = sv5
   -- sv5 does not create coupons for the migrated hosted SV
-  checkSvCouponBeneficariesBySv hostedSv round []
+  assertSvCouponBeneficiariesForSv hostedSv round []
 
   -- sv1 creates SV coupons
   rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv1
@@ -226,7 +226,7 @@ test_SvWeightsFullyOnledger = do
       sv = sv1
 
   let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
-  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
+  assertSvCouponBeneficiariesForSv hostedSv round expectedHostedSvCoupons
 
 
   -- Clearing SV beneficiaries
@@ -253,26 +253,35 @@ test_SvWeightsFullyOnledger = do
       sv = sv1
 
   let expectedHostedSvCouponsAfterClear = [(hostedSv, updatedHostedSvWeight)]
-  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCouponsAfterClear
+  assertSvCouponBeneficiariesForSv hostedSv round expectedHostedSvCouponsAfterClear
 
 
-  -- -- Offboarding an SV node
-  -- --------------------------
-  -- -- Assuming that all hosted SV operated by the SV node has been migrated to a new SV node
+  -- Offboarding a hosted SV node
+  --------------------------------
 
-  -- sv4SvInfo <- getSvInfoByParty app sv4
+  -- Instruct offboard
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, sv5] $
+    ARC_DsoRules with
+      dsoAction = SRARC_InstructOffboardHostedSv DsoRules_InstructOffboardHostedSv with
+        svParty = hostedSv
 
-  -- initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
-  --   ARC_DsoRules with
-  --     dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
-  --       sv = sv4
+  [(instructionCid, instruction)] <- query @OffboardHostedSvInstruction dso
+  [(svRewardBeneficiariesCid, _)] <- queryFilter @SvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
+  hostedSvInfo <- getHostedSvInfoByParty app instruction.svParty
+  [(svRewardStateCid, _)] <- queryFilter @SvRewardState dso (\co -> co.svName == hostedSvInfo.name)
 
-  -- [(_, rules)] <- query @DsoRules app.dso
-  -- Map.lookup sv4 rules.svs === None
-  -- Map.lookup sv4 rules.offboardedSvs === Some
-  --   OffboardedSvInfo with
-  --     name = sv4SvInfo.name
-  --     participantId = sv4SvInfo.participantId
+  -- Offboard
+  void $ submit (actAs sv1 <> readAs dso) $
+    exerciseCmd rulesCid DsoRules_OffboardHostedSv with
+      instructionCid
+      svRewardBeneficiariesCid
+      svRewardStateCid
+      sv = sv1
+
+  [(_, rules)] <- query @DsoRules app.dso
+  Map.lookup hostedSv (getHostedSvsMap rules) === None
+  assertSvRewardStateIsAbsent app hostedSvInfo.name
+  assertSvRewardBeneficiariesIsAbsent app hostedSv
 
   pure ()
 
@@ -324,7 +333,7 @@ test_SvWeightsMigration = do
     rewardStateCid = sv1RewardStateCid
     beneficiaries = sv1LegacyBeneficiaries
     sv = sv1
-  checkSvCouponBeneficariesBySv sv1 round sv1LegacyBeneficiaries
+  assertSvCouponBeneficiariesForSv sv1 round sv1LegacyBeneficiaries
 
 
   -- SV migration
@@ -364,13 +373,13 @@ test_SvWeightsMigration = do
   -- Check hosted SVs
   [(rulesCid, rules)] <- query @DsoRules app.dso
   Map.size (getHostedSvsMap rules) === 3
-  checkDsoRulesHostedSv app sv1 (mkHostedSvInfo sv1AsHostedSvName round sv1Weight sv1)
-  checkDsoRulesHostedSv app hostedSv (mkHostedSvInfo hostedSvName round hostedSvWeight sv1)
-  checkDsoRulesHostedSv app ghostSv (mkHostedSvInfo ghostSvName round ghostSvWeight sv1)
+  assertHostedSvInfoForParty app sv1 (mkHostedSvInfo sv1AsHostedSvName round sv1Weight sv1)
+  assertHostedSvInfoForParty app hostedSv (mkHostedSvInfo hostedSvName round hostedSvWeight sv1)
+  assertHostedSvInfoForParty app ghostSv (mkHostedSvInfo ghostSvName round ghostSvWeight sv1)
   -- Check hosted SVs SvRewardState contracts
-  checkSvRewardStateExists app sv1AsHostedSvName
-  checkSvRewardStateExists app hostedSvName
-  checkSvRewardStateExists app ghostSvName
+  assertSingleSvRewardStateExists app sv1AsHostedSvName
+  assertSingleSvRewardStateExists app hostedSvName
+  assertSingleSvRewardStateExists app ghostSvName
 
 
   -- Creating SV coupons
@@ -393,9 +402,9 @@ test_SvWeightsMigration = do
       rewardStatesWithBeneficiaries
       sv = sv1
 
-  checkSvCouponBeneficariesBySv sv1 round sv1Beneficiaries
-  checkSvCouponBeneficariesBySv hostedSv round hostedSvBeneficiaries
-  checkSvCouponBeneficariesBySv ghostSv round ghostSvBeneficiaries
+  assertSvCouponBeneficiariesForSv sv1 round sv1Beneficiaries
+  assertSvCouponBeneficiariesForSv hostedSv round hostedSvBeneficiaries
+  assertSvCouponBeneficiariesForSv ghostSv round ghostSvBeneficiaries
 
   pure ()
 
@@ -527,39 +536,58 @@ testSvNodeOnboarding = do
   pure ()
 
 
-
 -- Helpers
 -----------
 
-getHostedSvsMap : DsoRules -> Map.Map Party HostedSvInfo
-getHostedSvsMap rules = fromOptional Map.empty rules.hostedSvs
-
-checkSvCouponBeneficariesBySv : Party -> OpenMiningRound -> [(Party, Int)] -> Script ()
-checkSvCouponBeneficariesBySv sv round expected = do
+assertSvCouponBeneficiariesForSv : Party -> OpenMiningRound -> [(Party, Int)] -> Script ()
+assertSvCouponBeneficiariesForSv sv round expected = do
   (_, coupons) <- unzip <$> queryFilter @SvRewardCoupon sv (\co -> co.round == round.round && co.sv == sv)
   let beneficiaries = map (\coupon -> (coupon.beneficiary, coupon.weight)) coupons
   sort beneficiaries === sort expected
 
-checkNoSvCouponsForSvInRound : Party -> OpenMiningRound -> Script ()
-checkNoSvCouponsForSvInRound sv round = do
+assertNoSvRewardCouponsForSvInRound : Party -> OpenMiningRound -> Script ()
+assertNoSvRewardCouponsForSvInRound sv round = do
   [] <- queryFilter @SvRewardCoupon sv (\co -> co.round == round.round && co.sv == sv)
   pure ()
 
-checkSvCouponBeneficariesInRound : AmuletApp -> OpenMiningRound -> [(Party, Int)] -> Script ()
-checkSvCouponBeneficariesInRound app round expected = do
+assertSvCouponBeneficiariesInRound : AmuletApp -> OpenMiningRound -> [(Party, Int)] -> Script ()
+assertSvCouponBeneficiariesInRound app round expected = do
   (_, coupons) <- unzip <$> queryFilter @SvRewardCoupon app.dso (\co -> co.round == round.round)
   let beneficiaries = map (\coupon -> (coupon.beneficiary, coupon.weight)) coupons
   sort beneficiaries === sort expected
 
-checkDsoRulesHostedSv : AmuletApp -> Party -> HostedSvInfo -> Script ()
-checkDsoRulesHostedSv app hostedSv expected = do
+assertHostedSvInfoForParty : AmuletApp -> Party -> HostedSvInfo -> Script ()
+assertHostedSvInfoForParty app hostedSv expected = do
   hostedSvInfo <- getHostedSvInfoByParty app hostedSv
   hostedSvInfo === expected
 
-checkDsoRulesSv : AmuletApp -> Party -> SvInfo -> Script ()
-checkDsoRulesSv app sv expected = do
+assertSvInfoForParty : AmuletApp -> Party -> SvInfo -> Script ()
+assertSvInfoForParty app sv expected = do
   svInfo <- getSvInfoByParty app sv
   svInfo === expected
+
+assertSvRewardBeneficiariesForSvAndOperator : AmuletApp -> Party -> Party -> SvRewardBeneficiaries -> Script ()
+assertSvRewardBeneficiariesForSvAndOperator app hostedSv svOperator expected = do
+  [(_, actual)] <- queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv == hostedSv && b.svOperator == svOperator)
+  actual === expected
+
+assertSingleSvRewardStateExists : AmuletApp -> Text -> Script ()
+assertSingleSvRewardStateExists app svName = do
+  [_] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
+  pure ()
+
+assertSvRewardStateIsAbsent : AmuletApp -> Text -> Script ()
+assertSvRewardStateIsAbsent app svName = do
+  [] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
+  pure ()
+
+assertSvRewardBeneficiariesIsAbsent : AmuletApp -> Party -> Script ()
+assertSvRewardBeneficiariesIsAbsent app sv = do
+  [] <- queryFilter @SvRewardBeneficiaries app.dso (\co -> co.sv == sv)
+  pure ()
+
+getHostedSvsMap : DsoRules -> Map.Map Party HostedSvInfo
+getHostedSvsMap rules = fromOptional Map.empty rules.hostedSvs
 
 mkHostedSvInfo : Text -> OpenMiningRound -> Int -> Party -> HostedSvInfo
 mkHostedSvInfo name joinedAsOfRound svRewardWeight svOperator =
@@ -577,17 +605,6 @@ unsafeLookup key' m =
   case Map.lookup key' m of
     Some value -> value
     None -> error $ "Key not found: " <> show key'
-
-checkSvRewardStateExists : AmuletApp -> Text -> Script ()
-checkSvRewardStateExists app svName = do
-  [_] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
-  pure ()
-
-checkSvRewardStateDoesNotExists : AmuletApp -> Text -> Script ()
-checkSvRewardStateDoesNotExists app svName = do
-  [] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
-  pure ()
-
 
 getRewardStatesWithBeneficiariesBySvOperator
   : AmuletApp
@@ -614,12 +631,6 @@ getSvRewardBeneficiariesCid app hostedSv svOperator = do
   [(hostedSvSvRewardBeneficiariesCid, _)] <-
     queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
   pure hostedSvSvRewardBeneficiariesCid
-
-checkSvRewardBeneficiaries : AmuletApp -> Party -> Party -> SvRewardBeneficiaries -> Script ()
-checkSvRewardBeneficiaries app hostedSv svOperator expected = do
-  [(_, hostedSvSvRewardBeneficiaries)] <-
-    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
-  hostedSvSvRewardBeneficiaries === expected
 
 expectedSvCoupons : Int -> [(Party, Decimal)] -> [(Party, Int)]
 expectedSvCoupons svWeight beneficiaries =
