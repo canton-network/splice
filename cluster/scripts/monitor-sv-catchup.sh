@@ -144,13 +144,21 @@ else
   exit_code=1
 fi
 
+grafana_base="https://grafana.${GCP_CLUSTER_BASENAME}.global.canton.network.digitalasset.com"
+grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/global-domain-catchup?orgId=1&from=${start_time}&to=${end_time}&timezone=UTC&var-DS=prometheus&var-namespace=${namespace}&var-migration=All&viewPanel=panel-11"
+grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&from=${start_time}&to=${end_time}&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13"
+
 message="${icon} *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
 Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
 
-*Per-component peak rates over catchup window:*
+*Per-component average rates over catchup window:*
 • Sequencer: \`$(printf "%.0f" "$seq_rate_max")\` events/s  (expected throughput ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
 • Participant: \`$(printf "%.1f" "$part_rate")\`x  (expected catchup speed ≥ ${part_min_ratio}x baseline)  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
-• Mediator: \`$(printf "%.1f" "$med_rate")\`x  (expected catchup speed ≥ ${med_min_ratio}x baseline)  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")"
+• Mediator: \`$(printf "%.1f" "$med_rate")\`x  (expected catchup speed ≥ ${med_min_ratio}x baseline)  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
+
+*Dashboards:*
+• <${grafana_domain_link}|Sequencer>
+• <${grafana_participant_link}|Participant and Mediator>"
 
 _info "$message"
 
