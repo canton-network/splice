@@ -233,8 +233,6 @@ trait ScanStore
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
-  // TODO(DACH-NY/canton-network-internal#2982) Remove this testing endpoint
-  def dangerousSleep(lookForInLogs: String)(implicit tc: TraceContext): Future[Unit]
 }
 
 object ScanStore {

@@ -740,19 +740,6 @@ class DbScanStore(
         .toMap
     }
 
-  // TODO(DACH-NY/canton-network-internal#2982) Remove this testing endpoint
-  override def dangerousSleep(lookForInLogs: String)(implicit tc: TraceContext): Future[Unit] = {
-    val escapedLookForInLogs = lookForInLogs.take(512)
-    storage
-      .query(
-        sql"""
-          select $escapedLookForInLogs::text as look_for_in_logs, pg_sleep(300)
-        """.as[String],
-        "dangerousSleep",
-      )
-      .map(_ => ())
-  }
-
   // TODO (#934): this method probably belongs in UpdateHistory instead
   override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
       companion: C,

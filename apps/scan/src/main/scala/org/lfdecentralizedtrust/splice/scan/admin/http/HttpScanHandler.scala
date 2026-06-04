@@ -2894,24 +2894,6 @@ class HttpScanHandler(
       }
     }
   }
-
-  def getDangerousSleep(
-      respond: ScanResource.GetDangerousSleepResponse.type
-  )(lookForInLogs: String)(extracted: TraceContext): Future[
-    ScanResource.GetDangerousSleepResponse
-  ] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getDangerousSleep") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#2982) Remove this testing endpoint
-      store.dangerousSleep(lookForInLogs).map { _ =>
-        ScanResource.GetDangerousSleepResponse.OK(
-          definitions.DangerousSleepResponse(
-            sleptSeconds = 300L
-          )
-        )
-      }
-    }
-  }
 }
 
 object HttpScanHandler {
