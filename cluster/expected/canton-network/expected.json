@@ -287,7 +287,7 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
-          "enableLogicalSynchronizerDeploymentMode": true,
+          "enableLogicalSynchronizerDeploymentMode": false,
           "id": 9,
           "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
@@ -310,7 +310,7 @@
         },
         "archived": [
           {
-            "enableLogicalSynchronizerDeploymentMode": true,
+            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 7,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
@@ -330,7 +330,7 @@
             }
           },
           {
-            "enableLogicalSynchronizerDeploymentMode": true,
+            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 8,
             "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
@@ -2840,7 +2840,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant",
+        "participantAddress": "participant-2",
         "persistence": {
           "databaseName": "scan_sv_1",
           "port": 5432,
@@ -3058,7 +3058,7 @@
           "onboardingName": "Digital-Asset-2",
           "onboardingRoundZeroDuration": "2 h",
           "onboardingType": "found-dso",
-          "participantAddress": "participant",
+          "participantAddress": "participant-2",
           "periodicTopologySnapshotConfig": {
             "backupInterval": "12h",
             "location": {
@@ -3238,7 +3238,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
-          "participantAddress": "participant",
+          "participantAddress": "participant-2",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -3920,7 +3920,7 @@
         "migration": {
           "id": 2
         },
-        "participantAddress": "participant",
+        "participantAddress": "participant-2",
         "persistence": {
           "databaseName": "scan_sv_da_1",
           "port": 5432,
@@ -4114,7 +4114,7 @@
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
-          "participantAddress": "participant",
+          "participantAddress": "participant-2",
           "permissionedSynchronizer": false,
           "persistence": {
             "databaseName": "sv_sv_da_1",
@@ -4273,7 +4273,7 @@
             "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
-          "participantAddress": "participant",
+          "participantAddress": "participant-2",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
