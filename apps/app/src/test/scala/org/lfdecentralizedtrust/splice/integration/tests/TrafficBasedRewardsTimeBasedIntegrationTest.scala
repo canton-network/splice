@@ -71,7 +71,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
@@ -393,8 +393,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     }
 
     val totalsByRound: Map[Long, definitions.RewardAccountingActivityTotalsOk] =
-      clue("Rounds 6..10 activity totals and root hash are computed") {
-        (6L to 10L).map { round =>
+      clue("Rounds 0..10 activity totals and root hash are computed") {
+        (0L to 10L).map { round =>
           val totalsOk = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
             case GetRewardAccountingActivityTotalsResponse.members
                   .RewardAccountingActivityTotalsOk(t) =>
@@ -409,9 +409,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }.toMap
       }
 
-    // For rounds 0..5 scan cannot do totals calcs/produce a root hash, rounds
-    // 0..4 had no activity records; round 5 is excluded as the earliest round
-    // with records, and round 11 has not closed yet.
+    // Rounds 0..4 have no activity records (totals are zero);
+    // rounds 5..10 have activity. Round 11 has not closed yet.
     clue(
       "Minting allowances: rounds 6, 7, 10 reward both parties; round 9 only alice"
     ) {
@@ -458,19 +457,18 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         .futureValue
         .map(_.payload.round.number)
 
-    clue("CalculateRewards and ProcessRewards triggers consume middle-round (6..10) contracts") {
-      // V2 contracts for rounds 6..10 should be processed by SVs
+    clue("CalculateRewards and ProcessRewards triggers consume contracts for rounds < 11") {
       eventually() {
         val remainingCalculate = sv1Backend.appState.dsoStore
           .listCalculateRewardsV2()
           .futureValue
-          .filter(c => c.payload.round.number >= 6L && c.payload.round.number <= 10L)
+          .filter(c => c.payload.round.number < 11L)
         remainingCalculate shouldBe empty withClue
-          "Middle-round CalculateRewardsV2 contracts (6..10) should be consumed"
+          "CalculateRewardsV2 contracts for rounds < 11 should be consumed"
         val remainingProcess = listProcessRewardsV2Rounds()
-          .filter(r => r >= 6L && r <= 10L)
+          .filter(r => r < 11L)
         remainingProcess shouldBe empty withClue
-          "Middle-round ProcessRewardsV2 contracts (6..10) should be consumed"
+          "ProcessRewardsV2 contracts for rounds < 11 should be consumed"
       }
     }
   }
