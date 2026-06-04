@@ -143,7 +143,7 @@ Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ende
 
 *Per-component peak rates over catchup window:*
 • Sequencer: \`$(printf "%.1f" "$seq_rate_max")\` events/s  (expected throughput ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
-• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected throughput≥ ${part_min_eps}  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
+• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected throughput ≥ ${part_min_eps})  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
 • Mediator: \`$(printf "%.1f" "$med_rate_max")\` events/s  (expected throughput ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
 
 *Dashboards:*

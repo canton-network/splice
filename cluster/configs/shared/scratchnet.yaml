@@ -23,8 +23,8 @@ svs:
         thresholds:
           minBackupAgeHours: 1
           sequencerMinEventsPerSecond: 20
-          participantMinEventsPerSecondo: 20
-          mediatorMinEventsPerSecondo: 20
+          participantMinEventsPerSecond: 20
+          mediatorMinEventsPerSecond: 20
           caughtUpThresholds:
             sequencerBlockDelaySeconds: 30
             participantDelaySeconds: 30
