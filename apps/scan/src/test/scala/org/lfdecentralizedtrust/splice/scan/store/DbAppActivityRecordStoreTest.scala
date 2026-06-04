@@ -492,6 +492,32 @@ class DbAppActivityRecordStoreTest
           result.value shouldBe 11L
         }
       }
+
+      "not override after version bump" in {
+        for {
+          (store, historyId) <- newStore(
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
+            isFirstSv = true,
+          )
+          baseTs = CantonTimestamp.now()
+          // Version 1 meta row exists from prior run
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+          // Version 2 meta row added by ensureMeta
+          _ <- runEnsureMeta(store, Some((baseTs.toMicros + 1000000L, 10L)))
+          _ <- insertRecordsForRounds(
+            store,
+            historyId,
+            baseTs,
+            ("round-10", 10L),
+            ("round-11", 11L),
+          )
+          result <- store.earliestRoundWithCompleteAppActivity()
+        } yield {
+          // Query reads version 2 meta (earliest_ingested_round = 10),
+          // returns Some(11) — the case Some(1L) override does not fire.
+          result.value shouldBe 11L
+        }
+      }
     }
   }
 
@@ -528,6 +554,52 @@ class DbAppActivityRecordStoreTest
             ("round-6", 6L),
           )
           _ <- store.assertCompleteActivity(5L)
+        } yield succeed
+      }
+
+      "reject round with no prior records after version bump" in {
+        for {
+          (store, historyId) <- newStore(
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
+            isFirstSv = true,
+          )
+          baseTs = CantonTimestamp.now()
+          // Version 1 meta row exists from prior run
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+          // Version 2 meta row added by ensureMeta
+          _ <- runEnsureMeta(store, Some((baseTs.toMicros + 1000000L, 10L)))
+          _ <- insertRecordsForRounds(
+            store,
+            historyId,
+            baseTs,
+            ("round-10", 10L),
+            ("round-11", 11L),
+          )
+          // 2 meta rows → isFirstSvFreshNetwork is false → prior round required
+          result <- store.assertCompleteActivity(10L).failed
+        } yield {
+          result.getMessage should include("Incomplete app activity for round 10")
+        }
+      }
+
+      "accept round with prior records after version bump" in {
+        for {
+          (store, historyId) <- newStore(
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
+            isFirstSv = true,
+          )
+          baseTs = CantonTimestamp.now()
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+          _ <- runEnsureMeta(store, Some((baseTs.toMicros + 1000000L, 10L)))
+          _ <- insertRecordsForRounds(
+            store,
+            historyId,
+            baseTs,
+            ("round-10", 10L),
+            ("round-11", 11L),
+            ("round-12", 12L),
+          )
+          _ <- store.assertCompleteActivity(11L)
         } yield succeed
       }
     }
