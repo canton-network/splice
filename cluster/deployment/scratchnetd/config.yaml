@@ -1,1 +1,10 @@
-!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml) {}
+!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml)
+scanApp:
+  additionalEnvVars:
+    - name: ADDITIONAL_CONFIG_DIFFERENT_CCCI
+      value: |
+        canton.scan-apps.sv1scan.postgres.client-connection-check-interval = '15 seconds'
+pulumiProjectConfig:
+  default:
+    cloudSql:
+      enabled: true
