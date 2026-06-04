@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import * as semver from 'semver';
-import { allowDowngrade } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { allowDowngrade } from '@canton-network/splice-pulumi-common';
 import { PolicyPack, validateResourceOfType } from '@pulumi/policy';
 import { execSync } from 'child_process';
 

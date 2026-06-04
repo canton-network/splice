@@ -3,11 +3,11 @@
 import {
   getExpectedAmuletRulesConfigDiffsHTML,
   getExpectedDsoRulesConfigDiffsHTML,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
 import {
   checkAmuletRulesExpectedConfigDiffsHTML,
   checkDsoRulesExpectedConfigDiffsHTML,
-} from '@lfdecentralizedtrust/splice-common-test-utils';
+} from '@canton-network/splice-common-test-utils';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { test, expect, describe } from 'vitest';

@@ -1,5 +1,5 @@
 {
-  "name": "@lfdecentralizedtrust/splice-sv-frontend",
+  "name": "@canton-network/splice-sv-frontend",
   "version": "0.1.0",
   "browserslist": {
     "production": [
@@ -41,9 +41,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
-    "@lfdecentralizedtrust/splice-common-test-handlers": "^0.1.0",
-    "@lfdecentralizedtrust/splice-common-test-utils": "^0.1.0",
-    "@lfdecentralizedtrust/splice-common-test-vite-utils": "^0.1.0",
+    "@canton-network/splice-common-test-handlers": "^0.1.0",
+    "@canton-network/splice-common-test-utils": "^0.1.0",
+    "@canton-network/splice-common-test-vite-utils": "^0.1.0",
     "@testing-library/jest-dom": "^6.6.2",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.4.3",

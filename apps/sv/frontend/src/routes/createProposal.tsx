@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useSearchParams } from 'react-router';
-import { Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { Loading } from '@canton-network/splice-common-frontend';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
 import { GrantRevokeFeaturedAppForm } from '../components/forms/GrantRevokeFeaturedAppForm';
 import { OffboardSvForm } from '../components/forms/OffboardSvForm';

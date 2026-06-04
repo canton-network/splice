@@ -4,8 +4,8 @@ import * as cloudsql from '@google-cloud/sql';
 import * as gcp from '@pulumi/gcp';
 import * as automation from '@pulumi/pulumi/automation';
 import * as readline from 'readline';
-import { CLUSTER_BASENAME, config } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { runSvProjectForAllSvs } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
+import { CLUSTER_BASENAME, config } from '@canton-network/splice-pulumi-common';
+import { runSvProjectForAllSvs } from '@canton-network/splice-pulumi-sv/pulumi';
 import { program } from 'commander';
 
 import { stack } from './pulumi';

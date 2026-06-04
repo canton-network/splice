@@ -5,7 +5,7 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   DomainMigrationIndex,
   MigrationInfo,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { CometBftNodeConfigs } from './cometBftNodeConfigs';
 import { StaticCometBftConfigWithNodeName } from './cometbftConfig';

@@ -4,7 +4,7 @@
 import { Box, FormControlLabel, Radio, RadioGroup, Typography } from '@mui/material';
 import { useFieldContext } from '../../hooks/formContext';
 import { DesktopDateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { EffectivityType } from '../../utils/types';

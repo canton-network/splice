@@ -1,5 +1,5 @@
 {
-    "name": "@lfdecentralizedtrust/canton-network-pulumi-deployment",
+    "name": "@canton-network/canton-network-pulumi-deployment",
     "version": "1.0.0",
     "main": "src/index.ts",
     "devDependencies": {
@@ -7,7 +7,7 @@
         "@jest/globals": "^30.4.1",
         "@trivago/prettier-plugin-sort-imports": "^6.0.2",
         "@types/request": "^2.48.13",
-        "@typescript-eslint/eslint-plugin": "^8.59.4",
+        "@typescript-eslint/eslint-plugin": "^8.60.0",
         "@typescript-eslint/parser": "^8.57.2",
         "@eslint/js": "9.39.4",
         "eslint-config-prettier": "10.1.8",
@@ -21,7 +21,8 @@
     },
     "scripts": {
         "fix": "npm run format:fix && npm run lint:fix",
-        "check": "prettier --check -- *.ts && eslint --max-warnings=0 -- *.ts && npm run check --workspaces --if-present",
+        "type:check": "tsc --noEmit",
+        "check": "prettier --check -- *.ts && eslint --max-warnings=0 -- *.ts && npm run type:check && npm run check --workspaces --if-present",
         "format:fix": "prettier --write -- *.ts && npm run format:fix --workspaces --if-present",
         "format:check": "prettier --check -- *.ts && npm run format:check --workspaces --if-present",
         "lint:fix": "eslint --fix --max-warnings=0 -- *.ts && npm run lint:fix --workspaces --if-present",

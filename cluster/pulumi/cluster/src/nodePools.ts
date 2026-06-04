@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
-import { config, GCP_PROJECT } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';

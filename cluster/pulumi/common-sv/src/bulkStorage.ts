@@ -3,11 +3,11 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { ExactNamespace } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { ExactNamespace } from '@canton-network/splice-pulumi-common';
 import {
   ClusterBasename,
   GcpRegion,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/config/gcpConfig';
+} from '@canton-network/splice-pulumi-common/src/config/gcpConfig';
 
 import { BulkStorageConfig } from './singleSvConfig';
 

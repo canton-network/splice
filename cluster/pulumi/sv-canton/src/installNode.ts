@@ -7,7 +7,7 @@ import {
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   supportsSvRunbookReset,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
   coreSvsToDeploy,
@@ -15,7 +15,7 @@ import {
   sv1Config,
   svConfigs,
   svRunbookConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common-sv';
 
 import { installCantonComponents } from './canton';
 

@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from 'react';
-import { DisableConditionally, ErrorDisplay } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally, ErrorDisplay } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
 import { useState } from 'react';
 

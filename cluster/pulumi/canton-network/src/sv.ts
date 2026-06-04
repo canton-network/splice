@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as postgres from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
@@ -35,7 +35,7 @@ import {
   SvIdKey,
   svUserIds,
   validatorOnboardingSecretName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   CantonBftSynchronizerNode,
@@ -46,17 +46,17 @@ import {
   SynchronizerNodes,
   valuesForSvApp,
   valuesForSvValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { SvConfig, svsConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/config';
-import { installValidatorApp } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validator';
+} from '@canton-network/splice-pulumi-common-sv';
+import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
+import { installValidatorApp } from '@canton-network/splice-pulumi-common-validator/src/validator';
 import {
   BucketConfig,
   installBucketSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/buckets';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { initialAmuletPrice } from '@lfdecentralizedtrust/splice-pulumi-common/src/initialAmuletPrice';
-import { Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
-import { topologySnapshotConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/topology-snapshot';
+} from '@canton-network/splice-pulumi-common/src/buckets';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { initialAmuletPrice } from '@canton-network/splice-pulumi-common/src/initialAmuletPrice';
+import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { topologySnapshotConfig } from '@canton-network/splice-pulumi-common/src/topology-snapshot';
 import { Resource } from '@pulumi/pulumi';
 
 import {

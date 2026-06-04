@@ -1,8 +1,8 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-operator",
+  "name": "@canton-network/splice-pulumi-operator",
   "main": "src/index.ts",
   "dependencies": {
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0"
+    "@canton-network/splice-pulumi-common": "1.0.0"
   },
   "scripts": {
     "fix": "npm run format:fix && npm run lint:fix",

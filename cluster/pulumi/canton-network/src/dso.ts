@@ -16,7 +16,7 @@ import {
   SvIdKey,
   svKeyFromSecret,
   ValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   configForSv,
@@ -25,7 +25,7 @@ import {
   StaticCometBftConfigWithNodeName,
   StaticSvConfig,
   SvOnboarding,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common-sv';
 
 import { InstalledSv, installSvNode } from './sv';
 

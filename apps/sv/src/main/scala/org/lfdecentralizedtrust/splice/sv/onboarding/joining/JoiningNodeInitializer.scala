@@ -176,7 +176,7 @@ class JoiningNodeInitializer(
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
         domainConfigO.traverse_(
-          participantAdminConnection.ensureDomainRegisteredNoHandshake(
+          participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
           )
@@ -535,7 +535,7 @@ class JoiningNodeInitializer(
             dsoPartyToParticipantMapping.nonEmpty || activeDsoPartyToParticipantProposals.isEmpty
           ) {
             logger.info("Reconnecting all domains.")
-            participantAdminConnection.reconnectAllDomains()
+            participantAdminConnection.reconnectAllSynchronizers()
           } else {
             Future.unit
           }

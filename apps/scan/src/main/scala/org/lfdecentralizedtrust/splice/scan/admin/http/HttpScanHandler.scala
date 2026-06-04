@@ -665,7 +665,7 @@ class HttpScanHandler(
         synchronizerId <- store
           .lookupAmuletRules()
           .map(_.flatMap(_.state.fold(_.some, None)))
-        connectedDomains <- participantAdminConnection.listConnectedDomains()
+        connectedDomains <- participantAdminConnection.listConnectedSynchronizers()
       } yield {
         synchronizerId.fold(
           ScanResource.GetActivePhysicalSynchronizerSerialResponse.NotFound(

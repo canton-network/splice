@@ -3,7 +3,7 @@
 import React from 'react';
 import { Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
-import { DateWithDurationDisplay } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DateWithDurationDisplay } from '@canton-network/splice-common-frontend';
 import BftAnsEntry from './BftAnsEntry';
 import MetaDisplay from './MetaDisplay';
 import { SettlementInfo } from '@daml.js/splice-api-token-allocation/lib/Splice/Api/Token/AllocationV1/module';

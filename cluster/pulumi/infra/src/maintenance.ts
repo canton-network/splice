@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { versionFromDefault } from '@lfdecentralizedtrust/splice-pulumi-common/src/version';
+import { versionFromDefault } from '@canton-network/splice-pulumi-common/src/version';
 
 import { DOCKER_REPO, infraAffinityAndTolerations } from '../../common';
 

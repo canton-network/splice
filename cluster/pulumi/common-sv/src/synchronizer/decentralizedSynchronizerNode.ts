@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
-import { CLUSTER_HOSTNAME, DomainMigrationIndex } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { CLUSTER_HOSTNAME, DomainMigrationIndex } from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 
 export interface SvParticipant {

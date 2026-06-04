@@ -5,8 +5,8 @@ import {
   numInstances,
   imagePullSecret,
   DecentralizedSynchronizerUpgradeConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 
 import { MultiParticipant } from './multiParticipant';
 import { MultiValidator } from './multiValidator';

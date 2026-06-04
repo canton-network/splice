@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useLookupAnsEntryByNameFromResponse } from '@lfdecentralizedtrust/splice-common-frontend/scan-api';
+import { useLookupAnsEntryByNameFromResponse } from '@canton-network/splice-common-frontend/scan-api';
 import { UseQueryResult } from '@tanstack/react-query';
-import { AnsEntry } from '@lfdecentralizedtrust/scan-openapi';
+import { AnsEntry } from '@canton-network/scan-openapi';
 
 import { useValidatorScanProxyClient } from '../../context/ValidatorScanProxyContext';
 

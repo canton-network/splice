@@ -1,23 +1,25 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$defs": {
-    "synchronizer_active": {
+    "synchronizer_current": {
       "type": "object",
-      "required": [ "chainIdSuffix", "migrationId" ],
+      "required": [ "chainIdSuffix", "migrationId", "synchronizerSerialId" ],
       "additionalProperties": false,
       "properties": {
         "chainIdSuffix": { "type": "string", "minLength": 1 },
         "migrationId": { "type": "integer", "minimum": 0 },
+        "synchronizerSerialId": { "type": "integer", "minimum": 0 },
         "version": { "type": "string", "minLength": 1 }
       }
     },
     "synchronizer": {
       "type": "object",
-      "required": [ "chainIdSuffix", "migrationId", "version" ],
+      "required": [ "chainIdSuffix", "migrationId", "synchronizerSerialId", "version" ],
       "additionalProperties": false,
       "properties": {
         "chainIdSuffix": { "type": "string", "minLength": 1 },
         "migrationId": { "type": "integer", "minimum": 0 },
+        "synchronizerSerialId": { "type": "integer", "minimum": 0 },
         "version": { "type": "string", "minLength": 1 }
       }
     },
@@ -53,11 +55,11 @@
     },
     "runtimeDetails": {
       "type": "object",
-      "required": [ "migrationId", "scanUrl" ],
+      "required": [ "synchronizerSerialId" ],
       "additionalProperties": false,
       "properties": {
-        "migrationId": { "type": "integer", "minimum": 0 },
         "scanUrl": { "type": "string", "minLength": 1 },
+        "synchronizerSerialId": { "type": "integer", "minimum": 0 },
         "tlsSkipVerify": { "type": "boolean", "default": false }
       }
     },
@@ -88,11 +90,11 @@
         },
         "synchronizer": {
           "type": "object",
-          "required": ["active"],
+          "required": ["current"],
           "additionalProperties": false,
           "properties": {
-            "active": {
-              "$ref": "#/$defs/synchronizer_active"
+            "current": {
+              "$ref": "#/$defs/synchronizer_current"
             },
             "legacy": {
               "oneOf": [
@@ -100,7 +102,7 @@
                 { "$ref": "#/$defs/synchronizer" }
               ]
             },
-            "staging": {
+            "successor": {
               "oneOf": [
                 { "type": "null" },
                 { "$ref": "#/$defs/synchronizer" }
