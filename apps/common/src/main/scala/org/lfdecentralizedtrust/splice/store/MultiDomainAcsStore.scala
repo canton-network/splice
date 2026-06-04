@@ -328,10 +328,7 @@ object MultiDomainAcsStore extends StoreErrors {
       evPredicate: CreatedEvent => Boolean,
       decodeFromCreatedEvent: DecodeFromCreatedEvent[TCid, T],
       encodeToRow: EncodeToRow[TCid, T, R],
-      versionGuard: (
-          PackageVersionSupport,
-          CantonTimestamp,
-      ) => TraceContext => Future[PackageVersionSupport.FeatureSupport],
+      versionGuard: VersionGuard,
   ) {
     def matchingContractToRow(
         ev: CreatedEvent
@@ -484,10 +481,7 @@ object MultiDomainAcsStore extends StoreErrors {
       templateCompanion: Contract.Companion.Template[TCid, T]
   )(
       p: Contract[TCid, T] => Boolean,
-      versionGuard: (
-          PackageVersionSupport,
-          CantonTimestamp,
-      ) => TraceContext => Future[PackageVersionSupport.FeatureSupport] = { case _ =>
+      versionGuard: VersionGuard = { case _ =>
         _ => Future.successful(PackageVersionSupport.FeatureSupport(true, Seq.empty))
       },
   )(
@@ -971,4 +965,6 @@ object MultiDomainAcsStore extends StoreErrors {
     * chosen to be "reasonable".
     */
   val notOnDomainsTotalLimit: PageLimit = PageLimit tryCreate 1000
+
+  type VersionGuard = (PackageVersionSupport, CantonTimestamp) => (TraceContext) => Future[PackageVersionSupport.FeatureSupport]
 }
