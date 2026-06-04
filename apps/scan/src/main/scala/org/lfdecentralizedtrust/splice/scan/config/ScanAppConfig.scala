@@ -59,6 +59,7 @@ case class ScanAppBackendConfig(
     enableAppActivityRecordAndTrafficIngestion: Boolean = true,
     serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
+    rewardIssuanceTolerance: BigDecimal = BigDecimal(0.001),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the

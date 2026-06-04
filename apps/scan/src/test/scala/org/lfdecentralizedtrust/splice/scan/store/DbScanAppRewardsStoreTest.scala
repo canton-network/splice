@@ -576,6 +576,75 @@ class DbScanAppRewardsStoreTest
 
     }
 
+    // -- assertRewardAmountWithinIssuance tests --------------------------------
+    // Tested directly with fake round totals because normal computation
+    // cannot trigger the assertion — the tranche formula guarantees
+    // totalReward <= totalIssuance. This check is a safety net for bugs.
+
+    "assertRewardAmountWithinIssuance" should {
+
+      def mkParams(totalIssuance: BigDecimal): RewardIssuanceParams =
+        RewardIssuanceParams(
+          issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
+          threshold_CC = BigDecimal(0),
+          totalIssuanceForFeaturedAppRewards = totalIssuance,
+          unclaimedAppRewardAmount = BigDecimal(0),
+        )
+
+      def insertRoundTotal(historyId: Long, round: Long, amount: BigDecimal): Future[Unit] =
+        futureUnlessShutdownToFuture(
+          storage.underlying.queryAndUpdate(
+            sqlu"""insert into app_reward_round_totals
+                   (history_id, round_number, total_app_reward_minting_allowance,
+                    total_app_reward_thresholded, total_app_reward_unclaimed,
+                    rewarded_app_provider_parties_count)
+                   values ($historyId, $round, $amount, 0, 0, 1)""".map(_ => ()),
+            "test.insertRoundTotal",
+          )
+        )
+
+      "pass when reward amount is within issuance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertRewardAmountWithinIssuance",
+            )
+          )
+        } yield succeed
+      }
+
+      "fail when reward amount exceeds issuance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
+          result <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(5.0))),
+              "test.assertRewardAmountWithinIssuance",
+            )
+          ).failed
+        } yield {
+          result.getMessage should include("exceeds totalIssuance")
+        }
+      }
+
+      "pass when reward amount exceeds issuance within tolerance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0005))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertRewardAmountWithinIssuance",
+            )
+          )
+        } yield succeed
+      }
+    }
+
     // -- computeRewardTotals tests -------------------------------------------
 
     val rewardTotalsTestCases = Seq(
@@ -1100,6 +1169,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         appActivityRecordStore,
+        rewardIssuanceTolerance = BigDecimal(0.001),
         loggerFactory,
       )
       (store, updateHistory.historyId)

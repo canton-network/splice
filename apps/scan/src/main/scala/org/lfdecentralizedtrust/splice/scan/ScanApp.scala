@@ -282,7 +282,13 @@ class ScanApp(
           )
         } else None
       appRewardsStoreO = appActivityRecordStoreO.map(appActivityRecordStore =>
-        new DbScanAppRewardsStore(storage, updateHistory, appActivityRecordStore, loggerFactory)
+        new DbScanAppRewardsStore(
+          storage,
+          updateHistory,
+          appActivityRecordStore,
+          config.rewardIssuanceTolerance,
+          loggerFactory,
+        )
       )
       synchronizerId <-
         retryProvider.getValueWithRetries(
