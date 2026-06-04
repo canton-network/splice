@@ -848,20 +848,18 @@ class BftScanConnection(
     val callConfig = BftCallConfig.default(scanList.scanConnections)
     if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
     else
-      BftScanConnection
-        .executeCall[String, SingleScanConnection](
-          call = scan =>
-            scan.getRewardAccountingRootHash(roundNumber).flatMap {
-              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                Future.successful(ok.rootHash)
-              case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
-                  _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
-                Future.failed(BftScanConnection.IgnoreResponse(scan.url))
-            },
-          requestFrom = callConfig.connections,
-          nTargetSuccess = callConfig.targetSuccess,
-          logger = logger,
-        )
+      bftCall[String](
+        call = scan =>
+          scan.getRewardAccountingRootHash(roundNumber).flatMap {
+            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+              Future.successful(ok.rootHash)
+            case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
+                _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
+              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingRootHash",
+        callConfig = callConfig,
+      )
         .transform(tryRootHash =>
           Success(
             tryRootHash.toOption.fold(undetermined)(rootHash =>
@@ -884,20 +882,18 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]] = {
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    val callConfig = BftCallConfig.default(scanList.scanConnections).copy(targetSuccess = 1)
     if (!callConfig.enoughAvailableScans) Future.successful(None)
     else
-      BftScanConnection
-        .executeCall[GetRewardAccountingBatchResponse, SingleScanConnection](
-          call = scan =>
-            scan.getRewardAccountingBatch(roundNumber, batchHash).flatMap {
-              case Some(batch) => Future.successful(batch)
-              case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
-            },
-          requestFrom = callConfig.connections,
-          nTargetSuccess = 1,
-          logger = logger,
-        )
+      bftCall[GetRewardAccountingBatchResponse](
+        call = scan =>
+          scan.getRewardAccountingBatch(roundNumber, batchHash).flatMap {
+            case Some(batch) => Future.successful(batch)
+            case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingBatch",
+        callConfig = callConfig,
+      )
         .transform(tryBatch => Success(tryBatch.toOption))
   }
 }
