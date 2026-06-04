@@ -139,7 +139,7 @@ module Splice.TokenStandard.Utils (
   upcast_v1_v2_AllocationView,
   tryDowncast_v2_v1_AllocationView,
 
-  extraExecutorsMetaField,
+  extraExecutorsMetaKey,
   executorsFromSettlementInfoV1,
 
   -- *** Choices

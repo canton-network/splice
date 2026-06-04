@@ -41,8 +41,7 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
 
   tryDowncast_v2_v1_AllocationView,
 
-  -- FIXME: naming
-  extraExecutorsMetaField,
+  extraExecutorsMetaKey,
   executorsFromSettlementInfoV1,
 
   -- ** Choice implementations
@@ -208,7 +207,7 @@ isValidAllocationSpecificationV1 AllocationV1.AllocationSpecification{..} =
 -- | Check basic invariants of a `V2.SettlementInfo`.
 isValidSettlementInfoV2 : AllocationV2.SettlementInfo -> Bool
 isValidSettlementInfoV2 AllocationV2.SettlementInfo{..} =
-  not (null executors) && validateNoMeta extraExecutorsMetaField meta
+  not (null executors) && validateNoMeta extraExecutorsMetaKey meta
 
 -- | Check basic invariants of a `V2.AllocationSpecification`.
 isValidAllocationSpecificationV2
@@ -468,12 +467,12 @@ transferLegSidesWithAuthorizer leg = [(leg.sender, senderSide leg), (leg.receive
 -------------------
 
 -- TODO(#4517): test the round-tripping of 'extra-executors' in the metadata.
-extraExecutorsMetaField : Text
-extraExecutorsMetaField = tokenStandardV2Namespace <> "extra-executors"
+extraExecutorsMetaKey : Text
+extraExecutorsMetaKey = tokenStandardV2Namespace <> "extra-executors"
 
 executorsFromSettlementInfoV1 : AllocationV1.SettlementInfo -> [Party]
 executorsFromSettlementInfoV1 info =
-    info.executor :: partiesFromMeta extraExecutorsMetaField info.meta
+    info.executor :: partiesFromMeta extraExecutorsMetaKey info.meta
 
 downcast_v2_v1_TransferLeg : Party -> AllocationV2.TransferLeg -> AllocationV1.TransferLeg
 downcast_v2_v1_TransferLeg admin (AllocationV2.TransferLeg with sender, receiver, amount, instrumentId, meta) =
@@ -508,7 +507,7 @@ instance BackwardCompatible AllocationV1.SettlementInfo AllocationV2.SettlementI
       executors = executorsFromSettlementInfoV1 info
       id = settlementRef.id
       cid = settlementRef.cid
-      meta = dropMeta extraExecutorsMetaField meta
+      meta = dropMeta extraExecutorsMetaKey meta
 
 downcast_v2_v1_SettlementInfo : Time -> Optional Time -> Optional Time -> AllocationV2.SettlementInfo -> AllocationV1.SettlementInfo
 downcast_v2_v1_SettlementInfo requestedAt allocateBefore settlementDeadline (AllocationV2.SettlementInfo with executors, id, cid, meta) =
@@ -518,7 +517,7 @@ downcast_v2_v1_SettlementInfo requestedAt allocateBefore settlementDeadline (All
       requestedAt
       allocateBefore = fromOptional settleBefore allocateBefore
       settleBefore
-      meta = partiesToMeta extraExecutorsMetaField extraExecutors meta
+      meta = partiesToMeta extraExecutorsMetaKey extraExecutors meta
   where
     executor :: extraExecutors = executors
     settleBefore = fromOptional maxTime settlementDeadline

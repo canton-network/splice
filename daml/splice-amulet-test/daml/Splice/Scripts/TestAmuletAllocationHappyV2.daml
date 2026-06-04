@@ -218,7 +218,7 @@ test_allocationV1_WithdrawV2_multiExecutors_availableActions = do
     settlement = allocationV1.settlement with
       meta = Metadata with
         values = TextMap.fromList
-          [ (TSU.extraExecutorsMetaField, partyToText provider2)
+          [ (TSU.extraExecutorsMetaKey, partyToText provider2)
           ]
   [(_, allocV1)] <- query @AmuletAllocation alice
   let allocView = view (toInterface @V2.Allocation allocV1)

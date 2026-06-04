@@ -35,7 +35,7 @@ test_executorsFromSettlementInfoV1 = do
           cid = None
         meta = Metadata with
           values = TextMap.fromList
-            [ (TSU.extraExecutorsMetaField, partyToText executor2)
+            [ (TSU.extraExecutorsMetaKey, partyToText executor2)
             ]
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
@@ -62,14 +62,14 @@ test_allocationV1_availableActionsDefault = do
           cid = None
         meta = Metadata with
           values = TextMap.fromList
-            [ (TSU.extraExecutorsMetaField, partyToText executor2)
+            [ (TSU.extraExecutorsMetaKey, partyToText executor2)
             ]
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
         settleBefore = now `addRelTime` days 2
   let aliceAccount = V2.Account with
         owner = Some alice
-        executor = Some accountProvider
+        provider = Some accountProvider
         id = "aliceAccount"
   let allocationViewV1 = V1.AllocationView with
         holdingCids = []
