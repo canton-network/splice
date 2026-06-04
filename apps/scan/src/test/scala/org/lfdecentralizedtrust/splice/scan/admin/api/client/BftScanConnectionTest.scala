@@ -54,6 +54,7 @@ import org.slf4j.event.Level
 
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 
 // mock verification triggers this
@@ -900,6 +901,47 @@ class BftScanConnectionTest
         code should be(StatusCodes.BadGateway)
         message should include("Failed to reach consensus from 5 Scan nodes")
       }
+    }
+  }
+
+  "When targetSuccess is 1, BftScanConnection.executeCall" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "not let a single failure decide the call when n == 2" in {
+      val connections = getMockedConnections(n = 2)
+      makeMockFail(connections.head, notFoundFailure)
+      val delayedSuccess =
+        org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(
+          Future.successful(partyIdA)
+        )
+      connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
+
+      for {
+        result <- BftScanConnection.executeCall(call, connections, nTargetSuccess = 1, logger)
+      } yield result should be(partyIdA)
+    }
+
+    "Forward the failure when n == 1" in {
+      val connections = getMockedConnections(n = 1)
+      connections.foreach(makeMockFail(_, notFoundFailure))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure should be(notFoundFailure)
+    }
+
+    "fall through to ConsensusNotReached when all scans fail" in {
+      val connections = getMockedConnections(n = 3)
+      connections.foreach(makeMockFail(_, notFoundFailure))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
     }
   }
 
