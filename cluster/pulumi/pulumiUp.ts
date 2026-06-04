@@ -8,7 +8,6 @@ import {
 import { runSvCantonForAllMigrations } from '@canton-network/splice-pulumi-sv-canton/pulumi';
 import {
   runSvProjectForAllSvs,
-  runSvProjectForAllSvsIfLsu,
 } from '@canton-network/splice-pulumi-sv/pulumi';
 
 import { awaitAllOrThrowAllExceptions, Operation, PulumiAbortController, stack } from './pulumi';
