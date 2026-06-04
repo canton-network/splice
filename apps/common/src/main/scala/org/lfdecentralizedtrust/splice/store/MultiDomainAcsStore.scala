@@ -589,6 +589,8 @@ object MultiDomainAcsStore extends StoreErrors {
     // The way we parse transaction trees currently requires no filtering.
     // We may want to consider filtering for stores that just use the ACS
     // and don't care about tx trees but the extra overhead has not been an issue so far.
+    // Note that the version guards are also not going to work for updates as filtering out
+    // when we start the stream is going to miss contracts for templates when they get vetted later.
     def toUpdatesEventFormat: EventFormat = toEventFormat(
       Seq(
         CumulativeFilter(
