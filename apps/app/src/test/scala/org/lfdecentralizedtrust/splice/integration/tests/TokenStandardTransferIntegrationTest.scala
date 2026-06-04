@@ -11,13 +11,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAllScanAppConfigs_,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem.TransactionType as HttpTransactionType
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  AbortTransferInstruction,
-  ReceiverAmount,
-  Transfer,
-}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
@@ -66,7 +60,7 @@ class TokenStandardTransferIntegrationTest
   "Token Standard Transfers should" should {
 
     "support create, list, accept, reject and withdraw" in { implicit env =>
-      val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val _ = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val bobUserParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
       aliceWalletClient.tap(100)
 
