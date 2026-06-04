@@ -1036,7 +1036,7 @@ object BftScanConnection {
           val f = connections.f
           BftCallConfig(
             connections = connections.open,
-            requestsToDo = 2 * f + 1,
+            requestsToDo = if (f == 0) connections.open.size else 2 * f + 1,
             targetSuccess = f + 1,
           )
       }
