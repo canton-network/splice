@@ -6,8 +6,8 @@ import {
   K8sResourceSchema,
   KmsConfigSchema,
   LogLevelSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/config';
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common/src/config';
+import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
 export const SynchronizerConfigSchema = z.union([

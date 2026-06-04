@@ -7,12 +7,9 @@ import {
   theme,
   VotesHooks,
   VotesHooksContext,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
-import {
-  dsoInfo,
-  getDsoSvOffboardingAction,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
+import { dsoInfo, getDsoSvOffboardingAction } from '@canton-network/splice-common-test-handlers';
 import { QueryClient, QueryClientProvider, useQuery, UseQueryResult } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import dayjs from 'dayjs';

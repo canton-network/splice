@@ -5,8 +5,8 @@ import {
   config,
   loadJsonFromFile,
   externalIpRangesFile,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager';
 import util from 'node:util';
 import { z } from 'zod';

@@ -4,9 +4,9 @@ import React from 'react';
 import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { useTokenStandardAllocationRequests } from '../hooks/useTokenStandardAllocationRequests';
-import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally, Loading } from '@canton-network/splice-common-frontend';
 import { AllocationRequest } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { usePrimaryParty } from '../hooks';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -16,7 +16,7 @@ import MetaDisplay from './MetaDisplay';
 import TransferLegsDisplay from './TransferLegsDisplay';
 import { useWalletClient } from '../contexts/WalletServiceContext';
 import { useMutation } from '@tanstack/react-query';
-import { AllocateAmuletRequest } from '@lfdecentralizedtrust/wallet-openapi';
+import { AllocateAmuletRequest } from '@canton-network/wallet-openapi';
 import {
   SettlementInfo,
   TransferLeg,

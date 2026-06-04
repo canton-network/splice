@@ -3,7 +3,7 @@
 import {
   loadClusterYamlConfig,
   getClusterConfigPath,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configLoader';
+} from '@canton-network/splice-pulumi-common/src/config/configLoader';
 import { writeFileSync } from 'fs';
 import { dump } from 'js-yaml';
 import { dirname, resolve } from 'path';

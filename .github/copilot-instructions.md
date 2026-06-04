@@ -67,7 +67,7 @@ To add a new package to the workspace:
 
 ### Common Libs
 
-The `common-frontend` package (`@lfdecentralizedtrust/splice-common-frontend`) contains common code in `apps/common/frontend`. You can add reusable utility functions, React components, or shared config here. Ensure anything added is exposed via the library's entrypoint, `index.ts`.
+The `common-frontend` package (`@canton-network/splice-common-frontend`) contains common code in `apps/common/frontend`. You can add reusable utility functions, React components, or shared config here. Ensure anything added is exposed via the library's entrypoint, `index.ts`.
 
 ## Conversions between Java & Scala types
 

@@ -1,8 +1,8 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-policy",
+  "name": "@canton-network/splice-pulumi-policy",
   "main": "src/index.ts",
   "dependencies": {
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
+    "@canton-network/splice-pulumi-common": "1.0.0",
     "@pulumi/policy": "1.20.0"
   },
   "scripts": {

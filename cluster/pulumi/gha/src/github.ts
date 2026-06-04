@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
 import * as github from '@pulumi/github';
-import { DockerConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/dockerConfig';
+import { DockerConfig } from '@canton-network/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 
 import { ghaConfig } from './config';
