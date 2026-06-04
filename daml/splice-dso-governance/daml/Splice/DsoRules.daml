@@ -179,7 +179,7 @@ data SvMigrationData = SvMigrationData with
     svParty : Party -- ^ The SV party.
     svName : Text -- ^ Human-readable name; must be unique.
     svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
-    beneficaries : [(Party, Int)]
+    beneficaries : [(Party, Decimal)]
   deriving (Eq, Show)
 
 
@@ -574,8 +574,7 @@ data TrafficState = TrafficState with
 -- SV itself. If the beneficiary list is empty, all SV reward coupons for the SV
 -- are created for the SV itself.
 --
--- The total beneficiary weight must be less than or equal to the SV weight
--- assigned in 'DsoRules'.
+-- The total beneficiary weight percentage must be less than or equal to 1.0.
 template SvRewardBeneficiaries
   with
     dso : Party
@@ -583,13 +582,14 @@ template SvRewardBeneficiaries
       -- ^ The SV party whose reward coupons may be partially distributed to beneficiaries.
     svOperator : Party
       -- ^ The SV operator party responsible for creating reward coupons for 'sv'.
-    beneficiaries : [(Party, Int)]
+    beneficiaries : [(Party, Decimal)]
       -- ^ Beneficiary parties, excluding 'sv', and their corresponding positive
-      -- reward weights. Each beneficiary party must be unique.
+      -- reward weight percentages. Each beneficiary party must be unique.
   where
     ensure
       unique (map fst beneficiaries)
-        && all (> 0) (map snd beneficiaries)
+        && all (> 0.0) (map snd beneficiaries)
+        && sum (map snd beneficiaries) <= 1.0
         && notElem sv (map fst beneficiaries)
 
     signatory dso
@@ -1236,7 +1236,7 @@ template DsoRules with
       with
         svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
           -- ^ The existing beneficiary distribution contract to replace.
-        newBeneficiaries : [(Party, Int)]
+        newBeneficiaries : [(Party, Decimal)]
           -- ^ The full beneficiary distribution to set.
         svParty : Party
           -- ^ The SV party whose beneficiary distribution is being managed.
@@ -1247,11 +1247,8 @@ template DsoRules with
           Some hostedSvInfo -> do
             svRewardBeneficiaries <- fetchAndArchive (ForOwner with dso; owner = svParty) svRewardBeneficiariesCid
             -- Sanity checks
-            let svWeight = hostedSvInfo.svRewardWeight
             require "New beneficiaries must differ from the existing beneficiaries" $
               newBeneficiaries /= svRewardBeneficiaries.beneficiaries
-            require ("Sum of beneficiary weights is less than or equal to the SV weight " <> show svWeight) $
-              sum (map snd newBeneficiaries) <= svWeight
 
             svRewardBeneficiariesCid <- create SvRewardBeneficiaries with
               dso
@@ -1281,14 +1278,9 @@ template DsoRules with
         -- The sum of all migrated SV weights must match the SV operator's current
         -- legacy reward weight.
         --
-        -- This migration only moves SV reward weights on-ledger. It does not create
-        -- 'SvRewardBeneficiaries' contracts. Any optional beneficiary distribution
-        -- must be configured separately by the corresponding SV after migration.
-        --
         -- Extra beneficiaries previously used only for internal reward sharing must
         -- not be migrated as independent SV weights. Their share should instead
-        -- remain part of the corresponding SV's migrated weight and, if needed, be
-        -- configured later through 'SvRewardBeneficiaries'.
+        -- remain part of the corresponding SV's migrated weight.
         svsMigrationData : [SvMigrationData]
         openRoundCid : ContractId OpenMiningRound
         rewardStateCid : ContractId SvRewardState
@@ -1766,15 +1758,15 @@ template DsoRules with
     nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCoupon_V2Result
       with
         openRoundCid : ContractId OpenMiningRound
-        -- SvRewardStates to collect rewards for in this call, each with an optional
-        -- beneficiary distribution.
+        -- SvRewardStates to collect rewards for in this call, each with its
+        -- corresponding beneficiary distribution.
         --
         -- Each SvRewardState must correspond to an SV operated by this SV operator.
-        -- If no SvRewardBeneficiaries contract is provided, the corresponding SV
-        -- receives one coupon with the full SV weight.
+        -- If the SvRewardBeneficiaries contract has an empty beneficiary list, the
+        -- corresponding SV receives one coupon with the full SV weight.
         -- If a SvRewardBeneficiaries contract is provided, one coupon is issued per
-        -- configured beneficiary. The total beneficiary weight must be less than or
-        -- equal to the SV weight. Any remaining weight is issued to the SV itself.
+        -- configured beneficiary. The total beneficiary weight percentage must be less than or
+        -- equal to 1.0. Any remaining weight is issued to the SV itself.
         rewardStatesWithBeneficiaries : [(ContractId SvRewardState, ContractId SvRewardBeneficiaries)]
         sv : Party -- ^ The SV operator hosting the SVs.
       controller sv
@@ -1817,15 +1809,17 @@ template DsoRules with
                           "SvRewardBeneficiaries contract belongs to the corresponding SV"
                           (svRewardBeneficiaries.sv == hostedSv)
 
-                        let assignedWeight = sum (map snd beneficiaries)
+                        let beneficiaryWeights =
+                              (\(beneficiary, percentage) ->
+                                (beneficiary, floor (intToDecimal svRewardWeight * percentage))
+                              ) <$> beneficiaries
+                            assignedWeight = sum (map snd beneficiaryWeights)
                             remainingWeight = svRewardWeight - assignedWeight
-                        require
-                          ("Sum of beneficiary weights " <> show assignedWeight <> " must be less than or equal to the SV weight " <> show svRewardWeight)
-                          (assignedWeight <= svRewardWeight)
+
                         pure $
                           if remainingWeight > 0
-                            then beneficiaries <> [(hostedSv, remainingWeight)]
-                            else beneficiaries
+                            then beneficiaryWeights <> [(hostedSv, remainingWeight)]
+                            else beneficiaryWeights
 
                     newRewardStateCid <- create rewardState with
                       state = RewardState with

@@ -43,9 +43,9 @@ test_SvWeightsFullyOnledger = do
   -- hostedSv's extrabeneficary
   hostedSv_b <- allocateParty "Hosted_SV extra beneficiary"
 
-  let hostedSvBeneficiaries = [(hostedSv, 80_000), (hostedSv_b, 20_000)]
+  let hostedSvWeight = 100_000
+      hostedSvBeneficiaries = [(hostedSv, 0.8), (hostedSv_b, 0.2)]
       hostedSvBeneficiariesMap = Map.fromList hostedSvBeneficiaries
-      hostedSvWeight = totalWeight hostedSvBeneficiaries
 
 
   -- Onboarding an SV node (quick onboarding - check test below for real onboarding)
@@ -119,7 +119,8 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = newSvOperator
 
-  checkSvCouponBeneficariesBySv hostedSv round hostedSvBeneficiaries
+  let expectedHostedSvCoupons = expectedSvCoupons hostedSvWeight hostedSvBeneficiaries
+  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
 
   -- newSvOperator cannot create coupons using the legacy DsoRules_ReceiveSvRewardCoupon as
   -- there's no SvRewardState contract
@@ -139,22 +140,12 @@ test_SvWeightsFullyOnledger = do
       sv = newSvOperator
 
 
-  -- Updating SV weight + Updating beneficaries weight
-  -----------------------------------------------------
-  -- Reduce hostedSv's total reward weight. In this test, the reduction is applied to
-  -- sv1_b's beneficiary share so the beneficiary distribution matches the new total.
+  -- Updating SV weight
+  ----------------------
 
   runNextIssuance app
 
-  let weightDelta = -10
-      updatedHostedSvBenWeight = unsafeLookup hostedSv_b hostedSvBeneficiariesMap + weightDelta
-      updatedHostedSvBeneficiaries =
-        [ (hostedSv, unsafeLookup hostedSv hostedSvBeneficiariesMap)
-        , (hostedSv_b, updatedHostedSvBenWeight)
-        ]
-      updatedHostedSvWeight = totalWeight updatedHostedSvBeneficiaries
-      updatedHostedSvExtraBeneficiaries = [(hostedSv_b, updatedHostedSvBenWeight)]
-
+  let updatedHostedSvWeight = hostedSvWeight - 10
   -- Update hostedSv weight (this includes the weight shared with hostedSv_b)
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
     ARC_DsoRules with
@@ -165,24 +156,9 @@ test_SvWeightsFullyOnledger = do
   checkDsoRulesHostedSv app hostedSv
     (mkHostedSvInfo hostedSvName round updatedHostedSvWeight newSvOperator)
 
-  -- Update hostedSv_b's beneficaries weight
-  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
-  [(rulesCid, _)] <- query @DsoRules app.dso
-  void $ submit (actAs hostedSv <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
-      newBeneficiaries = updatedHostedSvExtraBeneficiaries
-      svParty = hostedSv
-
-  checkSvRewardBeneficiaries app hostedSv newSvOperator
-    SvRewardBeneficiaries with
-      dso
-      sv = hostedSv
-      svOperator = newSvOperator
-      beneficiaries = updatedHostedSvExtraBeneficiaries
-
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
+  [(rulesCid, _)] <- query @DsoRules app.dso
   rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
   void $ submit (actAs newSvOperator <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
@@ -190,7 +166,8 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = newSvOperator
 
-  checkSvCouponBeneficariesBySv hostedSv round updatedHostedSvBeneficiaries
+  let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
+  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
 
 
   -- Clearing SV beneficiaries
@@ -198,8 +175,6 @@ test_SvWeightsFullyOnledger = do
   -- Remove hostedSv_b from beneficiaries, so hostedSv receives all the SV coupons
 
   runNextIssuance app
-
-  let hostedSvBeneficiariesAfterClear = [(hostedSv, updatedHostedSvWeight)]
 
   -- Remove hostedSv_b's weight
   hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
@@ -218,7 +193,8 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = newSvOperator
 
-  checkSvCouponBeneficariesBySv hostedSv round hostedSvBeneficiariesAfterClear
+  let expectedHostedSvCouponsAfterClear = [(hostedSv, updatedHostedSvWeight)]
+  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCouponsAfterClear
 
 
   -- Updating the SV operator of a hosted SV (Offboarding/Onboarding)
@@ -291,7 +267,7 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = sv1
 
-  checkSvCouponBeneficariesBySv hostedSv round hostedSvBeneficiariesAfterClear
+  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCouponsAfterClear
 
 
   -- Offboarding an SV node
@@ -332,29 +308,28 @@ test_SvWeightsMigration = do
   -- hostedSv's extrabeneficary
   hostedSv_b <- allocateParty "Hosted_SV extra beneficiary"
 
-  let sv1TotalWeight = 100_000
+  let sv1LegacyBeneficiaries =
+        [ (sv1, 50_000)
+        , (ghostSv, 20_000)
+        , (hostedSv, 70_000)
+        , (sv1_b, 50_000)
+        , (hostedSv_b, 30_000)
+        ]
+      sv1TotalWeight = sum $ map snd sv1LegacyBeneficiaries
+      sv1LegacyBeneficiariesMap = Map.fromList sv1LegacyBeneficiaries
+      beneficiariesFromLegacy parties = map (\p -> (p, unsafeLookup p sv1LegacyBeneficiariesMap)) parties
+
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
     ARC_DsoRules with
       dsoAction = SRARC_UpdateSvRewardWeight DsoRules_UpdateSvRewardWeight with
         svParty = sv1
         newRewardWeight = sv1TotalWeight
 
-  sv1SvInfo <- getSvInfoByParty app sv1
-
-  let sv1LegacyBeneficiaries =
-        [ (sv1, 10_000)
-        , (ghostSv, 20_000)
-        , (hostedSv, 30_000)
-        , (sv1_b, 15_000)
-        , (hostedSv_b, 25_000)
-        ]
-      sv1LegacyBeneficiariesMap = Map.fromList sv1LegacyBeneficiaries
-      beneficiariesFromLegacy parties = map (\p -> (p, unsafeLookup p sv1LegacyBeneficiariesMap)) parties
-
 
   -- Creating SV coupons using the legacy DsoRules_ReceiveSvRewardCoupon
   -----------------------------------------------------------------------
 
+  sv1SvInfo <- getSvInfoByParty app sv1
   [(rulesCid, _)] <- query @DsoRules app.dso
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
   [(sv1RewardStateCid, _)] <- queryFilter @SvRewardState dso (\s -> s.svName == sv1SvInfo.name)
@@ -382,8 +357,8 @@ test_SvWeightsMigration = do
 
       sv1AsHostedSvName = sv1SvInfo.name <> "-hostedSV"
       svsMigrationData =
-        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1Weight [(sv1_b, unsafeLookup sv1_b sv1LegacyBeneficiariesMap)] -- sv1 itself is migrated as hosted SV
-        , mkSvMigrationData hostedSv hostedSvName hostedSvWeight [(hostedSv_b, unsafeLookup hostedSv_b sv1LegacyBeneficiariesMap)]
+        [ mkSvMigrationData sv1 sv1AsHostedSvName sv1Weight [(sv1_b, 0.5)] -- sv1 itself is migrated as hosted SV
+        , mkSvMigrationData hostedSv hostedSvName hostedSvWeight [(hostedSv_b, 0.3)]
         , mkSvMigrationData ghostSv ghostSvName ghostSvWeight []
         ]
 
@@ -611,7 +586,7 @@ mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
 mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvMigrationData : Party -> Text -> Int -> [(Party, Int)] -> SvMigrationData
+mkSvMigrationData : Party -> Text -> Int -> [(Party, Decimal)] -> SvMigrationData
 mkSvMigrationData svParty svName svRewardWeight beneficaries = SvMigrationData with ..
 
 unsafeLookup : (Ord k, Show k) => k -> Map.Map k v -> v
@@ -656,3 +631,8 @@ checkSvRewardBeneficiaries app hostedSv svOperator expected = do
   [(_, hostedSvSvRewardBeneficiaries)] <-
     queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
   hostedSvSvRewardBeneficiaries === expected
+
+
+expectedSvCoupons : Int -> [(Party, Decimal)] -> [(Party, Int)]
+expectedSvCoupons svWeight beneficiaries =
+  map (\(beneficiary, percentage) -> (beneficiary, floor (intToDecimal svWeight * percentage))) beneficiaries
