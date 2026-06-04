@@ -225,3 +225,4 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Remove the default observer implementations for `TransferInstruction`,`AllocationInstruction`, `Allocation`, and `AllocationRequest`
   in favor of the uniform default to use `observer this` to mirror the default implementation of consuming choices.
   (Note: the default implementations on the factories are kept, as they do allow saving extra views for public assets.)
+- Fix bugs in the default implementations of allocation extra observers and available actions
