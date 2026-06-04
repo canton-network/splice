@@ -133,6 +133,9 @@ class BftScanConnectionTest
   def makeMockFail(mock: SingleScanConnection, failure: Throwable): Unit = {
     when(mock.getDsoPartyId()).thenReturn(Future.failed(failure))
   }
+  def makeMockReturnMigrationId(mock: SingleScanConnection, migrationId: Long): Unit = {
+    when(mock.getMigrationId()).thenReturn(Future.successful(migrationId))
+  }
   def makeMockReturnMigrationInfo(
       mock: SingleScanConnection,
       migrationId: Long,
@@ -245,6 +248,19 @@ class BftScanConnectionTest
       for {
         dsoPartyId <- bft.getDsoPartyId()
       } yield dsoPartyId should be(partyIdA)
+    }
+
+    "return the agreed migration id when 2f+1 agree" in {
+      val connections = getMockedConnections(n = 4)
+      val disagreeing = connections.head
+      makeMockReturnMigrationId(disagreeing, 5L)
+      val agreeing = connections.drop(1)
+      agreeing.foreach(makeMockReturnMigrationId(_, 3L))
+      val bft = getBft(connections)
+
+      for {
+        migrationId <- bft.getMigrationId()
+      } yield migrationId should be(3L)
     }
 
     "return the agreed response when 2f+1 agree and log disagreements" in {

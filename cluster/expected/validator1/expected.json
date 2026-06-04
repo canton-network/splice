@@ -1078,9 +1078,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "validator1",
           "onboardingSecretFrom": {
             "secretKeyRef": {

@@ -114,14 +114,22 @@ class SplitwellApp(
       participantAdminConnection.getParticipantId()
     }
     storeKey = SplitwellStore.Key(providerParty = partyId)
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
+    domainMigrationId <- appInitStep(s"Resolving domain migration id") {
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "splitwell_domain_migration_id",
+        s"Wait for splitwell domain migration id to be available",
+        scanConnection.getMigrationId(),
+        logger,
+      )
+    }
     store = SplitwellStore(
       storeKey,
       storage,
       config.domains,
       loggerFactory,
       retryProvider,
-      config.domainMigrationId,
+      domainMigrationId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,

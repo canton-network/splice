@@ -123,11 +123,6 @@ services:
         ADDITIONAL_CONFIG_BFT_SCAN=
           canton.validator-apps.validator_backend.scan-client.type = "bft"
           canton.validator-apps.validator_backend.scan-client.seed-urls = [ "${SCAN_ADDRESS}" ]
-      - |
-        ADDITIONAL_CONFIG_MIGRATION_ID=
-            canton.validator-apps.validator_backend {
-              domain-migration-id = ${MIGRATION_ID}
-            }
     depends_on:
       chown-domain-upgrade-dump:
         condition: service_completed_successfully

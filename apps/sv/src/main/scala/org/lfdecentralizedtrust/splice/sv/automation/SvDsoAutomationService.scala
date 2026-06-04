@@ -527,7 +527,7 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
-        config.domainMigrationId,
+        dsoStore.domainMigrationId,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,
@@ -555,7 +555,7 @@ class SvDsoAutomationService(
           pruningConfig.retentionPeriod,
           pruningConfig.pruningSafetyCheckPercentage,
           participantAdminConnection,
-          config.domainMigrationId,
+          dsoStore.domainMigrationId,
           grpcClientMetrics,
         )
       )

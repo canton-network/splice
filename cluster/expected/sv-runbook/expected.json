@@ -652,7 +652,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2
+          "id": "2"
         },
         "participantAddress": "participant",
         "persistence": {
@@ -1300,9 +1300,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",
         "participantAddress": "participant",
@@ -1706,9 +1703,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": "2"
           },
           "nodeIdentifier": "DA-Helm-Test-Node",
           "participantAddress": "participant",

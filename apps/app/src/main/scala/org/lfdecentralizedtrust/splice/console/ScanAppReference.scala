@@ -92,6 +92,15 @@ abstract class ScanAppReference(
   }
 
   @Help.Summary(
+    "Returns the highest synchronizer migration id this scan is aware of."
+  )
+  def getMigrationId(): Long = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetMigrationId())
+    }
+  }
+
+  @Help.Summary(
     "Returns contracts required as inputs for a transfer."
   )
   def getTransferContextWithInstances(

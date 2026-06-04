@@ -304,10 +304,6 @@ async function installSvAndValidator(
       ? { secretName: participantBootstrapDumpSecretName }
       : undefined,
     approvedSvIdentities: approvedSvIdentities(),
-    migration: {
-      ...valuesFromYamlFile.migration,
-      ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig().migration,
-    },
     metrics: {
       enable: true,
     },
@@ -421,7 +417,6 @@ async function installSvAndValidator(
     metrics: {
       enable: true,
     },
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...synchronizerValues,
     resources: svConfig.scanApp?.resources,
   };

@@ -108,6 +108,17 @@ class JoiningNodeInitializer(
     )
   )
 
+  private def migrationIdFromSponsorSv(): Future[Long] =
+    svConnection.flatMap { case (_, connection) =>
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "get_migration_id",
+        "Getting migration id from sponsor SV",
+        connection.getMigrationId(),
+        logger,
+      )
+    }
+
   def joinDsoAndOnboardNodes(): Future[
     (
         SynchronizerId,
@@ -192,15 +203,16 @@ class JoiningNodeInitializer(
         participantAdminConnection,
       )
       storeKey = SvStore.Key(svParty, dsoPartyId)
+      domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
       svStore = newSvStore(
         storeKey,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore = newDsoStore(
         svStore.key,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -258,7 +270,7 @@ class JoiningNodeInitializer(
               clock,
               retryProvider,
               loggerFactory,
-              config.domainMigrationId,
+              domainMigrationId,
               config.scan,
             )
             dsoAutomation =
@@ -833,6 +845,7 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
+                domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
@@ -840,7 +853,7 @@ class JoiningNodeInitializer(
                   clock,
                   retryProvider,
                   loggerFactory,
-                  config.domainMigrationId,
+                  domainMigrationId,
                   config.scan,
                 )
                 dsoAutomation = newSvDsoAutomationService(

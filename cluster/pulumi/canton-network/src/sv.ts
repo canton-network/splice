@@ -369,9 +369,6 @@ async function installValidator(
   return await installValidatorApp({
     xns,
     ...commonValidatorAppValues,
-    migration: {
-      id: decentralizedSynchronizerMigrationConfig.activeMigrationId,
-    },
     validatorWalletUsers: svUserIds(svConfig.auth0Client.getCfg()).apply(ids =>
       ids.concat(svConfig.validatorWalletUser ? [svConfig.validatorWalletUser] : [])
     ),
@@ -441,7 +438,6 @@ function installSvApp(
 
   const svValues = {
     ...commonSvAppValues,
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...spliceInstanceNames,
     onboardingType: config.onboarding.type,
     onboardingName: config.onboardingName,

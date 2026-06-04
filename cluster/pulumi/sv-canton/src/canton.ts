@@ -129,7 +129,6 @@ export async function installCantonComponents(
             setCoreDbNames: svConfig.isCoreSv,
           },
           isActiveMigration,
-          migrationConfig.isRunningMigration(),
           svConfig.onboardingName,
           version,
           imagePullServiceAccountName,
