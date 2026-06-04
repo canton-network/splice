@@ -29,7 +29,7 @@ export const MigrationInfoSchema = z
     id: z.number().gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),
-    enableLogicalSynchronizerDeploymentMode: z.boolean().default(false),
+    enableLogicalSynchronizerDeploymentMode: z.boolean().default(true),
     migrateParticipantsFromSvCantonToSv: z.boolean().default(false),
     sequencer: z
       .object({
@@ -53,7 +53,7 @@ export const SynchronizerMigrationSchema = z
     archived: z.array(MigrationInfoSchema).optional(),
     activeDatabaseId: z.number().optional(),
     attachPvc: z.boolean().default(true),
-    lsuEnabled: z.boolean().default(false),
+    lsuEnabled: z.boolean().default(true),
     frozenMigrationId: z.number().optional(),
   })
   .strict();
