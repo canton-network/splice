@@ -363,7 +363,7 @@ trait ParticipantAdminSynchronizerConnection {
   ): Future[Unit] =
     runCmd(
       ParticipantAdminCommands.SynchronizerConnectivity.ModifySynchronizerConnection(
-        None,
+        config.synchronizerId,
         config,
         SequencerConnectionValidation.ThresholdActive,
       )
