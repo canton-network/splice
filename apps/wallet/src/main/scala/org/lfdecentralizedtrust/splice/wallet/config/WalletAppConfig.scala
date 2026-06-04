@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.config
 
+import com.google.common.annotations.VisibleForTesting
 import org.lfdecentralizedtrust.splice.config.{HttpClientConfig, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil
 import com.digitalasset.canton.SynchronizerAlias
@@ -56,6 +57,7 @@ final case class RewardSharingConfig(
 ) {
   def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
 
+  @VisibleForTesting
   def allBeneficiaries(provider: PartyId): Seq[AppRewardBeneficiaryConfig] = {
     val remainder = providerRemainder
     beneficiaries ++
