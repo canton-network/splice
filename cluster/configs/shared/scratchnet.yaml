@@ -21,7 +21,7 @@ svs:
       catchup:
         enabled: true
         thresholds:
-          minBackupAgeHours: 0
+          minBackupAgeHours: 1
           sequencerMinEventsPerSecond: 20
           participantMinCatchupRatio: 3
           mediatorMinCatchupRatio: 3

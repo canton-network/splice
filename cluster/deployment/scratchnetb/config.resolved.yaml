@@ -1082,7 +1082,7 @@ svs:
             participantDelaySeconds: 30
             sequencerBlockDelaySeconds: 30
           mediatorMinCatchupRatio: 3
-          minBackupAgeHours: 0
+          minBackupAgeHours: 1
           participantMinCatchupRatio: 3
           sequencerMinEventsPerSecond: 20
     validatorApp:
