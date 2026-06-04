@@ -61,6 +61,15 @@ mkAmuletApp dso dsoUser = AmuletApp with
       dso
       instrumentId = amuletInstrumentId dso
 
+registryToApp : Registry.AmuletRegistry -> Script AmuletApp
+registryToApp registry = do
+  dsoUser <- validateUserId ("dummy-dso-user")
+  _ <- createUser (User dsoUser (Some registry.dso)) []
+  pure AmuletApp with
+    dso = registry.dso
+    dsoUser = AmuletUser dsoUser registry.dso
+    registry = registry
+
 demoTime : Time
 demoTime = time (DA.Date.date 2022 Jan 1) 0 0 0
 

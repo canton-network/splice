@@ -230,7 +230,7 @@ module Splice.TokenStandard.Utils (
   transferInstruction_v2_receiverActor_rejectDefaultImplUsingV1,
   transferInstruction_v2_senderActor_withdrawDefaultImplUsingV1,
 
-  transferFactory_v2_senderActor_transferImpl,
+  transferFactory_v2_transferDefaultImplUsingV1,
 
   -- *** TransferFactory extra observers
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,

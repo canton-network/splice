@@ -7,6 +7,7 @@
 -- implementation of the V1 API.
 module Splice.Scripts.TestAmuletTransferInstructionV2 where
 
+import DA.Foldable (foldMap)
 import DA.List (sort)
 import DA.Map qualified as Map
 import DA.Time
@@ -18,6 +19,7 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
 import Splice.AmuletTransferInstruction
+import Splice.Amulet.TokenApiUtils
 import Splice.ExternalPartyAmuletRules
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -27,14 +29,50 @@ import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 
 import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
+import qualified Splice.Scripts.Util
 
 -- TODO(#4517): also run these test cases for TestTokenV2
 
 -- Happy-path test cases
 ------------------------
 
-test_happy_generic : (TestEnv -> ContractId V2.TransferInstruction -> Script ()) -> Script ()
-test_happy_generic mkTest = do
+test_transfer_singleStep_generic : TxKind -> (TestEnv -> Script (V2.TransferFactory_Transfer, Decimal, Decimal)) -> Script ()
+test_transfer_singleStep_generic txKind mkArg = do
+  env@(TestEnv {..}) <- setupTest
+  (choiceArg, aliceAmount, bobAmount) <- mkArg env
+  enrichedChoice <- V2.getTransferFactory registryV2 choiceArg
+  app <- Splice.Scripts.Util.registryToApp registriesEnv.amuletV1
+  (result, _) <-
+    Splice.Scripts.Util.checkTxMetadata' app txKind alice $
+    submitResultAndTree (foldMap actAs choiceArg.actors <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  WalletClientV2.checkUnlockedBalance alice instrId aliceAmount
+  WalletClientV2.checkUnlockedBalance bob instrId bobAmount
+  debug result
+  case result.output of
+    V2.TransferInstructionResult_Completed _ -> pure ()
+    out -> fail $ "Expected transfer to complete, but got: " <> show out
+
+test_transfer_singleStep_selfTransfer : Script ()
+test_transfer_singleStep_selfTransfer = test_transfer_singleStep_generic TxKind_MergeSplit $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          receiver = aliceAccount
+  pure (choiceArg, 1000.0, 0.0)
+
+test_transfer_singleStep_senderReceiverAuthz : Script ()
+test_transfer_singleStep_senderReceiverAuthz = test_transfer_singleStep_generic TxKind_Transfer $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        actors = [alice, bob]
+  pure (choiceArg, 990.0, 10.0)
+
+test_transfer_singleStep_preapproval : Script ()
+test_transfer_singleStep_preapproval = test_transfer_singleStep_generic TxKind_Transfer $ \TestEnv {..} -> do
+   AmuletRegistryV2.createTransferPreapproval registriesEnv.amuletV2 bob bob (now `addRelTime` days 100)
+   pure (transferArgV2, 990.0, 10.0)
+
+test_happy_instr_generic : (TestEnv -> ContractId V2.TransferInstruction -> Script ()) -> Script ()
+test_happy_instr_generic mkTest = do
   env@(TestEnv {..}) <- setupTest
   WalletClientV2.transferV2 registries alice transferArgV2
   WalletClientV2.checkUnlockedBalance alice instrId 990.0
@@ -43,7 +81,7 @@ test_happy_generic mkTest = do
   mkTest env instrCid
 
 test_availableActionsAndObservers : Script ()
-test_availableActionsAndObservers = test_happy_generic $ \TestEnv {..} instrCid -> do
+test_availableActionsAndObservers = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
   Some instr0 <- queryContractId @AmuletTransferInstruction alice (coerceContractId instrCid)
   let instr = toInterface @V2.TransferInstruction instr0
   let expectedActions = Map.fromList
@@ -68,21 +106,21 @@ test_availableActionsAndObservers = test_happy_generic $ \TestEnv {..} instrCid 
       actors = [alice]
       extraArgs = emptyExtraArgs
 
+
 test_transfer_AcceptV2 : Script ()
-test_transfer_AcceptV2 = test_happy_generic $ \TestEnv {..} instrCid -> do
+test_transfer_AcceptV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
   WalletClientV2.acceptTransferInstructionV2 registries bob instrCid
   WalletClientV2.checkUnlockedBalance bob instrId 10.0
   WalletClientV2.checkUnlockedBalance alice instrId 990.0
 
-
 test_transfer_RejectV2 : Script ()
-test_transfer_RejectV2 = test_happy_generic $ \TestEnv {..} instrCid -> do
+test_transfer_RejectV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
   WalletClientV2.rejectTransferInstructionV2 registries bob instrCid
   WalletClientV2.checkUnlockedBalance bob instrId 0.0
   WalletClientV2.checkUnlockedBalance alice instrId 1000.0
 
 test_transfer_WithdrawV2 : Script ()
-test_transfer_WithdrawV2 = test_happy_generic $ \TestEnv {..} instrCid -> do
+test_transfer_WithdrawV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
   WalletClientV2.withdrawTransferInstructionV2 registries alice instrCid
   WalletClientV2.checkUnlockedBalance bob instrId 0.0
   WalletClientV2.checkUnlockedBalance alice instrId 1000.0
@@ -106,19 +144,27 @@ test_transfer_negative_generic mkTest = do
 
   (choiceArg, check) <- mkTest env
   enrichedChoice <- V2.getTransferFactory registryV2 choiceArg
-  let [actor] = enrichedChoice.arg.actors
+  let actors = enrichedChoice.arg.actors
   submitMustFail'' check
     -- We grant readAs instr.admin to be able to test using holdings with the wrong owner
-    (actAs actor <> discloseMany' enrichedChoice.disclosures <> readAs instrId.admin) $
+    (foldMap actAs actors <> discloseMany' enrichedChoice.disclosures <> readAs instrId.admin) $
       exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
-test_transfer_TransferV2_wrongActor : Script ()
-test_transfer_TransferV2_wrongActor = test_transfer_negative_generic $ \TestEnv {..} -> do
+test_transfer_TransferV2_wrongActor_single : Script ()
+test_transfer_TransferV2_wrongActor_single = test_transfer_negative_generic $ \TestEnv {..} -> do
   let choiceArg = transferArgV2 with
         actors = [bob]
   pure $ (,) choiceArg $
     expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-    expectMessageContains "allowed actors: [['alice']]"
+    expectMessageContains "allowed actors: [['alice'],['alice','bob']]"
+
+test_transfer_TransferV2_wrongActor_multi : Script ()
+test_transfer_TransferV2_wrongActor_multi = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        actors = [alice, charlie]
+  pure $ (,) choiceArg $
+    expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
+    expectMessageContains "allowed actors: [['alice'],['alice','bob']]"
 
 test_transfer_TransferV2_wrongInstrumentId : Script ()
 test_transfer_TransferV2_wrongInstrumentId = test_transfer_negative_generic $ \TestEnv {..} -> do
