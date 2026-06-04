@@ -3,7 +3,7 @@
 import type { Config } from '@jest/types';
 import { createDefaultPreset } from 'ts-jest';
 
-import pkg from './package.json';
+import pkg from './package.json' with { type: 'json' };
 
 const config: Config.InitialOptions = {
   preset: 'ts-jest',
