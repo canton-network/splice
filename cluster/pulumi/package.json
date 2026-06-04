@@ -21,7 +21,8 @@
     },
     "scripts": {
         "fix": "npm run format:fix && npm run lint:fix",
-        "check": "prettier --check -- *.ts && eslint --max-warnings=0 -- *.ts && npm run check --workspaces --if-present",
+        "type:check": "tsc --noEmit",
+        "check": "prettier --check -- *.ts && eslint --max-warnings=0 -- *.ts && npm run type:check && npm run check --workspaces --if-present",
         "format:fix": "prettier --write -- *.ts && npm run format:fix --workspaces --if-present",
         "format:check": "prettier --check -- *.ts && npm run format:check --workspaces --if-present",
         "lint:fix": "eslint --fix --max-warnings=0 -- *.ts && npm run lint:fix --workspaces --if-present",
