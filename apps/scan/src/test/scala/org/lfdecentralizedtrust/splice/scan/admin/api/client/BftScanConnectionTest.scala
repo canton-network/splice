@@ -1040,17 +1040,20 @@ class BftScanConnectionTest
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
-      makeMockReturnRootHashOk(connections(1), round, "aabb")
+      when(connections(1).getRewardAccountingRootHash(round))
+        .thenReturn(Future.failed(notFoundFailure), Future.successful(rootHashOk(round, "aabb")))
       makeMockReturnRootHashUndetermined(connections(2), round)
-      makeMockReturnRootHashUndetermined(connections(3), round)
+      makeMockFail(connections(3), notFoundFailure)
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingRootHash(round)
-      } yield inside(resp) {
-        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-          ok.rootHash should be("aabb")
-          ok.roundNumber should be(round)
+      // With n=4, we query only two connections randomly, and even with
+      // retries it can sometimes fail. This eventually is here to avoid flakyness
+      eventually() {
+        inside(bft.getRewardAccountingRootHash(round).futureValue) {
+          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+            ok.rootHash should be("aabb")
+            ok.roundNumber should be(round)
+        }
       }
     }
 
@@ -1117,7 +1120,11 @@ class BftScanConnectionTest
       val hash = "abcdabcd"
       val connections = getMockedConnections(n = 3)
       makeMockReturnBatch(connections(0), round, hash, None)
-      makeMockReturnBatch(connections(1), round, hash, Some(rewardAccountingBatchResponse))
+      when(connections(1).getRewardAccountingBatch(round, hash))
+        .thenReturn(
+          Future.failed(notFoundFailure),
+          Future.successful(Some(rewardAccountingBatchResponse)),
+        )
       makeMockReturnBatch(connections(2), round, hash, None)
       val bft = getBft(connections)
 
