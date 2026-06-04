@@ -114,6 +114,7 @@ import DA.Assert (assertDeadlineExceeded)
 import DA.Action
 import DA.Fail (failWithStatus, FailureStatus(..), FailureCategory(..))
 import DA.Foldable (forA_)
+import DA.Foldable qualified as Foldable
 import DA.List (dedupSort, unique, maximumOn)
 import qualified DA.Map as Map
 import DA.Optional
@@ -1011,10 +1012,13 @@ allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl arg =
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl : AllocationInstructionV2.AllocationFactory_Allocate -> [Party]
 allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
     accountParties allocation.admin allocation.authorizer <>
-    (if all (>= 0.0) (textMapValues creditAmounts) then arg.settlement.executors else [])
+    (if noFundingRequired then arg.settlement.executors else [])
   where
     allocation = arg.allocation
     creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
+    noFundingRequired =
+      Foldable.all (>= 0.0) creditAmounts &&
+      optional True (Foldable.all (<= 0.0)) allocation.nextIterationFunding
 
 -- | Adapter to implement `V1.AllocationFactory_Allocate` using the body of the V2 choice.
 --

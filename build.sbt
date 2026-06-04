@@ -628,7 +628,8 @@ lazy val `splice-token-standard-utils-test-daml` =
           (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value
+          (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-utils-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-token-standard-v1-test-daml` =
