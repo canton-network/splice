@@ -22,8 +22,8 @@ svs:
         enabled: true
         thresholds:
           minBackupAgeHours: 0
-          sequencerMinEventsPerSecond: 800
-          participantMinCatchupRatio: 10
+          sequencerMinEventsPerSecond: 20
+          participantMinCatchupRatio: 3
           mediatorMinCatchupRatio: 3
           caughtUpThresholds:
             sequencerBlockDelaySeconds: 30

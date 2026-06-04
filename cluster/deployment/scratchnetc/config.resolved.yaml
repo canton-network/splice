@@ -1083,8 +1083,8 @@ svs:
             sequencerBlockDelaySeconds: 30
           mediatorMinCatchupRatio: 3
           minBackupAgeHours: 0
-          participantMinCatchupRatio: 10
-          sequencerMinEventsPerSecond: 800
+          participantMinCatchupRatio: 3
+          sequencerMinEventsPerSecond: 20
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
