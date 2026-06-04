@@ -64,7 +64,7 @@ class WalletRewardsTimeBasedIntegrationTest
       val rewardCouponV2Amount = BigDecimal(1000.0)
       clue("Create assigned RewardCouponV2 for bob's validator") {
         createRewardCouponsV2(
-          Seq((bobValidatorParty, rewardCouponV2Amount, bobValidatorParty))
+          Seq((bobValidatorParty, rewardCouponV2Amount, Some(bobValidatorParty)))
         )
       }
 

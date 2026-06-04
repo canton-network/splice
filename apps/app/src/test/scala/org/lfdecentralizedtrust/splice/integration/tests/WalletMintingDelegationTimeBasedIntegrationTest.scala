@@ -544,7 +544,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
           // Create RewardCouponV2 (assigned to beneficiary)
           createRewardCouponsV2(
-            Seq((beneficiaryParty.party, rewardCouponV2Amount, beneficiaryParty.party)),
+            Seq((beneficiaryParty.party, rewardCouponV2Amount, Some(beneficiaryParty.party))),
             round = Some(issuingRound.round),
           )
         }

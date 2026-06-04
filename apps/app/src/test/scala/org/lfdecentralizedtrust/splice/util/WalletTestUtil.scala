@@ -1439,14 +1439,14 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
   }
 
   def createRewardCouponsV2(
-      coupons: Seq[(PartyId, BigDecimal, PartyId)],
+      coupons: Seq[(PartyId, BigDecimal, Option[PartyId])],
       round: Option[splice.types.Round] = None,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val now = env.environment.clock.now
     val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
     sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
       actAs = Seq(dsoParty),
-      commands = coupons.flatMap { case (provider, amount, beneficiary) =>
+      commands = coupons.flatMap { case (provider, amount, beneficiaryO) =>
         new splice.amulet.RewardCouponV2(
           dsoParty.toProtoPrimitive,
           provider.toProtoPrimitive,
@@ -1454,7 +1454,9 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
           amount.bigDecimal,
           now.plus(java.time.Duration.ofDays(1)).toInstant,
           true,
-          java.util.Optional.of(beneficiary.toProtoPrimitive),
+          beneficiaryO.fold(java.util.Optional.empty[String]())(b =>
+            java.util.Optional.of(b.toProtoPrimitive)
+          ),
         ).create.commands.asScala
       },
     )
