@@ -118,9 +118,7 @@ trait TransferInputStore extends AppStore with LimitHelpers {
 
   /** Returns mintable RewardCouponV2 sorted by round ascending, amount descending.
     * When `includeUnassigned` is true, includes coupons where the party is provider
-    * with no beneficiary (for providers without sharing config).
-    * Always includes coupons where the party is the assigned beneficiary.
-    * Always excludes coupons assigned to a different party.
+    * with no beneficiary
     */
   def listSortedMintableRewardCouponV2s(
       issuingRoundsMap: Map[Round, IssuingMiningRound],
