@@ -966,5 +966,7 @@ object MultiDomainAcsStore extends StoreErrors {
     */
   val notOnDomainsTotalLimit: PageLimit = PageLimit tryCreate 1000
 
-  type VersionGuard = (PackageVersionSupport, CantonTimestamp) => (TraceContext) => Future[PackageVersionSupport.FeatureSupport]
+  type VersionGuard = (PackageVersionSupport, CantonTimestamp) => (
+      TraceContext
+  ) => Future[PackageVersionSupport.FeatureSupport]
 }
