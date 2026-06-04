@@ -123,7 +123,7 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to remove a hosted SV.
   | SRARC_AddSvNode DsoRules_AddSvNode
     -- ^ Voted action to directly add an SV node. Note: Implement in phase 2
-  | SRARC_ConfirmSvOnboarding_V2 DsoRules_ConfirmSvOnboarding_V2
+  | SRARC_ConfirmSvOnboarding_V2 DsoRules_ConfirmSvNodeOnboarding
     -- ^ Automated action to confirm that a party can become an SV. Note: Implement in phase 2
   deriving (Eq, Show)
 
@@ -284,7 +284,7 @@ data DsoRules_ConfirmSvOnboardingResult = DsoRules_ConfirmSvOnboardingResult wit
 
 -- Note: Implement in phase 2
 data DsoRules_ConfirmSvOnboarding_V2Result = DsoRules_ConfirmSvOnboarding_V2Result with
-    onboardingConfirmed : ContractId SvOnboardingConfirmed_V2
+    onboardingConfirmed : ContractId SvNodeOnboardingConfirmed
 
 data DsoRules_ExpireSvOnboardingConfirmedResult = DsoRules_ExpireSvOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
@@ -799,10 +799,10 @@ template DsoRules with
     -- Called by SV node candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
-    nonconsuming choice DsoRules_AddConfirmedSv_V2 : DsoRules_AddConfirmedSv_V2Result
+    nonconsuming choice DsoRules_AddConfirmedSvNode : DsoRules_AddConfirmedSv_V2Result
       with
         sv : Party
-        svOnboardingConfirmedCid : ContractId SvOnboardingConfirmed_V2
+        svOnboardingConfirmedCid : ContractId SvNodeOnboardingConfirmed
       controller sv
       do
         svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
@@ -1484,7 +1484,7 @@ template DsoRules with
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     -- Note: Implement in phase 2
-    nonconsuming choice DsoRules_ConfirmSvOnboarding_V2 : DsoRules_ConfirmSvOnboarding_V2Result
+    nonconsuming choice DsoRules_ConfirmSvNodeOnboarding : DsoRules_ConfirmSvOnboarding_V2Result
       with
         newSvOperatorParty : Party
         newSvNodeName : Text
@@ -1499,7 +1499,7 @@ template DsoRules with
           else pure ()
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingConfirmedTimeout
-        onboardingConfirmed <- create SvOnboardingConfirmed_V2 with
+        onboardingConfirmed <- create SvNodeOnboardingConfirmed with
           svOperatorParty = newSvOperatorParty
           svNodeName = newSvNodeName
           svNodeParticipantId = newNodeParticipantId
@@ -1528,9 +1528,9 @@ template DsoRules with
         return DsoRules_ExpireSvOnboardingConfirmedResult with ..
 
     -- Note: Implement in phase 2
-    choice DsoRules_ExpireSvOnboardingConfirmed_V2 : DsoRules_ExpireSvOnboardingConfirmed_V2Result
+    choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmed_V2Result
       with
-        cid: ContractId SvOnboardingConfirmed_V2
+        cid: ContractId SvNodeOnboardingConfirmed
         sv : Optional Party
       controller sv
       do

@@ -471,7 +471,7 @@ testSvNodeOnboarding = do
     submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
       confirmer = sv
       action = ARC_DsoRules with
-        dsoAction = SRARC_ConfirmSvOnboarding_V2 $ DsoRules_ConfirmSvOnboarding_V2 with
+        dsoAction = SRARC_ConfirmSvOnboarding_V2 $ DsoRules_ConfirmSvNodeOnboarding with
           newSvOperatorParty = svX
           newSvNodeName = "svX"
           newNodeParticipantId = "svX-participant-id"
@@ -479,8 +479,8 @@ testSvNodeOnboarding = do
   executeAllConfirmedActions app
 
   -- svX is now a confirmed SV
-  [(svOnboardingConfirmedCid, svOnboardingConfirmed)] <- query @SvOnboardingConfirmed_V2 dso
-  svOnboardingConfirmed === SvOnboardingConfirmed_V2 with
+  [(svOnboardingConfirmedCid, svOnboardingConfirmed)] <- query @SvNodeOnboardingConfirmed dso
+  svOnboardingConfirmed === SvNodeOnboardingConfirmed with
     svOperatorParty = svX
     svNodeName = "svX"
     svNodeParticipantId = "svX-participant-id"
@@ -495,7 +495,7 @@ testSvNodeOnboarding = do
   now <- getTime
   setTime svOnboardingConfirmed.expiresAt
 
-  submitMustFail (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSv_V2 with
+  submitMustFail (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
     sv = svX
     svOnboardingConfirmedCid
 
@@ -503,7 +503,7 @@ testSvNodeOnboarding = do
   setTime now
 
   -- svX completes its own onboarding by adding itself to the DsoRules
-  submit (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSv_V2 with
+  submit (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
     sv = svX
     svOnboardingConfirmedCid
 

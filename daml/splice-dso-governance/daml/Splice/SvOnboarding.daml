@@ -68,7 +68,7 @@ template SvOnboardingConfirmed with
 -- | A confirmation for approval of a candidate SV node.
 --
 -- Once this contract is created, the workflows to onboard that SVs node starts.
-template SvOnboardingConfirmed_V2 with
+template SvNodeOnboardingConfirmed with
     svOperatorParty : Party
     svNodeName : Text
     svNodeParticipantId: Text
@@ -98,11 +98,11 @@ instance HasCheckedFetch SvOnboardingConfirmed ForOwner where
 instance HasCheckedFetch SvOnboardingConfirmed ForDso where
   contractGroupId SvOnboardingConfirmed {..} = ForDso with dso
 
-instance HasCheckedFetch SvOnboardingConfirmed_V2 ForOwner where
-  contractGroupId SvOnboardingConfirmed_V2 {..} = ForOwner with dso; owner = svOperatorParty
+instance HasCheckedFetch SvNodeOnboardingConfirmed ForOwner where
+  contractGroupId SvNodeOnboardingConfirmed {..} = ForOwner with dso; owner = svOperatorParty
 
-instance HasCheckedFetch SvOnboardingConfirmed_V2 ForDso where
-  contractGroupId SvOnboardingConfirmed_V2 {..} = ForDso with dso
+instance HasCheckedFetch SvNodeOnboardingConfirmed ForDso where
+  contractGroupId SvNodeOnboardingConfirmed {..} = ForDso with dso
 
 
 instance HasCheckedFetch SvOnboardingRequest ForDso where
