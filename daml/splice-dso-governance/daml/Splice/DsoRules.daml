@@ -117,14 +117,12 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
   | SRARC_AddHostedSv DsoRules_AddHostedSv
     -- ^ Voted action to directly add a hosted SV.
-  | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2 -- TODOV: rename
+  | SRARC_UpdateHostedSvWeight DsoRules_UpdateHostedSvWeight
     -- ^ Voted action to update the weight of a hosted SV.
   | SRARC_InstructOffboardHostedSv DsoRules_InstructOffboardHostedSv
     -- ^ Voted action to instruct the offboarding of a hosted SV.
   | SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv
     -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
-  | SRARC_OffboardHostedSv DsoRules_OffboardHostedSv
-    -- ^ Voted action to remove a hosted SV.
   | SRARC_AddSvNode DsoRules_AddSvNode
     -- ^ Voted action to directly add an SV node. Note: Implement in phase 2
   | SRARC_ConfirmSvOnboarding_V2 DsoRules_ConfirmSvNodeOnboarding
@@ -1189,7 +1187,7 @@ template DsoRules with
             return DsoRules_UpdateSvRewardWeightResult with ..
 
     -- Note: Implement in phase 1
-    choice DsoRules_UpdateSvRewardWeight_V2 : DsoRules_UpdateSvRewardWeight_V2Result
+    choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateSvRewardWeight_V2Result
       with
         svParty : Party
         newRewardWeight : Int
@@ -2283,10 +2281,9 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_UpdateSvRewardWeight_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_UpdateHostedSvWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_OffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_ConfirmSvOnboarding_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
