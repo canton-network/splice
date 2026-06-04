@@ -115,6 +115,7 @@ class ScanTxLogParser(
               node.result.value.meta.values.asScala.get(TokenStandardMetadata.reasonMetaKey)
             state.setTransferPreapprovalSendFields(tree, exercised, description.toJava)
           case CreateTokenStandardTransferInstruction(node) =>
+            // TODO(tech-debt): remove this duplication with CreateTokenStandardTransferInstructionV2
             val cid: String = node.result.value.output match {
               case output: splice.api.token.transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Pending =>
                 output.transferInstructionCid.contractId
@@ -176,8 +177,108 @@ class ScanTxLogParser(
               }
             )
           case DirectTokenStandardTransfer(node) =>
+            // TODO(tech-debt): remove this duplication with DirectTokenStandardTransferV2
             val sender = node.argument.value.transfer.sender
             val receiver = node.argument.value.transfer.receiver
+            val amount = node.argument.value.transfer.amount
+
+            val senderAmount = senderAmountNoFees(sender, amount)
+            val state = parseTrees(
+              tree,
+              synchronizerId,
+              tree.getChildNodeIds(exercised).asScala.toList,
+              ignoreUnexpectedAmuletCreateArchive = true,
+            )
+            if (state.hasTransfer) {
+              // We hit this for transfers before the 24h signing delay change that call AmuletRules_Transfer or TransferPreapproval_Send internally
+              // or transfers with the 24h signing delay change where sender != receiver which call into TransferPreapproval_SendV2
+              state
+            } else {
+              // We hit this only when sender = receiver and the 24h signing delay change is active as then there is no TransferPreapproval_SendV2 child.
+              // We just parse this as a plain transfer matching the behavior before the 24h signing delay change.
+              val txLogEntry = new TransferTxLogEntry(
+                offset = LegacyOffset.Api.fromLong(tree.getOffset),
+                eventId =
+                  EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
+                domainId = synchronizerId,
+                date = Some(tree.getEffectiveAt),
+                sender = Some(senderAmount),
+                receivers = Seq(receiverAmountNoFees(receiver, amount)),
+                balanceChanges = Seq.empty,
+                description = node.argument.value.transfer.meta.values
+                  .getOrDefault(TokenStandardMetadata.reasonMetaKey, ""),
+              )
+              State(txLogEntry)
+            }
+          case CreateTokenStandardTransferInstructionV2(node) =>
+            // TODO(tech-debt): remove this duplication with CreateTokenStandardTransferInstruction
+            val admin = node.argument.value.transfer.instrumentId.admin
+            val cid: String = node.result.value.output match {
+              case output: splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Pending =>
+                output.transferInstructionCid.contractId
+              case output =>
+                // CreateTokenStandardTransferInstruction only matches on two-step transfers resulting in pending status.
+                // Single-step transfers are just parsed as the underlying transfer.
+                logger.warn(
+                  s"Unexpected transfer instruction result output, expected pending but got: $output"
+                )
+                ""
+            }
+            val state = parseTrees(
+              tree,
+              synchronizerId,
+              tree.getChildNodeIds(exercised).asScala.toList,
+              ignoreUnexpectedAmuletCreateArchive = true,
+            )
+            val stateWithTransfer = if (state.hasTransfer) {
+              // We hit this for transfers before the 24h signing change that call AmuletRules_Transfer internally.
+              state
+            } else {
+              val txLogEntry = new TransferTxLogEntry(
+                offset = LegacyOffset.Api.fromLong(tree.getOffset),
+                domainId = synchronizerId,
+                date = Some(tree.getEffectiveAt),
+                sender = Some(
+                  senderAmountNoFees(
+                    node.argument.value.transfer.sender.owner.toScala.getOrElse(admin),
+                    0.0, // Note: Because Scan tracks the sum of locked and unlocked input and output is 0.
+                  )
+                ),
+                // receiver is set to the sender as the amulet is locked to them
+                receivers = Seq(
+                  receiverAmountNoFees(
+                    node.argument.value.transfer.sender.owner.toScala.getOrElse(admin),
+                    node.argument.value.transfer.amount,
+                  )
+                ),
+                balanceChanges = Seq.empty,
+              )
+              State(
+                txLogEntry
+              )
+            }
+            stateWithTransfer.copy(
+              entries = stateWithTransfer.entries.map {
+                case e: TransferTxLogEntry =>
+                  e.copy(
+                    description = node.argument.value.transfer.meta.values
+                      .getOrDefault(TokenStandardMetadata.reasonMetaKey, ""),
+                    transferInstructionReceiver =
+                      node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin),
+                    transferInstructionAmount = Some(node.argument.value.transfer.amount),
+                    transferInstructionCid = cid,
+                    eventId =
+                      EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
+                    transferKind = TransferKind.TRANSFER_KIND_CREATE_TRANSFER_INSTRUCTION,
+                  )
+                case e => e
+              }
+            )
+          case DirectTokenStandardTransferV2(node) =>
+            // TODO(tech-debt): remove this duplication with DirectTokenStandardTransfer
+            val admin = node.argument.value.transfer.instrumentId.admin
+            val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+            val receiver = node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin)
             val amount = node.argument.value.transfer.amount
 
             val senderAmount = senderAmountNoFees(sender, amount)

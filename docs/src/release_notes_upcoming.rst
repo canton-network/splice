@@ -111,6 +111,8 @@
     - Token Standard V2 (CIP-112)
 
       - Notable callouts for Amulet changes:
+          - add support for single-step transfers via the V2 transfer factory interface for
+            cases where both sender and receiver authorization is available
           - add a ``meta : Optional Metadata`` field to the ``AmuletRules.TransferOutput`` type and
             the ``TransferPreapproval_SendV2`` choice
           - properly classify the burn of ANS in the V2 token standard transaction history

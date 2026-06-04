@@ -40,6 +40,7 @@ data TestEnv = TestEnv with
   aliceAccount : V2.Account
   bob : Party
   bobAccount : V2.Account
+  charlie : Party
   provider : Party
   instrId : V2.InstrumentId
   now : Time
@@ -60,6 +61,7 @@ setupTest = do
 
   alice <- allocatePartyExact "alice"
   bob <- allocatePartyExact "bob"
+  charlie <- allocatePartyExact "charlie"
   provider <- allocatePartyExact "provider"
 
   let mkAccount = TSU.basicAccount
@@ -90,6 +92,7 @@ setupTest = do
     aliceAccount = mkAccount alice
     bob
     bobAccount = mkAccount bob
+    charlie
     provider
     instrId
     now

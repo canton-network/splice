@@ -14,7 +14,7 @@ module Splice.TokenStandard.Utils.Internal.Transfers (
   transferInstruction_v2_receiverActor_rejectDefaultImplUsingV1,
   transferInstruction_v2_senderActor_withdrawDefaultImplUsingV1,
 
-  transferFactory_v2_senderActor_transferImpl,
+  transferFactory_v2_transferDefaultImplUsingV1,
 
   -- ** TransferFactory extra observers
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
@@ -208,22 +208,32 @@ instance ForwardCompatible (ContractId TransferInstructionV1.TransferFactory) (C
   downcast = coerceInterfaceContractId
 
 
--- | Transfer factory implementation based on V1, which can and should be used
--- whenever the sender is the actor to maximize tx parsing compatibility for V1
--- wallets.
-transferFactory_v2_senderActor_transferImpl
-  :  ContractId TransferInstructionV2.TransferFactory
+-- | Transfer factory implementation based on calling the V1 body.
+transferFactory_v2_transferDefaultImplUsingV1
+  : ([Party] -> TransferInstructionV1.TransferFactory_Transfer -> Update TransferInstructionV1.TransferInstructionResult)
+     -- ^ Body of the V1 implementation to call with information about the actors.
+     -- MUST check the actors.
+  -> ContractId TransferInstructionV2.TransferFactory
   -> TransferInstructionV2.TransferFactory_Transfer
   -> Update TransferInstructionV2.TransferInstructionResult
-transferFactory_v2_senderActor_transferImpl self arg = do
+transferFactory_v2_transferDefaultImplUsingV1 v1BodyWithActors self arg = do
   ensureNoAccountMeta "transfer" "sender" arg.transfer.meta
   ensureNoAccountMeta "transfer" "receiver" arg.transfer.meta
   let admin = arg.transfer.instrumentId.admin
-  checkActors arg.actors [[accountPrincipal admin arg.transfer.sender]]
-  upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferFactory) self) TransferInstructionV1.TransferFactory_Transfer with
-    expectedAdmin = arg.transfer.instrumentId.admin
-    transfer = downcast arg.transfer
-    extraArgs = arg.extraArgs
+  let argV1 = TransferInstructionV1.TransferFactory_Transfer with
+        expectedAdmin = arg.transfer.instrumentId.admin
+        transfer = downcast arg.transfer
+        extraArgs = arg.extraArgs
+  result <- upcast <$> v1BodyWithActors arg.actors argV1
+  -- add metadata for V1 tx history parsing
+  let addTransferInfo
+        | arg.transfer.sender == arg.transfer.receiver =
+            TextMap.insert txKindMetaKey "merge-split"
+        | otherwise =
+            TextMap.insert txKindMetaKey "transfer" .
+            TextMap.insert senderMetaKey (partyToText argV1.transfer.sender)
+  pure result with
+    meta = Metadata (addTransferInfo result.meta.values)
 
 -- | For public assets the receivers should be observers as well.
 transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl : TransferInstructionV2.TransferFactory_Transfer -> [Party]

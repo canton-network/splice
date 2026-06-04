@@ -96,6 +96,59 @@ object DirectTokenStandardTransfer
   }
 }
 
+final object CreateTokenStandardTransferInstructionV2
+    extends InterfaceExerciseNodeCompanion.Mk(
+      interface = splice.api.token.transferinstructionv2.TransferFactory.INTERFACE,
+      template = splice.externalpartyamuletrules.ExternalPartyAmuletRules.COMPANION,
+      choice =
+        splice.api.token.transferinstructionv2.TransferFactory.CHOICE_TransferFactory_Transfer,
+    ) {
+  @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
+  override def unapply(
+      event: ExercisedEvent
+  )(implicit lc: ErrorLoggingContext): Option[ExerciseNode[
+    splice.api.token.transferinstructionv2.TransferFactory_Transfer,
+    splice.api.token.transferinstructionv2.TransferInstructionResult,
+  ]] = {
+    super
+      .unapply(event)
+      .flatMap(node =>
+        // We only parse transfer instructions. Direct transfers are parsed through DirectTokenStandardTransfer
+        Option.when(
+          node.result.value.output.isInstanceOf[
+            splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Pending
+          ]
+        )(node)
+      )
+  }
+}
+
+object DirectTokenStandardTransferV2
+    extends InterfaceExerciseNodeCompanion.Mk(
+      interface = splice.api.token.transferinstructionv2.TransferFactory.INTERFACE,
+      template = splice.externalpartyamuletrules.ExternalPartyAmuletRules.COMPANION,
+      choice =
+        splice.api.token.transferinstructionv2.TransferFactory.CHOICE_TransferFactory_Transfer,
+    ) {
+  @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
+  override def unapply(
+      event: ExercisedEvent
+  )(implicit lc: ErrorLoggingContext): Option[ExerciseNode[
+    splice.api.token.transferinstructionv2.TransferFactory_Transfer,
+    splice.api.token.transferinstructionv2.TransferInstructionResult,
+  ]] = {
+    super
+      .unapply(event)
+      .flatMap(node =>
+        Option.when(
+          node.result.value.output.isInstanceOf[
+            splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
+          ]
+        )(node)
+      )
+  }
+}
+
 final object AllocationFactoryAllocate
     extends InterfaceExerciseNodeCompanion.Mk(
       interface = splice.api.token.allocationinstructionv1.AllocationFactory.INTERFACE,

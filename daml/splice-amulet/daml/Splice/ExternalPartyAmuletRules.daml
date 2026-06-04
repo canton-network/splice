@@ -132,7 +132,8 @@ template ExternalPartyAmuletRules
         admin = dso
         meta = emptyMetadata
 
-      transferFactory_transferImpl self arg = amulet_transferFactory_transferImpl this self arg
+      transferFactory_transferImpl _self arg =
+        amulet_transferFactoryV1_transferImpl this [arg.transfer.sender] arg
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
 
     interface instance V2.TransferFactory for ExternalPartyAmuletRules where
@@ -142,7 +143,9 @@ template ExternalPartyAmuletRules
 
       transferFactory_transferExtraObservers = transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl
 
-      transferFactory_transferImpl = transferFactory_v2_senderActor_transferImpl
+      transferFactory_transferImpl =
+        transferFactory_v2_transferDefaultImplUsingV1 $ amulet_transferFactoryV1_transferImpl this
+
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
 
 
@@ -332,16 +335,18 @@ data TransferCommand_ExpireResult = TransferCommand_ExpireResult
 -- Token standard transfer factory
 ----------------------------------
 
-amulet_transferFactory_transferImpl
+amulet_transferFactoryV1_transferImpl
   : ExternalPartyAmuletRules
-  -> ContractId Api.Token.TransferInstructionV1.TransferFactory
+  -> [Party]
   -> Api.Token.TransferInstructionV1.TransferFactory_Transfer
   -> Update Api.Token.TransferInstructionV1.TransferInstructionResult
-amulet_transferFactory_transferImpl this _self arg = do
-  let Api.Token.TransferInstructionV1.TransferFactory_Transfer {transfer, extraArgs} = arg
+amulet_transferFactoryV1_transferImpl this actors arg = do
+  let Api.Token.TransferInstructionV1.TransferFactory_Transfer {expectedAdmin, transfer, extraArgs} = arg
   let dso = this.dso
+  checkActors actors [[transfer.sender], [transfer.sender, transfer.receiver]]
+
   -- validate call to factory and retrieve context
-  requireExpectedAdminMatch arg.expectedAdmin dso
+  requireExpectedAdminMatch expectedAdmin dso
 
   -- == validate each field of the transfer specification ==
   -- sender: nothing to validate
@@ -350,7 +355,7 @@ amulet_transferFactory_transferImpl this _self arg = do
   forA_ optPreapprovalCid \preapprovalCid ->
     fetchChecked (ForOwner with dso; owner = transfer.receiver) preapprovalCid
   -- instrumentId:
-  let expectedInstrumentId = amuletInstrumentId this.dso
+  let expectedInstrumentId = amuletInstrumentId dso
   require
     ("Expected instrumentId " <> show expectedInstrumentId <> " matches actual instrumentId " <> show transfer.instrumentId)
     (expectedInstrumentId == transfer.instrumentId)
@@ -371,48 +376,46 @@ amulet_transferFactory_transferImpl this _self arg = do
   ensureNoAccountMeta "transfer" "sender" transfer.meta
   ensureNoAccountMeta "transfer" "receiver" transfer.meta
 
-  -- execute the right direction of transfer
   case optPreapprovalCid of
-    None
-      | transfer.receiver == transfer.sender -> do
-          -- execute a self-transfer
-          paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
-          inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-          result <- executeExternalPartyTransfer dso paymentContext Transfer with
-            sender = transfer.sender
-            provider = transfer.sender
-            inputs
-            outputs = [ TransferOutput with
-              receiver = transfer.sender
-              amount = transfer.amount
-              receiverFeeRatio = 0.0
-              lock = None
-              meta = Some transfer.meta]
-            beneficiaries = None
-          pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-            senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
-            output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
-              receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
-            meta = fromOptional emptyMetadata result.meta
+    _ | transfer.receiver `elem` actors -> do
+      -- self-transfer or sender+receiver authorized
+      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
+      inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
+      result <- executeExternalPartyTransfer dso paymentContext Transfer with
+        sender = transfer.sender
+        provider = transfer.sender
+        inputs
+        outputs = [ TransferOutput with
+          receiver = transfer.receiver
+          amount = transfer.amount
+          receiverFeeRatio = 0.0
+          lock = None
+          meta = Some transfer.meta]
+        beneficiaries = None
+      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+        senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
+        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
+          receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
+        meta = fromOptional emptyMetadata result.meta
 
-      | otherwise -> do
-          -- prepare a two-step transfer
-          let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
-          let requestedAt = arg.transfer.requestedAt
-          paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
-          (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
-          -- create the transfer instruction tracking this locked amulet
-          transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
-            transfer = arg.transfer with
-              inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
-            lockedAmulet
-          -- return result
-          pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-            senderChangeCids
-            output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
-              with
-                transferInstructionCid
-            meta
+    None -> do
+      -- prepare a two-step transfer
+      let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
+      let requestedAt = arg.transfer.requestedAt
+      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
+      (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
+      -- create the transfer instruction tracking this locked amulet
+      transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
+        transfer = arg.transfer with
+          inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
+        lockedAmulet
+      -- return result
+      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+        senderChangeCids
+        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
+          with
+            transferInstructionCid
+        meta
 
     Some preapprovalCid -> do
       -- use a payment context with featuring so the preapproval provider can be featured
