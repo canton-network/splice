@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.crypto.{EncryptionPublicKey, SigningPublicKey}
 import com.digitalasset.canton.topology.ParticipantId
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, ParticipantBootstrapDumpConfig}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAllSvAppConfigs,
@@ -77,6 +78,9 @@ class ParticipantKmsIdentitiesEnterpriseIntegrationTest
         (_, config) => ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config),
         (_, config) => ConfigTransforms.disableOnboardingParticipantPromotionDelay()(config),
       )
+      // Session signing keys only work on PV35+
+      // FIXME wait instead for PV35 to become the default; not much win merging this before
+      .withProtocolVersion(ProtocolVersion.v35)
       .withManualStart
 
   override lazy val resetRequiredTopologyState: Boolean = false
