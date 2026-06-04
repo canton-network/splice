@@ -346,22 +346,6 @@ class ScanApp(
         dsoParty,
         config.spliceInstanceNames.nameServiceNameAcronym.toLowerCase(),
       )
-      synchronizerId <- appInitStep("Get synchronizer id") {
-        retryProvider.getValueWithRetries(
-          RetryFor.WaitingOnInitDependency,
-          "amulet synchronizer id",
-          "amulet rules synchronizer id",
-          store.getAmuletRulesWithState().map {
-            _.state.fold(
-              identity,
-              throw Status.FAILED_PRECONDITION
-                .withDescription("Amulet rules in fllight")
-                .asRuntimeException(),
-            )
-          },
-          logger,
-        )
-      }
       _ <- config.domainMigrationId match {
         case Some(configuredMigrationId) =>
           appInitStep("Verifying configured domain migration id is in sync with other scans") {
