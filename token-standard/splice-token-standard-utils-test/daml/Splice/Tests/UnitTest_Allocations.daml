@@ -15,6 +15,7 @@ import Daml.Script
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 
@@ -25,22 +26,22 @@ import Splice.TokenStandard.Utils qualified as TSU
 test_executorsFromSettlementInfoV1 : Script ()
 test_executorsFromSettlementInfoV1 = do
   now <- getTime
-  provider1 <- allocateParty "provider1"
-  provider2 <- allocateParty "provider2"
+  executor1 <- allocateParty "executor1"
+  executor2 <- allocateParty "executor2"
   let settlementV2 = V1.SettlementInfo with
-        executor = provider1
+        executor = executor1
         settlementRef = V1.Reference with
           id = "settlement1"
           cid = None
         meta = Metadata with
           values = TextMap.fromList
-            [ (TSU.extraExecutorsMetaField, partyToText provider2)
+            [ (TSU.extraExecutorsMetaField, partyToText executor2)
             ]
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
         settleBefore = now `addRelTime` days 2
 
-  TSU.executorsFromSettlementInfoV1 settlementV2 === [provider1, provider2]
+  TSU.executorsFromSettlementInfoV1 settlementV2 === [executor1, executor2]
 
   pure ()
 
@@ -50,21 +51,26 @@ test_allocationV1_availableActionsDefault = do
   now <- getTime
   admin <- allocateParty "admin"
   alice <- allocateParty "alice"
+  accountProvider <- allocateParty "accountProvider"
   bob <- allocateParty "bob"
-  provider1 <- allocateParty "provider1"
-  provider2 <- allocateParty "provider2"
+  executor1 <- allocateParty "executor1"
+  executor2 <- allocateParty "executor2"
   let settlement = V1.SettlementInfo with
-        executor = provider1
+        executor = executor1
         settlementRef = V1.Reference with
           id = "settlement1"
           cid = None
         meta = Metadata with
           values = TextMap.fromList
-            [ (TSU.extraExecutorsMetaField, partyToText provider2)
+            [ (TSU.extraExecutorsMetaField, partyToText executor2)
             ]
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
         settleBefore = now `addRelTime` days 2
+  let aliceAccount = V2.Account with
+        owner = Some alice
+        executor = Some accountProvider
+        id = "aliceAccount"
   let allocationViewV1 = V1.AllocationView with
         holdingCids = []
         meta = emptyMetadata
@@ -78,12 +84,14 @@ test_allocationV1_availableActionsDefault = do
             instrumentId = V1.InstrumentId with
               admin
               id = "X"
-            meta = emptyMetadata
+            meta = TSU.accountToMeta "sender" aliceAccount emptyMetadata
+  debug allocationViewV1
   let expectedActions = Map.fromList
-        -- TODO(#4517): also test available actions with sender accounts
-        [ (V2.AA_Settle, [[provider1, provider2, admin]])
-        , (V2.AA_Cancel, [[provider1, provider2]])
+        [ (V2.AA_Settle, [[admin, executor1, executor2]])
+        , (V2.AA_Cancel, [[executor1, executor2]])
         , (V2.AA_Withdraw, [[alice]])
+          -- Note: the default actions do consider the account provider as an observer only,
+          -- which is why they do not get the Withdraw action.
         ]
 
   checkEq "allocationV1_availableActionsDefault" expectedActions $
