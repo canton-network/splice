@@ -96,7 +96,7 @@ while true; do
   part_caught=$(echo "$part_delay < $part_delay_ok" | bc -l)
   med_caught=$(echo "$med_delay  < $med_delay_ok" | bc -l)
 
-  info "Delays — seq: ${seq_delay}s, participant: ${part_delay}s, mediator: ${med_delay}s (elapsed: ${elapsed}s)"
+  _info "Delays — seq: ${seq_delay}s, participant: ${part_delay}s, mediator: ${med_delay}s (elapsed: ${elapsed}s)"
 
   if [ "$seq_caught" = "1" ] && [ "$part_caught" = "1" ] && [ "$med_caught" = "1" ]; then
     _info "All components caught up"
