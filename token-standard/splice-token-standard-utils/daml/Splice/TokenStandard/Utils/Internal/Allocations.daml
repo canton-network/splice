@@ -693,31 +693,15 @@ allocationInstruction_v1_updateDefaultImplUsingV2 _self _arg =
 -----------------------------------------------------------------------------
 
 -- | Add tx history metadata that makes settlement of allocations recognizable
--- by V1 tx history parsers.
+-- by V1 tx history parsers using the new 'settle-V2-allocation' tx kind, and a reason.
 allocationSettlementTxHistoryV1ToMeta : AllocationV2.AllocationSpecification -> Metadata -> Metadata
 allocationSettlementTxHistoryV1ToMeta alloc meta =
-    Metadata $ transferMeta <> meta.values
-  where
-    transferMeta = case alloc.transferLegSides of
-      [leg] -- V1 allocations will always hit this case, which means their tx history is recognized properly
-        | leg.side == AllocationV2.ReceiverSide ->
-          case leg.otherside.owner of
-            None -> TextMap.insert txKindMetaKey "mint" leg.meta.values
-            Some sender ->
-              TextMap.insert txKindMetaKey "transfer" $
-              TextMap.insert senderMetaKey (partyToText sender) leg.meta.values
-        | leg.side == AllocationV2.SenderSide ->
-          case leg.otherside.owner of
-            None -> TextMap.insert txKindMetaKey "burn" leg.meta.values
-            Some receiver ->
-              TextMap.insert txKindMetaKey "transfer" $
-              TextMap.insert receiverMetaKey (partyToText receiver) leg.meta.values
-      _ ->
-        -- V2 allocations can have multiple legs, which we report
-        -- approximatively using both a new txKind key and a reason.
-        -- The best option for wallets is though to start parsing the V2
-        -- history, which should be an easy lift.
-        TextMap.fromList [(txKindMetaKey, "settle-V2-allocation"), (reasonMetaKey, "settle V2 allocation")]
+    -- Note: we can't really do better as V2 allocation settlement just looks very different
+    -- from V1 transfers and allocation settlement.
+    Metadata $
+      TextMap.insert txKindMetaKey "settle-V2-allocation" $
+      TextMap.insert reasonMetaKey "settle V2 allocation" $
+      meta.values
 
 -- | Internal shared utility for the downcast functions.
 extractTransferLegForV1 : AllocationV2.AllocationSpecification -> Optional AllocationV2.TransferLeg
