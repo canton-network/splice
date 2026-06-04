@@ -16,19 +16,7 @@ validator1:
   deduplicationDuration: 30m
 svs:
   sv-1: !include(scratchnet-sv.yaml) {}
-  sv-2: !include(scratchnet-sv.yaml)
-    testing:
-      catchup:
-        enabled: true
-        thresholds:
-          minBackupAgeHours: 1
-          sequencerMinEventsPerSecond: 20
-          participantMinEventsPerSecond: 20
-          mediatorMinEventsPerSecond: 20
-          caughtUpThresholds:
-            sequencerBlockDelaySeconds: 30
-            participantDelaySeconds: 30
-            mediatorDelaySeconds: 30
+  sv-2: !include(scratchnet-sv.yaml) {}
   sv-3: !include(scratchnet-sv.yaml) {}
   sv-4: !include(scratchnet-sv.yaml) {}
   sv-5: !include(scratchnet-sv.yaml) {}
