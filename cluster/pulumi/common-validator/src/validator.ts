@@ -30,11 +30,11 @@ import {
   standardStorageClassName,
   validatorOnboardingSecretName,
   ValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   BucketConfig,
   installBucketSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/buckets';
+} from '@canton-network/splice-pulumi-common/src/buckets';
 import { Secret } from '@pulumi/kubernetes/core/v1';
 import { Output } from '@pulumi/pulumi';
 

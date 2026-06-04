@@ -3,8 +3,8 @@
 import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
-import { CLUSTER_BASENAME, extractPathPrefixes } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { PerEndpointLimits } from '@lfdecentralizedtrust/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
+import { CLUSTER_BASENAME, extractPathPrefixes } from '@canton-network/splice-pulumi-common';
+import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
 import * as config from './config';
 

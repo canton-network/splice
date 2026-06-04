@@ -7,7 +7,7 @@ import {
   Loading,
   Login,
   useUserState,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
 

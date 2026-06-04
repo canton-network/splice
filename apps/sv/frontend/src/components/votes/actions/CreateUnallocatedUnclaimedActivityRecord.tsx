@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { DateWithDurationDisplay } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DateWithDurationDisplay } from '@canton-network/splice-common-frontend';
 import { Decimal } from 'decimal.js-light';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FormControl, Stack, TextField, Typography } from '@mui/material';
@@ -11,7 +11,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
-import { getUTCWithOffset } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 import { ActionFromForm, actionFromFormIsError } from '../VoteRequest';
 

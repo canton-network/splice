@@ -5,7 +5,7 @@ import {
   DisableConditionally,
   Loading,
   SvClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useMutation } from '@tanstack/react-query';
 import React, { useState, useCallback } from 'react';
@@ -29,10 +29,7 @@ import { useValidatorOnboardings } from '../hooks/useValidatorOnboardings';
 import { useSvConfig } from '../utils';
 import { useNetworkInstanceName } from '../hooks';
 import dayjs from 'dayjs';
-import {
-  dateTimeFormatISO,
-  getUTCWithOffset,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 
 const VALID_PARTY_ID_REGEX = /^[^-]+-[^-]+-\d+$/;
 

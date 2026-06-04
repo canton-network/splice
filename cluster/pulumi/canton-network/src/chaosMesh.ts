@@ -8,7 +8,7 @@ import {
   GCP_PROJECT,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 import { z } from 'zod';
 

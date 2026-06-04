@@ -7,12 +7,12 @@ import {
   ExactNamespace,
   externalIpRangesFile,
   installSpliceHelmChart,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentitiesFile,
   getChainIdSuffix,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { CnChartVersion } from '@lfdecentralizedtrust/splice-pulumi-common/src/artifacts';
+} from '@canton-network/splice-pulumi-common-sv';
+import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
 import { Resource } from '@pulumi/pulumi';
 import { createHash } from 'crypto';
 

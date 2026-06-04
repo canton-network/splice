@@ -8,7 +8,7 @@ import { SvConfigProvider } from '../../../utils';
 import App from '../../../App';
 import { svPartyId } from '../../mocks/constants';
 import { Wrapper } from '../../helpers';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { GrantRevokeFeaturedAppForm } from '../../../components/forms/GrantRevokeFeaturedAppForm';
 import { server, svUrl } from '../../setup/setup';

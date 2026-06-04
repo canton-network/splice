@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as postgres from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as pulumi from '@pulumi/pulumi';
 import {
   Auth0Client,
@@ -18,16 +18,16 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   ValidatorTopupConfig,
   ansDomainPrefix,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
   installParticipant,
   splitwellDarPaths,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
+} from '@canton-network/splice-pulumi-common-validator';
 import {
   AutoAcceptTransfersConfig,
   installValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validator';
+} from '@canton-network/splice-pulumi-common-validator/src/validator';
 
 import { spliceConfig } from '../../common/src/config/config';
 import { validator1Config } from './config';

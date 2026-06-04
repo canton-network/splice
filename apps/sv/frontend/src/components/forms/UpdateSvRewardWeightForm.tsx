@@ -3,7 +3,7 @@
 
 import dayjs from 'dayjs';
 import { useAppForm } from '../../hooks/form';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { FormLayout } from './FormLayout';

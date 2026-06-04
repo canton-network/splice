@@ -165,7 +165,7 @@ class JoiningNodeInitializer(
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
         domainConfigO.traverse_(
-          participantAdminConnection.ensureSynchronizerRegisteredNoHandshake(
+          participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
           )

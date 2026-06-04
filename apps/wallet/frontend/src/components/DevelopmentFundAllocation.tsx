@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { DisableConditionally } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally } from '@canton-network/splice-common-frontend';
 import BftAnsField from './BftAnsField';
 import { DesktopDateTimePicker } from '@mui/x-date-pickers/DesktopDateTimePicker';
 import dayjs from 'dayjs';

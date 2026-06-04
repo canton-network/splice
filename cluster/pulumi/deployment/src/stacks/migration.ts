@@ -1,27 +1,24 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
+import { configForSv } from '@canton-network//splice-pulumi-common-sv';
 import {
   CLUSTER_BASENAME,
   config,
   DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { configForSv } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/dsoConfig';
-import { deploymentConf } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/config';
+} from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
+import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
 import {
   GitFluxRef,
   gitRepoForRef,
   StackFromRef,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/stack';
+} from '@canton-network/splice-pulumi-common/src/operator/flux-source';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 export function getMigrationSpecificStacksFromMainReference(): StackFromRef[] {
   if (deploymentConf.projectsToDeploy.has('sv-canton')) {

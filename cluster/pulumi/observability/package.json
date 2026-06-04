@@ -1,10 +1,10 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-observability",
+  "name": "@canton-network/splice-pulumi-observability",
   "main": "src/index.ts",
   "dependencies": {
     "@pulumiverse/grafana": "0.16.3",
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
-    "@lfdecentralizedtrust/splice-pulumi-common-sv": "1.0.0"
+    "@canton-network/splice-pulumi-common": "1.0.0",
+    "@canton-network/splice-pulumi-common-sv": "1.0.0"
   },
   "scripts": {
     "fix": "npm run format:fix && npm run lint:fix",

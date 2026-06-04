@@ -202,6 +202,8 @@ class FeaturedAppActivityMarkerTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      // ignoring a party would mean their featured app activity markers do not get converted into rewards
+      enableUnresponsivePartiesAutoIgnore = false,
     )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 

@@ -49,7 +49,7 @@ import {
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   approvedSvIdentitiesFile,
@@ -64,12 +64,9 @@ import {
   SynchronizerNodes,
   valuesForSvApp,
   valuesForSvValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';

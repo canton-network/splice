@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse, PathParams } from 'msw';
-import { LookupTransferPreapprovalByPartyResponse } from '@lfdecentralizedtrust/scan-openapi';
+import { LookupTransferPreapprovalByPartyResponse } from '@canton-network/scan-openapi';
 import { test, expect, describe } from 'vitest';
 import { vi } from 'vitest';
 import * as jtv from '@mojotech/json-type-validation';
@@ -35,7 +35,7 @@ import {
   ChoiceExecutionMetadata,
   ListAllocationRequestsResponse,
   ListAllocationsResponse,
-} from '@lfdecentralizedtrust/wallet-openapi';
+} from '@canton-network/wallet-openapi';
 import { AllocationRequest } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
 import { mkContract } from './mocks/contract';
 import { openApiRequestFromTransferLeg } from '../components/ListAllocationRequests';
@@ -44,7 +44,7 @@ import * as damlTypes from '@daml/types';
 import { ContractId, Optional, Text } from '@daml/types';
 import { AnyContract } from '@daml.js/splice-api-token-metadata/lib/Splice/Api/Token/MetadataV1/module';
 import { AmuletAllocation } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 
 const dsoEntry = nameServiceEntries.find(e => e.name.startsWith('dso'))!;
 
