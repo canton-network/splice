@@ -11,7 +11,7 @@ import { svPartyId } from '../../mocks/constants';
 import { Wrapper } from '../../helpers';
 import { SetAmuletConfigRulesForm } from '../../../components/forms/SetAmuletConfigRulesForm';
 import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { server, svUrl } from '../../setup/setup';
 import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
 

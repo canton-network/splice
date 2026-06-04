@@ -6,8 +6,8 @@ updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:4.0.3@sha256:bd2cc4f9c
 contentType: "application/json"
 
 # runtimeDetails:  # Optional, exposes the runtime configuration under path /runtime/
-#   migrationId: 4
-#   scanUrl: https://scan.sv.global.canton.network.xxx  # Scan URL to fetch the runtime configuration
+#   synchronizerSerialId: 5  # Serial ID of the current synchronizer to fetch metrics
+#   scanUrl: https://scan.sv.global.canton.network.xxx  # Optional, the default is the internal scan address, it's used to fetch the runtime configuration
 #   tlsSkipVerify: true  # Optional, the default is false
 
 # deploymentDetails:  # Optional, exposes static configuration under path /
@@ -22,13 +22,15 @@ contentType: "application/json"
 #   sv:
 #     version: "0.3.3"  # Optional, the default is set to the Chart version
 #   synchronizer:
-#     active:
+#     current:
 #       chainIdSuffix: "id0"
 #       migrationId: 4
+#       synchronizerSerialId: 5
 #       version: "0.3.3"  # Optional, the default is set to the Chart version
-#     staging:
+#     successor:
 #       chainIdSuffix: "id1"
-#       migrationId: 5
+#       migrationId: 4
+#       synchronizerSerialId: 6
 #       version: "0.3.4"
 #     legacy: null
 

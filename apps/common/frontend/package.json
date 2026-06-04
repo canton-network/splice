@@ -1,5 +1,5 @@
 {
-  "name": "@lfdecentralizedtrust/splice-common-frontend",
+  "name": "@canton-network/splice-common-frontend",
   "version": "0.1.0",
   "browserslist": {
     "production": [
@@ -16,11 +16,11 @@
   "dependencies": {
     "@daml/types": "^3.4.11",
     "@js-temporal/polyfill": "^0.4.4",
-    "@lfdecentralizedtrust/splice-common-frontend-utils": "0.1.0",
+    "@canton-network/splice-common-frontend-utils": "0.1.0",
     "@dmsnell/diff-match-patch": "^1.1.0",
-    "@lfdecentralizedtrust/splice-common-typeface-termina": "1.0.0",
-    "@lfdecentralizedtrust/splitwell-openapi": "0.0.1",
-    "@lfdecentralizedtrust/sv-openapi": "0.0.1",
+    "@canton-network/splice-common-typeface-termina": "1.0.0",
+    "@canton-network/splitwell-openapi": "0.0.1",
+    "@canton-network/sv-openapi": "0.0.1",
     "@tanstack/react-query": "5.90.20",
     "date-fns": "2.29.3",
     "decimal.js-light": "2.5.1",
@@ -40,8 +40,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
-    "@lfdecentralizedtrust/splice-common-test-handlers": "^0.1.0",
-    "@lfdecentralizedtrust/splice-common-test-utils": "^0.1.0",
+    "@canton-network/splice-common-test-handlers": "^0.1.0",
+    "@canton-network/splice-common-test-utils": "^0.1.0",
     "@tanstack/eslint-plugin-query": "5.91.3",
     "@tanstack/react-query-devtools": "5.91.2",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",

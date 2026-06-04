@@ -12,11 +12,8 @@ import type {
   VoteRequest,
   VoteRequestOutcome,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import type { DsoInfo } from '@lfdecentralizedtrust/splice-common-frontend';
-import {
-  type Contract,
-  dateTimeFormatISO,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import type { DsoInfo } from '@canton-network/splice-common-frontend';
+import { type Contract, dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs, { type Dayjs } from 'dayjs';
 import type {
   AmuletRulesConfigProposal,

@@ -17,7 +17,7 @@ import {
   getDsoConfigToCompareWith,
   PrettyJsonDiff,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { Link as RouterLink } from 'react-router';
 import {
   ProposalDetails,

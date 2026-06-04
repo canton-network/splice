@@ -1,9 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  BaseApiMiddleware,
-  onAuthExpired,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { BaseApiMiddleware, onAuthExpired } from '@canton-network/splice-common-frontend-utils';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 interface FakeRequestContext {

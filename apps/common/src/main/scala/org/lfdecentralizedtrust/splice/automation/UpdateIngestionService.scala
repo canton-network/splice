@@ -14,6 +14,7 @@ import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient.GetTreeUpdatesResponse
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   RetryProvider,
   ServiceWithGuaranteedShutdown,
   SpliceLedgerConnection,
@@ -33,8 +34,10 @@ class UpdateIngestionService(
     ingestionSink: MultiDomainAcsStore.IngestionSink,
     connection: SpliceLedgerConnection,
     config: AutomationConfig,
+    clock: Clock,
     backoffClock: Clock,
     override protected val retryProvider: RetryProvider,
+    packageVersionSupport: PackageVersionSupport,
     baseLoggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -122,6 +125,8 @@ class UpdateIngestionService(
             config.ingestion.activeContractsMaxBackoff.underlying,
             config.ingestion.activeContractsRandomFactor,
           ),
+          clock,
+          packageVersionSupport,
         )
       ),
       offset,

@@ -52,7 +52,6 @@ tests:
           content:
             # Splice-specific
             app: validator-app
-            migration: "0"
             # k8s/Helm standard
             app.kubernetes.io/instance: mock-validator
             app.kubernetes.io/managed-by: Helm
@@ -67,7 +66,6 @@ tests:
           content:
             # Splice-specific
             app: validator-app
-            migration: "0"
             # k8s/Helm standard
             app.kubernetes.io/instance: mock-validator
             app.kubernetes.io/managed-by: Helm

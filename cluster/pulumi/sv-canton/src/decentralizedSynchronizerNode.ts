@@ -19,7 +19,7 @@ import {
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   CometBftNodeConfigs,
   CometbftSynchronizerNode,
@@ -27,9 +27,9 @@ import {
   installCometBftNode,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
 
@@ -230,7 +230,6 @@ export class InStackCometBftDecentralizedSynchronizerNode
       mediatorPostgres: Postgres;
     },
     active: boolean,
-    runningMigration: boolean,
     onboardingName: string,
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
@@ -246,7 +245,6 @@ export class InStackCometBftDecentralizedSynchronizerNode
       svConfig,
       migrationId,
       active,
-      runningMigration,
       version,
       cometbft.enableStateSync,
       cometbft.enableTimeoutCommit,

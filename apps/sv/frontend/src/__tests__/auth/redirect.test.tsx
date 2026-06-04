@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Algorithm, AuthConfig, UserProvider } from '@lfdecentralizedtrust/splice-common-frontend';
+import { Algorithm, AuthConfig, UserProvider } from '@canton-network/splice-common-frontend';
 import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React, { useEffect } from 'react';

@@ -8,17 +8,17 @@ import {
   ExactNamespace,
   installLedgerApiUserSecret,
   SpliceCustomResourceOptions,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   InstalledMigrationSpecificSv,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { installPostgres, Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import {
   InStackCantonBftDecentralizedSynchronizerNode,
   InStackCometBftDecentralizedSynchronizerNode,
-} from '@lfdecentralizedtrust/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
+} from '@canton-network/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
 
 import { spliceConfig } from '../../common/src/config/config';
 
@@ -129,7 +129,6 @@ export async function installCantonComponents(
             setCoreDbNames: svConfig.isCoreSv,
           },
           isActiveMigration,
-          migrationConfig.isRunningMigration(),
           svConfig.onboardingName,
           version,
           imagePullServiceAccountName,

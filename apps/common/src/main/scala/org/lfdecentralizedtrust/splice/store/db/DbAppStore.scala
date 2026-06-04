@@ -6,12 +6,15 @@ package org.lfdecentralizedtrust.splice.store.db
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 abstract class DbTxLogAppStore[TXE](
     storage: DbStorage,
@@ -107,5 +110,22 @@ abstract class DbAppStore(
 
   override def close(): Unit = {
     multiDomainAcsStore.close()
+  }
+}
+
+object DbAppStore {
+
+  def getHighestKnownMigrationId(
+      storage: DbStorage
+  )(implicit
+      ec: ExecutionContext,
+      closeContext: CloseContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = {
+    val queryResult = storage.query(
+      sql"""select max(migration_id) from store_last_ingested_offsets""".as[Option[Long]],
+      "getHighestKnownMigrationId",
+    )
+    queryResult.map(_.headOption.flatten)
   }
 }

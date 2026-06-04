@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import {
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
 
 import { ghaConfig } from './config';

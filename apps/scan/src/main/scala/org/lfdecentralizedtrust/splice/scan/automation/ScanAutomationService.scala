@@ -12,7 +12,11 @@ import org.lfdecentralizedtrust.splice.automation.{
   UpdateIngestionService,
 }
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  RetryProvider,
+  SpliceLedgerClient,
+}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
@@ -50,6 +54,7 @@ class ScanAutomationService(
     svParty: PartyId,
     svName: String,
     upgradesConfig: UpgradesConfig,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -65,6 +70,7 @@ class ScanAutomationService(
       ledgerClient,
       retryProvider,
       config.parameters,
+      packageVersionSupport,
     ) {
   override def companion
       : org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService.type =
@@ -97,8 +103,10 @@ class ScanAutomationService(
         rewardsReferenceStore.multiDomainAcsStore.ingestionSink,
         connection(SpliceLedgerConnectionPriority.High),
         config.automation,
+        triggerContext.clock,
         backoffClock = triggerContext.pollingClock,
         triggerContext.retryProvider,
+        packageVersionSupport,
         triggerContext.loggerFactory,
       )
     )

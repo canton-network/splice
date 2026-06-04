@@ -52,22 +52,6 @@ export class DecentralizedSynchronizerMigrationConfig {
     return this.runningMigrations().some(info => info.id == id);
   }
 
-  isRunningMigration(): boolean {
-    return this.migratingFromActiveId != undefined && this.migratingFromActiveId != this.active.id;
-  }
-
-  migratingNodeConfig(): {
-    migration: {
-      id: DomainMigrationIndex;
-    };
-  } {
-    return {
-      migration: {
-        id: this.frozenMigrationId,
-      },
-    };
-  }
-
   get allMigrations(): MigrationInfo[] {
     return this.runningMigrations().concat(this.archived);
   }

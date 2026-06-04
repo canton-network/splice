@@ -7,13 +7,13 @@ import {
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common-sv';
 
 import { installParticipant } from './participant';
 

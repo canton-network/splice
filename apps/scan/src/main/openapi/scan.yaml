@@ -1113,6 +1113,21 @@ paths:
         "404":
           description: "No migration scheduled"
 
+  /v0/migrations/last:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getMigrationId"
+      description: |
+        Returns the last migration id that was configured for the synchronizer upgrades.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetMigrationIdResponse"
+
   # TODO(DACH-NY/canton-network-internal#418) Move to SV app
   /v0/synchronizer-identities/{domain_id_prefix}:
     get:
@@ -3583,6 +3598,15 @@ components:
         time:
           type: string
           format: date-time
+        migration_id:
+          type: integer
+          format: int64
+
+    GetMigrationIdResponse:
+      type: object
+      required:
+        - "migration_id"
+      properties:
         migration_id:
           type: integer
           format: int64

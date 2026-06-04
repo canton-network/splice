@@ -29,6 +29,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
   DarResources,
   Node,
+  PackageVersionSupport,
   ParticipantAdminConnection,
   RetryFor,
   SpliceLedgerClient,
@@ -114,17 +115,39 @@ class SplitwellApp(
       participantAdminConnection.getParticipantId()
     }
     storeKey = SplitwellStore.Key(providerParty = partyId)
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
+    domainMigrationId <- appInitStep(s"Resolving domain migration id") {
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "splitwell_domain_migration_id",
+        s"Wait for splitwell domain migration id to be available",
+        scanConnection.getMigrationId(),
+        logger,
+      )
+    }
     store = SplitwellStore(
       storeKey,
       storage,
       config.domains,
       loggerFactory,
       retryProvider,
-      config.domainMigrationId,
+      domainMigrationId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,
+    )
+    amuletRules <- scanConnection.getAmuletRules()
+    synchronizerId = SynchronizerId.tryFromString(
+      amuletRules.payload.configSchedule.initialValue.decentralizedSynchronizer.activeSynchronizer
+    )
+    readOnlyLedgerConnection = ledgerClient
+      .readOnlyConnection(
+        this.getClass.getSimpleName,
+        loggerFactory,
+      )
+    packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+      synchronizerId,
+      readOnlyLedgerConnection,
+      loggerFactory,
     )
     // splitwell does not need to have UpdateHistory
     automation = new SplitwellAutomationService(
@@ -137,6 +160,7 @@ class SplitwellApp(
       retryProvider,
       config.parameters,
       loggerFactory,
+      packageVersionSupport,
     )
     preferred <- appInitStep(s"Wait for preferred domain connection") {
       store.domains.waitForDomainConnection(config.domains.splitwell.preferred.alias)

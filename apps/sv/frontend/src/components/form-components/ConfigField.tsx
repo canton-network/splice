@@ -7,7 +7,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
-import { nextScheduledSynchronizerUpgradeFormat } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
 
 dayjs.extend(relativeTime);
 
