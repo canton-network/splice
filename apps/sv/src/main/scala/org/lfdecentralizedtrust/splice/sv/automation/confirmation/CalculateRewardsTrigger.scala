@@ -13,7 +13,11 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
-import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingRootHashResponse
+import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingRootHashResponse.members.{
+  RewardAccountingRootHashCannotProvide,
+  RewardAccountingRootHashOk,
+  RewardAccountingRootHashUndetermined,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
@@ -65,60 +69,52 @@ abstract class CalculateRewardsTriggerBase(
       task: Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val round = task.calculateRewards.payload.round.number
-    getRootHash(round).flatMap {
-      case None =>
-        throw Status.FAILED_PRECONDITION
-          .withDescription(
-            s"Scan has not yet computed the root hash for CalculateRewardsV2 round $round."
-          )
-          .asRuntimeException()
-      case Some(rootHash) =>
-        val action = startProcessingRewardsAction(
-          task.calculateRewards.contractId,
-          rootHash,
-        )
-        for {
-          queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
-          taskOutcome <- queryResult match {
-            case QueryResult(_, Some(_)) =>
-              Future.successful(TaskNoop)
-            case QueryResult(offset, None) =>
-              for {
-                dsoRules <- store.getDsoRules()
-                cmd = dsoRules.exercise(
-                  _.exerciseDsoRules_ConfirmAction(
-                    svParty.toProtoPrimitive,
-                    action,
-                  )
-                )
-                _ <- connection
-                  .submit(
-                    actAs = Seq(svParty),
-                    readAs = Seq(dsoParty),
-                    update = cmd,
-                  )
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.createStartProcessingRewardsV2Confirmation",
-                      Seq(svParty, dsoParty),
-                      task.calculateRewards.contractId.contractId,
-                    ),
-                    deduplicationOffset = offset,
-                  )
-                  .yieldUnit()
-                delay = java.time.Duration.between(
-                  task.calculateRewards.payload.roundClosedAt,
-                  context.clock.now.toInstant,
-                )
-                _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-                  MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-                )
-              } yield TaskSuccess(
-                s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
+    for {
+      rootHash <- getRootHash(round)
+      action = startProcessingRewardsAction(
+        task.calculateRewards.contractId,
+        rootHash,
+      )
+      queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
+      taskOutcome <- queryResult match {
+        case QueryResult(_, Some(_)) =>
+          Future.successful(TaskNoop)
+        case QueryResult(offset, None) =>
+          for {
+            dsoRules <- store.getDsoRules()
+            cmd = dsoRules.exercise(
+              _.exerciseDsoRules_ConfirmAction(
+                svParty.toProtoPrimitive,
+                action,
               )
-          }
-        } yield taskOutcome
-    }
+            )
+            _ <- connection
+              .submit(
+                actAs = Seq(svParty),
+                readAs = Seq(dsoParty),
+                update = cmd,
+              )
+              .withDedup(
+                commandId = SpliceLedgerConnection.CommandId(
+                  "org.lfdecentralizedtrust.splice.sv.createStartProcessingRewardsV2Confirmation",
+                  Seq(svParty, dsoParty),
+                  task.calculateRewards.contractId.contractId,
+                ),
+                deduplicationOffset = offset,
+              )
+              .yieldUnit()
+            delay = java.time.Duration.between(
+              task.calculateRewards.payload.roundClosedAt,
+              context.clock.now.toInstant,
+            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
+              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+            )
+          } yield TaskSuccess(
+            s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
+          )
+      }
+    } yield taskOutcome
   }
 
   override def isStaleTask(task: Task)(implicit
@@ -151,26 +147,35 @@ abstract class CalculateRewardsTriggerBase(
       }.toSet
     }
 
-  private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Option[Hash]] =
-    scanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).flatMap {
-      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-        Future.successful(Some(new Hash(ok.rootHash)))
-      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined(_) =>
-        Future.successful(None)
-      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide(_) =>
-        logger.info(
-          s"Our scan cannot provide the root-hash for round $round, doing BFT read."
-        )
-        bftScanConnectionF.flatMap(_.getRewardAccountingRootHash(round)).map {
-          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-            Some(new Hash(ok.rootHash))
-          case _ =>
-            logger.warn(
-              s"Could not obtain root-hash for round $round via BFT read."
-            )
-            None
-        }
+  private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Hash] = {
+    def rootHashUnavailable(reason: String): Nothing =
+      throw Status.FAILED_PRECONDITION
+        .withDescription(s"For round: $round $reason")
+        .asRuntimeException()
+
+    def bftReadRootHash: Future[Hash] = {
+      for {
+        bftScan <- bftScanConnectionF
+        response <- bftScan.getRewardAccountingRootHash(round)
+      } yield response match {
+        case RewardAccountingRootHashOk(ok) =>
+          logger.info(s"Obtained the root-hash for round $round via BFT read.")
+          new Hash(ok.rootHash)
+        case _ => rootHashUnavailable("could not obtain root-hash via BFT read.")
+      }
     }
+
+    for {
+      ownScan <- scanConnectionF
+      response <- ownScan.getRewardAccountingRootHash(round)
+      rootHash <- response match {
+        case RewardAccountingRootHashOk(ok) => Future.successful(new Hash(ok.rootHash))
+        case RewardAccountingRootHashUndetermined(_) =>
+          rootHashUnavailable("scan has not yet computed the root hash.")
+        case RewardAccountingRootHashCannotProvide(_) => bftReadRootHash
+      }
+    } yield rootHash
+  }
 
   private def startProcessingRewardsAction(
       calculateRewardsCid: CalculateRewardsV2.ContractId,
