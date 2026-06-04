@@ -302,7 +302,7 @@ class TokenStandardTransferIntegrationTest
         ),
       )
 
-      // TODO(#2254): check the exact balances once the scan backend supports it
+    // TODO(#2254): check the exact balances once the scan backend supports it
 
     }
 
