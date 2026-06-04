@@ -796,7 +796,7 @@ template DsoRules with
           newDsoRules = addSvResult.newDsoRules
 
     -- Note: Implement in phase 2
-    -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
+    -- Called by SV node candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
     nonconsuming choice DsoRules_AddConfirmedSv_V2 : DsoRules_AddConfirmedSv_V2Result
