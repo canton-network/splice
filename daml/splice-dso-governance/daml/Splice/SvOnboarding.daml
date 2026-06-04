@@ -88,6 +88,14 @@ template SvNodeOnboardingConfirmed with
         pure SvOnboardingConfirmed_ExpireResult
 
 
+-- TODOV: doc
+template UpdateSvOperatorForHostedSvInstruction with
+    svParty : Party
+    newSvOperatorParty : Party
+    dso : Party
+  where
+    signatory dso
+
 
 -- instances
 ------------
@@ -107,3 +115,6 @@ instance HasCheckedFetch SvNodeOnboardingConfirmed ForDso where
 
 instance HasCheckedFetch SvOnboardingRequest ForDso where
   contractGroupId SvOnboardingRequest {..} = ForDso with dso
+
+instance HasCheckedFetch UpdateSvOperatorForHostedSvInstruction ForDso where
+  contractGroupId UpdateSvOperatorForHostedSvInstruction {..} = ForDso with dso

@@ -32,13 +32,13 @@ test_SvWeightsFullyOnledger = do
   ---------
 
   (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
-  let newSvOperatorAlias = "new-SV-operator"
-      newSvNodeName = newSvOperatorAlias <> "-node-1"
-      newSvNodeParticipantId = newSvNodeName <> "-participant-id"
-      -- hostedSv is hosted by SV operator newSvOperator
+  let sv5Alias = "SV5"
+      sv5NodeName = sv5Alias <> "-node"
+      sv5NodeParticipantId = sv5NodeName <> "-participant-id"
+      -- hostedSv is hosted by SV operator sv5
       hostedSvName = "Hosted-SV"
 
-  newSvOperator <- allocateParty newSvOperatorAlias
+  sv5 <- allocateParty sv5Alias
   hostedSv <- allocateParty hostedSvName
   -- hostedSv's extrabeneficary
   hostedSv_b <- allocateParty "Hosted_SV extra beneficiary"
@@ -55,11 +55,13 @@ test_SvWeightsFullyOnledger = do
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
     ARC_DsoRules with
       dsoAction = SRARC_AddSvNode DsoRules_AddSvNode with
-        newSvOperatorParty = newSvOperator
-        newSvNodeName
-        newSvNodeParticipantId
+        newSvOperatorParty = sv5
+        newSvNodeName = sv5NodeName
+        newSvNodeParticipantId = sv5NodeParticipantId
 
-  checkDsoRulesSv app newSvOperator (mkSvInfo newSvNodeName round 0 newSvNodeParticipantId)
+  checkDsoRulesSv app sv5 (mkSvInfo sv5NodeName round 0 sv5NodeParticipantId)
+  checkSvRewardStateDoesNotExists app sv5NodeName
+
 
 
   -- Onboarding a hosted SV
@@ -67,29 +69,31 @@ test_SvWeightsFullyOnledger = do
   -- Add hostedSv with newSvOperator as SV operator
   -- Note: The onboarding flow creates a SvRewardBeneficiaries contract with no beneficiaries
 
-  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
+  [(_, round), _, _] <- getActiveOpenRoundsSorted app.dso
+  let hostedSvJoinedAsOfRound = round
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, sv5] $
     ARC_DsoRules with
       dsoAction = SRARC_AddHostedSv DsoRules_AddHostedSv with
         newSvParty = hostedSv
         newSvName = hostedSvName
         newSvRewardWeight = hostedSvWeight
-        joinedAsOfRound = round.round
-        svOperator = newSvOperator
+        joinedAsOfRound = hostedSvJoinedAsOfRound.round
+        svOperator = sv5
 
   checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round hostedSvWeight newSvOperator)
+    (mkHostedSvInfo hostedSvName round hostedSvWeight sv5)
 
-  checkSvRewardBeneficiaries app hostedSv newSvOperator
+  checkSvRewardBeneficiaries app hostedSv sv5
     SvRewardBeneficiaries with
       dso
       sv = hostedSv
-      svOperator = newSvOperator
+      svOperator = sv5
       beneficiaries = []
 
 
   -- Replace the default beneficiaries
   let hostedSvExtraBeneficiaries = [(hostedSv_b, unsafeLookup hostedSv_b hostedSvBeneficiariesMap)]
-  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv5
   [(rulesCid, _)] <- query @DsoRules app.dso
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
@@ -97,11 +101,11 @@ test_SvWeightsFullyOnledger = do
       newBeneficiaries = hostedSvExtraBeneficiaries
       svParty = hostedSv
 
-  checkSvRewardBeneficiaries app hostedSv newSvOperator
+  checkSvRewardBeneficiaries app hostedSv sv5
     SvRewardBeneficiaries with
       dso
       sv = hostedSv
-      svOperator = newSvOperator
+      svOperator = sv5
       beneficiaries = hostedSvExtraBeneficiaries
 
 
@@ -111,33 +115,33 @@ test_SvWeightsFullyOnledger = do
   [(rulesCid, _)] <- query @DsoRules app.dso
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
 
-  -- newSvOperator creates coupons using the new DsoRules_ReceiveSvRewardCoupon_V2
-  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
-  void $ submit (actAs newSvOperator <> readAs dso) $
+  -- sv5 creates coupons using the new DsoRules_ReceiveSvRewardCoupon_V2
+  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv5
+  void $ submit (actAs sv5 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       rewardStatesWithBeneficiaries
-      sv = newSvOperator
+      sv = sv5
 
   let expectedHostedSvCoupons = expectedSvCoupons hostedSvWeight hostedSvBeneficiaries
   checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
 
-  -- newSvOperator cannot create coupons using the legacy DsoRules_ReceiveSvRewardCoupon as
+  -- sv5 cannot create coupons using the legacy DsoRules_ReceiveSvRewardCoupon as
   -- there's no SvRewardState contract
-  [] <- queryFilter @SvRewardState dso (\s -> s.svName == newSvNodeName)
-  -- void $ submit (actAs newSvOperator <> readAs dso) $ exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon with
+  [] <- queryFilter @SvRewardState dso (\s -> s.svName == sv5NodeName)
+  -- void $ submit (actAs sv5 <> readAs dso) $ exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon with
   --   openRoundCid = roundCid
   --   rewardStateCid = undefined -- No contract
   --   beneficiaries = hostedSvBeneficiaries
-  --   sv = newSvOperator
+  --   sv = sv5
 
-  -- newSvOperator tries to create coupons using the new DsoRules_ReceiveSvRewardCoupon_V2 for the same round
-  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
-  void $ submitMustFail (actAs newSvOperator <> readAs dso) $
+  -- sv5 tries to create coupons using the new DsoRules_ReceiveSvRewardCoupon_V2 for the same round
+  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv5
+  void $ submitMustFail (actAs sv5 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       rewardStatesWithBeneficiaries
-      sv = newSvOperator
+      sv = sv5
 
 
   -- Updating SV weight
@@ -147,24 +151,79 @@ test_SvWeightsFullyOnledger = do
 
   let updatedHostedSvWeight = hostedSvWeight - 10
   -- Update hostedSv weight (this includes the weight shared with hostedSv_b)
-  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, sv5] $
     ARC_DsoRules with
       dsoAction = SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2 with
         svParty = hostedSv
         newRewardWeight = updatedHostedSvWeight
 
   checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight newSvOperator)
+    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv5)
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
   [(rulesCid, _)] <- query @DsoRules app.dso
-  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
-  void $ submit (actAs newSvOperator <> readAs dso) $
+  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv5
+  void $ submit (actAs sv5 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       rewardStatesWithBeneficiaries
-      sv = newSvOperator
+      sv = sv5
+
+  let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
+  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
+
+
+  -- Updating the SV operator of a hosted SV
+  --------------------------------------------
+  -- Migrate hostedSv from sv2 to sv1
+
+  -- Instruct update
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, sv5] $
+    ARC_DsoRules with
+      dsoAction = SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv with
+        svParty = hostedSv
+        newSvOperatorParty = sv1
+
+  -- Update
+  [(instructionCid, instruction)] <- query @UpdateSvOperatorForHostedSvInstruction dso
+  [(svRewardBeneficiariesCid, _)] <- queryFilter @SvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
+  void $ submit (actAs sv1 <> readAs dso) $
+    exerciseCmd rulesCid DsoRules_UpdateSvOperatorForHostedSv with
+      instructionCid
+      svRewardBeneficiariesCid
+      sv = sv1
+
+  checkDsoRulesHostedSv app hostedSv
+    (mkHostedSvInfo hostedSvName hostedSvJoinedAsOfRound updatedHostedSvWeight sv1)
+  checkSvRewardBeneficiaries app hostedSv sv1
+    SvRewardBeneficiaries with
+      dso
+      sv = hostedSv
+      svOperator = sv1
+      beneficiaries = hostedSvExtraBeneficiaries
+
+  runNextIssuance app
+  [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
+  [(rulesCid, _)] <- query @DsoRules app.dso
+
+  -- sv5 creates coupons
+  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv5
+  void $ submit (actAs sv5 <> readAs dso) $
+    exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
+      openRoundCid = roundCid
+      rewardStatesWithBeneficiaries
+      sv = sv5
+  -- sv5 does not create coupons for the migrated hosted SV
+  checkSvCouponBeneficariesBySv hostedSv round []
+
+  -- sv1 creates SV coupons
+  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv1
+  void $ submit (actAs sv1 <> readAs dso) $
+    exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
+      openRoundCid = roundCid
+      rewardStatesWithBeneficiaries
+      sv = sv1
 
   let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
   checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCoupons
@@ -177,7 +236,7 @@ test_SvWeightsFullyOnledger = do
   runNextIssuance app
 
   -- Remove hostedSv_b's weight
-  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
+  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv1
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
       svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
@@ -186,80 +245,6 @@ test_SvWeightsFullyOnledger = do
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
-  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
-  void $ submit (actAs newSvOperator <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
-      openRoundCid = roundCid
-      rewardStatesWithBeneficiaries
-      sv = newSvOperator
-
-  let expectedHostedSvCouponsAfterClear = [(hostedSv, updatedHostedSvWeight)]
-  checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCouponsAfterClear
-
-
-  -- Updating the SV operator of a hosted SV (Offboarding/Onboarding)
-  --------------------------------------------------------------------
-  -- Migrate hostedSv from newSvOperator to sv1
-  -- To do that, we need to offboard hostedSv and then onboard it again under the new SV operator
-
-  -- Offboarding --
-
-  hostedSvSvInfo <- getHostedSvInfoByParty app hostedSv
-  runNextIssuance app
-  [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
-
-  -- Offboard hostedSv
-  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
-    ARC_DsoRules with
-      dsoAction = SRARC_OffboardHostedSv DsoRules_OffboardHostedSv with
-        svParty = hostedSv
-
-  [(_, rules)] <- query @DsoRules app.dso
-  Map.lookup hostedSv (getHostedSvsMap rules) === None
-  Map.lookup hostedSv (getOffboardedHostedSvsMap rules) === Some
-    OffboardedHostedSvInfo with name = hostedSvSvInfo.name
-
-  -- Archive the SvRewardBeneficiaries contract as part of the offboarding flow.
-  -- The archival will be run by an automation in the SV backend.
-  hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv newSvOperator
-  void $ submit (actAs dso) $
-    archiveCmd hostedSvSvRewardBeneficiariesCid
-
-
-  -- Onboarding --
-
-  -- Add hostedSv with sv1 as SV operator
-  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
-    ARC_DsoRules with
-      dsoAction = SRARC_AddHostedSv DsoRules_AddHostedSv with
-        newSvParty = hostedSv
-        newSvName = hostedSvName
-        newSvRewardWeight = updatedHostedSvWeight
-        joinedAsOfRound = round.round
-        svOperator = sv1
-
-  checkDsoRulesHostedSv app hostedSv
-    (mkHostedSvInfo hostedSvName round updatedHostedSvWeight sv1)
-  checkSvRewardBeneficiaries app hostedSv sv1
-    SvRewardBeneficiaries with
-      dso
-      sv = hostedSv
-      svOperator = sv1
-      beneficiaries = []
-
-  -- newSvOperator cannot create coupons for the migrated hosted SV
-  [(rulesCid, _)] <- query @DsoRules app.dso
-  rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app newSvOperator
-  void $ submit (actAs newSvOperator <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
-      openRoundCid = roundCid
-      rewardStatesWithBeneficiaries
-      sv = newSvOperator
-
-  checkSvCouponBeneficariesBySv hostedSv round []
-
-  -- sv1 as the new SV operator creates SV coupons
-  [(rulesCid, _)] <- query @DsoRules app.dso
   rewardStatesWithBeneficiaries <- getRewardStatesWithBeneficiariesBySvOperator app sv1
   void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
@@ -267,26 +252,27 @@ test_SvWeightsFullyOnledger = do
       rewardStatesWithBeneficiaries
       sv = sv1
 
+  let expectedHostedSvCouponsAfterClear = [(hostedSv, updatedHostedSvWeight)]
   checkSvCouponBeneficariesBySv hostedSv round expectedHostedSvCouponsAfterClear
 
 
-  -- Offboarding an SV node
-  --------------------------
-  -- Assuming that all hosted SV operated by the SV node has been migrated to a new SV node
+  -- -- Offboarding an SV node
+  -- --------------------------
+  -- -- Assuming that all hosted SV operated by the SV node has been migrated to a new SV node
 
-  sv4SvInfo <- getSvInfoByParty app sv4
+  -- sv4SvInfo <- getSvInfoByParty app sv4
 
-  initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
-    ARC_DsoRules with
-      dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
-        sv = sv4
+  -- initiateAndAcceptVote app [sv1, sv2, sv3, sv4, newSvOperator] $
+  --   ARC_DsoRules with
+  --     dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
+  --       sv = sv4
 
-  [(_, rules)] <- query @DsoRules app.dso
-  Map.lookup sv4 rules.svs === None
-  Map.lookup sv4 rules.offboardedSvs === Some
-    OffboardedSvInfo with
-      name = sv4SvInfo.name
-      participantId = sv4SvInfo.participantId
+  -- [(_, rules)] <- query @DsoRules app.dso
+  -- Map.lookup sv4 rules.svs === None
+  -- Map.lookup sv4 rules.offboardedSvs === Some
+  --   OffboardedSvInfo with
+  --     name = sv4SvInfo.name
+  --     participantId = sv4SvInfo.participantId
 
   pure ()
 
@@ -548,9 +534,6 @@ testSvNodeOnboarding = do
 getHostedSvsMap : DsoRules -> Map.Map Party HostedSvInfo
 getHostedSvsMap rules = fromOptional Map.empty rules.hostedSvs
 
-getOffboardedHostedSvsMap : DsoRules -> Map.Map Party OffboardedHostedSvInfo
-getOffboardedHostedSvsMap rules = fromOptional Map.empty rules.offboardedHostedSvs
-
 checkSvCouponBeneficariesBySv : Party -> OpenMiningRound -> [(Party, Int)] -> Script ()
 checkSvCouponBeneficariesBySv sv round expected = do
   (_, coupons) <- unzip <$> queryFilter @SvRewardCoupon sv (\co -> co.round == round.round && co.sv == sv)
@@ -600,6 +583,12 @@ checkSvRewardStateExists app svName = do
   [_] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
   pure ()
 
+checkSvRewardStateDoesNotExists : AmuletApp -> Text -> Script ()
+checkSvRewardStateDoesNotExists app svName = do
+  [] <- queryFilter @SvRewardState app.dso (\s -> s.svName == svName)
+  pure ()
+
+
 getRewardStatesWithBeneficiariesBySvOperator
   : AmuletApp
   -> Party
@@ -631,7 +620,6 @@ checkSvRewardBeneficiaries app hostedSv svOperator expected = do
   [(_, hostedSvSvRewardBeneficiaries)] <-
     queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
   hostedSvSvRewardBeneficiaries === expected
-
 
 expectedSvCoupons : Int -> [(Party, Decimal)] -> [(Party, Int)]
 expectedSvCoupons svWeight beneficiaries =

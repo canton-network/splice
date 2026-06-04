@@ -117,8 +117,10 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
   | SRARC_AddHostedSv DsoRules_AddHostedSv
     -- ^ Voted action to directly add a hosted SV.
-  | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2
+  | SRARC_UpdateSvRewardWeight_V2 DsoRules_UpdateSvRewardWeight_V2 -- TODOV: rename
     -- ^ Voted action to update the weight of a hosted SV.
+  | SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv
+    -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
   | SRARC_OffboardHostedSv DsoRules_OffboardHostedSv
     -- ^ Voted action to remove a hosted SV.
   | SRARC_AddSvNode DsoRules_AddSvNode
@@ -154,11 +156,6 @@ data HostedSvInfo = HostedSvInfo with
 data OffboardedSvInfo = OffboardedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.
     participantId : Text -- ^ Participant ID of the offboarded SV.
-  deriving (Eq, Show)
-
--- | Information about offboarded hosted svs
-data OffboardedHostedSvInfo = OffboardedHostedSvInfo with
-    name : Text -- ^ Human-readable name; must be unique.
   deriving (Eq, Show)
 
 data DsoSummary = DsoSummary with
@@ -198,7 +195,7 @@ data DsoRules_AddSvOperatorResult = DsoRules_AddSvOperatorResult with
 
 data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
     newDsoRules : ContractId DsoRules
-    svRewardStateCid : Optional (ContractId SvRewardState)
+    svRewardStateCid : ContractId SvRewardState
     svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
 
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
@@ -254,6 +251,13 @@ data DsoRules_UpdateSvRewardWeight_V2Result = DsoRules_UpdateSvRewardWeight_V2Re
 
 data DsoRules_RemoveHostedSvResult = DsoRules_RemoveHostedSvResult with
     newDsoRules : ContractId DsoRules
+
+data DsoRules_UpdateSvOperatorForHostedSvResult = DsoRules_UpdateSvOperatorForHostedSvResult with
+    newDsoRules : ContractId DsoRules
+    svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
+
+data DsoRules_InstructUpdateSvOperatorForHostedSvResult = DsoRules_InstructUpdateSvOperatorForHostedSvResult with
+    instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
 
 data DsoRules_SetSvRewardBeneficiariesResult = DsoRules_SetSvRewardBeneficiariesResult with
     svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
@@ -620,7 +624,6 @@ template DsoRules with
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
     hostedSvs : Optional (Map.Map Party HostedSvInfo) -- ^ List of hosted SVs.
-    offboardedHostedSvs : Optional (Map.Map Party OffboardedHostedSvInfo)
   where
     ensure
       config.numUnclaimedRewardsThreshold > 0
@@ -687,7 +690,6 @@ template DsoRules with
               initialTrafficState
               isDevNet
               hostedSvs
-              offboardedHostedSvs
 
             return DsoRules_OffboardSvResult with ..
 
@@ -705,18 +707,14 @@ template DsoRules with
         let isSvOperator = flip Map.member svs
         require "svOperator is an SV operator" $ isSvOperator svOperator
 
-        svRewardStateCid <-
-          if hostedSvHasBeenOnboardedBefore newSvName this
-            then pure None
-            else Some <$>
-              create SvRewardState with
-                dso
-                svName = newSvName
-                state = RewardState with
-                  lastRoundCollected = Round (joinedAsOfRound.number - 1)
-                  numRoundsMissed = 0
-                  numRoundsCollected = 0
-                  numCouponsIssued = 0
+        svRewardStateCid <- create SvRewardState with
+          dso
+          svName = newSvName
+          state = RewardState with
+            lastRoundCollected = Round (joinedAsOfRound.number - 1)
+            numRoundsMissed = 0
+            numRoundsCollected = 0
+            numCouponsIssued = 0
 
         -- register the new SV in the DsoRules
         let hostedSvInfo = HostedSvInfo with
@@ -1208,23 +1206,68 @@ template DsoRules with
     -- Note: This choice does not archive the corresponding `SvRewardBeneficiaries`
     -- contract. The offboarding process performs that as a separate step through
     -- automation in the SV backend, which collects and archives
-    -- `SvRewardBeneficiaries` contracts whose `sv` appears in the `offboardedHostedSvs` map.
+    -- `SvRewardBeneficiaries` contracts whose `sv` appears in the `offboardedHostedSvs` map. -- TODOV
     choice DsoRules_OffboardHostedSv : DsoRules_RemoveHostedSvResult
       with
         svParty : Party
       controller dso
       do
         let hostedSvsMap = fromOptional Map.empty hostedSvs
-            offboardedHostedSvsMap = fromOptional Map.empty offboardedHostedSvs
         case Map.lookup svParty hostedSvsMap of
           None -> fail "SV party is not registered"
-          Some hostedSvInfo -> do
+          _ -> do
             let newHostedSvs = Map.delete svParty hostedSvsMap
-                offboardedHostedSvInfo = OffboardedHostedSvInfo with name = hostedSvInfo.name
-            newDsoRules <- create this with
-              hostedSvs = Some newHostedSvs
-              offboardedHostedSvs = Some $ Map.insert svParty offboardedHostedSvInfo offboardedHostedSvsMap
+            newDsoRules <- create this with hostedSvs = Some newHostedSvs
             pure DsoRules_RemoveHostedSvResult with newDsoRules
+
+    -- TODOV: doc
+    nonconsuming choice DsoRules_InstructUpdateSvOperatorForHostedSv : DsoRules_InstructUpdateSvOperatorForHostedSvResult
+      with
+        svParty : Party
+        newSvOperatorParty : Party
+      controller dso
+      do
+        let hostedSvsMap = fromOptional Map.empty hostedSvs
+        case Map.lookup svParty hostedSvsMap of
+          None -> fail "SV party is not registered"
+          _ -> do
+            instructionCid <- create UpdateSvOperatorForHostedSvInstruction with
+              svParty
+              newSvOperatorParty
+              dso
+            pure DsoRules_InstructUpdateSvOperatorForHostedSvResult with instructionCid
+
+    -- TODOV: doc
+    choice DsoRules_UpdateSvOperatorForHostedSv : DsoRules_UpdateSvOperatorForHostedSvResult
+      with
+        instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
+        svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        let hostedSvsMap = fromOptional Map.empty hostedSvs
+        case Map.lookup instruction.svParty hostedSvsMap of
+          None -> fail "SV party is not registered"
+          Some hostedSvInfo -> do
+            svRewardBeneficiaries <- fetchAndArchive (ForDso with dso) svRewardBeneficiariesCid
+            -- Sanity checks
+            require "The SV party in SvRewardBeneficiaries and UpdateSvOperatorForHostedSvInstruction must match" $
+              svRewardBeneficiaries.sv == instruction.svParty
+            require "The SV operator in SvRewardBeneficiaries and the old SV operator configured in DsoRules must match" $
+              svRewardBeneficiaries.svOperator == hostedSvInfo.svOperator
+
+            -- Update the SV operator
+            let newHostedSvInfo = hostedSvInfo with svOperator = instruction.newSvOperatorParty
+                newHostedSvs = Map.insert instruction.svParty newHostedSvInfo hostedSvsMap
+            newDsoRules <- create this with hostedSvs = Some newHostedSvs
+
+            -- Create a new SvRewardBeneficiaries with the new SV operator
+            svRewardBeneficiariesCid <- create svRewardBeneficiaries with
+              svOperator = instruction.newSvOperatorParty
+
+            pure DsoRules_UpdateSvOperatorForHostedSvResult with newDsoRules; svRewardBeneficiariesCid
 
     -- Note: Implement in phase 1
     -- | Replaces the SV reward beneficiary distribution for an SV.
@@ -2209,6 +2252,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UpdateSvRewardWeight_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_OffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_ConfirmSvOnboarding_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
@@ -2293,13 +2337,6 @@ lookupHostedSvInfoByName svName DsoRules{..} =
 svHasBeenOnboardedBefore : Text -> DsoRules -> Bool
 svHasBeenOnboardedBefore svName this =
   isSome (lookupSvInfoByName svName this) || any (\info -> info.name == svName) (Map.values this.offboardedSvs)
-
--- | Returns True if a hosted SV with that name is either currently onboarded
--- or a hosted SV with that name has been onboarded before and is now in offboardedHostedSvs.
-hostedSvHasBeenOnboardedBefore : Text -> DsoRules -> Bool
-hostedSvHasBeenOnboardedBefore svName this =
-  let offboardedHostedSvsMap = fromOptional Map.empty this.offboardedHostedSvs
-  in isSome (lookupHostedSvInfoByName svName this) || any (\info -> info.name == svName) (Map.values offboardedHostedSvsMap)
 
 ensureNeverOperatedNode : Party -> DsoRules -> Update ()
 ensureNeverOperatedNode newSvParty this = do
