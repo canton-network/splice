@@ -1081,9 +1081,9 @@ svs:
             mediatorDelaySeconds: 30
             participantDelaySeconds: 30
             sequencerBlockDelaySeconds: 30
-          mediatorMinCatchupRatio: 3
+          mediatorMinEventsPerSecondo: 20
           minBackupAgeHours: 1
-          participantMinCatchupRatio: 3
+          participantMinEventsPerSecondo: 20
           sequencerMinEventsPerSecond: 20
     validatorApp:
       additionalEnvVars:

@@ -5,8 +5,8 @@ import { z } from 'zod';
 const CatchupTestThresholdsSchema = z
   .object({
     sequencerMinEventsPerSecond: z.number().positive(),
-    participantMinCatchupRatio: z.number().positive(),
-    mediatorMinCatchupRatio: z.number().positive(),
+    participantMinEventsPerSecond: z.number().positive(),
+    mediatorMinEventsPerSecond: z.number().positive(),
     // pick a backup at least this old
     minBackupAgeHours: z.number().nonnegative(),
     // delays under which a component is considered "caught up"

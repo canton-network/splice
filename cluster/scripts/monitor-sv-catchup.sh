@@ -22,8 +22,8 @@ slack_channel=${2:?slack_channel must be provided}
 # Read thresholds from config, with defaults if not set
 config=$(get_resolved_config)
 seq_min_eps=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.sequencerMinEventsPerSecond // 1000")
-part_min_ratio=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.participantMinCatchupRatio // 10")
-med_min_ratio=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.mediatorMinCatchupRatio // 3")
+part_min_eps=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.participantMinEventsPerSecond // 1000")
+med_min_eps=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.mediatorMinEventsPerSecond // 1000")
 seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.sequencerBlockDelaySeconds // 30")
 part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.participantDelaySeconds // 30")
 med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.mediatorDelaySeconds // 30")
@@ -76,7 +76,7 @@ part_rate_max=0
 med_rate_max=0
 
 _info "Monitoring catchup for ${namespace}"
-_info "Thresholds: seq>=${seq_min_eps} eps, participant>=${part_min_ratio}x, mediator>=${med_min_ratio}x"
+_info "Thresholds: seq>=${seq_min_eps} eps, participant>=${part_min_eps} eps, mediator>=${med_min_eps} eps"
 _info "Caught-up when: seq<=${seq_delay_ok}s, participant<=${part_delay_ok}s, mediator<=${med_delay_ok}s"
 _info "Test timeout: ${timeout_hours}h"
 
@@ -122,19 +122,9 @@ elapsed=$(( $(date +%s) - start ))
 elapsed_mins=$(( elapsed / 60 ))
 end_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-_info "Waiting 60s for steady-state rate measurement..."
-sleep 60
-part_rate_end=$(query_part_rate)
-med_rate_end=$(query_med_rate)
-_info "Steady-state rates — participant: ${part_rate_end} eps, mediator: ${med_rate_end} eps"
-
-# Compute final ratios and pass/fail based on thresholds
-part_ratio=$(echo "scale=1; ($part_rate_max) / $part_rate_end" | bc)
-med_ratio=$(echo "scale=1; ($med_rate_max) / $med_rate_end" | bc)
-
 seq_ok=$(echo  "$seq_rate_max  >= $seq_min_eps"| bc -l)
-part_ok=$(echo "$part_ratio >= $part_min_ratio" | bc -l)
-med_ok=$(echo  "$med_ratio  >= $med_min_ratio"  | bc -l)
+part_ok=$(echo "$part_rate_max >= $part_min_eps" | bc -l)
+med_ok=$(echo  "$med_rate_max  >= $med_min_eps"  | bc -l)
 
 if [ "$outcome" = "success" ]; then
   icon="✅"
@@ -151,10 +141,10 @@ grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&f
 message="${icon} *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
 Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
 
-*Per-component average rates over catchup window:*
-• Sequencer: \`$(printf "%.0f" "$seq_rate_max")\` events/s  (expected throughput ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
-• Participant: \`$(printf "%.1f" "$part_rate")\`x  (expected catchup speed ≥ ${part_min_ratio}x baseline)  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
-• Mediator: \`$(printf "%.1f" "$med_rate")\`x  (expected catchup speed ≥ ${med_min_ratio}x baseline)  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
+*Per-component peak rates over catchup window:*
+• Sequencer: \`$(printf "%.1f" "$seq_rate_max")\` events/s  (expected throughput ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
+• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected throughput≥ ${part_min_eps}  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
+• Mediator: \`$(printf "%.1f" "$med_rate_max")\` events/s  (expected throughput ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
 
 *Dashboards:*
 • <${grafana_domain_link}|Sequencer>
