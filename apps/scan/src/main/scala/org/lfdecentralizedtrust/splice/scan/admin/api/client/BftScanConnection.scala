@@ -735,6 +735,7 @@ class BftScanConnection(
       endpoint: String,
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
+      disagreementLogLevel: Level = Level.INFO,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -777,6 +778,7 @@ class BftScanConnection(
             nTargetSuccess = callConfig.targetSuccess,
             logger,
             shortenResponsesForLog,
+            disagreementLogLevel,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -859,6 +861,7 @@ class BftScanConnection(
           },
         endpoint = "getRewardAccountingRootHash",
         callConfig = callConfig,
+        disagreementLogLevel = Level.WARN,
       )
         .transform(tryRootHash =>
           Success(
@@ -908,6 +911,7 @@ object BftScanConnection {
       nTargetSuccess: Int,
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
+      disagreementLogLevel: Level = Level.INFO,
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
@@ -946,7 +950,7 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses)
+                logDisagreements(logger, consensusResponse, responses, disagreementLogLevel)
             }
           }
         }
@@ -990,12 +994,15 @@ object BftScanConnection {
       logger: TracedLogger,
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
+      disagreementLogLevel: Level,
   )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
       responses.remove(consensusResponseKey)
       responses.forEach { (disagreeingResponse, scanUrls) =>
-        logger.info(
-          s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse"
+        LoggerUtil.logAtLevel(
+          disagreementLogLevel,
+          s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse",
         )
       }
     }

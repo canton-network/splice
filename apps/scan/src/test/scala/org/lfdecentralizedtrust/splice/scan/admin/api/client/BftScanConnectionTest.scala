@@ -1111,6 +1111,35 @@ class BftScanConnectionTest
           succeed
       }
     }
+
+    "logs disagreements at WARN level" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashOk(connections(1), round, "aabb")
+      makeMockReturnRootHashOk(connections(2), round, "ccdd")
+      makeMockReturnRootHashOk(connections(3), round, "ccdd")
+      val bft = getBft(connections)
+
+      // The disagreement is logged shortly after the call resolves on
+      // consensus. The trailing delay keeps the suppression
+      // window open long enough to capture that log.
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.Level(Level.WARN))(
+          bft
+            .getRewardAccountingRootHash(round)
+            .flatMap(_ =>
+              org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(Future.unit)
+            ),
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with the Consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
   }
 
   "BftScanConnection.getRewardAccountingBatch" should {
