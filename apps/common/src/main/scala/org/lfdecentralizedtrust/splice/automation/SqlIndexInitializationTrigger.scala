@@ -263,6 +263,15 @@ object SqlIndexInitializationTrigger {
           where entry_type = 'vot'
         """,
       ),
+    IndexAction
+      .Create(
+        indexName = "dso_acs_store_sv_party_idx",
+        createAction = sqlu"""
+          create index concurrently if not exists dso_acs_store_sv_party_idx
+          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, sv_party, event_number desc)
+          where sv_party is not null
+        """,
+      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting

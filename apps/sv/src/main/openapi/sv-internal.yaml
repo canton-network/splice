@@ -47,6 +47,37 @@ paths:
                 "$ref": "#/components/schemas/PrepareValidatorOnboardingResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v0/admin/validator/validatorpermissions:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "listValidatorPermissions"
+      parameters:
+        - name: "after"
+          description: A `next_page_token` from a prior response; if absent, return the first page.
+          in: "query"
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: "limit"
+          description: Maximum number of elements to return.
+          in: "query"
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListValidatorPermissionsResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
   /v0/admin/validator/onboarding/permission:
     post:
       tags: [sv]
@@ -764,6 +795,30 @@ components:
           description: |
             Human-readable alias of the validator party decoded from the stored secret.
           type: string
+
+    ValidatorPermissionsResponse:
+      type: object
+      required:
+        - validator_party_id
+        - validator_participant_id
+      properties:
+        validator_party_id:
+          type: string
+        validator_participant_id:
+          type: string
+
+    ListValidatorPermissionsResponse:
+      type: object
+      required:
+        - validator_permissions
+      properties:
+        validator_permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidatorPermissionsResponse"
+        next_page_token:
+          type: integer
+          format: int64
 
     GrantValidatorPermissionRequest:
       type: object

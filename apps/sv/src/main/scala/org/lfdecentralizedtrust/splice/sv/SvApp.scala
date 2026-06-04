@@ -60,6 +60,7 @@ import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   MultiDomainAcsStore,
+  PageLimit,
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -809,6 +810,30 @@ object SvApp {
         SyncCloseable("storage", storage.close()),
         SyncCloseable("http rate limiter", httpRateLimiter.close()),
       )
+  }
+
+  def listValidatorPermissions(
+      svParty: PartyId,
+      dsoStore: SvDsoStore,
+      after: Option[Long],
+      limit: PageLimit,
+  )(implicit
+      ec: ExecutionContext,
+      traceContext: TraceContext,
+  ): Future[(Seq[(String, String)], Option[Long])] = {
+    for {
+      (validatorPermissions, nextPageToken) <- dsoStore.listSponsoredValidatorPermissions(
+        svParty,
+        after,
+        limit,
+      )
+    } yield {
+      val permissions = validatorPermissions
+        .map(_.payload)
+        .map(p => (p.validator, p.validatorParticipantId))
+
+      (permissions, nextPageToken)
+    }
   }
 
   def grantValidatorPermission(

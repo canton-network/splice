@@ -144,6 +144,20 @@ class PermissionedSynchronizerIntegrationTest
 
     }
 
+    clue("SV listValidatorPermissions endpoint includes Alice") {
+      eventually() {
+        sv1Backend
+          .listValidatorPermissions()
+          .validatorPermissions
+          .map(p => (p.validatorPartyId, p.validatorParticipantId)) should contain(
+          (
+            aliceValidatorBackend.participantClient.id.adminParty.toProtoPrimitive,
+            aliceValidatorBackend.participantClient.id.toProtoPrimitive,
+          )
+        )
+      }
+    }
+
     actAndCheck(
       "Create ValidatorLicense for Alice", {
         aliceValidatorBackend.waitForInitialization()

@@ -94,6 +94,19 @@ abstract class SvAppReference(
     }
 
   @Help.Summary(
+    "List validator permission topology (via admin API)"
+  )
+  def listValidatorPermissions(
+      after: Option[Long] = None,
+      limit: Option[Int] = None,
+  ): definitions.ListValidatorPermissionsResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.ListValidatorPermissions(after, limit)
+      )
+    }
+
+  @Help.Summary(
     "Grant SV candidate submission permission (via admin API)"
   )
   def grantSvOnboardingPermission(

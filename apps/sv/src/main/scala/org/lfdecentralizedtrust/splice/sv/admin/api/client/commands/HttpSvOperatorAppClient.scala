@@ -35,6 +35,25 @@ object HttpSvOperatorAppClient {
     val createGenClientFn = (fn, host, ec, mat) => Client.httpClient(fn, host)(ec, mat)
   }
 
+  case class ListValidatorPermissions(after: Option[Long] = None, limit: Option[Int] = None)
+      extends BaseCommand[
+        http.ListValidatorPermissionsResponse,
+        definitions.ListValidatorPermissionsResponse,
+      ] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.ListValidatorPermissionsResponse] =
+      client.listValidatorPermissions(after, limit, headers = headers)
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.ListValidatorPermissionsResponse.OK(response) =>
+      Right(response)
+    }
+  }
+
   case object ListOngoingValidatorOnboardings
       extends BaseCommand[http.ListOngoingValidatorOnboardingsResponse, Seq[ValidatorOnboarding]] {
     override def submitRequest(

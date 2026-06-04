@@ -51,6 +51,7 @@ import org.lfdecentralizedtrust.splice.store.{
   Limit,
   LimitHelpers,
   MultiDomainAcsStore,
+  PageLimit,
 }
 import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore, SvStore}
 import SvDsoStore.RoundBatch
@@ -1177,6 +1178,54 @@ class DbSvDsoStore(
       resultWithOffset.offset,
       resultWithOffset.row.map(contractFromRow(ValidatorLicense.COMPANION)(_)),
     )).getOrRaise(offsetExpectedError())
+  }
+
+  override def listSponsoredValidatorPermissions(
+      sponsor: PartyId,
+      after: Option[Long],
+      limit: PageLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        Seq[Contract[
+          splice.validatorpermission.ValidatorPermission.ContractId,
+          splice.validatorpermission.ValidatorPermission,
+        ]],
+        Option[Long],
+    )
+  ] = {
+
+    val whereClause = after match {
+      case Some(a) => sql"""sv_party = $sponsor AND event_number < $a"""
+      case None => sql"""sv_party = $sponsor"""
+    }
+
+    val fetchLimit = limit.limit + 1 // +1 is to check if another page exists
+    val orderLimitClause = sql""" ORDER BY event_number DESC LIMIT $fetchLimit"""
+
+    storage
+      .query(
+        selectFromAcsTable(
+          DsoTables.acsTableName,
+          acsStoreId,
+          domainMigrationId,
+          splice.validatorpermission.ValidatorPermission.COMPANION,
+          where = whereClause,
+          orderLimit = orderLimitClause,
+        ),
+        "listSponsoredValidatorPermissions",
+      )
+      .map { rows =>
+        val hasNextPage = rows.size > limit.limit
+        val pageRows = if (hasNextPage) rows.dropRight(1) else rows
+
+        val contracts =
+          pageRows.map(contractFromRow(splice.validatorpermission.ValidatorPermission.COMPANION)(_))
+        val nextPageToken = if (hasNextPage) pageRows.lastOption.map(_.eventNumber) else None
+
+        (contracts, nextPageToken)
+      }
   }
 
   override def lookupValidatorPermissionWithOffset(
