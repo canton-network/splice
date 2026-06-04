@@ -48,7 +48,7 @@ test_SvWeightsFullyOnledger = do
       hostedSvWeight = totalWeight hostedSvBeneficiaries
 
 
-  -- Onboarding an SV node (quick onboarding - check test bellow for real onboarding)
+  -- Onboarding an SV node (quick onboarding - check test below for real onboarding)
   -----------------------------------------------------------------------------------
 
   [(_, round), _, _] <- getActiveOpenRoundsSorted app.dso
