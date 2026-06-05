@@ -96,7 +96,7 @@ test_SvWeightsFullyOnledger = do
   hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv5
   [(rulesCid, _)] <- query @DsoRules app.dso
   void $ submit (actAs hostedSv <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
+    exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
       newBeneficiaries = hostedSvExtraBeneficiaries
       svParty = hostedSv
@@ -238,7 +238,7 @@ test_SvWeightsFullyOnledger = do
   -- Remove hostedSv_b's weight
   hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv1
   void $ submit (actAs hostedSv <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
+    exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
       newBeneficiaries = []
       svParty = hostedSv

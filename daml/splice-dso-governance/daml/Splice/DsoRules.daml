@@ -1392,9 +1392,9 @@ template DsoRules with
     -- | Replaces the SV reward beneficiary distribution for an SV.
     --
     -- Note: A `HostedSvRewardBeneficiaries` contract is created during hosted SV
-    -- onboarding. This choice replaces that existing contract with a new one
+    -- onboarding with no beneficiaries. This choice replaces that existing contract with a new one
     -- containing `newBeneficiaries`.
-    nonconsuming choice DsoRules_SetSvRewardBeneficiaries : DsoRules_SetSvRewardBeneficiariesResult
+    nonconsuming choice DsoRules_SetHostedSvRewardBeneficiaries : DsoRules_SetSvRewardBeneficiariesResult
       with
         hostedSvRewardBeneficiariesCid : ContractId HostedSvRewardBeneficiaries
           -- ^ The existing beneficiary distribution contract to replace.
@@ -1483,7 +1483,7 @@ template DsoRules with
 
                   -- replace the default HostedSvRewardBeneficiaries if beneficiaries are provided
                   unless (null svMigrationData.beneficaries) do
-                    -- Note: `DsoRules_SetSvRewardBeneficiaries` cannot be exercised here because
+                    -- Note: `DsoRules_SetHostedSvRewardBeneficiaries` cannot be exercised here because
                     -- it is controlled by the hosted SV, while this choice is controlled by the
                     -- SV operator.
                     _ <- fetchAndArchive (ForDso with dso) hostedSvRewardBeneficiariesCid
