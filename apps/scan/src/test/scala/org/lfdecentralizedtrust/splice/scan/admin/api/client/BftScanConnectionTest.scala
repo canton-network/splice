@@ -1048,13 +1048,28 @@ class BftScanConnectionTest
 
       // With n=4, we query only two connections randomly, and even with
       // retries it can sometimes fail. This eventually is here to avoid flakyness
-      eventually() {
-        inside(bft.getRewardAccountingRootHash(round).futureValue) {
-          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-            ok.rootHash should be("aabb")
-            ok.roundNumber should be(round)
-        }
-      }
+      //
+      // The agreement is logged shortly after the call resolves on
+      // consensus. The trailing delay keeps the suppression
+      // window open long enough to capture that log.
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          {
+            eventually() {
+              inside(bft.getRewardAccountingRootHash(round).futureValue) {
+                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                  ok.rootHash should be("aabb")
+                  ok.roundNumber should be(round)
+              }
+            }
+            org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(Future.unit)
+          },
+          logs =>
+            logs.exists(l =>
+              l.level == Level.INFO && l.message.contains("agreed on the Consensus")
+            ) should be(true),
+        )
+        .map(_ => succeed)
     }
 
     "returns Undetermined when no quorum agrees on a hash" in {
