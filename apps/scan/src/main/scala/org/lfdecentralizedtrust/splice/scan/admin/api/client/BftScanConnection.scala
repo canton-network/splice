@@ -1056,6 +1056,7 @@ object BftScanConnection {
           val f = connections.f
           BftCallConfig(
             connections = connections.open,
+            // Play it safe wrt availability in case we have no fault tolerance.
             requestsToDo = if (f == 0) connections.open.size else 2 * f + 1,
             targetSuccess = f + 1,
           )
