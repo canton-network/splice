@@ -64,7 +64,7 @@ import org.slf4j.event.Level
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 
 // mock verification triggers this
 @SuppressWarnings(Array("com.digitalasset.canton.DiscardedFuture"))
@@ -1159,24 +1159,6 @@ class BftScanConnectionTest
 
   "BftScanConnection.getRewardAccountingBatch" should {
 
-    "returns the batch from the first scan that has it" in {
-      val round = 7L
-      val hash = "abcdabcd"
-      val connections = getMockedConnections(n = 3)
-      makeMockReturnBatch(connections(0), round, hash, None)
-      when(connections(1).getRewardAccountingBatch(round, hash))
-        .thenReturn(
-          Future.failed(tcpFailure),
-          Future.successful(Some(rewardAccountingBatchResponse)),
-        )
-      makeMockReturnBatch(connections(2), round, hash, None)
-      val bft = getBft(connections)
-
-      for {
-        resp <- bft.getRewardAccountingBatch(round, hash)
-      } yield resp should be(Some(rewardAccountingBatchResponse))
-    }
-
     "returns None when no scan has the batch" in {
       val round = 7L
       val hash = "abcdabcd"
@@ -1189,7 +1171,7 @@ class BftScanConnectionTest
       } yield resp should be(None)
     }
 
-    "ignores failing scans and still returns a batch" in {
+    "on multiple retries, we can obtain batch even in prescense of failing scans" in {
       val round = 7L
       val hash = "abcdabcd"
       val connections = getMockedConnections(n = 3)
@@ -1198,25 +1180,17 @@ class BftScanConnectionTest
       makeMockReturnBatch(connections(2), round, hash, None)
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingBatch(round, hash)
-      } yield resp should be(Some(rewardAccountingBatchResponse))
-    }
-
-    "resolves as soon as one scan has data, without waiting for slow scans" in {
-      val round = 7L
-      val hash = "abcdabcd"
-      val connections = getMockedConnections(n = 3)
-      makeMockReturnBatch(connections(0), round, hash, Some(rewardAccountingBatchResponse))
-      // These never complete; the call must still resolve from connection 0.
-      when(connections(1).getRewardAccountingBatch(round, hash))
-        .thenReturn(Promise[Option[GetRewardAccountingBatchResponse]]().future)
-      when(connections(2).getRewardAccountingBatch(round, hash))
-        .thenReturn(Promise[Option[GetRewardAccountingBatchResponse]]().future)
-      val bft = getBft(connections)
+      def attempt(remaining: Int): Future[Option[GetRewardAccountingBatchResponse]] =
+        bft.getRewardAccountingBatch(round, hash).flatMap {
+          case Some(resp) => Future.successful(Some(resp))
+          case None if remaining > 1 => attempt(remaining - 1)
+          case None => Future.successful(None)
+        }
 
       for {
-        resp <- bft.getRewardAccountingBatch(round, hash)
+        // Each call queries a single random scan, and it does not retry internally.
+        // So if the caller attempts 100 times, we should hit a batch with very high probability.
+        resp <- attempt(100)
       } yield resp should be(Some(rewardAccountingBatchResponse))
     }
   }

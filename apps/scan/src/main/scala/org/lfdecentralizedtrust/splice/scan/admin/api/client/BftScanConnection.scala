@@ -884,7 +884,8 @@ class BftScanConnection(
   }
 
   /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
-    * required: we query a single random scan and use its response if it has the batch.
+    * required: we query a single random scan and return its response.
+    * Note: this will not do a retry at all, even if the scan being requested happens to be offline.
     */
   override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
       ec: ExecutionContext,
@@ -1063,9 +1064,10 @@ object BftScanConnection {
       }
     }
 
-    // For targetSuccess==1, by setting the requestsToDo to 1, bftCall would
-    // select a random scan during retries, thereby preventing a single malicious
-    // scan to prevent reaching concesus by doing a failed response faster than others.
+    // By setting the targetSuccess and requestsToDo to 1, bftCall would
+    // select a random scan for call.
+    // Caution: this will *always* reach consensus on the first bftCall, hence
+    // the caller need to retry if the response was not received.
     def randomSingleCall(connections: ScanConnections): BftCallConfig =
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
