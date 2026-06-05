@@ -735,7 +735,8 @@ class BftScanConnection(
       endpoint: String,
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
-      disagreementLogLevel: Level = Level.INFO,
+      consensusLogConfig: BftScanConnection.ConsensusLogConfig =
+        BftScanConnection.ConsensusLogConfig(),
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -778,7 +779,7 @@ class BftScanConnection(
             nTargetSuccess = callConfig.targetSuccess,
             logger,
             shortenResponsesForLog,
-            disagreementLogLevel,
+            consensusLogConfig,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -861,7 +862,11 @@ class BftScanConnection(
           },
         endpoint = "getRewardAccountingRootHash",
         callConfig = callConfig,
-        disagreementLogLevel = Level.WARN,
+        consensusLogConfig = BftScanConnection.ConsensusLogConfig(
+          disagreementLogLevel = Level.WARN,
+          onlyLogDisagreementsInSuccessResponse = true,
+          agreementLogLevel = Some(Level.INFO),
+        ),
       )
         .transform(tryRootHash =>
           Success(
@@ -911,7 +916,7 @@ object BftScanConnection {
       nTargetSuccess: Int,
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
-      disagreementLogLevel: Level = Level.INFO,
+      consensusLogConfig: ConsensusLogConfig = ConsensusLogConfig(),
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
@@ -950,7 +955,7 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses, disagreementLogLevel)
+                logDisagreements(logger, consensusResponse, responses, consensusLogConfig)
             }
           }
         }
@@ -994,16 +999,28 @@ object BftScanConnection {
       logger: TracedLogger,
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
-      disagreementLogLevel: Level,
+      consensusLogConfig: ConsensusLogConfig,
   )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
     implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
-      responses.remove(consensusResponseKey)
-      responses.forEach { (disagreeingResponse, scanUrls) =>
+      val agreeingScanUrls = responses.remove(consensusResponseKey)
+      consensusLogConfig.agreementLogLevel.foreach { level =>
         LoggerUtil.logAtLevel(
-          disagreementLogLevel,
-          s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse",
+          level,
+          s"Scans $agreeingScanUrls agreed on the Consensus $consensusResponse",
         )
+      }
+      responses.forEach { (disagreeingResponse, scanUrls) =>
+        val shouldLog = disagreeingResponse match {
+          case _: SuccessfulResponse[?] => true
+          case _ => !consensusLogConfig.onlyLogDisagreementsInSuccessResponse
+        }
+        if (shouldLog) {
+          LoggerUtil.logAtLevel(
+            consensusLogConfig.disagreementLogLevel,
+            s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse",
+          )
+        }
       }
     }
   }
@@ -1847,6 +1864,12 @@ object BftScanConnection {
   final case class IgnoreResponse(url: Uri)
       extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
       with NoStackTrace
+
+  case class ConsensusLogConfig(
+      disagreementLogLevel: Level = Level.INFO,
+      onlyLogDisagreementsInSuccessResponse: Boolean = false,
+      agreementLogLevel: Option[Level] = None,
+  )
 
   private sealed trait ScanResponse[+T]
   private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]
