@@ -1151,7 +1151,7 @@ class BftScanConnectionTest
       makeMockReturnBatch(connections(0), round, hash, None)
       when(connections(1).getRewardAccountingBatch(round, hash))
         .thenReturn(
-          Future.failed(notFoundFailure),
+          Future.failed(tcpFailure),
           Future.successful(Some(rewardAccountingBatchResponse)),
         )
       makeMockReturnBatch(connections(2), round, hash, None)
@@ -1178,7 +1178,7 @@ class BftScanConnectionTest
       val round = 7L
       val hash = "abcdabcd"
       val connections = getMockedConnections(n = 3)
-      makeMockFailBatch(connections(0), round, hash, notFoundFailure)
+      makeMockFailBatch(connections(0), round, hash, tcpFailure)
       makeMockReturnBatch(connections(1), round, hash, Some(rewardAccountingBatchResponse))
       makeMockReturnBatch(connections(2), round, hash, None)
       val bft = getBft(connections)
