@@ -9,13 +9,16 @@ import Splice.Util
 
 data SvOnboardingRequest_ExpireResult = SvOnboardingRequest_ExpireResult
 
--- Note: Deprecate in phase 2
 data SvOnboardingConfirmed_ExpireResult = SvOnboardingConfirmed_ExpireResult
 
 -- Note: Implement in phase 2
-data SvOnboardingConfirmed_V2_ExpireResult = SvOnboardingConfirmed_V2_ExpireResult
+data SvNodeOnboardingConfirmed_ExpireResult = SvNodeOnboardingConfirmed_ExpireResult
+
+-- Note: Implement in phase 2
+data SvNodeOnboardingRequest_ExpireResult = SvNodeOnboardingRequest_ExpireResult
 
 
+-- Note: Deprecate in phase 2
 -- | Template used by the SVs to collect confirmations for the onboarding of an SV candidate.
 -- The existence of this contract triggers SV automation that creates confirmation contracts for
 -- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
@@ -38,6 +41,30 @@ template SvOnboardingRequest with
         now <- getTime
         require "Onboarding has expired" (now >= expiresAt)
         pure SvOnboardingRequest_ExpireResult
+
+-- Note: Implement in phase 2
+-- | Template used by the SVs to collect confirmations for the onboarding of an SV node candidate.
+-- The existence of this contract triggers SV automation that creates confirmation contracts for
+-- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
+template SvNodeOnboardingRequest with
+    candidateName : Text            -- ^ Human-readable name of the SV candidate. Must match the one in `ApprovedSvIdentity`!
+    candidateParty : Party          -- ^ PartyId of the candidate SV node party.
+    candidateParticipantId : Text   -- ^ ParticipantId of the candidate SV node.
+    token : Text                    -- ^ An encoded and signed `SvOnboardingToken` that confirms the candidate's identity.
+    sponsor : Party                 -- ^ The established SV node that created this contract.
+    dso: Party
+    expiresAt : Time                -- ^ When this contract can be archived even if the onboarding did not succeed.
+  where
+    signatory dso
+    observer candidateParty
+
+    -- Archive if we are past the `expiresAt`.
+    choice SvNodeOnboardingRequest_Expire : SvNodeOnboardingRequest_ExpireResult
+      controller dso
+      do
+        now <- getTime
+        require "Onboarding has expired" (now >= expiresAt)
+        pure SvNodeOnboardingRequest_ExpireResult
 
 -- Note: Deprecate in phase 2
 -- | A confirmation for approval of a candidate SV.
@@ -80,18 +107,25 @@ template SvNodeOnboardingConfirmed with
     observer svOperatorParty
 
     -- Archive if we are past the `expiresAt`.
-    choice SvOnboardingConfirmed_V2_Expire : SvOnboardingConfirmed_ExpireResult
+    choice SvNodeOnboardingConfirmed_Expire : SvNodeOnboardingConfirmed_ExpireResult
       controller dso
       do
         now <- getTime
         require "SV candidate confirmation has expired" (now >= expiresAt)
-        pure SvOnboardingConfirmed_ExpireResult
+        pure SvNodeOnboardingConfirmed_ExpireResult
 
 
--- TODOV: doc
+-- | Instruction created by the DSO to update the SV operator of a hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV and the new SV operator, and the hosted SV entry and its
+-- 'SvRewardBeneficiaries' contract are updated when the instruction is consumed by
+-- 'DsoRules_UpdateSvOperatorForHostedSv'.
 template UpdateSvOperatorForHostedSvInstruction with
     svParty : Party
+      -- ^ The hosted SV party whose SV operator should be updated.
     newSvOperatorParty : Party
+      -- ^ The new SV operator party for the hosted SV.
     dso : Party
   where
     signatory dso
@@ -125,6 +159,8 @@ instance HasCheckedFetch SvNodeOnboardingConfirmed ForOwner where
 instance HasCheckedFetch SvNodeOnboardingConfirmed ForDso where
   contractGroupId SvNodeOnboardingConfirmed {..} = ForDso with dso
 
+instance HasCheckedFetch SvNodeOnboardingRequest ForDso where
+  contractGroupId SvNodeOnboardingRequest {..} = ForDso with dso
 
 instance HasCheckedFetch SvOnboardingRequest ForDso where
   contractGroupId SvOnboardingRequest {..} = ForDso with dso

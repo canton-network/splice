@@ -420,20 +420,20 @@ testSvNodeOnboarding = do
   -- we can't test token validity in Daml (it's a JWT)
   let token = "mock-token"
 
-  -- sv2 initiates the onboarding of the new sv
+  -- sv2 initiates the onboarding of the new sv node
   svSubmits app sv2 $ \cid -> exerciseCmd cid $
-    DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" token sv2
+    DsoRules_StartSvNodeOnboarding "svX" svX "svX-participant-id" token sv2
 
   -- an onboarding request for svX has been created
-  [(_, svOnboardingRequest)] <- query @SvOnboardingRequest dso
-  svOnboardingRequest === SvOnboardingRequest with
+  [(_, svNodeOnboardingRequest)] <- query @SvNodeOnboardingRequest dso
+  svNodeOnboardingRequest === SvNodeOnboardingRequest with
     candidateName = "svX"
     candidateParty = svX
     candidateParticipantId = "svX-participant-id"
     token
     sponsor = sv2
     dso
-    expiresAt = svOnboardingRequest.expiresAt
+    expiresAt = svNodeOnboardingRequest.expiresAt
 
   -- svX collects three confirmations which is enough to onboard him
   [(dsoRulesCid, _)] <- query @DsoRules dso
@@ -441,33 +441,33 @@ testSvNodeOnboarding = do
     submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
       confirmer = sv
       action = ARC_DsoRules with
-        dsoAction = SRARC_ConfirmSvOnboarding_V2 $ DsoRules_ConfirmSvNodeOnboarding with
+        dsoAction = SRARC_ConfirmSvNodeOnboarding $ DsoRules_ConfirmSvNodeOnboarding with
           newSvOperatorParty = svX
           newSvNodeName = "svX"
           newNodeParticipantId = "svX-participant-id"
           reason = "because"
   executeAllConfirmedActions app
 
-  -- svX is now a confirmed SV
-  [(svOnboardingConfirmedCid, svOnboardingConfirmed)] <- query @SvNodeOnboardingConfirmed dso
-  svOnboardingConfirmed === SvNodeOnboardingConfirmed with
+  -- svX is now a confirmed SV node
+  [(svNodeOnboardingConfirmedCid, svNodeOnboardingConfirmed)] <- query @SvNodeOnboardingConfirmed dso
+  svNodeOnboardingConfirmed === SvNodeOnboardingConfirmed with
     svOperatorParty = svX
     svNodeName = "svX"
     svNodeParticipantId = "svX-participant-id"
     reason = "because"
     dso
-    expiresAt = svOnboardingConfirmed.expiresAt
+    expiresAt = svNodeOnboardingConfirmed.expiresAt
 
   -- once svX becomes able to read as DSO party (e.g., after party migration to svX's participant)...
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   -- onboarding fails if the time expired
   now <- getTime
-  setTime svOnboardingConfirmed.expiresAt
+  setTime svNodeOnboardingConfirmed.expiresAt
 
   submitMustFail (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
     sv = svX
-    svOnboardingConfirmedCid
+    svNodeOnboardingConfirmedCid
 
   -- reset the time to now
   setTime now
@@ -475,7 +475,7 @@ testSvNodeOnboarding = do
   -- svX completes its own onboarding by adding itself to the DsoRules
   submit (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
     sv = svX
-    svOnboardingConfirmedCid
+    svNodeOnboardingConfirmedCid
 
   checkSvStatusReports app
 

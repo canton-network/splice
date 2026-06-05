@@ -124,9 +124,11 @@ data DsoRules_ActionRequiringConfirmation
   | SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv
     -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
   | SRARC_AddSvNode DsoRules_AddSvNode
-    -- ^ Voted action to directly add an SV node. Note: Implement in phase 2
-  | SRARC_ConfirmSvOnboarding_V2 DsoRules_ConfirmSvNodeOnboarding
-    -- ^ Automated action to confirm that a party can become an SV. Note: Implement in phase 2
+    -- ^ Voted action to directly add an SV node.
+  | SRARC_OffboardSvNode DsoRules_OffboardSvNode
+    -- ^ Voted action to remove an SV node.
+  | SRARC_ConfirmSvNodeOnboarding DsoRules_ConfirmSvNodeOnboarding
+    -- ^ Automated action to confirm that a party can become an SV.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -201,14 +203,16 @@ data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
     newDsoRules : ContractId DsoRules
 
+data DsoRules_OffboardSvNodeResult = DsoRules_OffboardSvNodeResult with
+    newDsoRules : ContractId DsoRules
+
 data DsoRules_SubmitStatusReportResult = DsoRules_SubmitStatusReportResult with
     newReport : ContractId SvStatusReport
 
 data DsoRules_AddConfirmedSvResult = DsoRules_AddConfirmedSvResult with
     newDsoRules : ContractId DsoRules
 
--- Note: Implement in phase 2
-data DsoRules_AddConfirmedSv_V2Result = DsoRules_AddConfirmedSv_V2Result with
+data DsoRules_AddConfirmedSvNodeResult = DsoRules_AddConfirmedSvNodeResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_SetSynchronizerNodeConfigResult = DsoRules_SetSynchronizerNodeConfigResult with
@@ -246,7 +250,7 @@ data DsoRules_SetConfigResult = DsoRules_SetConfigResult with
 data DsoRules_UpdateSvRewardWeightResult = DsoRules_UpdateSvRewardWeightResult with
     newDsoRules : ContractId DsoRules
 
-data DsoRules_UpdateSvRewardWeight_V2Result = DsoRules_UpdateSvRewardWeight_V2Result with
+data DsoRules_UpdateHostedSvWeightResult = DsoRules_UpdateHostedSvWeightResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSvResult with
@@ -282,22 +286,27 @@ data DsoRules_MergeValidatorLicenseResult = DsoRules_MergeValidatorLicenseResult
 data DsoRules_StartSvOnboardingResult = DsoRules_StartSvOnboardingResult with
     onboardingRequest : ContractId SvOnboardingRequest
 
+data DsoRules_StartSvNodeOnboardingResult = DsoRules_StartSvNodeOnboardingResult with
+    onboardingRequest : ContractId SvNodeOnboardingRequest
+
 data DsoRules_ExpireSvOnboardingRequestResult = DsoRules_ExpireSvOnboardingRequestResult
 
+data DsoRules_ExpireSvNodeOnboardingRequestResult = DsoRules_ExpireSvNodeOnboardingRequestResult
+
 data DsoRules_ArchiveSvOnboardingRequestResult = DsoRules_ArchiveSvOnboardingRequestResult
+
+data DsoRules_ArchiveSvNodeOnboardingRequestResult = DsoRules_ArchiveSvNodeOnboardingRequestResult
 
 data DsoRules_ConfirmSvOnboardingResult = DsoRules_ConfirmSvOnboardingResult with
     onboardingConfirmed : ContractId SvOnboardingConfirmed
 
--- Note: Implement in phase 2
-data DsoRules_ConfirmSvOnboarding_V2Result = DsoRules_ConfirmSvOnboarding_V2Result with
+data DsoRules_ConfirmSvNodeOnboardingResult = DsoRules_ConfirmSvNodeOnboardingResult with
     onboardingConfirmed : ContractId SvNodeOnboardingConfirmed
 
 data DsoRules_ExpireSvOnboardingConfirmedResult = DsoRules_ExpireSvOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
 
--- Note: Implement in phase 2
-data DsoRules_ExpireSvOnboardingConfirmed_V2Result = DsoRules_ExpireSvOnboardingConfirmed_V2Result with
+data DsoRules_ExpireSvNodeOnboardingConfirmedResult = DsoRules_ExpireSvNodeOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_Amulet_ExpireTransferInstructionsResult = DsoRules_Amulet_ExpireTransferInstructionsResult
@@ -662,6 +671,7 @@ template DsoRules with
       do newDsoRules <- dsoRules_AddSvNode this arg
          return DsoRules_AddSvOperatorResult with ..
 
+    -- Note: Deprecate in phase 2
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
       with
         sv : Party
@@ -695,6 +705,41 @@ template DsoRules with
               hostedSvs
 
             return DsoRules_OffboardSvResult with ..
+
+    -- Note: Implement in phase 2
+    choice DsoRules_OffboardSvNode : DsoRules_OffboardSvNodeResult
+      with
+        sv : Party
+      controller dso
+      do
+        require "There is more than one sv" (Map.size svs > 1)
+        case Map.lookup sv svs of
+          None -> fail "Not a sv"
+          Some info -> do
+            -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
+            -- revoking that sv's rights in the CometBFT network and the topology state.
+            let newSvs = Map.delete sv svs
+            -- We optimize for prompt removal of a sv if the vote said so.
+            -- and instead just choose the sv with the lexicographically smallest name.
+            let (newDsoDelegate, newEpoch)
+                  | sv == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
+                  | otherwise        = (dsoDelegate, epoch)
+            let offboardedSvInfo = OffboardedSvInfo with
+                    name = info.name
+                    participantId = info.participantId
+            -- create the new rules contract
+            newDsoRules <- create DsoRules with
+              dso
+              epoch = newEpoch
+              dsoDelegate = newDsoDelegate
+              svs = newSvs
+              offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
+              config
+              initialTrafficState
+              isDevNet
+              hostedSvs
+
+            return DsoRules_OffboardSvNodeResult with ..
 
     -- Note: Implement in phase 1
     choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
@@ -800,21 +845,21 @@ template DsoRules with
     -- Called by SV node candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
-    nonconsuming choice DsoRules_AddConfirmedSvNode : DsoRules_AddConfirmedSv_V2Result
+    nonconsuming choice DsoRules_AddConfirmedSvNode : DsoRules_AddConfirmedSvNodeResult
       with
         sv : Party
-        svOnboardingConfirmedCid : ContractId SvNodeOnboardingConfirmed
+        svNodeOnboardingConfirmedCid : ContractId SvNodeOnboardingConfirmed
       controller sv
       do
-        svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
-        assertWithinDeadline "svOnboardingConfirmed.expiresAt" svOnboardingConfirmed.expiresAt
+        svNodeOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svNodeOnboardingConfirmedCid
+        assertWithinDeadline "svNodeOnboardingConfirmed.expiresAt" svNodeOnboardingConfirmed.expiresAt
 
         addSvNodeResult <- exercise self DsoRules_AddSvNode with
           newSvOperatorParty = sv
-          newSvNodeName = svOnboardingConfirmed.svNodeName
-          newSvNodeParticipantId = svOnboardingConfirmed.svNodeParticipantId
+          newSvNodeName = svNodeOnboardingConfirmed.svNodeName
+          newSvNodeParticipantId = svNodeOnboardingConfirmed.svNodeParticipantId
 
-        return DsoRules_AddConfirmedSv_V2Result with
+        return DsoRules_AddConfirmedSvNodeResult with
           newDsoRules = addSvNodeResult.newDsoRules
 
     -- Decentralized synchronizer config management
@@ -1192,7 +1237,7 @@ template DsoRules with
     -- Updates the reward weight stored in the hosted SV entry in
     -- 'DsoRules.hostedSvs'. The hosted SV must already be registered, and the new
     -- reward weight must be positive.
-    choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateSvRewardWeight_V2Result
+    choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateHostedSvWeightResult
       with
         svParty : Party
           -- ^ The hosted SV party whose reward weight should be updated.
@@ -1208,7 +1253,7 @@ template DsoRules with
             let newHostedSv = hostedSv with svRewardWeight = newRewardWeight
                 newHostedSvs = Map.insert svParty newHostedSv hostedSvsMap
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
-            pure DsoRules_UpdateSvRewardWeight_V2Result with newDsoRules
+            pure DsoRules_UpdateHostedSvWeightResult with newDsoRules
 
     -- Note: Implement in phase 1
     -- | Creates an instruction to offboard a hosted SV.
@@ -1523,9 +1568,10 @@ template DsoRules with
          pure $ DsoRules_MergeValidatorLicenseResult cid
 
 
-    -- SV onboarding
-    ----------------
+    -- SV node onboarding
+    ---------------------
 
+    -- Note: Deprecate in phase 2
     nonconsuming choice DsoRules_StartSvOnboarding : DsoRules_StartSvOnboardingResult
       with
         candidateName : Text
@@ -1541,6 +1587,23 @@ template DsoRules with
         onboardingRequest <- create SvOnboardingRequest with ..
         return DsoRules_StartSvOnboardingResult with ..
 
+    -- Note: Implement in phase 2
+    nonconsuming choice DsoRules_StartSvNodeOnboarding : DsoRules_StartSvNodeOnboardingResult
+      with
+        candidateName : Text
+        candidateParty : Party
+        candidateParticipantId: Text
+        token : Text
+        sponsor : Party
+      controller sponsor
+      do
+        require "Sponsor is an SV" (sponsor `Map.member` svs)
+        now <- getTime
+        let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
+        onboardingRequest <- create SvNodeOnboardingRequest with ..
+        return DsoRules_StartSvNodeOnboardingResult with ..
+
+    -- Note: Deprecate in phase 2
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
       with
         cid: ContractId SvOnboardingRequest
@@ -1551,6 +1614,18 @@ template DsoRules with
         exercise cid SvOnboardingRequest_Expire
         return DsoRules_ExpireSvOnboardingRequestResult
 
+    -- Note: Implement in phase 2
+    nonconsuming choice DsoRules_ExpireSvNodeOnboardingRequest : DsoRules_ExpireSvNodeOnboardingRequestResult
+      with
+        cid: ContractId SvNodeOnboardingRequest
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        exercise cid SvNodeOnboardingRequest_Expire
+        return DsoRules_ExpireSvNodeOnboardingRequestResult
+
+    -- Note: Deprecate in phase 2
     nonconsuming choice DsoRules_ArchiveSvOnboardingRequest : DsoRules_ArchiveSvOnboardingRequestResult
       with
         svOnboardingRequestCid: ContractId SvOnboardingRequest
@@ -1564,6 +1639,21 @@ template DsoRules with
         require "SV party is an SV" (isSome maybeSv)
         require "SV name matches" ((fromSome maybeSv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
+
+    -- Note: Implement in phase 2
+    nonconsuming choice DsoRules_ArchiveSvNodeOnboardingRequest : DsoRules_ArchiveSvNodeOnboardingRequestResult
+      with
+        svNodeOnboardingRequestCid: ContractId SvNodeOnboardingRequest
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
+        svNodeOnboardingRequest <- fetchAndArchive (ForDso with dso) svNodeOnboardingRequestCid
+        let maybeSv = Map.lookup svNodeOnboardingRequest.candidateParty svs
+        require "SV party is an SV" (isSome maybeSv)
+        require "SV name matches" ((fromSome maybeSv).name == svNodeOnboardingRequest.candidateName)
+        return DsoRules_ArchiveSvNodeOnboardingRequestResult
 
     -- Note: Deprecate in phase 2
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
@@ -1593,7 +1683,7 @@ template DsoRules with
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     -- Note: Implement in phase 2
-    nonconsuming choice DsoRules_ConfirmSvNodeOnboarding : DsoRules_ConfirmSvOnboarding_V2Result
+    nonconsuming choice DsoRules_ConfirmSvNodeOnboarding : DsoRules_ConfirmSvNodeOnboardingResult
       with
         newSvOperatorParty : Party
         newSvNodeName : Text
@@ -1615,7 +1705,7 @@ template DsoRules with
           reason
           dso
           expiresAt
-        return DsoRules_ConfirmSvOnboarding_V2Result with ..
+        return DsoRules_ConfirmSvNodeOnboardingResult with ..
 
     -- Note: Deprecate in phase 2
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
@@ -1637,15 +1727,15 @@ template DsoRules with
         return DsoRules_ExpireSvOnboardingConfirmedResult with ..
 
     -- Note: Implement in phase 2
-    choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmed_V2Result
+    choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvNodeOnboardingConfirmedResult
       with
         cid: ContractId SvNodeOnboardingConfirmed
-        sv : Optional Party
+        sv : Party
       controller sv
       do
-        _ <- getAndValidateSvParty this sv
+        _ <- getAndValidateSvParty this (Some sv)
         svOnboardingConfirmed <- fetchButArchiveLater (ForDso with dso) cid
-        exercise cid SvOnboardingConfirmed_V2_Expire
+        exercise cid SvNodeOnboardingConfirmed_Expire
         -- register the sv as offboarded so it's PartyToParticipant mapping for the DSO party gets removed
         let svOperator = svOnboardingConfirmed.svOperatorParty
         let offboardingInfo = OffboardedSvInfo with
@@ -1653,7 +1743,7 @@ template DsoRules with
               participantId = svOnboardingConfirmed.svNodeParticipantId
         newDsoRules <- create this with
           offboardedSvs = Map.insert svOperator offboardingInfo offboardedSvs
-        return DsoRules_ExpireSvOnboardingConfirmed_V2Result with ..
+        return DsoRules_ExpireSvNodeOnboardingConfirmedResult with ..
 
 
 
@@ -2329,7 +2419,8 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_ConfirmSvOnboarding_V2 choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_OffboardSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_ConfirmSvNodeOnboarding choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
