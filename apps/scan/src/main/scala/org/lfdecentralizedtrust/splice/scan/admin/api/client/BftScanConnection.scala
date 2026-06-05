@@ -103,6 +103,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.environment.BaseAppConnection.UnexpectedHttpJsonResponse
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.tokenstandard.{
@@ -344,8 +345,32 @@ class BftScanConnection(
   override def getMigrationId()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Long] =
-    bftCall(_.getMigrationId(), "getMigrationId")
+  ): Future[Long] = {
+    val connections = scanList.scanConnections
+    for {
+      // Check which scans are missing the getMigrationId endpoint.
+      compatibleScans <- Future
+        .traverse(connections.open)(connection =>
+          connection
+            .getMigrationId()
+            .transform {
+              case Success(_) => Success(true)
+              // In this case, 404 means the endpoint does not exist
+              case Failure(ex: UnexpectedHttpJsonResponse)
+                  if ex.statusCode == StatusCodes.NotFound =>
+                Success(false)
+              case _ => Success(true)
+            }
+            .map(result => connection -> result)
+        )
+        .map(_.toMap)
+      result <- bftCall(
+        _.getMigrationId(),
+        "getMigrationId",
+        BftCallConfig.forAvailableData(connections, compatibleScans.contains),
+      )
+    } yield result
+  }
 
   private case class MigrationInfoResponses(
       withData: Map[SingleScanConnection, SourceMigrationInfo],
