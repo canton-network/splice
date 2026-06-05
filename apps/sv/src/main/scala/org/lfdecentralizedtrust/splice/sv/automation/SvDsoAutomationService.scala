@@ -119,7 +119,7 @@ class SvDsoAutomationService(
       () =>
         BftScanConnection.Bft.getPeerScansFromDsoRules(
           dsoStore,
-          dsoStore.key.svParty.filterString,
+          dsoStore.key.svParty,
         )(tc, ec),
       ledgerClient,
       ScanAppClientConfig.DefaultScansRefreshInterval,

@@ -1436,13 +1436,13 @@ object BftScanConnection {
       } yield domainScans.map(scanInfo => DsoScan(scanInfo.publicUrl, scanInfo.svName))
     }
 
-    def getPeerScansFromDsoRules(store: DsoRulesStore, ownSvParty: String)(implicit
+    def getPeerScansFromDsoRules(store: DsoRulesStore, ownSvParty: PartyId)(implicit
         tc: TraceContext,
         ec: ExecutionContext,
     ): Future[Seq[DsoScan]] =
       store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
         rulesAndStates.svNodeStates.values
-          .filterNot(_.payload.sv == ownSvParty)
+          .filterNot(_.payload.sv == ownSvParty.toProtoPrimitive)
           .flatMap { nodeState =>
             nodeState.payload.state.synchronizerNodes.asScala.values
               .flatMap(
