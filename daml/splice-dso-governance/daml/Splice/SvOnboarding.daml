@@ -119,7 +119,7 @@ template SvNodeOnboardingConfirmed with
 --
 -- This follows the instruction pattern used for two-step operations: the DSO first
 -- records the hosted SV and the new SV operator, and the hosted SV entry and its
--- 'SvRewardBeneficiaries' contract are updated when the instruction is consumed by
+-- 'HostedSvRewardBeneficiaries' contract are updated when the instruction is consumed by
 -- 'DsoRules_UpdateSvOperatorForHostedSv'.
 template UpdateSvOperatorForHostedSvInstruction with
     svParty : Party

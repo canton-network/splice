@@ -67,7 +67,7 @@ test_SvWeightsFullyOnledger = do
   -- Onboarding a hosted SV
   --------------------------
   -- Add hostedSv with newSvOperator as SV operator
-  -- Note: The onboarding flow creates a SvRewardBeneficiaries contract with no beneficiaries
+  -- Note: The onboarding flow creates a HostedSvRewardBeneficiaries contract with no beneficiaries
 
   [(_, round), _, _] <- getActiveOpenRoundsSorted app.dso
   let hostedSvJoinedAsOfRound = round
@@ -83,8 +83,8 @@ test_SvWeightsFullyOnledger = do
   assertHostedSvInfoForParty app hostedSv
     (mkHostedSvInfo hostedSvName round hostedSvWeight sv5)
 
-  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
-    SvRewardBeneficiaries with
+  assertHostedSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
+    HostedSvRewardBeneficiaries with
       dso
       sv = hostedSv
       svOperator = sv5
@@ -97,12 +97,12 @@ test_SvWeightsFullyOnledger = do
   [(rulesCid, _)] <- query @DsoRules app.dso
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+      hostedSvRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
       newBeneficiaries = hostedSvExtraBeneficiaries
       svParty = hostedSv
 
-  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
-    SvRewardBeneficiaries with
+  assertHostedSvRewardBeneficiariesForSvAndOperator app hostedSv sv5
+    HostedSvRewardBeneficiaries with
       dso
       sv = hostedSv
       svOperator = sv5
@@ -187,17 +187,17 @@ test_SvWeightsFullyOnledger = do
 
   -- Update
   [(instructionCid, instruction)] <- query @UpdateSvOperatorForHostedSvInstruction dso
-  [(svRewardBeneficiariesCid, _)] <- queryFilter @SvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
+  [(hostedSvRewardBeneficiariesCid, _)] <- queryFilter @HostedSvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
   void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_UpdateSvOperatorForHostedSv with
       instructionCid
-      svRewardBeneficiariesCid
+      hostedSvRewardBeneficiariesCid
       sv = sv1
 
   assertHostedSvInfoForParty app hostedSv
     (mkHostedSvInfo hostedSvName hostedSvJoinedAsOfRound updatedHostedSvWeight sv1)
-  assertSvRewardBeneficiariesForSvAndOperator app hostedSv sv1
-    SvRewardBeneficiaries with
+  assertHostedSvRewardBeneficiariesForSvAndOperator app hostedSv sv1
+    HostedSvRewardBeneficiaries with
       dso
       sv = hostedSv
       svOperator = sv1
@@ -239,7 +239,7 @@ test_SvWeightsFullyOnledger = do
   hostedSvSvRewardBeneficiariesCid <- getSvRewardBeneficiariesCid app hostedSv sv1
   void $ submit (actAs hostedSv <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetSvRewardBeneficiaries with
-      svRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
+      hostedSvRewardBeneficiariesCid = hostedSvSvRewardBeneficiariesCid
       newBeneficiaries = []
       svParty = hostedSv
 
@@ -266,7 +266,7 @@ test_SvWeightsFullyOnledger = do
         svParty = hostedSv
 
   [(instructionCid, instruction)] <- query @OffboardHostedSvInstruction dso
-  [(svRewardBeneficiariesCid, _)] <- queryFilter @SvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
+  [(hostedSvRewardBeneficiariesCid, _)] <- queryFilter @HostedSvRewardBeneficiaries dso (\co -> co.sv == instruction.svParty)
   hostedSvInfo <- getHostedSvInfoByParty app instruction.svParty
   [(svRewardStateCid, _)] <- queryFilter @SvRewardState dso (\co -> co.svName == hostedSvInfo.name)
 
@@ -274,7 +274,7 @@ test_SvWeightsFullyOnledger = do
   void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_OffboardHostedSv with
       instructionCid
-      svRewardBeneficiariesCid
+      hostedSvRewardBeneficiariesCid
       svRewardStateCid
       sv = sv1
 
@@ -566,9 +566,9 @@ assertSvInfoForParty app sv expected = do
   svInfo <- getSvInfoByParty app sv
   svInfo === expected
 
-assertSvRewardBeneficiariesForSvAndOperator : AmuletApp -> Party -> Party -> SvRewardBeneficiaries -> Script ()
-assertSvRewardBeneficiariesForSvAndOperator app hostedSv svOperator expected = do
-  [(_, actual)] <- queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv == hostedSv && b.svOperator == svOperator)
+assertHostedSvRewardBeneficiariesForSvAndOperator : AmuletApp -> Party -> Party -> HostedSvRewardBeneficiaries -> Script ()
+assertHostedSvRewardBeneficiariesForSvAndOperator app hostedSv svOperator expected = do
+  [(_, actual)] <- queryFilter @HostedSvRewardBeneficiaries app.dso (\b -> b.sv == hostedSv && b.svOperator == svOperator)
   actual === expected
 
 assertSingleSvRewardStateExists : AmuletApp -> Text -> Script ()
@@ -583,7 +583,7 @@ assertSvRewardStateIsAbsent app svName = do
 
 assertSvRewardBeneficiariesIsAbsent : AmuletApp -> Party -> Script ()
 assertSvRewardBeneficiariesIsAbsent app sv = do
-  [] <- queryFilter @SvRewardBeneficiaries app.dso (\co -> co.sv == sv)
+  [] <- queryFilter @HostedSvRewardBeneficiaries app.dso (\co -> co.sv == sv)
   pure ()
 
 getHostedSvsMap : DsoRules -> Map.Map Party HostedSvInfo
@@ -609,7 +609,7 @@ unsafeLookup key' m =
 getRewardStatesWithBeneficiariesBySvOperator
   : AmuletApp
   -> Party
-  -> Script [(ContractId SvRewardState, ContractId SvRewardBeneficiaries)]
+  -> Script [(ContractId SvRewardState, ContractId HostedSvRewardBeneficiaries)]
 getRewardStatesWithBeneficiariesBySvOperator app svOperator = do
   [(_, rules)] <- query @DsoRules app.dso
   let hostedSvsMap = getHostedSvsMap rules
@@ -619,17 +619,17 @@ getRewardStatesWithBeneficiariesBySvOperator app svOperator = do
 
   forA hostedSvsOperatedBySvOperator $ \(hostedSvParty, hostedSvInfo) -> do
     [(rewardStateCid, _)] <- queryFilter @SvRewardState app.dso (\s -> s.svName == hostedSvInfo.name)
-    [svRewardBeneficiariesCid] <- map fst <$>
-      queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSvParty && b.svOperator == svOperator)
-    pure (rewardStateCid, svRewardBeneficiariesCid)
+    [hostedSvRewardBeneficiariesCid] <- map fst <$>
+      queryFilter @HostedSvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSvParty && b.svOperator == svOperator)
+    pure (rewardStateCid, hostedSvRewardBeneficiariesCid)
 
 totalWeight : [(Party, Int)] -> Int
 totalWeight beneficiaries = sum (map snd beneficiaries)
 
-getSvRewardBeneficiariesCid : AmuletApp -> Party -> Party -> Script (ContractId SvRewardBeneficiaries)
+getSvRewardBeneficiariesCid : AmuletApp -> Party -> Party -> Script (ContractId HostedSvRewardBeneficiaries)
 getSvRewardBeneficiariesCid app hostedSv svOperator = do
   [(hostedSvSvRewardBeneficiariesCid, _)] <-
-    queryFilter @SvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
+    queryFilter @HostedSvRewardBeneficiaries app.dso (\b -> b.sv  == hostedSv && b.svOperator == svOperator)
   pure hostedSvSvRewardBeneficiariesCid
 
 expectedSvCoupons : Int -> [(Party, Decimal)] -> [(Party, Int)]
