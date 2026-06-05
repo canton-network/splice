@@ -13,6 +13,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.model.*
+import org.apache.pekko.stream.StreamTcpException
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules as amuletrulesCodegen
@@ -233,6 +234,8 @@ class BftScanConnectionTest
     StatusCodes.NotFound,
     HttpCommandException.ErrorResponseBody(ErrorResponse("Whatever thing was not found")),
   )
+  val tcpFailure = new StreamTcpException("Connection reset by peer")
+
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
 
@@ -908,9 +911,9 @@ class BftScanConnectionTest
 
     val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
 
-    "not let a single failure decide the call when n == 2" in {
+    "not let a single error response decide the call when n == 2" in {
       val connections = getMockedConnections(n = 2)
-      makeMockFail(connections.head, notFoundFailure)
+      makeMockFail(connections.head, tcpFailure)
       val delayedSuccess =
         org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(
           Future.successful(partyIdA)
@@ -922,9 +925,17 @@ class BftScanConnectionTest
       } yield result should be(partyIdA)
     }
 
-    "Forward the failure when n == 1" in {
-      val connections = getMockedConnections(n = 1)
-      connections.foreach(makeMockFail(_, notFoundFailure))
+    // Unlike a transport exception, an http failure still counts towards the quorum.
+    // Although this behaviour is mostly a result of the tech-debt of the
+    // inability for the scan endpoints to specify what responses are expected (like 404)
+    "but let a single http failure decide the call when n == 2" in {
+      val connections = getMockedConnections(n = 2)
+      makeMockFail(connections.head, notFoundFailure)
+      val delayedSuccess =
+        org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(
+          Future.successful(partyIdA)
+        )
+      connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
 
       for {
         failure <- BftScanConnection
@@ -933,9 +944,20 @@ class BftScanConnectionTest
       } yield failure should be(notFoundFailure)
     }
 
-    "fall through to ConsensusNotReached when all scans fail" in {
+    "Forward the error response when n == 1" in {
+      val connections = getMockedConnections(n = 1)
+      connections.foreach(makeMockFail(_, tcpFailure))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure should be(tcpFailure)
+    }
+
+    "fall through to ConsensusNotReached when all scans throw  error response" in {
       val connections = getMockedConnections(n = 3)
-      connections.foreach(makeMockFail(_, notFoundFailure))
+      connections.foreach(makeMockFail(_, tcpFailure))
 
       for {
         failure <- BftScanConnection
