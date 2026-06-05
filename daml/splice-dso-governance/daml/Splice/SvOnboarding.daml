@@ -122,9 +122,9 @@ template SvNodeOnboardingConfirmed with
 -- 'HostedSvRewardBeneficiaries' contract are updated when the instruction is consumed by
 -- 'DsoRules_UpdateSvOperatorForHostedSv'.
 template UpdateSvOperatorForHostedSvInstruction with
-    svParty : Party
+    hostedSv : Party
       -- ^ The hosted SV party whose SV operator should be updated.
-    newSvOperatorParty : Party
+    newSvOperator : Party
       -- ^ The new SV operator party for the hosted SV.
     dso : Party
   where
@@ -137,7 +137,7 @@ template UpdateSvOperatorForHostedSvInstruction with
 -- records the hosted SV to offboard, and the hosted SV's associated contracts are
 -- archived when the instruction is consumed by 'DsoRules_OffboardHostedSv'.
 template OffboardHostedSvInstruction with
-    svParty : Party
+    hostedSv : Party
       -- ^ The hosted SV party to offboard.
     dso : Party
   where
