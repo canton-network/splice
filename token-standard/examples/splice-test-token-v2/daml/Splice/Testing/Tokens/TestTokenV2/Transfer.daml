@@ -50,16 +50,16 @@ template TokenTransferOffer with
     interface instance V1.TransferInstruction for TokenTransferOffer where
       view = downcast (view @V2.TransferInstruction (toInterface this))
 
-      transferInstruction_withdrawImpl = transferInstruction_v1_withdrawDefaultImplUsingV2
+      transferInstruction_withdrawImpl = transferInstructionV1_withdrawDefaultImplUsingV2
         (toInterface this)
         (token_transferInstruction_withdrawImplV2 CalledFromV1 this)
-      transferInstruction_acceptImpl = transferInstruction_v1_acceptDefaultImplUsingV2
+      transferInstruction_acceptImpl = transferInstructionV1_acceptDefaultImplUsingV2
         (toInterface this)
         (token_transferInstruction_acceptImplV2 CalledFromV1 this)
-      transferInstruction_rejectImpl = transferInstruction_v1_rejectDefaultImplUsingV2
+      transferInstruction_rejectImpl = transferInstructionV1_rejectDefaultImplUsingV2
         (toInterface this)
         (token_transferInstruction_rejectImplV2 CalledFromV1 this)
-      transferInstruction_updateImpl = transferInstruction_v1_updateDefaultImplUsingV2
+      transferInstruction_updateImpl = transferInstructionV1_updateDefaultImplUsingV2
 
     interface instance V2.TransferInstruction for TokenTransferOffer where
       view = V2.TransferInstructionView with
