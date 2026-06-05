@@ -150,7 +150,7 @@ abstract class CalculateRewardsTriggerBase(
   private def getRootHash(round: Long)(implicit tc: TraceContext): Future[Hash] = {
     def rootHashUnavailable(reason: String): Nothing =
       throw Status.FAILED_PRECONDITION
-        .withDescription(s"For round: $round $reason")
+        .withDescription(s"For round $round: $reason")
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
@@ -171,7 +171,7 @@ abstract class CalculateRewardsTriggerBase(
       rootHash <- response match {
         case RewardAccountingRootHashOk(ok) => Future.successful(new Hash(ok.rootHash))
         case RewardAccountingRootHashUndetermined(_) =>
-          rootHashUnavailable("scan has not yet computed the root hash.")
+          rootHashUnavailable("our own Scan has not yet computed the root hash.")
         case RewardAccountingRootHashCannotProvide(_) => bftReadRootHash
       }
     } yield rootHash
