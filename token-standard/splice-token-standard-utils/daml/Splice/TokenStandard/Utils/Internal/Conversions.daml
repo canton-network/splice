@@ -14,6 +14,11 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   toAnyContractId,
 
   -- * Metadata conversion
+  tokenStandardV2Namespace,
+  expiresAtMetaKey,
+  providerMetaKey,
+  accountIdMetaKey,
+
   timeToMeta,
   timeFromMeta,
   expiresAtToMeta,
@@ -54,14 +59,15 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   ensureNoAccountMeta,
   validateNoAccountMeta,
 
--- TODO(#4517): add unit tests for the non-trivial functions
-  -- ** Internal metadata functions
-  tokenStandardV2Namespace,
+  -- ** Available to pending actions conversion
+  availableToPendingActions,
 
 ) where
 
 import DA.Action
 import DA.Date
+import DA.List (dedupSort)
+import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as T
 import DA.Time
@@ -80,7 +86,7 @@ epoch : Time
 epoch = time (date 1970 Jan 1) 0 0 0
 
 maxTime : Time
-maxTime = time (date 9999 Dec 31) 23 59 59
+maxTime = time (date 9999 Dec 31) 23 59 59 `addRelTime` microseconds 999999
 
 encodeTime : Time -> Text
 encodeTime t = show (convertRelTimeToMicroseconds(t `subTime` epoch))
@@ -113,14 +119,12 @@ insertOptional k ov m = case ov of
   None -> m
   Some v -> TextMap.insert k v m
 
-
 timeToMeta : Text -> Time -> Metadata -> Metadata
 timeToMeta field t meta =
-  Metadata $ TextMap.insert (tokenStandardV2Namespace <> field) (encodeTime t) meta.values
+  Metadata $ TextMap.insert field (encodeTime t) meta.values
 
 timeFromMeta : Text -> Metadata -> Optional Time
-timeFromMeta field meta =
-  decodeTime <$> TextMap.lookup (tokenStandardV2Namespace <> field) meta.values
+timeFromMeta field meta = decodeTime <$> TextMap.lookup field meta.values
 
 
 -- Account utils
@@ -180,37 +184,40 @@ regularAccountOwner : HoldingV2.Account -> Party
 regularAccountOwner account =
   fromSomeNote ("Expected a regular account, but got the special account: " <> show account) account.owner
 
-providerKey : Text -> Text
-providerKey field = tokenStandardV2Namespace <> field <> ".provider"
+providerMetaKey : Text -> Text
+providerMetaKey field = tokenStandardV2Namespace <> field <> ".provider"
 
-idKey : Text -> Text
-idKey field = tokenStandardV2Namespace <> field <> ".id"
+accountIdMetaKey : Text -> Text
+accountIdMetaKey field = tokenStandardV2Namespace <> field <> ".id"
+
+expiresAtMetaKey : Text
+expiresAtMetaKey = tokenStandardV2Namespace <> "expiresAt"
 
 accountToMeta : Text -> HoldingV2.Account -> Metadata -> Metadata
 accountToMeta field account meta =
   Metadata $
-  (if T.isEmpty account.id then identity else TextMap.insert (idKey field) account.id) $
-  insertOptional (providerKey field) (partyToText <$> account.provider) $
+  (if T.isEmpty account.id then identity else TextMap.insert (accountIdMetaKey field) account.id) $
+  insertOptional (providerMetaKey field) (partyToText <$> account.provider) $
   meta.values
 
 accountFromMeta : Party -> Text -> Metadata -> HoldingV2.Account
 accountFromMeta owner field meta =
   HoldingV2.Account with
-    provider = (TextMap.lookup (providerKey field) meta.values) >>= partyFromText
-    id = fromOptional "" $ TextMap.lookup (idKey field) meta.values
-    owner = Some owner
+    provider = (TextMap.lookup (providerMetaKey field) meta.values) >>= partyFromText
+    id = fromOptional "" $ TextMap.lookup (accountIdMetaKey field) meta.values
+    owner = if owner == specialAccountOwnerStubV1 then None else Some owner
 
 dropAccountMeta : Text -> Metadata -> Metadata
 dropAccountMeta fieldName meta =
   Metadata $
-  TextMap.delete (providerKey fieldName) $
-  TextMap.delete (idKey fieldName) $
+  TextMap.delete (providerMetaKey fieldName) $
+  TextMap.delete (accountIdMetaKey fieldName) $
   meta.values
 
 ensureNoAccountMeta : Text -> Text -> Metadata -> Update ()
 ensureNoAccountMeta path fieldName meta = do
-    check (providerKey fieldName)
-    check (idKey fieldName)
+    check (providerMetaKey fieldName)
+    check (accountIdMetaKey fieldName)
   where
     check k = case TextMap.lookup k meta.values of
       None -> pure ()
@@ -223,14 +230,14 @@ ensureBasicAccount fieldName account = do
 
 validateNoAccountMeta : Text -> Metadata -> Bool
 validateNoAccountMeta fieldName meta =
-    validateNoMeta (providerKey fieldName) meta &&
-    validateNoMeta (idKey fieldName) meta
+    validateNoMeta (providerMetaKey fieldName) meta &&
+    validateNoMeta (accountIdMetaKey fieldName) meta
 
 validateNoMeta : Text -> Metadata -> Bool
-validateNoMeta fieldName meta = isNone $ TextMap.lookup (tokenStandardV2Namespace <> fieldName) meta.values
+validateNoMeta fieldName meta = isNone $ TextMap.lookup fieldName meta.values
 
 dropMeta : Text -> Metadata -> Metadata
-dropMeta field meta = Metadata $ TextMap.delete (tokenStandardV2Namespace <> field) meta.values
+dropMeta field meta = Metadata $ TextMap.delete field meta.values
 
 partiesToMeta : Text -> [Party] -> Metadata -> Metadata
 partiesToMeta field parties meta
@@ -253,7 +260,7 @@ partiesFromMeta field meta =
 -- | Report early expiry of instructions or allocations in the V1 metadata.
 expiresAtToMeta : Optional Time -> Metadata -> Metadata
 expiresAtToMeta None meta = meta
-expiresAtToMeta (Some t) meta = timeToMeta "expiresAt" t meta
+expiresAtToMeta (Some t) meta = timeToMeta expiresAtMetaKey t meta
 
 
 -- Holding change metadata
@@ -302,6 +309,25 @@ v1HistoryTagAsUnlockV1 : Metadata -> Metadata
 v1HistoryTagAsUnlockV1 (Metadata meta) = Metadata $ TextMap.insert txKindMetaKey "unlock" meta
 
 
+-- Available to pending actions conversion
+------------------------------------------
+
+-- | Convert a map of named available actions to an approximate list of pending actions,
+-- using `joint-` to mark actions that require joint-authorization, and using `or` to combine
+-- multiple actions available to a party.
+availableToPendingActions : (a -> Text) -> Map.Map a [[Party]] -> Map.Map Party Text
+availableToPendingActions actionName availableActions =
+    fmap (T.intercalate " or " . dedupSort) allActions
+  where
+    allActions = Map.fromListWithR (++) $ do
+      (action, possibleActors) <- Map.toList availableActions
+      actors0 <- possibleActors
+      let actors = dedupSort actors0
+      let prefix = if length actors > 1 then "joint-" else ""
+      actor <- actors
+      pure (actor, [prefix <> actionName action])
+
+
 -- Class based conversion
 ---------------------------
 
@@ -348,4 +374,4 @@ instance BackwardCompatible HoldingV1.HoldingView HoldingV2.HoldingView where
     instrumentId = upcast v1.instrumentId
     amount = v1.amount
     lock = upcast <$> v1.lock
-    meta = v1.meta
+    meta = dropAccountMeta "account" v1.meta

@@ -4,20 +4,23 @@
 -- | Unit tests for Splice.TokenStandard.Utils.Internal.Transfers
 module Splice.Tests.UnitTest_Transfers where
 
-import DA.Action (unless)
 import DA.List (sort, dedupSort)
+import DA.Map qualified as Map
 import DA.Time
-import DA.Text qualified as T
 
 import Daml.Script
 
 import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as V1
 import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 
 import Splice.TokenStandard.Utils qualified as TSU
 
--- TODO(#4517): add the missing unit tests for the non-trivial functions in Transfers utils
+import Splice.Tests.TokenStandard.UnitTestUtils
+import Splice.Api.Token.Test.DummyHolding (DummyHolding(..))
+
 
 test_transferFactoryV2_transferExtraObserversDefaultImpl : Script ()
 test_transferFactoryV2_transferExtraObserversDefaultImpl = do
@@ -27,13 +30,144 @@ test_transferFactoryV2_transferExtraObserversDefaultImpl = do
         actors = [alice]
         extraArgs = emptyExtraArgs
 
-  let expectedPublicObservers = sort [alice, bob, accountProvider1, accountProvider2]
-  checkEq "transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl" expectedPublicObservers $
-    dedupSort $ TSU.transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl choiceArg
+  checkEq "transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl"
+    (dedupSort $ TSU.transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl choiceArg)
+    (sort [alice, bob, accountProvider1, accountProvider2])
 
-  let expectedPrivateObservers = sort [alice, accountProvider1]
-  checkEq "transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl" expectedPrivateObservers $
-    dedupSort $ TSU.transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl choiceArg
+  checkEq "transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl"
+    (dedupSort $ TSU.transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl choiceArg)
+    (sort [alice, accountProvider1])
+
+test_transfer_roundtrips : Script ()
+test_transfer_roundtrips = do
+  TestEnv {..} <- setupTest
+
+  let burn = V2.Account with
+        owner = None
+        id = "cip-112/burn"
+        provider = None
+  let aliceCustodied = V2.Account with
+        owner = Some alice
+        id = "aliceCustodied"
+        provider = Some accountProvider1
+
+  let transferV1 = V1.Transfer with
+        sender = alice
+        receiver = bob
+        amount = 10.0
+        instrumentId = V1.InstrumentId with
+          admin
+          id = "X"
+        inputHoldingCids = []
+        requestedAt = transferV2.requestedAt
+        executeBefore = transferV2.executeBefore
+        meta = emptyMetadata
+
+  test_v1_roundtrips @V2.Transfer "Transfer"
+    [ transferV1
+    , transferV1 with meta = mkMeta dummyMeta
+    ]
+
+  test_v2_roundtrips @V1.Transfer "Transfer"
+    [ transferV2
+    , transferV2 with sender = aliceCustodied
+    , transferV2 with receiver = burn
+    ]
+
+  test_v1_roundtrips @V2.TransferInstructionResult "TransferInstructionResult"
+    [ V1.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V1.TransferInstructionResult_Pending (coerceContractId dummyCid)
+        meta = mkMeta dummyMeta
+    , V1.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V1.TransferInstructionResult_Completed [coerceContractId dummyCid, coerceContractId dummyCid]
+        meta = mkMeta dummyMeta
+    , V1.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V1.TransferInstructionResult_Failed
+        meta = mkMeta dummyMeta
+    ]
+
+  test_v2_roundtrips @V1.TransferInstructionResult "TransferInstructionResult"
+    [ V2.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V2.TransferInstructionResult_Pending (coerceContractId dummyCid)
+        meta = mkMeta dummyMeta
+    , V2.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V2.TransferInstructionResult_Completed [coerceContractId dummyCid, coerceContractId dummyCid]
+        meta = mkMeta dummyMeta
+    , V2.TransferInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid]
+        output = V2.TransferInstructionResult_Failed
+        meta = mkMeta dummyMeta
+    ]
+
+
+test_downcast_TransferInstructionViewV2 : Script ()
+test_downcast_TransferInstructionViewV2 = do
+  TestEnv {..} <- setupTest
+  let instrViewV2 = V2.TransferInstructionView with
+        originalInstructionCid = Some (coerceContractId dummyCid)
+        transfer = transferV2
+        meta = emptyMetadata
+        expiresAt = Some TSU.maxTime
+        availableActions = mempty
+  let expectedInstrViewV1 = V1.TransferInstructionView with
+        originalInstructionCid = Some (coerceContractId dummyCid)
+        transfer = TSU.downcast transferV2
+        meta = mkMeta [("cip-112/expiresAt", "253402300799999999")]
+        status = V1.TransferPendingInternalWorkflow mempty
+
+  checkEq "downcast TransferInstructionViewV2"
+    (TSU.downcast instrViewV2)
+    expectedInstrViewV1
+
+  let testStatus : Map.Map V2.TransferInstructionAction [[Party]] -> V1.TransferInstructionStatus -> (V1.TransferInstructionStatus, V1.TransferInstructionStatus)
+      testStatus actions expectedStatus =
+        let instrViewV2' = instrViewV2 with availableActions = actions in
+        let instrViewV1' = TSU.downcast @V1.TransferInstructionView instrViewV2' in
+        (instrViewV1'.status, expectedStatus)
+  let as0 = Map.fromList
+          [ (V2.TIA_Withdraw, [[alice],[accountProvider1]])
+          , (V2.TIA_Accept, [[bob], [accountProvider2]])
+          , (V2.TIA_Reject, [[bob],[accountProvider1, accountProvider2]])
+          , (V2.TIA_Custom "reserve-funds", [[admin, accountProvider1]])
+          ]
+
+  checkEq' "transferStatus of downcast TransferInstructionViewV2"
+    [ testStatus as0 V1.TransferPendingReceiverAcceptance
+    , testStatus (Map.delete V2.TIA_Accept as0) $ V1.TransferPendingInternalWorkflow with
+        pendingActions = Map.fromList
+          [ (accountProvider1,"joint-reject or joint-reserve-funds or withdraw")
+          , (accountProvider2,"joint-reject")
+          , (admin,"joint-reserve-funds")
+          , (alice,"withdraw")
+          , (bob,"reject")
+          ]
+    , testStatus
+        (Map.singleton V2.TIA_Accept [[bob, accountProvider2], [accountProvider2]]) $
+        V1.TransferPendingInternalWorkflow with
+          pendingActions = Map.fromList
+            [ (accountProvider2,"accept or joint-accept")
+            , (bob,"joint-accept")
+            ]
+    , testStatus Map.empty V1.TransferPendingInternalWorkflow with
+        pendingActions = Map.empty
+    ]
+
+test_transferAcceptanceTxHistoryV1ToMeta : Script ()
+test_transferAcceptanceTxHistoryV1ToMeta = do
+  TestEnv {..} <- setupTest
+
+  checkEq "transferAcceptanceTxHistoryV1ToMeta "
+    (TSU.transferAcceptanceTxHistoryV1ToMeta transferV2 emptyMetadata) $
+    mkMeta
+      [ ("splice.lfdecentralizedtrust.org/sender", partyToText alice)
+      , ("splice.lfdecentralizedtrust.org/receiver", partyToText bob)
+      , ("splice.lfdecentralizedtrust.org/tx-kind", "transfer")
+      ]
 
 
 -- Shared test infra
@@ -50,6 +184,7 @@ data TestEnv = TestEnv with
   instrId : V2.InstrumentId
   now : Time
   transferV2 : V2.Transfer
+  dummyCid : ContractId ()
 
 setupTest : Script TestEnv
 setupTest = do
@@ -79,18 +214,7 @@ setupTest = do
         requestedAt = now
         executeBefore = now `addRelTime` days 7
         meta = emptyMetadata
+  dummyCid0 <- submit alice $
+    createCmd DummyHolding with owner = alice, issuer = alice, amount = 100.0
+  let dummyCid = coerceContractId dummyCid0
   pure TestEnv with ..
-
-emptyExtraArgs : ExtraArgs
-emptyExtraArgs = ExtraArgs with
-  context = emptyChoiceContext
-  meta = emptyMetadata
-
-checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
-checkEq prefix expected actual =
-  unless (actual == expected) $
-    fail $ T.unlines
-      [ prefix <> ": actual values do not match expected values."
-      , "  actual:   " <> show actual
-      , "  expected: " <> show expected
-      ]

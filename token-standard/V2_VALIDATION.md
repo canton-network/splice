@@ -210,6 +210,9 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Clarify that `V2.Allocation_Cancel` can be called by the `admin` to cancel expired allocations
 - Call out the requirement that `V2.TransferFactory_Transfer` SHOULD complete in a single step
   if its actors include all parties required to authorize the transfer
+- Remove `V2.AllocationRequest.settleAt` field, as it is redundant with the
+  `settlementDeadline` of the requested allocations
+
 
 ### Utility and test library changes
 
@@ -232,3 +235,13 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   that can also be used for multi-actor choices (e.g., sender and receiver jointly authorizing a transfer)
 - Removed superfluous `admin` argument from `burnAccount`, `mintAccount`, and `netAllocationCreditAmounts`. That
   argument is no longer required since we introduced special "owner-less" accounts for mint and burn
+- Removed the `transferInstructionV2_availableActionsDefault` function, as inlining it into the implementations
+  is trivial and invites the required thinking for registry implementors whether really only owners can act or not.
+- Add `downcast_v2_v1_AllocationRequestView` for cases where the default computation of the `settlementDeadline` field
+  used by `downcast V2.AllocationRequestView` is not suitable
+- Fix the missing removal of metadata when upcasting from V1 to V2 datatypes.
+- Adjust the pending action computations for `V1.TransferInstruction` and `V1.AllocationInstruction` to report
+  all available actions of the V2 types.
+- Use consistent naming for all metadata keys: `providerMetaKey`, `accountIdMetaKey`, `expiresAtMetaKey`, and `extraExecutorsMetaKey`
+- Fix a namespacing mistake in the computation of the `expiresAtMetaKey`
+- Remove redundant `textMapZipWithDefault`. Use `textMapMergeWithDefault` instead

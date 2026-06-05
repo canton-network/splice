@@ -865,7 +865,7 @@ mkAcceptAndCreateRequestedAllocationsV2 registries actor (reqCid, req) = do
 
       (None, Some _) -> do
         -- allocate legs for V1-only admins via their V1 factory
-        let reqV1 = (TSU.downcast req) with
+        let reqV1 = (TSU.downcast_v2_v1_AllocationRequestView alloc.settlementDeadline req) with
               -- overwrite the transfer legs to only include the legs relevant for this admin
               transferLegs = TextMap.fromList $ do
                 leg <- alloc.transferLegSides
