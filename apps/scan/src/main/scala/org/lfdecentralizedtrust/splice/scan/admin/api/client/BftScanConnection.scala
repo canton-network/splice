@@ -883,14 +883,14 @@ class BftScanConnection(
         )
   }
 
-  /** Here we query all scans in parallel and resolve to the first response that has the
-    * batch because the contents of batch are verifiable using the hash.
+  /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
+    * required: we query a single random scan and use its response if it has the batch.
     */
   override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]] = {
-    val callConfig = BftCallConfig.default(scanList.scanConnections).copy(targetSuccess = 1)
+    val callConfig = BftCallConfig.randomSingleCall(scanList.scanConnections)
     if (!callConfig.enoughAvailableScans) Future.successful(None)
     else
       bftCall[GetRewardAccountingBatchResponse](
@@ -1062,6 +1062,12 @@ object BftScanConnection {
           )
       }
     }
+
+    // For targetSuccess==1, by setting the requestsToDo to 1, bftCall would
+    // select a random scan during retries, thereby preventing a single malicious
+    // scan to prevent reaching concesus by doing a failed response faster than others.
+    def randomSingleCall(connections: ScanConnections): BftCallConfig =
+      default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
     def forAvailableData(
         connections: ScanConnections,
