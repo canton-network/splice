@@ -835,7 +835,7 @@ class BftScanConnection(
     * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
     *
     * So simple equality comparison on responses is not possible, and we treat
-    * the two non-Ok responses as a "no response" by throwing an exception so
+    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
     * that this does not cause grouping in executeCall.
     *
     * And if no response could be obtained via bft we respond with 'Undetermined'
