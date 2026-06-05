@@ -1187,10 +1187,17 @@ template DsoRules with
             return DsoRules_UpdateSvRewardWeightResult with ..
 
     -- Note: Implement in phase 1
+    -- | Updates the reward weight of a hosted SV.
+    --
+    -- Updates the reward weight stored in the hosted SV entry in
+    -- 'DsoRules.hostedSvs'. The hosted SV must already be registered, and the new
+    -- reward weight must be positive.
     choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateSvRewardWeight_V2Result
       with
         svParty : Party
+          -- ^ The hosted SV party whose reward weight should be updated.
         newRewardWeight : Int
+          -- ^ The new positive reward weight for the hosted SV.
       controller dso
       do
         require "New reward weight is positive" (newRewardWeight > 0)
@@ -1203,10 +1210,16 @@ template DsoRules with
             newDsoRules <- create this with hostedSvs = Some newHostedSvs
             pure DsoRules_UpdateSvRewardWeight_V2Result with newDsoRules
 
-    -- TODOV: doc
+    -- Note: Implement in phase 1
+    -- | Creates an instruction to offboard a hosted SV.
+    --
+    -- This is the first step of the hosted-SV offboarding flow. The DSO records
+    -- which hosted SV should be offboarded, after checking that the party is
+    -- currently registered as a hosted SV in 'DsoRules.hostedSvs'.
     nonconsuming choice DsoRules_InstructOffboardHostedSv : DsoRules_InstructOffboardHostedSvResult
       with
         svParty : Party
+          -- ^ The hosted SV party to offboard.
       controller dso
       do
         let hostedSvsMap = fromOptional Map.empty hostedSvs
@@ -1217,13 +1230,24 @@ template DsoRules with
             pure DsoRules_InstructOffboardHostedSvResult with instructionCid
 
     -- Note: Implement in phase 1
-    -- | Offboards a hosted SV.
+    -- | Completes the offboarding of a hosted SV.
+    --
+    -- This is the second step of the hosted-SV offboarding flow. It consumes the
+    -- DSO instruction, archives the hosted SV's associated reward contracts, and
+    -- removes the hosted SV from 'DsoRules.hostedSvs'.
+    --
+    -- The provided 'SvRewardBeneficiaries' and 'SvRewardState' contracts must belong
+    -- to the hosted SV being offboarded.
     choice DsoRules_OffboardHostedSv : DsoRules_OffboardHostedSvResult
       with
         instructionCid : ContractId OffboardHostedSvInstruction
+          -- ^ The DSO instruction authorizing the hosted-SV offboarding.
         svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
+          -- ^ The beneficiary distribution contract for the hosted SV being offboarded.
         svRewardStateCid : ContractId SvRewardState
+          -- ^ The reward state contract for the hosted SV being offboarded.
         sv : Party
+          -- ^ The SV operator completing the offboarding.
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
@@ -1232,10 +1256,10 @@ template DsoRules with
         case Map.lookup instruction.svParty hostedSvsMap of
           None -> fail "SV party is not registered"
           Some hostedSvInfo -> do
-            -- Archive the SvRewardBeneficiaries contract
+            -- Archive the hosted SV's associated reward contracts.
             svRewardBeneficiaries <- fetchAndArchive (ForDso with dso) svRewardBeneficiariesCid
-            -- Archive the SvRewardState contract
             svRewardState <- fetchAndArchive (ForDso with dso) svRewardStateCid
+
             -- Sanity checks
             require "The SV party in SvRewardBeneficiaries and OffboardHostedSvInstruction must match" $
               svRewardBeneficiaries.sv == instruction.svParty
@@ -1250,11 +1274,19 @@ template DsoRules with
 
             pure DsoRules_OffboardHostedSvResult with newDsoRules
 
-    -- TODOV: doc
+    -- Note: Implement in phase 1
+    -- | Creates an instruction to update the SV operator of a hosted SV.
+    --
+    -- This is the first step of the hosted-SV operator update flow. The DSO records
+    -- which hosted SV should be updated and which SV operator it should be assigned
+    -- to, after checking that the hosted SV is currently registered in
+    -- 'DsoRules.hostedSvs'.
     nonconsuming choice DsoRules_InstructUpdateSvOperatorForHostedSv : DsoRules_InstructUpdateSvOperatorForHostedSvResult
       with
         svParty : Party
+          -- ^ The hosted SV party whose SV operator should be updated.
         newSvOperatorParty : Party
+          -- ^ The new SV operator party for the hosted SV.
       controller dso
       do
         let hostedSvsMap = fromOptional Map.empty hostedSvs
@@ -1267,12 +1299,24 @@ template DsoRules with
               dso
             pure DsoRules_InstructUpdateSvOperatorForHostedSvResult with instructionCid
 
-    -- TODOV: doc
+    -- Note: Implement in phase 1
+    -- | Completes the update of the SV operator for a hosted SV.
+    --
+    -- This is the second step of the hosted-SV operator update flow. It consumes the
+    -- DSO instruction, updates the hosted SV entry in 'DsoRules.hostedSvs', and
+    -- recreates the hosted SV's 'SvRewardBeneficiaries' contract with the new SV
+    -- operator.
+    --
+    -- The provided 'SvRewardBeneficiaries' contract must belong to the hosted SV
+    -- being updated and to the currently configured SV operator.
     choice DsoRules_UpdateSvOperatorForHostedSv : DsoRules_UpdateSvOperatorForHostedSvResult
       with
         instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
+          -- ^ The DSO instruction authorizing the SV operator update.
         svRewardBeneficiariesCid : ContractId SvRewardBeneficiaries
+          -- ^ The beneficiary distribution contract for the hosted SV being updated.
         sv : Party
+          -- ^ The SV operator completing the update.
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)

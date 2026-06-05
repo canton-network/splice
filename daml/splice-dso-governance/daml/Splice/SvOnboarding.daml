@@ -97,9 +97,14 @@ template UpdateSvOperatorForHostedSvInstruction with
     signatory dso
 
 
--- TODOV: doc
+-- | Instruction created by the DSO to authorize the offboarding of a hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV to offboard, and the hosted SV's associated contracts are
+-- archived when the instruction is consumed by 'DsoRules_OffboardHostedSv'.
 template OffboardHostedSvInstruction with
     svParty : Party
+      -- ^ The hosted SV party to offboard.
     dso : Party
   where
     signatory dso
