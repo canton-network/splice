@@ -176,11 +176,16 @@ object ExternalPartyWalletStore {
         }(co =>
           ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
         ),
-        mkFilter(RewardCouponV2.COMPANION) { co =>
-          co.payload.dso == dso &&
-          (co.payload.provider == externalParty ||
-            co.payload.beneficiary == java.util.Optional.of(externalParty))
-        }(co =>
+        mkFilter(RewardCouponV2.COMPANION)(
+          co =>
+            co.payload.dso == dso &&
+              (co.payload.provider == externalParty ||
+                co.payload.beneficiary == java.util.Optional.of(externalParty)),
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.externalParty), now)(tc)
+          },
+        )(co =>
           ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
         ),
         mkFilter(ValidatorRewardCoupon.COMPANION) { co =>
