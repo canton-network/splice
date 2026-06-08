@@ -152,7 +152,6 @@ class AllocationsFrontendIntegrationTest
       val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
       val bobTransferAmount = BigDecimal(6)
 
-      val venuePartyHint = s"venue-party-${Random.nextInt()}"
       // We use the same venue party for bob so we can setup the TradeSettlementAgreement using a submit with `actAs = Seq(venueParty, bobParty)`.
       val venueParty = bobValidatorBackend.getValidatorPartyId()
 
