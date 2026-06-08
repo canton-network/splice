@@ -18,7 +18,7 @@ export const imagePullDeps = imagePullSecret(namespace);
 
 const secretName = (
   (imagePullDeps as pulumi.Resource[])
-    .filter(e => e instanceof k8s.core.v1.Secret)
+    .filter(e => e instanceof k8s.core.v1.Secret || e.constructor?.name === 'Secret')
     .pop() as k8s.core.v1.Secret
 ).metadata.name;
 
