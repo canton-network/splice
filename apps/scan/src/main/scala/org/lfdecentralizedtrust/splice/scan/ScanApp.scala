@@ -580,8 +580,7 @@ class ScanApp(
       )
       BftScanConnection
         .peerScanConnection(
-          store,
-          svName,
+          () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
           ledgerClient,
           scansRefreshInterval = config.automation.pollingInterval,
           amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
