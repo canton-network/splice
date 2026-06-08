@@ -144,7 +144,7 @@ template ExternalPartyAmuletRules
       transferFactory_transferExtraObservers = transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl
 
       transferFactory_transferImpl =
-        transferFactory_v2_transferDefaultImplUsingV1 $ amulet_transferFactoryV1_transferImpl this
+        transferFactoryV2_transferDefaultImplUsingV1 $ amulet_transferFactoryV1_transferImpl this
 
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
 

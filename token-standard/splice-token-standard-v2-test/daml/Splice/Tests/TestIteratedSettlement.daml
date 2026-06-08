@@ -301,7 +301,7 @@ test_refresh_and_withdrawal TestCase {..} = do
         context = context.choiceContext
         meta = emptyMetadata
   let (Left (FailureStatusError err)) = result
-  err === mkCannotWithdrawCommittedAllocationFailure (Some aliceSettlementDeadline)
+  err === cannotWithdrawCommittedAllocationFailure (Some aliceSettlementDeadline)
 
   -- cycle allocation at different times
   let refreshAllocation allocationCid = do
