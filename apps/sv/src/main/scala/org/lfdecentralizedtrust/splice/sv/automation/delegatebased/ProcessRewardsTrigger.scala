@@ -147,12 +147,12 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         response <- bftScan.getRewardAccountingBatch(round, batchHash)
       } yield response match {
         case Some(batch) =>
-          logger.info(s"Obtained the batch for round $round via BFT read.")
+          logger.info(s"Obtained batch for round $round with hash $batchHash via BFT read.")
           batch
         case None =>
           throw Status.FAILED_PRECONDITION
             .withDescription(
-              s"Batch could not be obtained via BFT read for round $round with hash $batchHash"
+              s"Failed to obtain batch for round $round with hash $batchHash via BFT read."
             )
             .asRuntimeException()
       }
