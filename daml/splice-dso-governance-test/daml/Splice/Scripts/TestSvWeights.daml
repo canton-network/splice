@@ -95,11 +95,11 @@ test_SvWeightsFullyOnledger = do
   let hsv1ExtraBeneficiaries = [(hsv1_b, unsafeLookup hsv1_b hsv1BeneficiariesMap)]
   hsv1SvRewardBeneficiariesCid <- getHostedSvRewardBeneficiariesCid app hsv1 sv5
   [(rulesCid, _)] <- query @DsoRules app.dso
-  void $ submit (actAs hsv1 <> readAs dso) $
+  void $ submit (actAs sv5 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hsv1SvRewardBeneficiariesCid
       newBeneficiaries = hsv1ExtraBeneficiaries
-      hostedSv = hsv1
+      sv = sv5
 
   assertHostedSvRewardBeneficiariesForSvAndOperator app hsv1 sv5
     HostedSvRewardBeneficiaries with
@@ -238,11 +238,11 @@ test_SvWeightsFullyOnledger = do
 
   -- Remove hsv1_b's weight
   hsv1SvRewardBeneficiariesCid <- getHostedSvRewardBeneficiariesCid app hsv1 sv1
-  void $ submit (actAs hsv1 <> readAs dso) $
+  void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hsv1SvRewardBeneficiariesCid
       newBeneficiaries = []
-      hostedSv = hsv1
+      sv = sv1
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso

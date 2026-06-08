@@ -1400,22 +1400,28 @@ template DsoRules with
           -- ^ The existing beneficiary distribution contract to replace.
         newBeneficiaries : [(Party, Decimal)]
           -- ^ The full beneficiary distribution to set.
-        hostedSv : Party
-          -- ^ The hosted SV party whose beneficiary distribution is being managed.
-      controller hostedSv
+        sv : Party
+          -- ^ The SV operator hosting the hosted SV whose beneficiary distribution is being managed.
+      controller sv
       do
+        _ <- getAndValidateSvParty this (Some sv)
+        hostedSvRewardBeneficiaries <- fetchAndArchive (ForDso with dso) hostedSvRewardBeneficiariesCid
+        let hostedSv = hostedSvRewardBeneficiaries.hostedSv
+            svOperator = hostedSvRewardBeneficiaries.svOperator
         case Map.lookup hostedSv (fromOptional Map.empty hostedSvs) of
           None -> fail "Hosted SV party is not registered"
-          Some hostedSvInfo -> do
-            hostedSvRewardBeneficiaries <- fetchAndArchive (ForOwner with dso; owner = hostedSv) hostedSvRewardBeneficiariesCid
+          Some _ -> do
             -- Sanity checks
+            require
+              ( "Beneficiary's distribution for hosted SV "
+                  <> show hostedSv
+                  <> " is managed by the SV operator "
+                  <> show svOperator
+              ) $ svOperator == sv
             require "New beneficiaries must differ from the existing beneficiaries" $
               newBeneficiaries /= hostedSvRewardBeneficiaries.beneficiaries
 
-            hostedSvRewardBeneficiariesCid <- create HostedSvRewardBeneficiaries with
-              dso
-              hostedSv
-              svOperator = hostedSvInfo.svOperator
+            hostedSvRewardBeneficiariesCid <- create hostedSvRewardBeneficiaries with
               beneficiaries = newBeneficiaries
 
             pure DsoRules_SetSvRewardBeneficiariesResult with hostedSvRewardBeneficiariesCid
