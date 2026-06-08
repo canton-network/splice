@@ -1,5 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.daml.ledger.api.v2
+import com.daml.ledger.javaapi
+import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv2,
@@ -7,6 +10,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2
+import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
   TestCommon,
@@ -47,7 +51,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
   ): CreateAllocationRequestResult = {
     val (_, otcTrade) = actAndCheck(
       "Venue creates OTC Trade", {
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
           .submitJava(
             actAs = Seq(venueParty),
             commands = mkTestTrade(
@@ -67,7 +71,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
     )(
       "There exists a trade visible to the venue's participant",
       _ =>
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
           .awaitJava(tradingappv2.OTCTrade.COMPANION)(
             venueParty
           ),
@@ -75,7 +79,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
 
     val (_, (bobAllocationRequest, aliceAllocationRequest)) = actAndCheck(
       "Venue creates allocation requests", {
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
           .submitJava(
             actAs = Seq(venueParty),
             commands = otcTrade.id
@@ -133,7 +137,7 @@ trait TokenStandardV2TestUtil extends TestCommon {
       // - Allocations should be made before this time.
       // Settlement happens at any point after this time.
       Instant.now().plusSeconds(30L),
-      java.util.Optional.empty,
+      java.util.Optional.of(Instant.now().plusSeconds(180L)),
     )
   }
 
@@ -181,5 +185,39 @@ trait TokenStandardV2TestUtil extends TestCommon {
       otcTrade: tradingappv2.OTCTrade.Contract
   ): Seq[allocationv2.TransferLeg] =
     otcTrade.data.tradeLegs.asScala.map(_.leg).toSeq
+
+  def listHoldingsV2(
+      participantClient: ParticipantClientReference,
+      party: PartyId,
+  ): Seq[
+    (
+        holdingv2.Holding.ContractId,
+        holdingv2.HoldingView,
+    )
+  ] = {
+    val holdings =
+      participantClient.ledger_api.state.acs.of_party(
+        party = party,
+        filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+          TemplateId(
+            templateId.getPackageId,
+            templateId.getModuleName,
+            templateId.getEntityName,
+          )
+        ),
+      )
+    holdings.map(instr => {
+      val instrViewRaw = (instr.event.interfaceViews.head.viewValue
+        .getOrElse(throw new RuntimeException("expected an interface view to be present")))
+      val instrView = holdingv2.HoldingView
+        .valueDecoder()
+        .decode(
+          javaapi.data.DamlRecord.fromProto(
+            v2.value.Record.toJavaProto(instrViewRaw)
+          )
+        )
+      (new holdingv2.Holding.ContractId(instr.contractId), instrView)
+    })
+  }
 
 }

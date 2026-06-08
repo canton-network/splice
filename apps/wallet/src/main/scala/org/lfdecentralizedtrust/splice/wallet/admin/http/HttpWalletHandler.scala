@@ -96,7 +96,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
 import scala.jdk.CollectionConverters.*
 import scala.reflect.ClassTag
-import cats.data.Chain
+import cats.data.{Chain, OptionT}
 
 class HttpWalletHandler(
     override protected val walletManager: UserWalletManager,
@@ -1463,44 +1463,79 @@ class HttpWalletHandler(
       tUser: WalletUserRequest
   ): Future[WalletResource.WithdrawAmuletAllocationV2Response] = {
     implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
-    withSpan(s"$workflowId.withdrawAmuletAllocation") { implicit traceContext => _ =>
-      val allocationCid = Codec.tryDecodeJavaContractId(
+    withSpan(s"$workflowId.withdrawAmuletAllocationV2") { implicit traceContext => _ =>
+      val allocationV2Cid = Codec.tryDecodeJavaContractId(
+        amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+      )(
+        contractId
+      )
+      val allocationV1Cid = Codec.tryDecodeJavaContractId(
         amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
       )(
         contractId
       )
       val store = userWallet.store
+      val actAs = Seq(store.key.validatorParty, store.key.endUserParty)
+      val readAs = Seq.empty
       for {
-        allocation <- store.multiDomainAcsStore
-          .getContractById(
-            amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
-          )(allocationCid)
-          .map(
-            _.toAssignedContract.getOrElse(
-              throw Status.Code.FAILED_PRECONDITION.toStatus
-                .withDescription(s"AmuletAllocationV2 is not assigned to a synchronizer.")
-                .asRuntimeException()
-            )
-          )
         context <- scanConnection.getAllocationWithdrawContextV2(
-          allocation.contractId.toInterface(allocationv2.Allocation.INTERFACE)
+          new allocationv2.Allocation.ContractId(contractId)
         )
-        result <- userWallet.connection
-          .submit(
-            Seq(store.key.validatorParty, store.key.endUserParty),
-            Seq.empty,
-            allocation.exercise(
-              _.toInterface(allocationv2.Allocation.INTERFACE)
-                .exerciseAllocation_Withdraw(
-                  java.util.List.of(store.key.endUserParty.toProtoPrimitive),
-                  context.toExtraArgs(),
+        exerciseArgs = new allocationv2.Allocation_Withdraw(
+          java.util.List.of(store.key.endUserParty.toProtoPrimitive),
+          context.toExtraArgs(),
+        )
+        result <- OptionT(
+          store.multiDomainAcsStore
+            .lookupContractById(
+              amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+            )(allocationV2Cid)
+        ).subflatMap(_.toAssignedContract)
+          .semiflatMap { v2 =>
+            userWallet.connection
+              .submit(
+                actAs,
+                readAs,
+                // This returns a type containing `this.type`, which means that it doesn't match v1.
+                // The common type is thus the one from the yieldResult
+                v2.exercise(
+                  _.toInterface(allocationv2.Allocation.INTERFACE)
+                    .exerciseAllocation_Withdraw(exerciseArgs)
+                ),
+              )
+              .noDedup
+              .withSynchronizerId(v2.domain)
+              .withDisclosedContracts(DisclosedContracts.fromProto(context.disclosedContracts))
+              .yieldResult()
+          }
+          .orElse(
+            OptionT(
+              store.multiDomainAcsStore
+                .getContractById(
+                  amuletAllocationV1Codegen.AmuletAllocation.COMPANION
+                )(allocationV1Cid)
+                .map(_.toAssignedContract)
+            ).semiflatMap { v1 =>
+              userWallet.connection
+                .submit(
+                  actAs,
+                  readAs,
+                  v1.exercise(
+                    _.toInterface(allocationv2.Allocation.INTERFACE)
+                      .exerciseAllocation_Withdraw(exerciseArgs)
+                  ),
                 )
-            ),
+                .noDedup
+                .withSynchronizerId(v1.domain)
+                .withDisclosedContracts(DisclosedContracts.fromProto(context.disclosedContracts))
+                .yieldResult()
+            }
           )
-          .noDedup
-          .withSynchronizerId(allocation.domain)
-          .withDisclosedContracts(DisclosedContracts.fromProto(context.disclosedContracts))
-          .yieldResult()
+          .getOrElse(
+            throw Status.Code.FAILED_PRECONDITION.toStatus
+              .withDescription(s"AmuletAllocation is not assigned to a synchronizer.")
+              .asRuntimeException()
+          )
       } yield WalletResource.WithdrawAmuletAllocationV2ResponseOK(
         d0.AmuletAllocationV2WithdrawResult(
           result.exerciseResult.authorizerHoldingCids.asScala.map { case (instrumentId, holdings) =>

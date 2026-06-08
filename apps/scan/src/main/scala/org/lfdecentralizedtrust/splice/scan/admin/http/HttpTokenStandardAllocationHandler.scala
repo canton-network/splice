@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
+import cats.data.OptionT
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
@@ -135,12 +136,16 @@ class HttpTokenStandardAllocationHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
-        // TODO (#4949): this only lists V2 allocations, but it should also do V1
-        allocations <- contractFetcher.lookupContractsById(
+        allocationsV2 <- contractFetcher.lookupContractsById(
           amuletallocationv2.AmuletAllocationV2.COMPANION
         )(settleBatch.allocations.asScala.toSeq.map(_.allocationCid))
+        allocationsV1 <- contractFetcher.lookupContractsById(
+          amuletallocationv1.AmuletAllocation.COMPANION
+        )(settleBatch.allocations.asScala.toSeq.map(_.allocationCid))
+        lockedAmuletCids = allocationsV2.flatMap(_.payload.lockedAmulet.toScala) ++
+          allocationsV1.map(_.payload.lockedAmulet)
         lockedAmulets <- contractFetcher.lookupContractsById(LockedAmulet.COMPANION)(
-          allocations.flatMap(_.payload.lockedAmulet.toScala)
+          lockedAmuletCids.distinctBy(_.contractId)
         )
       } yield v2.Resource.GetSettlementFactoryResponseOK(
         v2.definitions
@@ -288,12 +293,25 @@ class HttpTokenStandardAllocationHandler(
       tc: TraceContext
   ): Future[ChoiceContext] = {
     for {
-      amuletAlloc <- contractFetcher
-        .lookupContractById(amuletallocationv2.AmuletAllocationV2.COMPANION)(
-          new amuletallocationv2.AmuletAllocationV2.ContractId(
-            allocationId
+      (lockedAmulet, expiry) <- OptionT(
+        contractFetcher
+          .lookupContractById(amuletallocationv2.AmuletAllocationV2.COMPANION)(
+            new amuletallocationv2.AmuletAllocationV2.ContractId(
+              allocationId
+            )
           )
-        )
+      ).map(alloc =>
+        (alloc.payload.lockedAmulet.toScala, alloc.payload.allocation.settlementDeadline)
+      ).orElse(
+        OptionT(
+          contractFetcher
+            .lookupContractById(amuletallocationv1.AmuletAllocation.COMPANION)(
+              new amuletallocationv1.AmuletAllocation.ContractId(
+                allocationId
+              )
+            )
+        ).map(alloc => (Some(alloc.payload.lockedAmulet), alloc.payload.expiresAt))
+      ).value
         .map(
           _.getOrElse(
             throw io.grpc.Status.NOT_FOUND
@@ -307,8 +325,8 @@ class HttpTokenStandardAllocationHandler(
         Builder,
       ](
         s"AmuletAllocationV2 '$allocationId'",
-        amuletAlloc.payload.lockedAmulet.toScala,
-        amuletAlloc.payload.allocation.settlementDeadline.toScala,
+        lockedAmulet,
+        expiry.toScala,
         requireLockedAmulet,
         featuredProvider =
           None, // Not required. Featured app rights are used in bulk, and will go once CIP-104 is live
