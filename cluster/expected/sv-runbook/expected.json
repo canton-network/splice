@@ -229,9 +229,10 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 2
+              "migrationId": 2,
+              "synchronizerSerialId": 9
             }
           }
         },
@@ -241,8 +242,7 @@
           "host": "info.sv.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 2,
-          "scanUrl": "http://scan-app.sv:5012"
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -652,7 +652,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2
+          "id": "2"
         },
         "participantAddress": "participant",
         "persistence": {
@@ -1104,7 +1104,7 @@
           "__pulumiResource": true,
           "__pulumiType": "kubernetes:core/v1:Namespace",
           "__transformations": [],
-          "__version": "4.31.1",
+          "__version": "4.28.0",
           "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
@@ -1299,9 +1299,6 @@
         "maxVettingDelay": "1m",
         "metrics": {
           "enable": true
-        },
-        "migration": {
-          "id": 2
         },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",
@@ -1706,9 +1703,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": "2"
           },
           "nodeIdentifier": "DA-Helm-Test-Node",
           "participantAddress": "participant",

@@ -740,9 +740,6 @@
             "enable": true
           },
           "migrateValidatorParty": false,
-          "migration": {
-            "id": "2"
-          },
           "nodeIdentifier": "validator-runbook",
           "participantAddress": "participant-2",
           "participantIdentitiesDumpPeriodicBackup": {
