@@ -144,7 +144,7 @@ class HttpTokenStandardAllocationHandler(
         lockedAmuletCids = allocationsV2.flatMap(_.payload.lockedAmulet.toScala) ++
           allocationsV1.map(_.payload.lockedAmulet)
         lockedAmulets <- contractFetcher.lookupContractsById(LockedAmulet.COMPANION)(
-          lockedAmuletCids
+          lockedAmuletCids.distinctBy(_.contractId)
         )
       } yield v2.Resource.GetSettlementFactoryResponseOK(
         v2.definitions
