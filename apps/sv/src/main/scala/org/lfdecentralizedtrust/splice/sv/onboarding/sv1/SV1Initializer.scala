@@ -259,12 +259,19 @@ class SV1Initializer(
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
+      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
+      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+        synchronizerId,
+        initConnection,
+        loggerFactory,
+      )
       svAutomation = newSvSvAutomationService(
         svStore,
         dsoStore,
         ledgerClient,
         participantAdminConnection,
         synchronizerNodeService,
+        packageVersionSupport,
       )
       connection = svAutomation.connection(SpliceLedgerConnectionPriority.Low)
       (_, decentralizedSynchronizer) <- (
@@ -277,11 +284,6 @@ class SV1Initializer(
         sv1Config.name,
       )
       dsoPartyHosting = newDsoPartyHosting(storeKey.dsoParty)
-      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        decentralizedSynchronizer,
-        connection,
-        loggerFactory,
-      )
       initialRound <- establishInitialRound(
         connection,
         upgradesConfig,

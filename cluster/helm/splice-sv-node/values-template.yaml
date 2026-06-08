@@ -34,8 +34,6 @@ persistence:
   secretName: "postgres-secrets"
 
 migration:
-  id: 0
-  migrating: false
   attachPvc: true
 # pvc used for migrations
 pvc:

@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
   DarResources,
   PackageIdResolver,
+  PackageVersionSupport,
   RetryProvider,
   SpliceLedgerClient,
 }
@@ -47,6 +48,7 @@ class SplitwellAutomationService(
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
     protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -61,6 +63,7 @@ class SplitwellAutomationService(
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
 
   override def companion

@@ -102,8 +102,6 @@ tests:
   - it: "always populates enable-wallet"
     set:
       enableWallet: false
-      migration:
-        migrating: true
     documentSelector:
       path: kind
       value: Deployment

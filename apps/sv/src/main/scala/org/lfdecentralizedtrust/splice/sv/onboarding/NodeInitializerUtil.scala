@@ -103,6 +103,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       ledgerClient: SpliceLedgerClient,
       participantAdminConnection: ParticipantAdminConnection,
       synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
+      packageVersionSupport: PackageVersionSupport,
   )(implicit
       ec: ExecutionContextExecutor,
       mat: Materializer,
@@ -122,6 +123,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       synchronizerNodeService,
       retryProvider,
       config.topologySnapshotConfig,
+      packageVersionSupport,
       loggerFactory,
     )
 
