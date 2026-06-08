@@ -97,7 +97,8 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   TxLogEntry,
 }
 import org.lfdecentralizedtrust.splice.scan.store.bulk.{
-  AcsSnapshotBulkStorage,
+  BulkStorage,
+  AcsSnapshotBulkStorageStaging,
   UpdateHistoryBulkStorage,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
@@ -115,10 +116,10 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
+
 import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
   Contract,
@@ -2574,7 +2575,8 @@ class HttpScanHandler(
     }
   }
 
-  private def getBulkStorage(): Option[(AcsSnapshotBulkStorage, UpdateHistoryBulkStorage, Uri)] = {
+  private def getBulkStorage()
+      : Option[(AcsSnapshotBulkStorageStaging, UpdateHistoryBulkStorage, Uri)] = {
     for {
       acs <- bulkStorage.acsSnapshotBulkStorage
       update <- bulkStorage.updateHistoryBulkStorage

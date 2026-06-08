@@ -20,7 +20,7 @@ import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection
 import scala.concurrent.ExecutionContext
 
 class BulkStorage(
-    val acsSnapshotBulkStorage: Option[AcsSnapshotBulkStorage],
+    val acsSnapshotBulkStorage: Option[AcsSnapshotBulkStorageStaging],
     val updateHistoryBulkStorage: Option[UpdateHistoryBulkStorage],
     services: Seq[PekkoRetryingService[?]],
     override protected val retryProvider: RetryProvider,
@@ -68,7 +68,7 @@ object BulkStorage {
       val s3Connection = S3BucketConnection(s3Config, loggerFactory)
       val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
 
-      val acs = new AcsSnapshotBulkStorage(
+      val acs = new AcsSnapshotBulkStorageStaging(
         storageConfig,
         appConfig,
         acsSnapshotStore,

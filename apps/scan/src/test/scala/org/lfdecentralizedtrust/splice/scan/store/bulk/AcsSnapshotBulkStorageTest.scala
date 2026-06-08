@@ -166,7 +166,7 @@ class AcsSnapshotBulkStorageTest
 
       val retryProvider =
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-      val bulkStorage = new AcsSnapshotBulkStorage(
+      val bulkStorage = new AcsSnapshotBulkStorageStaging(
         bulkStorageTestConfig,
         appConfig,
         store.store,
