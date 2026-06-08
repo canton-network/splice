@@ -1169,7 +1169,7 @@ executeTransfer' config csum dso t = do
         pure $ TransferEventsV2.TransferLegSide with
           transferLegId = "mint"
           side = TransferEventsV2.ReceiverSide
-          otherside = mintAccount dso
+          otherside = mintAccount
           amount = mintAmount
           instrumentId = amuletInstrumentIdName
           meta = Metadata with
@@ -1638,7 +1638,7 @@ createTransferOutputs currentOpenRound transferConfigAmulet dso sender summary p
             ExtCreatedAmulet _ -> error "unexpected: ExtCreatedAmulet used for transfer output"
       let senderAccount = basicAccount sender
       let receiverAccount
-            | out.owner == dso = burnAccount dso  -- transfers to the DSO party are always burns
+            | out.owner == dso = burnAccount  -- transfers to the DSO party are always burns
             | otherwise = basicAccount out.owner
       let leg side otherside = TransferEventsV2.TransferLegSide with
             transferLegId = "leg" <> show i

@@ -275,7 +275,7 @@ allocateTokenAllocation eventLogCid accountMap this allocationKind = do
   -- compute required funds: the ones for the outgoing transfers and the next iteration settlement
   let netCreditToTransferOutAmount amount = if amount >= 0.0 then 0.0 else negate amount
   let transferOutAmounts = netCreditToTransferOutAmount <$>
-        netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
+        netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
   let requiredFundingAmount =
         textMapUnionWith (+) transferOutAmounts $ fromOptional TextMap.empty allocation.nextIterationFunding
 
@@ -331,7 +331,7 @@ settleTokenAllocationV2 accountMap this self arg = do
   -- compute required funding and settle
   debitInputAmounts <- debitInputTokens allocation.admin allocation.authorizer this.lockedTokens
   let actualTransferLegs = allocation.transferLegSides ++ arg.extraTransferLegSides
-  let netTransferAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer actualTransferLegs
+  let netTransferAmounts = netAllocationCreditAmounts allocation.authorizer actualTransferLegs
   let netInputAmounts = textMapUnionWith (+) debitInputAmounts netTransferAmounts
   let nextIterationFundingAmounts = fromOptional TextMap.empty arg.nextIterationFunding
 

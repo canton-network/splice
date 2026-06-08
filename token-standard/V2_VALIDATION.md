@@ -230,3 +230,5 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Fix bugs in the default implementations of allocation extra observers and available actions
 - Replace ``transferFactory_v2_senderActor_transferImpl`` with a more general ``transferFactory_v2_transferDefaultImplUsingV1``
   that can also be used for multi-actor choices (e.g., sender and receiver jointly authorizing a transfer)
+- Removed superfluous `admin` argument from `burnAccount`, `mintAccount`, and `netAllocationCreditAmounts`. That
+  argument is no longer required since we introduced special "owner-less" accounts for mint and burn

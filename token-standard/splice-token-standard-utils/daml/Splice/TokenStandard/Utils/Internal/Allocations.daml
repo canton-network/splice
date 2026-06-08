@@ -173,12 +173,12 @@ nonIteratedAllocation allocationCid = AllocationV2.FinalizedAllocation with
 -- allocations for the receiver of a burn do not result in a positive credit amount.
 -- Thereby allowing the instrument admin to use allocations to authorize mints and burns
 -- as part of settlement.
-netAllocationCreditAmounts : Party -> HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
-netAllocationCreditAmounts admin authorizer transferLegSides =
+netAllocationCreditAmounts : HoldingV2.Account -> [AllocationV2.TransferLegSide] -> TextMap.TextMap Decimal
+netAllocationCreditAmounts authorizer transferLegSides =
     TextMap.fromListWithR (+) $ map legAmount transferLegSides
   where
-    isMintAuthorizer = authorizer == mintAccount admin
-    isBurnAuthorizer = authorizer == burnAccount admin
+    isMintAuthorizer = authorizer == mintAccount
+    isBurnAuthorizer = authorizer == burnAccount
     legAmount leg =
       ( leg.instrumentId
       , case leg.side of
@@ -998,7 +998,7 @@ allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl arg =
     (if noFundingRequired then arg.settlement.executors else [])
   where
     allocation = arg.allocation
-    creditAmounts = netAllocationCreditAmounts allocation.admin allocation.authorizer allocation.transferLegSides
+    creditAmounts = netAllocationCreditAmounts allocation.authorizer allocation.transferLegSides
     noFundingRequired =
       Foldable.all (>= 0.0) creditAmounts &&
       optional True (Foldable.all (<= 0.0)) allocation.nextIterationFunding

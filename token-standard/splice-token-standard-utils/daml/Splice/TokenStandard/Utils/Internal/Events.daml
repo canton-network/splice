@@ -56,14 +56,14 @@ mintAccountId = tokenStandardV2Namespace <> "mint"
 burnAccountId : Text
 burnAccountId = tokenStandardV2Namespace <> "burn"
 
-mintAccount : Party -> V2.Account
-mintAccount p = V2.Account with
+mintAccount : V2.Account
+mintAccount = V2.Account with
   owner = None
   provider = None
   id = mintAccountId
 
-burnAccount : Party -> V2.Account
-burnAccount p = V2.Account with
+burnAccount : V2.Account
+burnAccount = V2.Account with
   owner = None
   provider = None
   id = burnAccountId
@@ -94,7 +94,7 @@ logMint factoryCid receiver amount instrumentId meta outputHoldingCids = do
   let leg = TransferEventsV2.TransferLegSide with
         transferLegId = "mint"
         side = TransferEventsV2.ReceiverSide
-        otherside = mintAccount instrumentId.admin
+        otherside = mintAccount
         instrumentId = instrumentId.id
         amount
         meta
@@ -114,7 +114,7 @@ logBurn factoryCid sender amount instrumentId meta inputHoldingCids = do
   let leg = TransferEventsV2.TransferLegSide with
         transferLegId = "burn"
         side = TransferEventsV2.SenderSide
-        otherside = burnAccount instrumentId.admin
+        otherside = burnAccount
         instrumentId = instrumentId.id
         amount
         meta

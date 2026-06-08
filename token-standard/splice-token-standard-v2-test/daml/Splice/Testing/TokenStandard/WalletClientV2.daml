@@ -1006,9 +1006,9 @@ validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
     forA_ changes $ \change -> do
       forA_ change.transferLegSides $ \leg -> do
         -- check that the direction of burn accounts is right
-        when (leg.otherside == TSU.burnAccount change.admin && leg.side == TransferEventsV2.ReceiverSide) $
+        when (leg.otherside == TSU.burnAccount && leg.side == TransferEventsV2.ReceiverSide) $
           fail $ "cannot receiver from a burn account: " <> show leg
-        when (leg.otherside == TSU.mintAccount change.admin && leg.side == TransferEventsV2.SenderSide) $
+        when (leg.otherside == TSU.mintAccount && leg.side == TransferEventsV2.SenderSide) $
           fail $ "cannot send to a mint account: " <> show leg
         -- check that the other side of the transfer leg is also reported
         let otherSide = case leg.side of
@@ -1036,14 +1036,14 @@ validateHoldingsChanges holdingsBefore txTree holdingsAfter = do
     reportedSupplyChangeByAdmin = Map.filter (/= 0.0) $ Map.fromListWithR (+) $ do
       change <- changes
       -- ignore changes reported on burn and mint accounts since they are not real accounts
-      guard (change.account /= TSU.burnAccount change.admin && change.account /= TSU.mintAccount change.admin)
+      guard (change.account /= TSU.burnAccount && change.account /= TSU.mintAccount)
       leg <- change.transferLegSides
       case leg.side of
         TransferEventsV2.SenderSide ->  do
-          guard (leg.otherside == TSU.burnAccount change.admin)
+          guard (leg.otherside == TSU.burnAccount)
           pure (change.admin, negate leg.amount)
         TransferEventsV2.ReceiverSide ->  do
-          guard (leg.otherside == TSU.mintAccount change.admin)
+          guard (leg.otherside == TSU.mintAccount)
           pure (change.admin, leg.amount)
 
     actualSupplyChangeByAdmin = Map.filter (/= 0.0) $ Map.fromListWithR (+) $
