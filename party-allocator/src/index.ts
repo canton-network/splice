@@ -5,7 +5,7 @@ import * as crypto from "node:crypto";
 import {
   Command,
   DisclosedContract,
-} from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
+} from "@canton-network/canton-json-api-v2-openapi";
 import { opendir, writeFile } from "node:fs/promises";
 import { config } from "./config.js";
 import fs from "fs";

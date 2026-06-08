@@ -3,7 +3,7 @@
 import {
   AssignedContract,
   Contract,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils/interfaces';
+} from '@canton-network/splice-common-frontend-utils/interfaces';
 
 import { Unit } from '@daml.js/splice-wallet-payments/lib/Splice/Wallet/Payment';
 import { JsonApiError } from '../contexts';

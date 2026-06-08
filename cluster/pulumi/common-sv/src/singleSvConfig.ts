@@ -5,11 +5,11 @@ import {
   LogLevelSchema,
   CloudSqlConfigSchema,
   K8sResourceSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { ValidatorAppConfigSchema } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/config';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { CnChartVersionSchema } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/versionSchema';
+} from '@canton-network/splice-pulumi-common';
+import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
 import { merge } from 'lodash';
 import util from 'node:util';
 import { z } from 'zod';

@@ -19,13 +19,6 @@ auth:
   #   connectionTimeout: "10 seconds"
   #   readTimeout: "10 seconds"
 
-# MIGRATION_START
-# Replace MIGRATION_ID with the migration ID of the global synchronizer.
-migration:
-  # This should stay constant after the introduction of logical synchronizer upgrades.
-  id: "MIGRATION_ID"
-#MIGRATION_END
-
 participantAddress: "participant"
 
 # Please make the ``global-domain-sequencer`` service accessible for other validators to subscribe to, and set the URL below to your sequencer service.

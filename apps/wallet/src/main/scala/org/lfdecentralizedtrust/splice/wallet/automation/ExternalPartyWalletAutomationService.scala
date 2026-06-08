@@ -32,6 +32,7 @@ class ExternalPartyWalletAutomationService(
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
     override protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -44,6 +45,7 @@ class ExternalPartyWalletAutomationService(
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
 
   override protected def metricsContext: MetricsContext =

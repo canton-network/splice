@@ -21,7 +21,7 @@ function _info(){
 }
 
 function usage() {
-  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> -m <migration_id> [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-M] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E]"
+  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> -m <migration_id> [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E]"
   echo "  -s <sponsor_sv_address>: The full URL of the sponsor SV"
   echo "  -o <onboarding_secret>: The onboarding secret to use. May be empty (\"\") if you are already onboarded."
   echo "  -p <party_hint>: The party hint to use for the validator operator, by default also your participant identifier."
@@ -31,7 +31,6 @@ function usage() {
   echo "  -C <host_scan_address>: An optional alternative URL of a Scan app, when accessed from the host as opposed to a container."
   echo "  -n <network_name>: The name of an existing docker network to use. If not provided, the default network will be created used."
   echo "  -m <migration_id>: The migration ID to use. Must be a non-negative integer."
-  echo "  -M: Use this flag when bumping the migration ID as part of a migration."
   echo "  -i <identities_dump>: restore identities from a dump file. Requires a new participant identifier to be provided."
   echo "  -w: Wait for the validator to be fully up and running before returning."
   echo "  -l: Connect participant and validator also to docker network compose-sv_splice-sv-public, to use an SV deployed locally on docker compose"
@@ -72,7 +71,7 @@ bft_custom_urls=""
 bft_custom_svs=""
 bft_custom_threshold=""
 
-while getopts 'has:c:C:t:o:n:bq:m:Mp:P:i:wlEBu:S:T:' arg; do
+while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:' arg; do
   case ${arg} in
     h)
       usage

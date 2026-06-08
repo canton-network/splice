@@ -77,6 +77,7 @@ class ValidatorAutomationService(
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
     globalSynchronizerAlias: SynchronizerAlias,
     override protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -89,6 +90,7 @@ class ValidatorAutomationService(
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =

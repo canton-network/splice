@@ -8,7 +8,7 @@ import {
   HELM_MAX_HISTORY_SIZE,
   imagePullSecret,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { local } from '@pulumi/command';
 
 import { PulumiOperatorGracePeriod } from '../../common/src/operator/config';

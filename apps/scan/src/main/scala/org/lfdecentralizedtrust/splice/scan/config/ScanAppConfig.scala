@@ -60,8 +60,10 @@ case class ScanAppBackendConfig(
     isFirstSv: Boolean = false,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
+    // The migration id is normally read from the DB (the highest known migration id in the
+    // update history). It only needs to be configured to bootstrap a node that does not yet
+    // have any migration id in its DB (e.g. the network-founding scan or a freshly joining scan).
+    domainMigrationId: Option[Long] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     spliceInstanceNames: SpliceInstanceNamesConfig,
     updateHistoryBackfillEnabled: Boolean = true,

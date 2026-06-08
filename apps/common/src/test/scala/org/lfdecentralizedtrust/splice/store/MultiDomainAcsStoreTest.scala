@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.AppPaymentRequest
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent
+import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, PackageVersionSupport}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
   AcsRowData,
@@ -16,8 +17,12 @@ import org.lfdecentralizedtrust.splice.store.db.{
 }
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract, ContractWithState}
 import com.daml.nonempty.NonEmpty
+import com.digitalasset.daml.lf.language.Ast
 import com.digitalasset.canton.HasActorSystem
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
@@ -1663,6 +1668,51 @@ abstract class MultiDomainAcsStoreTest[
         resultAmulet.map(_.contractId.contractId) should contain theSameElementsAs Seq(
           goodContract.contractId.contractId
         )
+      }
+    }
+
+    "toAcsEventFormat respects version guards" in {
+      def filter(supported: Boolean) =
+        MultiDomainAcsStore.SimpleContractFilter[GenericAcsRowData, GenericInterfaceRowData](
+          dsoParty,
+          templateFilters = Map(
+            mkFilter(AppRewardCoupon.COMPANION)(
+              _ => true,
+              versionGuard = { case _ =>
+                _ => Future.successful(PackageVersionSupport.FeatureSupport(supported, Seq.empty))
+              },
+            ) { contract =>
+              GenericAcsRowData(contract)
+            },
+            mkFilter(Amulet.COMPANION)(_ => true) { contract =>
+              GenericAcsRowData(contract)
+            },
+          ),
+          interfaceFilters = Map.empty,
+        )
+      val clock = new com.digitalasset.canton.time.SimClock(loggerFactory = loggerFactory)
+      val outerLoggerFactory = loggerFactory
+      val versionSupport = new PackageVersionSupport {
+        override def loggerFactory: NamedLoggerFactory = outerLoggerFactory
+        // Not actually relevant, but required by the trait
+        override def isPackageSupported(
+            packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
+            at: CantonTimestamp,
+            metadata: Ast.PackageMetadata,
+        )(implicit
+            tc: TraceContext
+        ): Future[PackageVersionSupport.FeatureSupport] =
+          Future.successful(PackageVersionSupport.FeatureSupport(true, Seq.empty))
+      }
+      for {
+        unfiltered <- filter(true).ingestionFilter.toAcsEventFormat(versionSupport, clock)
+        filtered <- filter(false).ingestionFilter.toAcsEventFormat(versionSupport, clock)
+      } yield {
+        unfiltered.filtersByParty.head._2.cumulative.map(
+          _.getTemplateFilter.getTemplateId.entityName
+        ) should contain theSameElementsAs Seq("AppRewardCoupon", "Amulet")
+        filtered.filtersByParty.head._2.cumulative
+          .map(_.getTemplateFilter.getTemplateId.entityName) shouldBe Seq("Amulet")
       }
     }
 

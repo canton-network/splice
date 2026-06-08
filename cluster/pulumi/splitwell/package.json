@@ -1,9 +1,9 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-splitwell",
+  "name": "@canton-network/splice-pulumi-splitwell",
   "main": "src/index.ts",
   "dependencies": {
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
-    "@lfdecentralizedtrust/splice-pulumi-common-validator": "1.0.0"
+    "@canton-network/splice-pulumi-common": "1.0.0",
+    "@canton-network/splice-pulumi-common-validator": "1.0.0"
   },
   "scripts": {
     "fix": "npm run format:fix && npm run lint:fix",

@@ -192,7 +192,7 @@ class ScanTimeBasedIntegrationTest
 
   "snapshotting" in { implicit env =>
     val (aliceUserParty, bobUserParty) = onboardAliceAndBob()
-    val migrationId = sv1ScanBackend.config.domainMigrationId
+    val migrationId = sv1ScanBackend.getMigrationId()
 
     clue(
       "Wait for backfilling to complete, as the ACS snapshot trigger is paused until then"

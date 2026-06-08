@@ -3,7 +3,7 @@
 
 import { useTokenMetadataClient } from '../api/TokenMetadataClientContext';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
-import { Instrument } from '@lfdecentralizedtrust/token-metadata-openapi';
+import { Instrument } from '@canton-network/token-metadata-openapi';
 
 export const useAmuletMetadata = (): UseQueryResult<Instrument> => {
   const metadataClient = useTokenMetadataClient();

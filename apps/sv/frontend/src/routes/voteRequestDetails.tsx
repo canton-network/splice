@@ -21,9 +21,9 @@ import {
 } from '../utils/governance';
 import { useDsoInfos } from '../contexts/SvContext';
 import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useVoteRequestResultByCid } from '../hooks/useVoteRequestResultByCid';
-import { Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { Loading } from '@canton-network/splice-common-frontend';
 import { ProposalDetailsContent } from '../components/governance/ProposalDetailsContent';
 
 export const VoteRequestDetails: React.FC = () => {

@@ -17,7 +17,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
   SpliceLedgerConnection,
 }
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService
@@ -48,6 +48,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
     packageVersionSupport: PackageVersionSupport,
     packageVettingService: PackageVettingLookupService,
     scanConnectionF: Future[ScanConnection],
+    bftScanConnectionF: Future[BftScanConnection],
 )(implicit
     override val ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -160,6 +161,7 @@ class RestartDsoDelegateBasedAutomationTrigger(
          config,
          svTaskContext,
          scanConnectionF,
+         bftScanConnectionF,
          retryProvider,
          loggerFactory,
        )
