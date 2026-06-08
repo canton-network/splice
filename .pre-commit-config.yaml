@@ -91,7 +91,7 @@ repos:
         language: system
         entry: ./gha-scripts/scripts/check-build.sh
         pass_filenames: false
-        files: '(^package\.json$|^package-lock\.json$|^src/.*\.ts$)'
+        files: '(^gha-scripts/package\.json$|^gha-scripts/package-lock\.json$|^gha-scripts/src/.*\.ts$)'
   -  repo: https://github.com/rstcheck/rstcheck
      rev: v6.2.5
      hooks:
