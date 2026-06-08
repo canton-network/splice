@@ -10,6 +10,7 @@
   - Deployment
 
       - The ``migration.id`` value is no longer required by the SV (sv, validator, scan apps) and validator (validator app) helm charts and has been removed.
-        These apps now resolve the synchronizer migration id automatically at start-up. For the scan helm chart the
-        ``migration.id`` value is now optional and only needs to be set to bootstrap a scan that does not yet have any
-        migration id in its database (e.g. the network-founding or a freshly joining scan).
+        These apps now resolve the synchronizer migration id automatically at start-up from their database.
+        A freshly joining scan that does not yet have any migration id in its database bootstraps it from the
+        scan of the SV sponsoring the onboarding, configured via the new optional ``sponsorScanUrl`` value in the
+        scan helm chart.

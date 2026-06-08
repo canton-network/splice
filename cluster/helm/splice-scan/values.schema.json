@@ -21,7 +21,6 @@
     {
       "required": [
         "spliceInstanceNames",
-        "migration",
         "persistence",
         "participantAddress"
       ],
@@ -120,14 +119,9 @@
             }
           }
         },
-        "migration": {
-          "type": "object",
-          "required": ["id"],
-          "properties": {
-            "id": {
-              "description": "The migration id of the synchronizer"
-            }
-          }
+        "sponsorScanUrl": {
+          "type": "string",
+          "description": "URL of the sponsor scan from which a freshly joining scan bootstraps its migration id"
         },
         "failOnAppVersionMismatch": {
           "type": "boolean"
