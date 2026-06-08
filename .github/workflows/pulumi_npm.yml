@@ -20,6 +20,7 @@ jobs:
               git status --short >> "$GITHUB_STEP_SUMMARY"
               # shellcheck disable=SC2016
               echo 'Please run `cd $(git rev-parse --show-toplevel)/cluster/pulumi && npm install` and commit the changes in `package-lock.json`' >> "$GITHUB_STEP_SUMMARY"
+              git diff
               exit 1
             else
               echo "package-lock.json is correct :green_circle:" >> "$GITHUB_STEP_SUMMARY"
