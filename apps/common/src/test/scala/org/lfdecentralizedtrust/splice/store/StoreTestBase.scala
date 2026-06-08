@@ -459,6 +459,7 @@ abstract class StoreTestBase
     val template = new AmuletAllocation(
       new LockedAmulet.ContractId(nextCid()),
       allocationSpec,
+      java.util.Optional.empty(),
     )
 
     contract(

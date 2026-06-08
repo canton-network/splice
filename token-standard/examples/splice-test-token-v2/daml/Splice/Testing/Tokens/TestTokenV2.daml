@@ -46,7 +46,7 @@ template TokenRules with
         meta = emptyMetadata
 
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
-      transferFactory_transferImpl = transferFactory_v1_transferDefaultImplUsingV2 (toInterface this)
+      transferFactory_transferImpl = transferFactoryV1_transferDefaultImplUsingV2 (toInterface this)
 
     interface instance V2.TransferFactory for TokenRules where
       view = V2.TransferFactoryView with
@@ -85,7 +85,7 @@ template TokenRules with
 
       allocationFactory_publicFetchImpl = publicFetchDefaultImpl this
       allocationFactory_allocateImpl =
-        allocationFactory_v1_allocateDefaultImplUsingV2 admin
+        allocationFactoryV1_allocateDefaultImplUsingV2 admin
         (token_allocationFactoryV2_allocateImpl CalledFromV1 CreateV1Allocation this)
 
     interface instance V2.AllocationFactory for TokenRules where

@@ -1,11 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  Auth0ClientType,
-  Auth0Fetch,
-  getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { svRunbookConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+import { Auth0ClientType, Auth0Fetch, getAuth0Config } from '@canton-network/splice-pulumi-common';
+import { svRunbookConfig } from '@canton-network/splice-pulumi-common-sv';
 
 import { buildSvAppConfig } from './config';
 import { installNode } from './installNode';

@@ -4,16 +4,15 @@ import React from 'react';
 import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { useTokenStandardAllocationRequests } from '../hooks/useTokenStandardAllocationRequests';
-import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally, Loading } from '@canton-network/splice-common-frontend';
 import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { usePrimaryParty } from '../hooks';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useAmuletAllocations } from '../hooks/useAmuletAllocations';
-import MetaDisplay from './MetaDisplay';
 import TransferLegsDisplay from './TransferLegsDisplay';
 import {
   useWalletClient,
@@ -23,10 +22,7 @@ import {
   isV2AllocationRequest,
 } from '../contexts/WalletServiceContext';
 import { useMutation } from '@tanstack/react-query';
-import {
-  AllocateAmuletRequest,
-  AllocateAmuletV2Request,
-} from '@lfdecentralizedtrust/wallet-openapi';
+import { AllocateAmuletRequest, AllocateAmuletV2Request } from '@canton-network/wallet-openapi';
 import {
   AllocationSpecification as AllocationSpecificationV2,
   SettlementInfo,
@@ -38,6 +34,7 @@ import UseGetAmuletRules from '../hooks/scan-proxy/useGetAmuletRules';
 import { ContractId } from '@daml/types';
 import { getSettlement } from '../utils/tokenStandard';
 import AllocationSpecificationDisplay from './AllocationSpecificationDisplay';
+import { TextMapDisplay } from './TextMap';
 
 dayjs.extend(relativeTime);
 
@@ -141,7 +138,7 @@ const AllocationRequestDisplay: React.FC<{
           {Object.keys(requestMeta.values).length > 0 ? (
             <>
               <Typography variant="h5">Request Meta</Typography>
-              <MetaDisplay meta={requestMeta.values} />
+              <TextMapDisplay textMap={requestMeta.values} />
             </>
           ) : null}
           {isV2 ? (
@@ -231,8 +228,8 @@ const V2AllocationRequestActionButton: React.FC<{
     mutationFn: async () => {
       const req = openApiV2RequestFromAllocationRequest(
         settlement,
-        amuletLegSidesForUser,
-        allocationSpecification.settlementDeadline
+        allocationSpecification,
+        amuletLegSidesForUser
       );
       return await createAllocationV2(req);
     },
@@ -502,8 +499,8 @@ export function openApiV1RequestFromTransferLeg(
 /** V2: build AllocateAmuletV2Request from settlement + filtered transfer legs */
 export function openApiV2RequestFromAllocationRequest(
   settlement: SettlementInfo,
-  transferLegSides: TransferLegSide[],
-  settlementDeadline: string | null
+  allocationSpecification: AllocationSpecificationV2,
+  transferLegSides: TransferLegSide[]
 ): AllocateAmuletV2Request {
   return {
     settlement: {
@@ -513,8 +510,12 @@ export function openApiV2RequestFromAllocationRequest(
         cid: settlement.cid as string,
       },
       meta: settlement.meta.values,
-      ...(settlementDeadline
-        ? { settlement_deadline: damlTimestampToOpenApiTimestamp(settlementDeadline) }
+      ...(allocationSpecification.settlementDeadline
+        ? {
+            settlement_deadline: damlTimestampToOpenApiTimestamp(
+              allocationSpecification.settlementDeadline
+            ),
+          }
         : {}),
     },
     transfer_leg_sides: transferLegSides.map(side => ({
@@ -524,10 +525,11 @@ export function openApiV2RequestFromAllocationRequest(
       side: side.side === 'SenderSide' ? 'SENDERSIDE' : 'RECEIVERSIDE',
       meta: side.meta.values,
     })),
-    // TODO (#5498): make the FE specify these
-    committed: false,
-    next_iteration_funding: {},
-    meta: {},
+    committed: allocationSpecification.committed,
+    meta: allocationSpecification.meta.values,
+    ...(allocationSpecification.nextIterationFunding
+      ? { next_iteration_funding: allocationSpecification.nextIterationFunding }
+      : {}),
   };
 }
 

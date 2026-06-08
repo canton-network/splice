@@ -22,6 +22,7 @@ import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils hiding (require)
 
 import Splice.Amulet
+import Splice.AmuletConfig (TransferConfigV2, getTokenStandardMaxTTL)
 import Splice.AmuletRules
 import Splice.AmuletAllocation qualified as AmuletAllocationV1
 import Splice.Amulet.TwoStepTransfer
@@ -41,12 +42,11 @@ template AmuletAllocationV2
       -- Empty if the net fund movement is positive.
     settlement : V2.SettlementInfo
     allocation : V2.AllocationSpecification
-    dso : Party
     expiresAt : Time
     numIterations : Int
     createdAt : Time
   where
-    signatory dso, allocation.authorizer.owner
+    signatory allocation.admin, allocation.authorizer.owner
     observer settlement.executors
 
     ensure
@@ -68,16 +68,14 @@ template AmuletAllocationV2
         availableActions = allocationV2_availableActionsDefault settlement.executors allocation
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocation_settleExtraObservers _arg = []
-      allocation_cancelExtraObservers _arg = []
-
-      -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = settlement.executors
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocation_settleExtraObservers _arg = observer this
+      allocation_cancelExtraObservers _arg = observer this
+      allocation_withdrawExtraObservers _arg = observer this
 
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
-        archiveAndCheckActors self arg.actors [[accountPrincipal dso allocation.authorizer]]
+        archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
         authorizerHoldingCids <- unlockAmuletAllocationV2 this extraArgs
         pure V2.AllocationResult with
@@ -92,7 +90,7 @@ template AmuletAllocationV2
 
       allocation_settleImpl self arg = do
         -- check actors and deadline
-        archiveAndCheckActors self arg.actors [dso :: settlement.executors]
+        archiveAndCheckActors self arg.actors [allocation.admin :: settlement.executors]
         forA_ allocation.settlementDeadline $ \deadline ->
           assertWithinDeadline "allocation.settlement.settlementDeadline" deadline
 
@@ -107,44 +105,46 @@ template AmuletAllocationV2
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 
         -- archive the locked tokens
-        let authorizer = accountPrincipal dso allocation.authorizer
+        let authorizer = accountPrincipal allocation.admin allocation.authorizer
         (inputFundingAmount, inputTokenCids) <-
           case lockedAmulet of
             None -> pure (0.0, [])
             Some lockedAmuletCid -> do
-              lockedAmulet <- fetchAndArchive (ForOwner with dso = dso; owner = authorizer) lockedAmuletCid
+              lockedAmulet <- fetchAndArchive (ForOwner with dso = allocation.admin; owner = authorizer) lockedAmuletCid
               pure (lockedAmulet.amulet.amount.initialAmount, [toInterfaceContractId lockedAmuletCid])
 
         -- compute total funds to move
-        let netTransferAmount = netAmuletCreditAmount dso (basicAccount authorizer) actualTransferLegSides
+        let netTransferAmount = netAmuletCreditAmount allocation.admin (basicAccount authorizer) actualTransferLegSides
         let inputAmount = inputFundingAmount + netTransferAmount
         let payoutAmount = inputAmount - outputFundingAmount
         require' ("inputAmount", inputAmount) isGreaterOrEqualR ("minimal outputAmount", outputFundingAmount)
 
         -- read reference data
-        (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+        (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext allocation.admin arg.extraArgs.context
         let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
 
         -- create the payout
         payoutHoldingCids <-
           if payoutAmount <= 0.0 then pure [] else do
             amuletCid <- create Amulet with
-              dso
+              dso = allocation.admin
               owner = authorizer
               amount = expiringAmount configAmulet.holdingFee payoutAmount configState.holdingFeesOpenRoundNumber
             pure [toInterfaceContractId amuletCid]
 
-        -- create the locked amulet for the next iteration, if needed
-        newExpiresAt <- bumpAllocationExpiry expiresAt allocation.settlementDeadline
+        -- Bump the allocation expiry using the old `expiresAt` as the "current time",
+        -- which is safe to do as the traffic spend to iterate the allocation covers
+        -- the cost of storing the allocation for the longer period.
+        newExpiresAt <- computeAllocationExpiry configAmulet expiresAt allocation.settlementDeadline
         lockedAmulet <-
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
               lock = TimeLock with
-                holders = [authorizer, dso]
+                holders = [authorizer, allocation.admin]
                 expiresAt = newExpiresAt
                 optContext = Some $ AmuletAllocationV1.mkAllocationLockContext (downcast settlement)
               amulet = Amulet with
-                dso
+                dso = allocation.admin
                 owner = authorizer
                 amount = expiringAmount configAmulet.holdingFee outputFundingAmount configState.holdingFeesOpenRoundNumber
             pure (Some lockedAmuletCid)
@@ -158,7 +158,6 @@ template AmuletAllocationV2
               allocation = this.allocation with
                 transferLegSides = []
                 nextIterationFunding = arg.nextIterationFunding
-              dso
               expiresAt = newExpiresAt
               numIterations = numIterations + 1
               createdAt
@@ -210,31 +209,17 @@ validateAmuletTransferLegs transferLegs = do
     requireMatchExpected ("transferLeg.instrumentId", leg.instrumentId) amuletInstrumentIdName
     require' ("transferLeg.amount", leg.amount) isGreaterOrEqualR ("zero", 0.0)
 
--- | Minimum time-to-live for an amulet allocation. The maximum is then twice that much.
--- TODO(#4665): make max duration configurable; and also implement for transfer instructions
-minAmuletAllocationTTL : RelTime
-minAmuletAllocationTTL = days 45
+computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
+computeAllocationExpiry transferConfig now settlementDeadline = do
+  let expiresAt = optional identity min settlementDeadline $
+        now `addRelTime` getTokenStandardMaxTTL transferConfig
+  assertWithinDeadline "allocation.expiresAt" expiresAt
+  pure expiresAt
 
-maxAmuletAllocationTTL : RelTime
-maxAmuletAllocationTTL = minAmuletAllocationTTL + minAmuletAllocationTTL
-
-computeAllocationExpiry : Time -> Optional Time -> Time
-computeAllocationExpiry now settlementDeadline =
-  optional identity min settlementDeadline $
-  now `addRelTime` maxAmuletAllocationTTL
-
--- | Bump the allocation expiry such that the allocation has an expiry
--- time between `minAmuletAllocationTTL` and `maxAmuletAllocationTTL` from now.
-bumpAllocationExpiry : Time -> Optional Time -> Update Time
-bumpAllocationExpiry currentExpiresAt settlementDeadline = do
-  dontBump <- isLedgerTimeLE (currentExpiresAt `addRelTime` negate minAmuletAllocationTTL)
-  pure $ if dontBump then currentExpiresAt else
-    optional identity min settlementDeadline $
-    addRelTime currentExpiresAt minAmuletAllocationTTL
 
 
 -- instances
 ------------
 
 instance HasCheckedFetch AmuletAllocationV2 ForDso where
-  contractGroupId AmuletAllocationV2{..} = ForDso with dso
+  contractGroupId AmuletAllocationV2{..} = ForDso with dso = allocation.admin

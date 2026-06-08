@@ -23,7 +23,4 @@ spec:
     matchNames:
     - {{ .Release.Namespace }}
 
-  targetLabels:
-    - migration
-
 {{- end }}

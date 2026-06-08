@@ -130,7 +130,7 @@ listTransferOffers p instrumentId = do
 listRequestedAllocations : Party -> V1.InstrumentId -> Script [V1.AllocationSpecification]
 listRequestedAllocations p instrumentId = do
   reqs <- queryInterface @V1.AllocationRequest p
-  trace reqs $ pure ()
+  debug reqs
   let amuletAllocs = do
         (_reqCid, Some req) <- reqs
         (tfId, tf) <- TextMap.toList req.transferLegs

@@ -50,6 +50,10 @@ defaultTransferConfig = TransferConfig with
     -- Chosen conservatively, but high enough to invite thinking about what's possible.
     maxNumLockHolders = 10
 
+    -- Time to live for token standard state contracts (allocations and transfer instructions).
+    -- Not set by default so that default is used and downgrades are possible.
+    tokenStandardMaxTTL = None
+
 -- | Decentralized synchronizer config to use for testing.
 defaultAmuletDecentralizedSynchronizerConfig : AmuletDecentralizedSynchronizerConfig
 defaultAmuletDecentralizedSynchronizerConfig = AmuletDecentralizedSynchronizerConfig with

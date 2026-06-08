@@ -45,6 +45,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  RewardAccountingRootHashOk,
+  RewardAccountingRootHashUndetermined,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
@@ -57,6 +59,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.store.DsoRulesStore
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -115,9 +118,10 @@ import org.slf4j.event.Level
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
-import scala.util.control.NonFatal
+import scala.util.control.{NoStackTrace, NonFatal}
 import scala.util.{Failure, Random, Success, Try}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 class BftScanConnection(
     override protected val amuletLedgerClient: SpliceLedgerClient,
@@ -337,6 +341,12 @@ class BftScanConnection(
   ): OptionT[Future, MigrationSchedule] = OptionT(
     bftCall(_.getMigrationSchedule().value, "getMigrationSchedule")
   )
+
+  override def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    bftCall(_.getMigrationId(), "getMigrationId")
 
   private case class MigrationInfoResponses(
       withData: Map[SingleScanConnection, SourceMigrationInfo],
@@ -792,6 +802,8 @@ class BftScanConnection(
       endpoint: String,
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
+      consensusLogConfig: BftScanConnection.ConsensusLogConfig =
+        BftScanConnection.ConsensusLogConfig(),
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -834,6 +846,7 @@ class BftScanConnection(
             nTargetSuccess = callConfig.targetSuccess,
             logger,
             shortenResponsesForLog,
+            consensusLogConfig,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -884,17 +897,81 @@ class BftScanConnection(
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
 
+  /** This is special because in addition to 'Ok' we can receive
+    * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
+    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+    *
+    * So simple equality comparison on responses is not possible, and we treat
+    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
+    * that this does not cause grouping in executeCall.
+    *
+    * And if no response could be obtained via bft we respond with 'Undetermined'
+    */
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[GetRewardAccountingRootHashResponse] =
-    bftCall(_.getRewardAccountingRootHash(roundNumber), "getRewardAccountingRootHash")
+  ): Future[GetRewardAccountingRootHashResponse] = {
+    val undetermined =
+      GetRewardAccountingRootHashResponse(
+        RewardAccountingRootHashUndetermined(status = "Undetermined")
+      )
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
+    else
+      bftCall[String](
+        call = scan =>
+          scan.getRewardAccountingRootHash(roundNumber).flatMap {
+            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+              Future.successful(ok.rootHash)
+            case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
+                _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
+              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingRootHash",
+        callConfig = callConfig,
+        consensusLogConfig = BftScanConnection.ConsensusLogConfig(
+          disagreementLogLevel = Level.WARN,
+          onlyLogDisagreementsInSuccessResponse = true,
+          agreementLogLevel = Some(Level.INFO),
+        ),
+      )
+        .transform(tryRootHash =>
+          Success(
+            tryRootHash.toOption.fold(undetermined)(rootHash =>
+              GetRewardAccountingRootHashResponse(
+                RewardAccountingRootHashOk(
+                  status = "Ok",
+                  roundNumber = roundNumber,
+                  rootHash = rootHash,
+                )
+              )
+            )
+          )
+        )
+  }
 
+  /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
+    * required: we query a single random scan and return its response.
+    * Note: this will not do a retry at all, even if the scan being requested happens to be offline.
+    */
   override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[Option[GetRewardAccountingBatchResponse]] =
-    bftCall(_.getRewardAccountingBatch(roundNumber, batchHash), "getRewardAccountingBatch")
+  ): Future[Option[GetRewardAccountingBatchResponse]] = {
+    val callConfig = BftCallConfig.randomSingleCall(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(None)
+    else
+      bftCall[GetRewardAccountingBatchResponse](
+        call = scan =>
+          scan.getRewardAccountingBatch(roundNumber, batchHash).flatMap {
+            case Some(batch) => Future.successful(batch)
+            case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingBatch",
+        callConfig = callConfig,
+      )
+        .transform(tryBatch => Success(tryBatch.toOption))
+  }
 }
 trait HasUrl {
   def url: Uri
@@ -907,6 +984,7 @@ object BftScanConnection {
       nTargetSuccess: Int,
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
+      consensusLogConfig: ConsensusLogConfig = ConsensusLogConfig(),
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
@@ -925,7 +1003,13 @@ object BftScanConnection {
               (_, scans) => scan.url :: Option(scans).getOrElse(List.empty),
             )
 
-          if (agreements.size == nTargetSuccess) { // consensus has been reached
+          // In the special case of nTargetSuccess == 1, ignore error responses
+          // Otherwise a single HTTP error or network failure would prevent reading the responses from others
+          val considerResponseForQuorum = key match {
+            case _: ExceptionFailureResponse[?] => !(nTargetSuccess == 1 && requestFrom.size != 1)
+            case _ => true
+          }
+          if (considerResponseForQuorum && agreements.size == nTargetSuccess) { // consensus has been reached
             finalResponse.tryComplete(response): Unit
           }
 
@@ -939,7 +1023,7 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses)
+                logDisagreements(logger, consensusResponse, responses, consensusLogConfig)
             }
           }
         }
@@ -983,13 +1067,31 @@ object BftScanConnection {
       logger: TracedLogger,
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
+      consensusLogConfig: ConsensusLogConfig,
   )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
-      responses.remove(consensusResponseKey)
-      responses.forEach { (disagreeingResponse, scanUrls) =>
-        logger.info(
-          s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse"
+      val agreeingScanUrls = responses.remove(consensusResponseKey)
+      consensusLogConfig.agreementLogLevel.foreach { level =>
+        LoggerUtil.logAtLevel(
+          level,
+          s"Reached consensus from:\n${agreeingScanUrls.mkString("\n")}",
         )
+      }
+      responses.forEach { (disagreeingResponse, scanUrls) =>
+        val shouldLog = disagreeingResponse match {
+          case _: SuccessfulResponse[?] => true
+          case _ => !consensusLogConfig.onlyLogDisagreementsInSuccessResponse
+        }
+        if (shouldLog) {
+          LoggerUtil.logAtLevel(
+            consensusLogConfig.disagreementLogLevel,
+            s"""The following Scan URLs disagreed with consensus:
+               |${scanUrls.map(url => s"  $url").mkString("\n")}
+               |consensus response: $consensusResponse
+               |disagreeing response: $disagreeingResponse""".stripMargin,
+          )
+        }
       }
     }
   }
@@ -1025,11 +1127,19 @@ object BftScanConnection {
           val f = connections.f
           BftCallConfig(
             connections = connections.open,
-            requestsToDo = 2 * f + 1,
+            // Play it safe wrt availability in case we have no fault tolerance.
+            requestsToDo = if (f == 0) connections.open.size else 2 * f + 1,
             targetSuccess = f + 1,
           )
       }
     }
+
+    // By setting the targetSuccess and requestsToDo to 1, bftCall would
+    // select a random scan for call.
+    // Caution: this will *always* reach consensus on the first bftCall, hence
+    // the caller need to retry if the response was not received.
+    def randomSingleCall(connections: ScanConnections): BftCallConfig =
+      default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
     def forAvailableData(
         connections: ScanConnections,
@@ -1404,6 +1514,24 @@ object BftScanConnection {
           )
       } yield domainScans.map(scanInfo => DsoScan(scanInfo.publicUrl, scanInfo.svName))
     }
+
+    def getPeerScansFromDsoRules(store: DsoRulesStore, ownSvParty: PartyId)(implicit
+        tc: TraceContext,
+        ec: ExecutionContext,
+    ): Future[Seq[DsoScan]] =
+      store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
+        rulesAndStates.svNodeStates.values
+          .filterNot(_.payload.sv == ownSvParty.toProtoPrimitive)
+          .flatMap { nodeState =>
+            nodeState.payload.state.synchronizerNodes.asScala.values
+              .flatMap(
+                _.scan.toScala.toList
+                  .map(scan => DsoScan(Uri(scan.publicUrl), nodeState.payload.sv))
+              )
+          }
+          .toList
+          .sortBy(_.publicUrl.toString)
+      }
   }
 
   private def bootstrapWithSeedNodes(
@@ -1676,8 +1804,7 @@ object BftScanConnection {
   }
 
   def peerScanConnection(
-      store: ScanStore,
-      svName: String,
+      getPeerScans: () => Future[Seq[DsoScan]],
       spliceLedgerClient: SpliceLedgerClient,
       scansRefreshInterval: NonNegativeFiniteDuration,
       amuletRulesCacheTimeToLive: NonNegativeFiniteDuration,
@@ -1697,19 +1824,17 @@ object BftScanConnection {
     for {
       scans <- retryProvider.retry(
         RetryFor.WaitingOnInitDependency,
-        "fetch_scan_list_from_store",
-        "Peer scans found in store.",
-        Bft
-          .getPeerScansFromStore(store, svName)
-          .flatMap {
-            case Nil =>
-              Future.failed(
-                Status.UNAVAILABLE
-                  .withDescription("No peer scans found in store")
-                  .asException()
-              )
-            case scans => Future.successful(scans)
-          },
+        "fetch_peer_scan_list",
+        "Peer scans found.",
+        getPeerScans().flatMap {
+          case Nil =>
+            Future.failed(
+              Status.UNAVAILABLE
+                .withDescription("No peer scans found")
+                .asException()
+            )
+          case scans => Future.successful(scans)
+        },
         loggerFactory.getTracedLogger(classOf[BftScanConnection]),
       )
       initialConnections <- MonadUtil
@@ -1726,20 +1851,19 @@ object BftScanConnection {
         failed.toMap,
         uri => builder(uri, amuletRulesCacheTimeToLive),
         _ => Future.unit,
-        _ => Bft.getPeerScansFromStore(store, svName),
+        _ => getPeerScans(),
         scansRefreshInterval,
         retryProvider,
         loggerFactory,
       )
-      bftConnection = new BftScanConnection(
-        spliceLedgerClient,
-        amuletRulesCacheTimeToLive,
-        scanList,
-        clock,
-        retryProvider,
-        loggerFactory,
-      )
-    } yield bftConnection
+    } yield new BftScanConnection(
+      spliceLedgerClient,
+      amuletRulesCacheTimeToLive,
+      scanList,
+      clock,
+      retryProvider,
+      loggerFactory,
+    )
   }
 
   private def buildScanConnection(
@@ -1814,6 +1938,17 @@ object BftScanConnection {
         copy(amuletRulesCacheTimeToLive = ttl)
     }
   }
+
+  // url makes each abstention a distinct key, so abstentions never group into a deciding quorum
+  final case class IgnoreResponse(url: Uri)
+      extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
+      with NoStackTrace
+
+  case class ConsensusLogConfig(
+      disagreementLogLevel: Level = Level.INFO,
+      onlyLogDisagreementsInSuccessResponse: Boolean = false,
+      agreementLogLevel: Option[Level] = None,
+  )
 
   private sealed trait ScanResponse[+T]
   private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]

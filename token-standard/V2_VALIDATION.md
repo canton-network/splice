@@ -208,6 +208,8 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
     are the same
   - required moving `AllocationSpecification.settlement` up to the `AllocationView` level
 - Clarify that `V2.Allocation_Cancel` can be called by the `admin` to cancel expired allocations
+- Call out the requirement that `V2.TransferFactory_Transfer` SHOULD complete in a single step
+  if its actors include all parties required to authorize the transfer
 
 ### Utility and test library changes
 
@@ -221,3 +223,10 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   aid in creating metadata for V1 transaction history parsing for `V2.TransferInstruction_Accept` choices.
 - Replace `allocationV2_cancelDefaultImplUsingV1` with `allocationV2_cancelDefaultImpl`, which requires only
   `exeuctors` authority and allows the `admin` to cancel expired allocations
+- Remove `BackwardsCompatible V1.AllocationView` instance in favor of the more precise `upcast_v1_v2_AllocationView`
+- Remove the default observer implementations for `TransferInstruction`,`AllocationInstruction`, `Allocation`, and `AllocationRequest`
+  in favor of the uniform default to use `observer this` to mirror the default implementation of consuming choices.
+  (Note: the default implementations on the factories are kept, as they do allow saving extra views for public assets.)
+- Fix bugs in the default implementations of allocation extra observers and available actions
+- Replace ``transferFactory_v2_senderActor_transferImpl`` with a more general ``transferFactory_v2_transferDefaultImplUsingV1``
+  that can also be used for multi-actor choices (e.g., sender and receiver jointly authorizing a transfer)

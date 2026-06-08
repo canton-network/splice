@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentEvent,
   TreeUpdateOrOffsetCheckpoint,
 }
+import org.lfdecentralizedtrust.splice.environment.PackageVersionSupport
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes, AcsRowData}
 import org.lfdecentralizedtrust.splice.util.Contract.Companion
@@ -38,9 +39,12 @@ import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLogging}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.participant.pretty.Implicits.prettyContractId
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
@@ -335,6 +339,7 @@ object MultiDomainAcsStore extends StoreErrors {
       evPredicate: CreatedEvent => Boolean,
       decodeFromCreatedEvent: DecodeFromCreatedEvent[TCid, T],
       encodeToRow: EncodeToRow[TCid, T, R],
+      versionGuard: VersionGuard,
   ) {
     def matchingContractToRow(
         ev: CreatedEvent
@@ -381,6 +386,7 @@ object MultiDomainAcsStore extends StoreErrors {
     override val ingestionFilter =
       IngestionFilter(
         primaryParty,
+        templateFilters.view.map { case (k, filter) => (k, filter.versionGuard) }.toSeq,
         // In interface filters the ledger API warns when using a package id so we convert to a package name here.
         interfaceFilters.keys.map(PackageQualifiedName.getFromResources(_)).toSeq,
       )
@@ -485,7 +491,10 @@ object MultiDomainAcsStore extends StoreErrors {
   def mkFilter[TCid <: ContractId[T], T <: Template, R <: AcsRowData](
       templateCompanion: Contract.Companion.Template[TCid, T]
   )(
-      p: Contract[TCid, T] => Boolean
+      p: Contract[TCid, T] => Boolean,
+      versionGuard: VersionGuard = { case _ =>
+        _ => Future.successful(PackageVersionSupport.FeatureSupport(true, Seq.empty))
+      },
   )(
       encode: EncodeToRow[TCid, T, R]
   ): (
@@ -501,6 +510,7 @@ object MultiDomainAcsStore extends StoreErrors {
         },
         ev => Contract.fromCreatedEvent(templateCompanion)(ev),
         encode,
+        versionGuard,
       ),
     )
 
@@ -535,19 +545,73 @@ object MultiDomainAcsStore extends StoreErrors {
     */
   final case class IngestionFilter(
       primaryParty: PartyId,
+      includeTemplates: Seq[
+        (
+            PackageQualifiedName,
+            (PackageVersionSupport, CantonTimestamp) => (
+                TraceContext
+            ) => Future[PackageVersionSupport.FeatureSupport],
+        )
+      ],
       includeInterfaces: Seq[PackageQualifiedName],
       includeCreatedEventBlob: Boolean = true,
   ) {
 
-    def toEventFormat: EventFormat =
+    def toAcsEventFormat(
+        packageVersionSupport: PackageVersionSupport,
+        clock: Clock,
+    )(implicit tc: TraceContext, ec: ExecutionContext): Future[EventFormat] = {
+      val now = clock.now
+      for {
+        templates <- MonadUtil.sequentialTraverse(includeTemplates) { case (id, versionGuard) =>
+          versionGuard(packageVersionSupport, now)(tc).map(keep => (id, keep))
+        }
+      } yield {
+        val filteredTemplates = templates.collect {
+          case (id, feature) if feature.supported => id
+        }
+        val templateFilters = filteredTemplates
+          .map { templateId =>
+            CumulativeFilter(
+              CumulativeFilter.IdentifierFilter.TemplateFilter(
+                com.daml.ledger.api.v2.transaction_filter.TemplateFilter(
+                  Some(
+                    com.daml.ledger.api.v2.value.Identifier(
+                      packageId = s"#${templateId.packageName}",
+                      moduleName = templateId.qualifiedName.moduleName,
+                      entityName = templateId.qualifiedName.entityName,
+                    )
+                  ),
+                  includeCreatedEventBlob = includeCreatedEventBlob,
+                )
+              )
+            )
+          }
+        toEventFormat(templateFilters)
+      }
+    }
+
+    // The way we parse transaction trees currently requires no filtering.
+    // We may want to consider filtering for stores that just use the ACS
+    // and don't care about tx trees but the extra overhead has not been an issue so far.
+    // Note that the version guards are also not going to work for updates as filtering out
+    // when we start the stream is going to miss contracts for templates when they get vetted later.
+    def toUpdatesEventFormat: EventFormat = toEventFormat(
+      Seq(
+        CumulativeFilter(
+          CumulativeFilter.IdentifierFilter.WildcardFilter(
+            com.daml.ledger.api.v2.transaction_filter
+              .WildcardFilter(includeCreatedEventBlob)
+          )
+        )
+      )
+    )
+
+    private def toEventFormat(nonInterfaceFilters: Seq[CumulativeFilter]): EventFormat =
       EventFormat(
         filtersByParty = Map(
           primaryParty.toProtoPrimitive -> com.daml.ledger.api.v2.transaction_filter.Filters(
-            CumulativeFilter(
-              CumulativeFilter.IdentifierFilter.WildcardFilter(
-                com.daml.ledger.api.v2.transaction_filter.WildcardFilter(includeCreatedEventBlob)
-              )
-            ) +: includeInterfaces.map { interfaceId =>
+            nonInterfaceFilters ++ includeInterfaces.map { interfaceId =>
               CumulativeFilter(
                 CumulativeFilter.IdentifierFilter.InterfaceFilter(
                   com.daml.ledger.api.v2.transaction_filter.InterfaceFilter(
@@ -912,4 +976,8 @@ object MultiDomainAcsStore extends StoreErrors {
     * chosen to be "reasonable".
     */
   val notOnDomainsTotalLimit: PageLimit = PageLimit tryCreate 1000
+
+  type VersionGuard = (PackageVersionSupport, CantonTimestamp) => (
+      TraceContext
+  ) => Future[PackageVersionSupport.FeatureSupport]
 }

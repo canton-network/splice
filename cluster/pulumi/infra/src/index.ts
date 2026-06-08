@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // ensure the config is loaded and the ENV is overriden
 import * as k8s from '@pulumi/kubernetes';
-import { config } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { svsConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/config';
+import { config } from '@canton-network/splice-pulumi-common';
+import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
 import { configureAuth0 } from './auth0';
 import { configureCloudArmorPolicy } from './cloudArmor';

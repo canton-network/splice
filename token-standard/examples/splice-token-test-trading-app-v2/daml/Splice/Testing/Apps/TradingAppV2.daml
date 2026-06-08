@@ -55,9 +55,9 @@ template OTCTradeAllocationRequest with
           Map.fromList [ (action, possibleActors) | action <- [V2.ARA_Accept, V2.ARA_Reject]]
         meta = emptyMetadata
 
-      allocationRequest_acceptExtraObservers = allocationRequestV2_acceptDefaultExtraObservers this
-      allocationRequest_rejectExtraObservers = allocationRequestV2_rejectDefaultExtraObservers this
-      allocationRequest_withdrawExtraObservers = allocationRequestV2_withdrawDefaultExtraObservers this
+      allocationRequest_acceptExtraObservers _arg = observer this
+      allocationRequest_rejectExtraObservers _arg = observer this
+      allocationRequest_withdrawExtraObservers _arg = observer this
 
       allocationRequest_acceptImpl = allocationRequestV2_acceptDefaultImpl [[p] | p <- affectedAccountParties this]
       allocationRequest_rejectImpl = allocationRequestV2_rejectDefaultImplUsingV1 [[p] | p <- affectedAccountParties this]

@@ -383,6 +383,24 @@ class HttpSvPublicHandler(
     }
   }
 
+  /** Intended use: A joining SV node calls this on its sponsoring SV to learn the
+    * synchronizer migration id to use)
+    *
+    * Protection: None; the migration id is not sensitive.
+    */
+  override def getMigrationId(
+      respond: r0.GetMigrationIdResponse.type
+  )()(extracted: TraceContext): Future[r0.GetMigrationIdResponse] = {
+    implicit val traceContext: TraceContext = extracted
+    withSpan(s"$workflowId.getMigrationId") { _ => _ =>
+      Future.successful(
+        r0.GetMigrationIdResponse.OK(
+          definitions.GetMigrationIdResponse(dsoStore.domainMigrationId)
+        )
+      )
+    }
+  }
+
   /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
     *
     * Protection: Endpoint is protected by IP allowlisting

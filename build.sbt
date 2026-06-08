@@ -126,6 +126,7 @@ lazy val root: Project = (project in file("."))
     `splice-api-token-allocation-instruction-v2-daml`,
     `splice-api-token-burn-mint-v1-daml`,
     `splice-token-standard-utils-daml`,
+    `splice-token-standard-utils-test-daml`,
     `splice-token-standard-v1-test-daml`,
     `splice-token-test-trading-app-daml`,
     `splice-token-standard-v2-test-daml`,
@@ -254,12 +255,14 @@ lazy val docs = project
           (`splice-dso-governance-daml` / Compile / damlBuild).value ++
           (`splice-validator-lifecycle-daml` / Compile / damlBuild).value ++
           (`splice-wallet-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-utils-test-daml` / Compile / damlBuild).value ++
           (`splice-token-standard-v1-test-daml` / Compile / damlBuild).value ++
           (`splice-token-test-trading-app-daml` / Compile / damlBuild).value ++
           (`splice-token-test-trading-app-v2-daml` / Compile / damlBuild).value ++
           (`splice-wallet-payments-daml` / Compile / damlBuild).value ++
           (`splice-util-featured-app-proxies-daml` / Compile / damlBuild).value ++
           (`splice-util-token-standard-wallet-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
@@ -606,6 +609,27 @@ lazy val `splice-token-standard-utils-daml` =
           (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-instruction-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value,
+    )
+
+lazy val `splice-token-standard-utils-test-daml` =
+  project
+    .in(file("token-standard/splice-token-standard-utils-test"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-instruction-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-request-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-instruction-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-utils-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-token-standard-v1-test-daml` =
@@ -1016,6 +1040,7 @@ lazy val `splice-util-token-standard-wallet-daml` =
         (`splice-token-standard-utils-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value,
+      Compile / damlEnableJavaCodegen := true,
     )
 
 lazy val `splice-util-featured-app-proxies-test-daml` =
@@ -1151,6 +1176,9 @@ lazy val `apps-common` =
       `splice-api-token-allocation-request-v2-daml`,
       `splice-api-token-allocation-instruction-v1-daml`,
       `splice-api-token-allocation-instruction-v2-daml`,
+      `splice-api-token-transfer-events-v2-daml`,
+      `splice-token-standard-utils-daml`,
+      `splice-util-token-standard-wallet-daml`,
       `splice-token-test-dummy-holding-daml`,
       `splice-token-test-trading-app-daml`,
       `splice-token-test-trading-app-v2-daml`,
@@ -1586,31 +1614,31 @@ lazy val `apps-common-frontend` = {
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-frontend-utils",
+              "@canton-network/splice-common-frontend-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-utils",
+              "@canton-network/splice-common-test-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-handlers",
+              "@canton-network/splice-common-test-handlers",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-vite-utils",
+              "@canton-network/splice-common-test-vite-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-frontend",
+              "@canton-network/splice-common-frontend",
               log,
             )
             (baseDirectory.value / "lib" ** "*").get.toSet
@@ -1646,11 +1674,11 @@ lazy val `apps-common-frontend` = {
         npmInstall.value
         for (
           workspace <- Seq(
-            "@lfdecentralizedtrust/splice-common-test-vite-utils",
-            "@lfdecentralizedtrust/splice-common-frontend-utils",
-            "@lfdecentralizedtrust/splice-common-test-utils",
-            "@lfdecentralizedtrust/splice-common-test-handlers",
-            "@lfdecentralizedtrust/splice-common-frontend",
+            "@canton-network/splice-common-test-vite-utils",
+            "@canton-network/splice-common-frontend-utils",
+            "@canton-network/splice-common-test-utils",
+            "@canton-network/splice-common-test-handlers",
+            "@canton-network/splice-common-frontend",
           )
         )
           BuildCommon.TS.runWorkspaceCommand(npmRootDir.value, "build", workspace, log)
@@ -1693,7 +1721,7 @@ lazy val `apps-wallet-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-wallet-frontend",
+      frontendWorkspace := "@canton-network/splice-wallet-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1704,7 +1732,7 @@ lazy val `apps-scan-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-scan-frontend",
+      frontendWorkspace := "@canton-network/splice-scan-frontend",
       sharedFrontendSettings,
       npmInstallOpenApiDeps := Seq(
         (
@@ -1722,7 +1750,7 @@ lazy val `apps-splitwell-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-splitwell-frontend",
+      frontendWorkspace := "@canton-network/splice-splitwell-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1733,7 +1761,7 @@ lazy val `apps-ans-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-ans-frontend",
+      frontendWorkspace := "@canton-network/splice-ans-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1744,7 +1772,7 @@ lazy val `apps-sv-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-sv-frontend",
+      frontendWorkspace := "@canton-network/splice-sv-frontend",
       sharedFrontendSettings,
     )
 }
@@ -2186,7 +2214,7 @@ checkErrors := {
     val ignorePatternsFilenames = ignorePatterns.map(ignorePatternsFilename)
     val cmd =
       Seq(
-        "splice-shared-gha/.github/actions/scripts/check-logs.sh",
+        ".github/actions/scripts/check-logs.sh",
         logFileName,
       ) ++ ignorePatternsFilenames
     if (cmd.! != 0) {
@@ -2204,7 +2232,7 @@ checkErrors := {
 
     // Note that this will split the given file and then delete it, so it is idempotent.
     Seq(
-      "splice-shared-gha/.github/actions/scripts/split-canton-logs.sh",
+      ".github/actions/scripts/split-canton-logs.sh",
       logFile,
       logFileBefore,
       logFileAfter,
@@ -2287,6 +2315,9 @@ lazy val `apps-dar-resources-generator` =
       `splice-api-token-allocation-request-v2-daml`,
       `splice-api-token-allocation-instruction-v1-daml`,
       `splice-api-token-allocation-instruction-v2-daml`,
+      `splice-api-token-transfer-events-v2-daml`,
+      `splice-token-standard-utils-daml`,
+      `splice-util-token-standard-wallet-daml`,
       `splice-token-test-dummy-holding-daml`,
       `splice-token-test-trading-app-daml`,
       `splice-featured-app-api-v1-daml`,

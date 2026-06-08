@@ -8,9 +8,9 @@ import {
   imagePullPolicy,
   jmxOptions,
   numNodesPerInstance,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { ServiceMonitor } from '@lfdecentralizedtrust/splice-pulumi-common/src/metrics';
-import { versionFromDefault } from '@lfdecentralizedtrust/splice-pulumi-common/src/version';
+} from '@canton-network/splice-pulumi-common';
+import { ServiceMonitor } from '@canton-network/splice-pulumi-common/src/metrics';
+import { versionFromDefault } from '@canton-network/splice-pulumi-common/src/version';
 import _ from 'lodash';
 
 import { EnvironmentVariable, multiValidatorConfig } from './config';

@@ -7,24 +7,21 @@ import {
   CLUSTER_BASENAME,
   CnChartVersion,
   config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/dsoConfig';
+} from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
   deployedValidators,
   validatorRunbookStackName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { deploymentConf } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/config';
+} from '@canton-network/splice-pulumi-common-validator';
+import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
 import {
   GitFluxRef,
   StackFromRef,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/stack';
+} from '@canton-network/splice-pulumi-common/src/operator/flux-source';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 function isVersionAtLeastOrSnapshot(version: CnChartVersion, minVersion: string): boolean {
   if (version.type === 'local') {

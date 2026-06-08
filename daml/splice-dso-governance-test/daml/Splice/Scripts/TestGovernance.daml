@@ -454,8 +454,8 @@ testRacingSvRemoval = do
 
   -- and it eagerly accepts its other vote request as well
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  submitMultiMustFail'' (expectMessageContains "Not a sv")
-    [sv1] [dso] $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+  submitMustFail'' (expectMessageContains "Not a sv") (actAs sv1 <> readAs dso) $
+    exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
       requestCid = req2
       amuletRulesCid = None
       sv = Some sv1
@@ -744,6 +744,7 @@ testAmuletRulesConfigChange = do
         maxNumInputs = 101
         maxNumOutputs = 101
         maxNumLockHolders = 11
+        tokenStandardMaxTTL = None
 
   let defaultBaseRateTrafficLimits2 = BaseRateTrafficLimits with
         burstAmount = 10 * 20 * 1000 + 1

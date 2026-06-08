@@ -53,7 +53,7 @@ template AmuletTransferInstruction
       view = Api.TransferInstructionV2.TransferInstructionView with
         originalInstructionCid = None
         transfer = upcast transfer
-        expiresAt = Some transfer.executeBefore -- TODO(#4665): limit the maximum TTL to avoid a storage leak
+        expiresAt = Some transfer.executeBefore
         availableActions = Map.fromList
           [ (Api.TransferInstructionV2.TIA_Withdraw, [[transfer.sender]])
           , (Api.TransferInstructionV2.TIA_Accept, [[transfer.receiver]])
@@ -61,13 +61,13 @@ template AmuletTransferInstruction
           ]
         meta = emptyMetadata
 
-      transferInstruction_acceptImpl = transferInstruction_v2_receiverActor_acceptDefaultImplUsingV1 transfer.receiver
-      transferInstruction_rejectImpl = transferInstruction_v2_receiverActor_rejectDefaultImplUsingV1 transfer.receiver
-      transferInstruction_withdrawImpl = transferInstruction_v2_senderActor_withdrawDefaultImplUsingV1 transfer.sender
+      transferInstruction_acceptImpl = transferInstructionV2_receiverActor_acceptDefaultImplUsingV1 transfer.receiver
+      transferInstruction_rejectImpl = transferInstructionV2_receiverActor_rejectDefaultImplUsingV1 transfer.receiver
+      transferInstruction_withdrawImpl = transferInstructionV2_senderActor_withdrawDefaultImplUsingV1 transfer.sender
 
-      transferInstruction_acceptExtraObservers = transferInstruction_acceptDefaultExtraObservers this
-      transferInstruction_rejectExtraObservers = transferInstruction_rejectDefaultExtraObservers this
-      transferInstruction_withdrawExtraObservers = transferInstruction_withdrawDefaultExtraObservers this
+      transferInstruction_acceptExtraObservers _arg = observer this
+      transferInstruction_rejectExtraObservers _arg = observer this
+      transferInstruction_withdrawExtraObservers _arg = observer this
 
 
 

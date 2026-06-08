@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { getMetaKeyValue } from "../apis/ledger-api-utils";
+import { getMetaKeyValue, Meta } from "../apis/ledger-api-utils";
 import { BurnedMetaKey } from "../constants";
 import {
   Holding,
@@ -32,7 +32,7 @@ function sumHoldings(holdings: Holding[]): BigNumber {
 
 export function computeAmountChanges(
   children: HoldingsChange,
-  meta: any,
+  meta: Meta,
   partyId: string,
 ): { mintAmount: string; burnAmount: string } {
   const burnAmount = BigNumber(getMetaKeyValue(BurnedMetaKey, meta) || "0");

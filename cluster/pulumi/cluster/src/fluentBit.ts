@@ -7,7 +7,7 @@ import {
   exactNamespace,
   GCP_REGION,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 export function installFluentBit(): void {
   // GCP does not allow configuring the fluent-bit instance it deploys. So we disable GCP's fluent-bit instance for workloads and install our own that

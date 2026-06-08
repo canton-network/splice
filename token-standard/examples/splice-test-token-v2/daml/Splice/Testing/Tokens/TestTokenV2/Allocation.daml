@@ -72,10 +72,10 @@ template TokenAllocationInstructionV2 with
           allocation.settlementDeadline
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocationInstruction_withdrawExtraObservers _arg = []
-      allocationInstruction_acceptExtraObservers _arg = []
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocationInstruction_withdrawExtraObservers _arg = observer this
+      allocationInstruction_acceptExtraObservers _arg = observer this
 
       allocationInstruction_withdrawImpl = token_allocationInstruction_withdrawImplV2 CalledFromV2 CreateV2Allocation this
       allocationInstruction_acceptImpl = token_allocationInstruction_acceptImplV2 CalledFromV2 CreateV2Allocation this
@@ -178,13 +178,11 @@ template TokenAllocationV2 with
         numIterations
         meta = emptyMetadata
 
-      -- No extra observers required, as the choice bodies do not introduce further informees.
-      -- Note that the executors are controllers on these two choices.
-      allocation_settleExtraObservers _arg = []
-      allocation_cancelExtraObservers _arg = []
-
-      -- Add executors as extra observers so there is no extra view for the archival of the holding
-      allocation_withdrawExtraObservers _arg = settlement.executors
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocation_settleExtraObservers _arg = observer this
+      allocation_cancelExtraObservers _arg = observer this
+      allocation_withdrawExtraObservers _arg = observer this
 
       allocation_withdrawImpl = token_allocation_withdrawImplV2 CalledFromV2 CreateV2Allocation this
       allocation_cancelImpl = token_allocation_cancelImplV2 CalledFromV2 CreateV2Allocation this
@@ -540,8 +538,8 @@ template TokenAllocationInstructionV1 with
     interface instance V1.AllocationInstruction for TokenAllocationInstructionV1 where
       view = viewAsAllocationInstructionV1 (instrV2.allocateBefore, instrV2)
 
-      allocationInstruction_updateImpl = allocationInstruction_v1_updateDefaultImplUsingV2
-      allocationInstruction_withdrawImpl = allocationInstruction_v1_withdrawDefaultImplUsingV2
+      allocationInstruction_updateImpl = allocationInstructionV1_updateDefaultImplUsingV2
+      allocationInstruction_withdrawImpl = allocationInstructionV1_withdrawDefaultImplUsingV2
         (toInterface instrV2)
         (token_allocationInstruction_withdrawImplV2 CalledFromV1 CreateV1Allocation instrV2)
 
@@ -585,16 +583,16 @@ template TokenAllocationV1 with
           allocationV2 = this.allocationV2 with
             originalAllocationCid = Some $
               fromOptional (coerceContractId self) this.allocationV2.originalAllocationCid
-        allocation_v1_executeTransferDefaultImplUsingV2
+        allocationV1_executeTransferDefaultImplUsingV2
           allocationFactoryCid
           settlementFactoryCid
           (toInterface allocationV2) (toInterfaceContractId newSelf) arg
 
-      allocation_cancelImpl = allocation_v1_cancelDefaultImplUsingV2
+      allocation_cancelImpl = allocationV1_cancelDefaultImplUsingV2
         (toInterface this)
         (token_allocation_cancelImplV2 CalledFromV1 CreateV1Allocation allocationV2)
 
-      allocation_withdrawImpl = allocation_v1_withdrawDefaultImplUsingV2
+      allocation_withdrawImpl = allocationV1_withdrawDefaultImplUsingV2
         (toInterface this)
         (token_allocation_withdrawImplV2 CalledFromV1 CreateV1Allocation allocationV2)
 

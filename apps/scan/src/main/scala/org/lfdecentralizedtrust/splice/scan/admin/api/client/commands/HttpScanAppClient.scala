@@ -1275,6 +1275,28 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetMigrationId()
+      extends InternalBaseCommand[
+        http.GetMigrationIdResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetMigrationIdResponse] = {
+      client.getMigrationId(headers)
+    }
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetMigrationIdResponse.OK(response) =>
+        Right(response.migrationId)
+    }
+  }
+
   @deprecated(message = "Use GetUpdateHistory instead", since = "0.2.5")
   case class GetUpdateHistoryV0(
       count: Int,

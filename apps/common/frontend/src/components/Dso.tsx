@@ -6,13 +6,13 @@ import {
   Loading,
   PartyId,
   TitledTable,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract, durationToInterval } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract, durationToInterval } from '@canton-network/splice-common-frontend-utils';
 import { UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
 import JSONPretty from 'react-json-pretty';
 import 'react-json-pretty/themes/monikai.css';
-import { CometBftNodeDumpOrErrorResponse, NodeStatus } from '@lfdecentralizedtrust/sv-openapi';
+import { CometBftNodeDumpOrErrorResponse, NodeStatus } from '@canton-network/sv-openapi';
 
 import { Box, Tab, Table, TableBody, TableRow, Tabs, Typography } from '@mui/material';
 import TableCell from '@mui/material/TableCell';

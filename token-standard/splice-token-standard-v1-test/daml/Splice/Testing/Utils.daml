@@ -12,7 +12,7 @@ module Splice.Testing.Utils
     submitWithDisclosuresMustFail',
 
     FailureStatusCheck(..),
-    submitMultiMustFail'',
+    submitMustFail'',
     submitWithDisclosuresMustFail'',
     expectErrorId,
     expectMessageContains,
@@ -127,15 +127,14 @@ submitWithDisclosuresMustFail'' check p ds cmds = do
 ----------------------------------------------------------------------------
 
 -- | Use this to check that multi-party submission fails with the expected 'FailureStatus'.
-submitMultiMustFail''
+submitMustFail''
   : Show a
   => FailureStatusCheck
-  -> [Party]
-  -> [Party]
+  -> SubmitOptions
   -> Commands a
   -> Script ()
-submitMultiMustFail'' check actAsParties readAsParties cmds = do
-  result <- trySubmit (actAs actAsParties <> readAs readAsParties) cmds
+submitMustFail'' check options cmds = do
+  result <- trySubmit options cmds
   checkSubmitFailure check result
 
 -- | Internal helper to validate that a submission failed with the expected 'FailureStatus'.

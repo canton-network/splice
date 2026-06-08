@@ -4,8 +4,8 @@ import {
   DisableConditionally,
   ErrorDisplay,
   Loading,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { AssignedContract, Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { AssignedContract, Contract } from '@canton-network/splice-common-frontend-utils';
 import { useCallback, useState } from 'react';
 
 import { Button, FormGroup, List, ListItem, Stack, TextField, Typography } from '@mui/material';

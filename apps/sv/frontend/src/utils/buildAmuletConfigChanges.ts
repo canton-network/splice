@@ -100,6 +100,12 @@ export function buildAmuletConfigChanges(
       currentValue: before?.transferConfig.maxNumLockHolders || '',
       newValue: after?.transferConfig.maxNumLockHolders || '',
     },
+    {
+      fieldName: 'transferConfigTokenStandardMaxTTL',
+      label: 'Token standard allocation and instruction max TTL (microseconds)',
+      currentValue: before?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
+      newValue: after?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
+    },
 
     ...buildIssuanceCurveChanges(before?.issuanceCurve, after?.issuanceCurve),
 

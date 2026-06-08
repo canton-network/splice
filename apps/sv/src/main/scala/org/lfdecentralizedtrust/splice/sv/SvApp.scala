@@ -52,7 +52,7 @@ import org.lfdecentralizedtrust.splice.http.v0.sv_admin.SvAdminResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
-import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.admin.http.{
@@ -131,28 +131,19 @@ class SvApp(
     (for {
       _ <-
         appInitStep("Ensure participant is initialized with expected id") {
-          UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
-            case Some(migrationId) if migrationId < config.domainMigrationId =>
-              throw Status.INVALID_ARGUMENT
-                .withDescription(
-                  s"Migration ID was incremented (to ${config.domainMigrationId}). The migration id should not be changed from the last value it had."
-                )
-                .asRuntimeException()
-            case _ =>
-              logger.info(
-                "Ensuring participant is initialized"
-              )
-              val cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
-                SvCantonIdentifierConfig.default(config)
-              )
-              ParticipantInitializer.ensureParticipantInitializedWithExpectedId(
-                cantonIdentifierConfig.participant,
-                participantAdminConnection,
-                config.participantBootstrappingDump,
-                loggerFactory,
-                retryProvider,
-              )
-          }
+          logger.info(
+            "Ensuring participant is initialized"
+          )
+          val cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
+            SvCantonIdentifierConfig.default(config)
+          )
+          ParticipantInitializer.ensureParticipantInitializedWithExpectedId(
+            cantonIdentifierConfig.participant,
+            participantAdminConnection,
+            config.participantBootstrappingDump,
+            loggerFactory,
+            retryProvider,
+          )
         }
     } yield ()).andThen { case _ => participantAdminConnection.close() }
   }

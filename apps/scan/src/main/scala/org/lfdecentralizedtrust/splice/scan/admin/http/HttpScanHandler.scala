@@ -665,7 +665,7 @@ class HttpScanHandler(
         synchronizerId <- store
           .lookupAmuletRules()
           .map(_.flatMap(_.state.fold(_.some, None)))
-        connectedDomains <- participantAdminConnection.listConnectedDomains()
+        connectedDomains <- participantAdminConnection.listConnectedSynchronizers()
       } yield {
         synchronizerId.fold(
           ScanResource.GetActivePhysicalSynchronizerSerialResponse.NotFound(
@@ -2095,6 +2095,19 @@ class HttpScanHandler(
             schedule
           )
         )
+    }
+  }
+
+  override def getMigrationId(
+      respond: ScanResource.GetMigrationIdResponse.type
+  )()(extracted: TraceContext): Future[ScanResource.GetMigrationIdResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getMigrationId") { _ => _ =>
+      Future.successful(
+        ScanResource.GetMigrationIdResponse.OK(
+          definitions.GetMigrationIdResponse(updateHistory.domainMigrationId)
+        )
+      )
     }
   }
 

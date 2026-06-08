@@ -284,6 +284,11 @@ trait ScanConnection
       tc: TraceContext,
   ): OptionT[Future, MigrationSchedule]
 
+  def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long]
+
   def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
       tc: TraceContext,

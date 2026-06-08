@@ -7,18 +7,21 @@ import {
   AllocateAmuletV2Request,
   AllocateAmuletRequestSettlementSettlementRef,
   TransferLegSide,
-} from '@lfdecentralizedtrust/wallet-openapi';
+} from '@canton-network/wallet-openapi';
 import {
   Alert,
   Button,
   Card,
   CardContent,
+  Checkbox,
   Divider,
+  FormControlLabel,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import { DisableConditionally } from '@lfdecentralizedtrust/splice-common-frontend';
+import BigNumber from 'bignumber.js';
+import { DisableConditionally } from '@canton-network/splice-common-frontend';
 import BftAnsField from './BftAnsField';
 import AmountInput from './AmountInput';
 import { Add, Remove } from '@mui/icons-material';
@@ -28,6 +31,7 @@ import {
   isValidDamlTimestamp,
 } from '../utils/timestampConversion';
 import { usePrimaryParty } from '../hooks';
+import { TextMap, TextMapEditor } from './TextMap';
 
 const CreateAllocation: React.FC = () => {
   const { createAllocationV2 } = useWalletClient();
@@ -250,6 +254,69 @@ const CreateAllocation: React.FC = () => {
             <Button id="add-transfer-leg" startIcon={<Add />} onClick={addLeg}>
               Add Transfer Leg
             </Button>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="create-allocation-committed"
+                  checked={allocation.committed}
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      committed: event.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Committed"
+            />
+            <Typography variant="body2">Metadata</Typography>
+            <TextMapEditor
+              meta={allocation.meta}
+              setTextMap={meta =>
+                setAllocation({
+                  ...allocation,
+                  meta,
+                })
+              }
+              idPrefix="create-allocation"
+            />
+
+            <Divider />
+
+            <Typography variant="h5">Iterated Settlement Options</Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="create-allocation-allow-iterated-settlement"
+                  checked={allocation.allow_iterated_settlement}
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      allow_iterated_settlement: event.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Allow iterated settlement"
+            />
+            {allocation.allow_iterated_settlement && (
+              <>
+                <Typography variant="body2">Funding amount (Amulet)</Typography>
+                <TextField
+                  id="create-allocation-next-iteration-funding-amount"
+                  value={allocation.next_iteration_funding_amount}
+                  error={
+                    !isValidNextIterationFundingAmount(allocation.next_iteration_funding_amount)
+                  }
+                  onChange={event =>
+                    setAllocation({
+                      ...allocation,
+                      next_iteration_funding_amount: event.target.value,
+                    })
+                  }
+                />
+              </>
+            )}
 
             <DisableConditionally
               conditions={[
@@ -296,6 +363,10 @@ interface PartialAllocateAmuletV2Request {
     settlement_deadline?: string;
   };
   transfer_legs: PartialTransferLeg[];
+  committed: boolean;
+  meta: TextMap;
+  allow_iterated_settlement: boolean;
+  next_iteration_funding_amount: string;
 }
 
 function emptyTransferLeg(): PartialTransferLeg {
@@ -309,8 +380,21 @@ function emptyForm(): PartialAllocateAmuletV2Request {
       settlement_deadline: undefined,
       settlement_ref: { id: '', cid: undefined },
     },
-    transfer_legs: [emptyTransferLeg()],
+    transfer_legs: [],
+    committed: false,
+    meta: {},
+    allow_iterated_settlement: false,
+    next_iteration_funding_amount: '0',
   };
+}
+
+function isValidNextIterationFundingAmount(amount: string): boolean {
+  const value = amount.trim();
+  if (!value) {
+    return false;
+  }
+  const amountNumber = new BigNumber(value);
+  return amountNumber.isFinite() && amountNumber.gte(0);
 }
 
 function validatedForm(
@@ -348,7 +432,16 @@ function validatedForm(
       amount: leg.amount,
     });
   }
-  if (validLegSides.length === 0) return null;
+  if (
+    partial.allow_iterated_settlement &&
+    !isValidNextIterationFundingAmount(partial.next_iteration_funding_amount)
+  ) {
+    return null;
+  }
+
+  // You must specify either transfer legs, or iterated settlement funding.
+  if (validLegSides.length === 0 && !partial.allow_iterated_settlement) return null;
+
   return {
     settlement: {
       executors: partial.settlement.executors,
@@ -361,9 +454,10 @@ function validatedForm(
       },
     },
     transfer_leg_sides: validLegSides,
-    // TODO (#5498): make the FE specify these
-    committed: false,
-    meta: {},
-    next_iteration_funding: undefined,
+    committed: partial.committed,
+    meta: partial.meta,
+    next_iteration_funding: partial.allow_iterated_settlement
+      ? { ['Amulet']: partial.next_iteration_funding_amount.trim() }
+      : undefined,
   };
 }

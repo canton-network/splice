@@ -100,6 +100,23 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  def supportsAmuletAllocationV2(
+      parties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      Seq(
+        PackageIdResolver.Package.SpliceAmulet -> parties
+      ),
+      now,
+      DarResources.amulet,
+      DarResources.amulet_0_1_20,
+      ignoreRedundantCheck = false,
+    )
+  }
+
   // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
 
   def supportsExpireTransferInstructions(
@@ -142,6 +159,28 @@ trait PackageVersionSupport extends NamedLogging {
       DarResources.dsoGovernance_0_1_24,
     )
   }
+
+  def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceAmulet,
+      now,
+      DarResources.amulet,
+      DarResources.amulet_0_1_19,
+    )
+
+  def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceWallet,
+      now,
+      DarResources.wallet,
+      DarResources.wallet_0_1_16,
+    )
 
   private def isDarSupported(
       parties: Seq[PartyId],

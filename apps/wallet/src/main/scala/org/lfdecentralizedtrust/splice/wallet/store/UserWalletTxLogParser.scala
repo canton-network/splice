@@ -63,12 +63,14 @@ import org.lfdecentralizedtrust.splice.history.{
   AnsRules_CollectEntryRenewalPayment,
   AnsRules_CollectInitialEntryPayment,
   CreateTokenStandardTransferInstruction,
+  CreateTokenStandardTransferInstructionV2,
   DevelopmentFundCouponCreate,
   DevelopmentFundCoupon_Archive,
   DevelopmentFundCoupon_Expire,
   DevelopmentFundCoupon_Reject,
   DevelopmentFundCoupon_Withdraw,
   DirectTokenStandardTransfer,
+  DirectTokenStandardTransferV2,
   LockedAmuletExpireAmulet,
   LockedAmuletExpireAmuletV2,
   LockedAmuletOwnerExpireLock,
@@ -617,6 +619,7 @@ class UserWalletTxLogParser(
           // ------------------------------------------------------------------
 
           case CreateTokenStandardTransferInstruction(node) =>
+            // TODO(tech-debt): deduplicate with the V2 version
             val cid: String = node.result.value.output match {
               case output: splice.api.token.transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Pending =>
                 output.transferInstructionCid.contractId
@@ -683,6 +686,7 @@ class UserWalletTxLogParser(
             }
 
           case DirectTokenStandardTransfer(node) =>
+            // TODO(tech-debt): deduplicate with the V2 version
             defer {
               parseTrees(
                 tree,
@@ -697,6 +701,118 @@ class UserWalletTxLogParser(
                 } else {
                   // We hit this only for self-transfers after the 24 submission delay change.
                   val sender = node.argument.value.transfer.sender
+                  val transferEntry = TransferTxLogEntry(
+                    eventId =
+                      EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
+                    date = Some(tree.getEffectiveAt),
+                    sender = Some(
+                      PartyAndAmount(sender, 0)
+                    ), // This is the net amount, without fees this is always zero.
+                    receivers = Seq.empty, // receivers never includes the sender
+                    senderHoldingFees = BigDecimal(0.0),
+                    appRewardsUsed = BigDecimal(0.0),
+                    validatorRewardsUsed = BigDecimal(0.0),
+                    svRewardsUsed = Some(BigDecimal(0.0)),
+                  )
+                  childState.appended(State(entries = immutable.Queue[TxLogEntry](transferEntry)))
+                }
+              childStateWithTransfer
+                .mergeBalanceChangesIntoTransfer(
+                  TransferTransactionSubtype.Transfer,
+                  Some(EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId)),
+                )
+                .setTransferDescription(
+                  node.argument.value.transfer.meta.values
+                    .getOrDefault(TokenStandardMetadata.reasonMetaKey, "")
+                )
+            }
+
+          case CreateTokenStandardTransferInstructionV2(node) =>
+            // TODO(tech-debt): deduplicate with the V1 version
+            val cid: String = node.result.value.output match {
+              case output: splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Pending =>
+                output.transferInstructionCid.contractId
+              case output =>
+                // CreateTokenStandardTransferInstruction only matches on two-step transfers resulting in pending status.
+                // Single-step transfers are just parsed as the underlying transfer.
+                logger.warn(
+                  s"Unexpected transfer instruction result output, expected pending but got: $output"
+                )
+                ""
+            }
+
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              val childStateWithTransfer =
+                if (childState.hasTransfer) {
+                  // Legacy choice that calls into AmuletRules_Transfer
+                  childState
+                } else {
+                  val admin = node.argument.value.transfer.instrumentId.admin
+                  val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+                  val transferEntry = TransferTxLogEntry(
+                    eventId =
+                      EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
+                    // This is slightly off. The receiver does not actually see this exercised event.
+                    // But our tx log infrastructure does not support putting in created events here.
+                    subtype = Some(
+                      TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
+                    ),
+                    date = Some(tree.getEffectiveAt),
+                    sender = Some(PartyAndAmount(sender, -node.argument.value.transfer.amount)),
+                    receivers =
+                      Seq.empty, // This only locks CC so there is not actually any receiver
+                    senderHoldingFees = BigDecimal(0.0),
+                    appRewardsUsed = BigDecimal(0.0),
+                    validatorRewardsUsed = BigDecimal(0.0),
+                    svRewardsUsed = Some(BigDecimal(0.0)),
+                  )
+                  childState.appended(State(entries = immutable.Queue[TxLogEntry](transferEntry)))
+                }
+              childStateWithTransfer
+                .mergeBalanceChangesIntoTransfer(
+                  TransferTransactionSubtype.CreateTokenStandardTransferInstruction,
+                  Some(EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId)),
+                )
+                .setTransferDescription(
+                  node.argument.value.transfer.meta.values
+                    .getOrDefault(TokenStandardMetadata.reasonMetaKey, "")
+                )
+                .setTransferInstructionReceiver {
+                  val admin = node.argument.value.transfer.instrumentId.admin
+                  node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin)
+                }
+                .setTransferInstructionAmount(
+                  node.argument.value.transfer.amount
+                )
+                .setTransferInstructionCid(
+                  cid
+                )
+            }
+
+          case DirectTokenStandardTransferV2(node) =>
+            // TODO(tech-debt): deduplicate with the V1 version
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              val childStateWithTransfer =
+                if (childState.hasTransfer) {
+                  childState
+                } else {
+                  // We hit this only for self-transfers after the 24 submission delay change.
+                  val admin = node.argument.value.transfer.instrumentId.admin
+                  val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -1102,8 +1218,10 @@ class UserWalletTxLogParser(
           // because that one does not (easily) include the transfer legs whereas this one does
           case SettlementFactorySettle(node) =>
             now {
+              // Note we only need to parse the `transferLegs`, as they cover exactly the transfers being settled.
               node.argument.value.transferLegs.asScala.foldLeft(State.empty) {
                 case (stateAcc, transferLeg) =>
+                  // Not all transfer legs are relevant to the txlog's user, so we filter down to the ones that are
                   if (
                     transferLeg.instrumentId == amuletInstrumentIdName && (transferLeg.receiver.owner.toScala
                       .contains(endUserPartyProtoPrimitive) || transferLeg.sender.owner.toScala

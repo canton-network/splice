@@ -1,0 +1,245 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for Splice.TokenStandard.Utils.Internal.Allocations
+module Splice.Tests.UnitTest_Allocations where
+
+import DA.Action (unless)
+import DA.Assert
+import DA.List (sort, dedupSort)
+import DA.Map qualified as Map
+import DA.Time
+import DA.Text qualified as T
+import DA.TextMap qualified as TextMap
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+-- TODO(#4517): add the missing unit tests for the non-trivial functions in Allocations utils
+
+test_executorsFromSettlementInfoV1 : Script ()
+test_executorsFromSettlementInfoV1 = do
+  now <- getTime
+  executor1 <- allocateParty "executor1"
+  executor2 <- allocateParty "executor2"
+  let settlementV2 = V1.SettlementInfo with
+        executor = executor1
+        settlementRef = V1.Reference with
+          id = "settlement1"
+          cid = None
+        meta = Metadata with
+          values = TextMap.fromList
+            [ (TSU.extraExecutorsMetaKey, partyToText executor2)
+            ]
+        requestedAt = now
+        allocateBefore = now `addRelTime` days 1
+        settleBefore = now `addRelTime` days 2
+
+  TSU.executorsFromSettlementInfoV1 settlementV2 === [executor1, executor2]
+
+  pure ()
+
+test_allocationV1_availableActionsDefault : Script ()
+test_allocationV1_availableActionsDefault = do
+  TestEnv {..} <- setupTest
+  let allocationViewV1 = V1.AllocationView with
+        holdingCids = []
+        meta = emptyMetadata
+        allocation = allocationV1
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [[admin, executor1, executor2]])
+        , (V2.AA_Cancel, [[executor1, executor2]])
+        , (V2.AA_Withdraw, [[alice]])
+          -- Note: the default actions do consider the account provider as an observer only,
+          -- which is why they do not get the Withdraw action.
+        ]
+  checkEq "allocationV1_availableActionsDefault" expectedActions $
+    TSU.allocationV1_availableActionsDefault allocationViewV1
+
+test_allocationV2_availableActionsDefault : Script ()
+test_allocationV2_availableActionsDefault = do
+  TestEnv {..} <- setupTest
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [[admin, executor1, executor2]])
+        , (V2.AA_Cancel, [[executor1, executor2]])
+        , (V2.AA_Withdraw, [[alice]])
+          -- Note: the default actions do consider the account provider as an observer only,
+          -- which is why they do not get the Withdraw action.
+        ]
+  checkEq "allocationV2_availableActionsDefault" expectedActions $
+    TSU.allocationV2_availableActionsDefault settlementV2.executors allocationV2
+
+test_settlementFactoryV2_settleBatchExtraObserversDefaultImpl : Script ()
+test_settlementFactoryV2_settleBatchExtraObserversDefaultImpl = do
+  TestEnv {..} <- setupTest
+  let choiceArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        allocations = []
+        transferLegs = legsV2
+        actors = settlementV2.executors
+        extraArgs = emptyExtraArgs
+
+  let expectedPublicObservers = sort [alice, bob, charlie, accountProvider]
+  checkEq "settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl" expectedPublicObservers $
+    dedupSort $ TSU.settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin choiceArg
+
+  let expectedPrivateObservers = []
+  checkEq "settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl" expectedPrivateObservers $
+    dedupSort $ TSU.settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl choiceArg
+
+
+test_allocationFactoryV2_allocateExtraObserversDefaultImpl  : Script ()
+test_allocationFactoryV2_allocateExtraObserversDefaultImpl = do
+  TestEnv {..} <- setupTest
+  let choiceArg = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2
+        inputHoldingCids = []
+        actors = [alice]
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+
+  let expectedPublicObservers = sort [executor1, executor2, accountProvider, alice]
+  checkEq "allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl" expectedPublicObservers $
+    dedupSort $ TSU.allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl choiceArg
+
+  -- funding is required for the allocation leg ==> do not show the allocation step itself to the executors
+  let expectedPrivateObservers = sort [accountProvider, alice]
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (leg input)" expectedPrivateObservers $
+    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArg
+
+  -- funding is required for the next iteration ==> do not show the allocation step itself to the executors
+  let choiceArgIterationInput = choiceArg with
+        allocation = allocationV2 with
+          transferLegSides = []
+          nextIterationFunding = Some $ TextMap.fromList [("X", 10.0)]
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (iteration input)" expectedPrivateObservers $
+    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgIterationInput
+
+  -- no funding is required ==> show the allocation step to the executors
+  let choiceArgNoInput = choiceArg with
+        allocation = allocationV2 with
+          authorizer = bobAccount
+          transferLegSides = [TSU.receiverSide aliceBobLeg]
+          nextIterationFunding = Some $ TextMap.fromList [("X", 0.0)]
+  let expectedPrivateObservers = sort [executor1, executor2, accountProvider, bob]
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (no input)" expectedPrivateObservers $
+    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgNoInput
+
+
+-- Shared test infra
+--------------------
+
+data TestEnv = TestEnv with
+  admin : Party
+  alice : Party
+  aliceAccount : V2.Account
+  bob : Party
+  bobAccount : V2.Account
+  charlie : Party
+  charlieAccount : V2.Account
+  accountProvider : Party
+  executor1 : Party
+  executor2 : Party
+  instrId : V2.InstrumentId
+  now : Time
+  settlementV1 : V1.SettlementInfo
+  allocationV1 : V1.AllocationSpecification
+  settlementV2 : V2.SettlementInfo
+  allocationV2 : V2.AllocationSpecification
+  aliceBobLeg : V2.TransferLeg
+  legsV2 : [V2.TransferLeg]
+
+setupTest : Script TestEnv
+setupTest = do
+  now <- getTime
+  admin <- allocateParty "admin"
+  alice <- allocateParty "alice"
+  accountProvider <- allocateParty "accountProvider"
+  bob <- allocateParty "bob"
+  charlie <- allocateParty "charlie"
+  executor1 <- allocateParty "executor1"
+  executor2 <- allocateParty "executor2"
+  let settlementV1 = V1.SettlementInfo with
+        executor = executor1
+        settlementRef = V1.Reference with
+          id = "settlement1"
+          cid = None
+        meta = Metadata with
+          values = TextMap.fromList
+            [ (TSU.extraExecutorsMetaKey, partyToText executor2)
+            ]
+        requestedAt = now
+        allocateBefore = now `addRelTime` days 1
+        settleBefore = now `addRelTime` days 2
+  let aliceAccount = V2.Account with
+        owner = Some alice
+        provider = Some accountProvider
+        id = "aliceAccount"
+  let bobAccount = V2.Account with
+        owner = Some bob
+        provider = Some accountProvider
+        id = "bobAccount"
+  let charlieAccount = TSU.basicAccount charlie
+  let instrId = V2.InstrumentId with
+        admin
+        id = "X"
+  let allocationV1 = V1.AllocationSpecification with
+        settlement = settlementV1
+        transferLegId = "leg1"
+        transferLeg = V1.TransferLeg with
+          sender = alice
+          receiver = bob
+          amount = 10.0
+          instrumentId = TSU.downcast instrId
+          meta = TSU.accountToMeta "sender" aliceAccount emptyMetadata
+  let settlementV2 = V2.SettlementInfo with
+        executors = [executor1, executor2]
+        id = "settlement1"
+        cid = None
+        meta = emptyMetadata
+  let aliceBobLeg = V2.TransferLeg with
+        transferLegId = "leg1"
+        sender = aliceAccount
+        receiver = bobAccount
+        amount = 10.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  let bobCharlieLeg = V2.TransferLeg with
+        transferLegId = "leg2"
+        sender = bobAccount
+        receiver = charlieAccount
+        amount = 5.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  let legsV2 = [aliceBobLeg, bobCharlieLeg]
+  let allocationV2 = V2.AllocationSpecification with
+        admin = instrId.admin
+        authorizer = aliceAccount
+        transferLegSides = [TSU.senderSide aliceBobLeg]
+        committed = False
+        nextIterationFunding = None
+        settlementDeadline = None
+        meta = emptyMetadata
+  pure TestEnv with ..
+
+emptyExtraArgs : ExtraArgs
+emptyExtraArgs = ExtraArgs with
+  context = emptyChoiceContext
+  meta = emptyMetadata
+
+checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
+checkEq prefix expected actual =
+  unless (actual == expected) $
+    fail $ T.unlines
+      [ prefix <> ": actual values do not match expected values."
+      , "  actual:   " <> show actual
+      , "  expected: " <> show expected
+      ]

@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.automation
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   RetryProvider,
   SpliceLedgerClient,
   SpliceLedgerConnection,
@@ -36,6 +37,7 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
     ledgerClient: SpliceLedgerClient,
     retryProvider: RetryProvider,
     parametersConfig: SpliceParametersConfig,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -102,8 +104,10 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
         updateHistory.ingestionSink,
         connection(SpliceLedgerConnectionPriority.High),
         automationConfig,
+        triggerContext.clock,
         backoffClock = triggerContext.pollingClock,
         triggerContext.retryProvider,
+        packageVersionSupport,
         triggerContext.loggerFactory,
       )
     )
@@ -118,8 +122,10 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
       store.multiDomainAcsStore.ingestionSink,
       connection(SpliceLedgerConnectionPriority.High),
       automationConfig,
+      triggerContext.clock,
       backoffClock = triggerContext.pollingClock,
       triggerContext.retryProvider,
+      packageVersionSupport,
       triggerContext.loggerFactory,
     )
   )

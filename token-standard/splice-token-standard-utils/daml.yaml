@@ -24,6 +24,11 @@ data-dependencies:
 
 build-options:
   - --target=2.1
+
+  - --force-utility-package=yes
+  # Use ^^^ to disallow template and interface definitions and make all types
+  # unserializable, which ensures that different versions of this pacakage are
+  # always SCU-compatible.
 codegen:
   java:
     package-prefix: org.lfdecentralizedtrust.splice.codegen.java

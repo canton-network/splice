@@ -12,9 +12,9 @@ import {
   GCP_PROJECT,
   getDnsNames,
   isDevNet,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { infraAffinityAndTolerations } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { svConfigsBasic } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
+} from '@canton-network/splice-pulumi-common';
+import { infraAffinityAndTolerations } from '@canton-network/splice-pulumi-common';
+import { svConfigsBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
 import { gcpDnsProject } from './config';
 

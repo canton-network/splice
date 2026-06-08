@@ -5,8 +5,8 @@ import {
   LedgerApiProps,
   useUserState,
   LedgerApiClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { AssignedContract, Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { AssignedContract, Contract } from '@canton-network/splice-common-frontend-utils';
 import React, { useContext } from 'react';
 
 import {

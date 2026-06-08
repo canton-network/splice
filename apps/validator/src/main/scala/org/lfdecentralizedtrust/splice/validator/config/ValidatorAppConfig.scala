@@ -171,8 +171,6 @@ case class ValidatorAppBackendConfig(
     migrateValidatorParty: Option[MigrateValidatorPartyConfig] = None,
     svValidator: Boolean = false,
     svUser: Option[String] = None,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     enableWallet: Boolean = true,
     sequencerRequestAmplificationPatience: NonNegativeFiniteDuration =

@@ -20,6 +20,8 @@ module Splice.TokenStandard.Utils (
   ensureNoAccountMeta,
   accountFromMeta,
   accountToMeta,
+  partiesFromMeta,
+  partiesToMeta,
 
   -- ** Requirements checking
   require,
@@ -52,7 +54,12 @@ module Splice.TokenStandard.Utils (
   fromAnyContractId,
   toAnyContractId,
 
-  -- * Transfer metadata
+  -- * Metadata utilities
+
+  -- ** Extra metadata fields
+  expiresAtToMeta,
+
+  -- ** Transfer metadata
   reasonMetaKey,
   txKindMetaKey,
   senderMetaKey,
@@ -99,7 +106,6 @@ module Splice.TokenStandard.Utils (
   -- * Allocation workflows
 
   -- ** Utilities for allocations
-
   netAllocationCreditAmounts,
   nonIteratedAllocation,
 
@@ -132,13 +138,16 @@ module Splice.TokenStandard.Utils (
   upcast_v1_v2_AllocationView,
   tryDowncast_v2_v1_AllocationView,
 
+  extraExecutorsMetaKey,
+  executorsFromSettlementInfoV1,
+
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImpl,
 
   validateNextIterationArgs,
   ensureWithdrawIsAllowed,
-  mkCannotWithdrawCommittedAllocationFailure,
+  cannotWithdrawCommittedAllocationFailure,
 
   -- ** Settlement factory implementation
   settlementFactoryV2_settleBatchDefaultImpl,
@@ -154,9 +163,9 @@ module Splice.TokenStandard.Utils (
   viewAsAllocationV1,
   canViewAsAllocationV1,
 
-  allocation_v1_executeTransferDefaultImplUsingV2,
-  allocation_v1_withdrawDefaultImplUsingV2,
-  allocation_v1_cancelDefaultImplUsingV2,
+  allocationV1_executeTransferDefaultImplUsingV2,
+  allocationV1_withdrawDefaultImplUsingV2,
+  allocationV1_cancelDefaultImplUsingV2,
 
   allocationSettlementTxHistoryV1ToMeta,
 
@@ -169,8 +178,8 @@ module Splice.TokenStandard.Utils (
   viewAsAllocationInstructionV1,
   canViewAsAllocationInstructionV1,
 
-  allocationInstruction_v1_withdrawDefaultImplUsingV2,
-  allocationInstruction_v1_updateDefaultImplUsingV2,
+  allocationInstructionV1_withdrawDefaultImplUsingV2,
+  allocationInstructionV1_updateDefaultImplUsingV2,
 
 
   -- * Allocation request implementation
@@ -180,10 +189,6 @@ module Splice.TokenStandard.Utils (
   allocationRequestV1_withdrawDefaultImpl,
 
   -- ** V2 defaults
-  allocationRequestV2_acceptDefaultExtraObservers,
-  allocationRequestV2_rejectDefaultExtraObservers,
-  allocationRequestV2_withdrawDefaultExtraObservers,
-
   allocationRequestV2_acceptDefaultImpl,
 
   -- ** V2 for dual version templates
@@ -202,7 +207,7 @@ module Splice.TokenStandard.Utils (
   allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl,
 
   -- ** V1 defaults using V2 implementations
-  allocationFactory_v1_allocateDefaultImplUsingV2,
+  allocationFactoryV1_allocateDefaultImplUsingV2,
 
 
   -- * Transfer factory implementations
@@ -211,29 +216,25 @@ module Splice.TokenStandard.Utils (
   isValidTransferV2,
 
   -- ** Implementing V1 based on V2 for dual version templates
-  transferFactory_v1_transferDefaultImplUsingV2,
-  transferInstruction_v1_acceptDefaultImplUsingV2,
-  transferInstruction_v1_withdrawDefaultImplUsingV2,
-  transferInstruction_v1_rejectDefaultImplUsingV2,
-  transferInstruction_v1_updateDefaultImplUsingV2,
+  transferFactoryV1_transferDefaultImplUsingV2,
+  transferInstructionV1_acceptDefaultImplUsingV2,
+  transferInstructionV1_withdrawDefaultImplUsingV2,
+  transferInstructionV1_rejectDefaultImplUsingV2,
+  transferInstructionV1_updateDefaultImplUsingV2,
 
   transferAcceptanceTxHistoryV1ToMeta,
 
   -- ** Implementing V2 based on V1 for dual version templates
-  transferInstruction_v2_receiverActor_acceptDefaultImplUsingV1,
-  transferInstruction_v2_receiverActor_rejectDefaultImplUsingV1,
-  transferInstruction_v2_senderActor_withdrawDefaultImplUsingV1,
+  transferInstructionV2_receiverActor_acceptDefaultImplUsingV1,
+  transferInstructionV2_receiverActor_rejectDefaultImplUsingV1,
+  transferInstructionV2_senderActor_withdrawDefaultImplUsingV1,
 
-  transferFactory_v2_senderActor_transferImpl,
+  transferFactoryV2_transferDefaultImplUsingV1,
 
   -- *** TransferFactory extra observers
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
   transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
 
-  -- *** TransferInstruction extra observers
-  transferInstruction_acceptDefaultExtraObservers,
-  transferInstruction_rejectDefaultExtraObservers,
-  transferInstruction_withdrawDefaultExtraObservers,
 ) where
 
 

@@ -177,8 +177,8 @@ data TestSetup = TestSetup with
   mkTransfer : SimpleTransfer -> Script WalletClientV2.TSABatch
   checkMetadata : Bool
 
-testTokenV1_test_v1_transfers : Script ()
-testTokenV1_test_v1_transfers = do
+testTokenV1_test_transferV1 : Script ()
+testTokenV1_test_transferV1 = do
   -- setup
   env <- TestRegistries.initialize TestRegistries.defaultConfig
   let instrX = V2.InstrumentId with
@@ -200,8 +200,8 @@ testTokenV1_test_v1_transfers = do
       checkMetadata = False
 
 
-testTokenV2_test_v1_transfers : Script ()
-testTokenV2_test_v1_transfers = do
+testTokenV2_test_transferV1 : Script ()
+testTokenV2_test_transferV1 = do
   -- setup
   env <- TestRegistries.initialize TestRegistries.defaultConfig
   let instrX = V2.InstrumentId with
@@ -223,8 +223,8 @@ testTokenV2_test_v1_transfers = do
       checkMetadata = False
 
 
-testTokenV2_test_v2_transfer : Script ()
-testTokenV2_test_v2_transfer = do
+testTokenV2_testV2_transfer : Script ()
+testTokenV2_testV2_transfer = do
   -- setup
   env <- TestRegistries.initialize TestRegistries.defaultConfig
   let registries = env.registries

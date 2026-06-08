@@ -1,9 +1,9 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-common",
+  "name": "@canton-network/splice-pulumi-common",
   "version": "1.0.0",
   "main": "src/index.ts",
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.61.0",
+    "@dotenvx/dotenvx": "^1.69.1",
     "@google-cloud/storage": "^7.19.0",
     "@kubernetes/client-node": "^1.4.0",
     "@pulumi/command": "1.2.1",

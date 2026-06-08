@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import { useAmuletAllocations } from '../hooks/useAmuletAllocations';
-import { DisableConditionally, Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally, Loading } from '@canton-network/splice-common-frontend';
 import Typography from '@mui/material/Typography';
 import { Button, Card, CardContent, Chip, Stack } from '@mui/material';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
 import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import AllocationSettlementDisplay from './AllocationSettlementDisplay';

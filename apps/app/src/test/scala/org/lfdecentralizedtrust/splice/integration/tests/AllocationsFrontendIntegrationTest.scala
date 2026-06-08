@@ -1,11 +1,11 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.topology.PartyId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg as TransferLegV1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2.{
-  SettlementInfo,
-  TransferLeg as TransferLegV2,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
+import allocationv2.TransferLeg as TransferLegV2
+import com.digitalasset.canton.admin.api.client.data.TemplateId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -16,7 +16,9 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletFrontendTestUtil,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.TokenStandard
 
+import java.time.Instant
 import java.util.Optional
 import scala.util.Random
 import scala.jdk.CollectionConverters.*
@@ -74,7 +76,7 @@ class AllocationsFrontendIntegrationTest
     )
 
     val wantedSettlement =
-      new SettlementInfo(
+      new allocationv2.SettlementInfo(
         java.util.List.of(validatorPartyId.toProtoPrimitive),
         "some_reference",
         Optional.empty,
@@ -93,8 +95,7 @@ class AllocationsFrontendIntegrationTest
           validatorPartyId.toProtoPrimitive,
           validatorPartyId.toProtoPrimitive,
         )
-        // Add n (-1 because one is already there) forms for transfer legs
-        wantedTransferLegs.drop(1).foreach { _ =>
+        wantedTransferLegs.foreach { _ =>
           eventuallyClickOn(id("add-transfer-leg"))
         }
         wantedTransferLegs.zipWithIndex.foreach { case (transferLeg, index) =>
@@ -151,15 +152,8 @@ class AllocationsFrontendIntegrationTest
       val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
       val bobTransferAmount = BigDecimal(6)
 
-      val venuePartyHint = s"venue-party-${Random.nextInt()}"
-      val venueParty = splitwellValidatorBackend.onboardUser(
-        splitwellWalletClient.config.ledgerApiUser,
-        Some(
-          PartyId.tryFromProtoPrimitive(
-            s"$venuePartyHint::${splitwellValidatorBackend.participantClient.id.namespace.toProtoPrimitive}"
-          )
-        ),
-      )
+      // We use the same venue party for bob so we can setup the TradeSettlementAgreement using a submit with `actAs = Seq(venueParty, bobParty)`.
+      val venueParty = bobValidatorBackend.getValidatorPartyId()
 
       aliceWalletClient.tap(1000)
       bobWalletClient.tap(1000)
@@ -384,6 +378,235 @@ class AllocationsFrontendIntegrationTest
       }
     }
 
+    // analogous to test_locked_funds
+    "create an iterated allocation" in { implicit env =>
+      val aliceDamlUser = aliceWalletClient.config.ledgerApiUser
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val providerPartyHint = s"provider-party-${Random.nextInt()}"
+      val providerParty = splitwellValidatorBackend.onboardUser(
+        splitwellWalletClient.config.ledgerApiUser,
+        Some(
+          PartyId.tryFromProtoPrimitive(
+            s"$providerPartyHint::${splitwellValidatorBackend.participantClient.id.namespace.toProtoPrimitive}"
+          )
+        ),
+      )
+      val wantedSettlement = new allocationv2.SettlementInfo(
+        java.util.List.of(providerParty.toProtoPrimitive),
+        "billing/prefunded-test",
+        java.util.Optional.empty(),
+        emptyMetadata,
+      )
+
+      aliceWalletClient.tap(1000)
+
+      withFrontEnd("alice") { implicit webDriver =>
+        browseToAliceWallet(aliceDamlUser)
+        browseToAllocationsPage()
+
+        val nextIterationAmount = "100"
+
+        actAndCheck(
+          "create prefunded allocation", {
+            textField("create-allocation-settlement-ref-id").underlying
+              .sendKeys(wantedSettlement.id)
+            eventuallyClickOn(id("create-allocation-settlement-executor-0"))
+            setAnsField(
+              textField("create-allocation-settlement-executor-0"),
+              providerParty.toProtoPrimitive,
+              providerParty.toProtoPrimitive,
+            )
+
+            // No transfer legs
+
+            // Check the committed checkbox
+            inside(find(id("create-allocation-committed"))) { case Some(element) =>
+              element.underlying.click()
+            }
+
+            // Allow iterated settlement and set funding amount.
+            inside(find(id("create-allocation-allow-iterated-settlement"))) { case Some(element) =>
+              element.underlying.click()
+            }
+            textField("create-allocation-next-iteration-funding-amount").underlying.clear()
+            textField("create-allocation-next-iteration-funding-amount").underlying
+              .sendKeys(nextIterationAmount)
+
+            eventuallyClickOn(id("create-allocation-submit-button"))
+          },
+        )(
+          "the committed allocation is shown with next iteration funding",
+          _ => {
+            val allocation = findAll(className("allocation")).toSeq.loneElement
+
+            checkSettlementInfo(
+              allocation,
+              wantedSettlement.id,
+              None,
+              Seq(providerParty.toProtoPrimitive),
+            )
+
+            // Verify committed and next iteration funding are displayed
+            seleniumText(
+              allocation.childElement(className("allocation-committed"))
+            ) should include("yes")
+
+            seleniumText(
+              allocation.childElement(className("allocation-next-iteration-funding"))
+            ) should include(nextIterationAmount)
+          },
+        )
+      }
+
+      val aliceAllocation = aliceWalletClient.listAmuletAllocations().loneElement
+
+      val billingLeg = new TransferLegV2(
+        "billing-leg",
+        /*sender=*/ basicAccount(aliceParty),
+        /*receiver=*/ basicAccount(providerParty),
+        BigDecimal(0.5).bigDecimal,
+        amuletInstrumentIdName,
+        new Metadata(
+          java.util.Map.of("splice.lfdecentralizedtrust.org/reason", "daily license fee")
+        ),
+      )
+      val billingLegSide = new allocationv2.TransferLegSide(
+        billingLeg.transferLegId,
+        allocationv2.TransferSide.SENDERSIDE,
+        billingLeg.receiver,
+        billingLeg.amount,
+        billingLeg.instrumentId,
+        billingLeg.meta,
+      )
+
+      val (_, providerAllocation) = actAndCheck(
+        "provider creates allocation to accept license fee payment", {
+          val choice = new allocationinstructionv2.AllocationFactory_Allocate(
+            wantedSettlement,
+            new allocationv2.AllocationSpecification(
+              dsoParty.toProtoPrimitive,
+              basicAccount(providerParty),
+              java.util.List.of(
+                new allocationv2.TransferLegSide(
+                  billingLeg.transferLegId,
+                  allocationv2.TransferSide.RECEIVERSIDE,
+                  basicAccount(aliceParty),
+                  billingLeg.amount,
+                  billingLeg.instrumentId,
+                  billingLeg.meta,
+                )
+              ),
+              java.util.Optional.empty(),
+              java.util.Optional.empty(),
+              false,
+              emptyMetadata,
+            ),
+            Instant.now(),
+            java.util.List.of(),
+            emptyExtraArgs,
+            java.util.List.of(providerParty.toProtoPrimitive),
+          )
+          val enrichedChoice = sv1ScanBackend.getAllocationFactoryV2(choice)
+          splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(providerParty),
+              commands = enrichedChoice.factoryId
+                .exerciseAllocationFactory_Allocate(enrichedChoice.args)
+                .commands()
+                .asScala
+                .toSeq,
+              disclosedContracts = enrichedChoice.disclosedContracts,
+            )
+        },
+      )(
+        "the provider sees the allocation",
+        _ => {
+          val providerAllocations =
+            splitwellValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+              .of_party(
+                party = providerParty,
+                filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+                  TemplateId(
+                    templateId.getPackageId,
+                    templateId.getModuleName,
+                    templateId.getEntityName,
+                  )
+                ),
+              )
+              .filter(_.contractId != aliceAllocation.contract.contractId.contractId)
+
+          providerAllocations.loneElement
+        },
+      )
+
+      val nextIteration =
+        Map(amuletInstrumentIdName -> BigDecimal(99).bigDecimal.setScale(10)).asJava
+
+      val (_, aliceAllocationAfter) = actAndCheck(
+        "provider settles billing against prefunded allocation", {
+          val enrichedChoice = sv1ScanBackend.getSettlementFactoryV2(
+            new allocationv2.SettlementFactory_SettleBatch(
+              wantedSettlement,
+              java.util.List.of(
+                billingLeg
+              ),
+              java.util.List.of(
+                new allocationv2.FinalizedAllocation(
+                  new allocationv2.Allocation.ContractId(providerAllocation.contractId),
+                  java.util.List.of(),
+                  java.util.Optional.empty(),
+                ),
+                new allocationv2.FinalizedAllocation(
+                  new allocationv2.Allocation.ContractId(
+                    aliceAllocation.contract.contractId.contractId
+                  ),
+                  java.util.List.of(billingLegSide),
+                  java.util.Optional.of(nextIteration),
+                ),
+              ),
+              java.util.List.of(providerParty.toProtoPrimitive),
+              emptyExtraArgs,
+            )
+          )
+          splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(providerParty),
+              commands = enrichedChoice.factoryId
+                .exerciseSettlementFactory_SettleBatch(enrichedChoice.args)
+                .commands()
+                .asScala
+                .toSeq,
+              disclosedContracts = enrichedChoice.disclosedContracts,
+            )
+        },
+      )(
+        "only the next iteration allocation is left",
+        _ => {
+          splitwellValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+            .of_party(
+              party = providerParty,
+              filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+                TemplateId(
+                  templateId.getPackageId,
+                  templateId.getModuleName,
+                  templateId.getEntityName,
+                )
+              ),
+            ) should have size 1 withClue "Provider Allocations after settlement"
+
+          aliceWalletClient.listAmuletAllocations().loneElement
+        },
+      )
+
+      aliceAllocationAfter match {
+        case TokenStandard.V1AmuletAllocation(_) => fail("Expected a V2 allocation")
+        case TokenStandard.V2AmuletAllocation(contract) =>
+          contract.payload.numIterations should be(1)
+          contract.payload.allocation.nextIterationFunding.toScala
+            .valueOrFail("Missing nextIterationFunding") should be(nextIteration)
+      }
+    }
+
   }
 
   private def browseToAllocationsPage()(implicit driver: WebDriverType) = {
@@ -392,9 +615,12 @@ class AllocationsFrontendIntegrationTest
         eventuallyClickOn(id("navlink-allocations"))
       },
     )(
-      "allocations page is shown",
+      "allocations page and create form is shown",
       _ => {
         currentUrl should endWith("/allocations")
+        find(id("create-allocation-settlement-ref-id")).valueOrFail(
+          "Could not find create allocation form"
+        )
       },
     )
   }
@@ -404,7 +630,7 @@ class AllocationsFrontendIntegrationTest
       id: String,
       cid: Option[String],
       executors: Seq[String],
-  ) = {
+  ): Unit = {
     seleniumText(
       parent.childElement(className("settlement-id"))
     ) should be(

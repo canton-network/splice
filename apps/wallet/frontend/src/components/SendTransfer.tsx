@@ -4,7 +4,7 @@ import {
   DisableConditionally,
   ErrorDisplay,
   Loading,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import addHours from 'date-fns/addHours';

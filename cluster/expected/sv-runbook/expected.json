@@ -229,9 +229,10 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 2
+              "migrationId": 2,
+              "synchronizerSerialId": 9
             }
           }
         },
@@ -241,8 +242,7 @@
           "host": "info.sv.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 2,
-          "scanUrl": "http://scan-app.sv:5012"
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -652,7 +652,7 @@
           "enable": true
         },
         "migration": {
-          "id": 2
+          "id": "2"
         },
         "participantAddress": "participant",
         "persistence": {
@@ -1300,9 +1300,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",
         "participantAddress": "participant",
@@ -1706,9 +1703,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": "2"
           },
           "nodeIdentifier": "DA-Helm-Test-Node",
           "participantAddress": "participant",

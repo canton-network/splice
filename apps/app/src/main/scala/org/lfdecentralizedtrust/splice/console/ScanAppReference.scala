@@ -53,6 +53,7 @@ import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, Synchro
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
+  allocationinstructionv2,
   allocationv1,
   allocationv2,
   transferinstructionv1,
@@ -90,6 +91,15 @@ abstract class ScanAppReference(
   def getDsoInfo(): GetDsoInfoResponse = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetDsoInfo(List()))
+    }
+  }
+
+  @Help.Summary(
+    "Returns the highest synchronizer migration id this scan is aware of."
+  )
+  def getMigrationId(): Long = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetMigrationId())
     }
   }
 
@@ -751,6 +761,17 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationFactoryV2(
+      choiceArgs: allocationinstructionv2.AllocationFactory_Allocate
+  ): FactoryChoiceWithDisclosures[
+    allocationinstructionv2.AllocationFactory.ContractId,
+    allocationinstructionv2.AllocationFactory_Allocate,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationFactoryV2(choiceArgs))
+    }
+  }
+
   def getAllocationTransferContext(
       allocationId: allocationv1.Allocation.ContractId
   ): ChoiceContextWithDisclosures = {
@@ -791,6 +812,14 @@ abstract class ScanAppReference(
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationWithdrawContext(allocationId))
+    }
+  }
+
+  def getAllocationV2WithdrawContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationWithdrawContextV2(allocationId))
     }
   }
 

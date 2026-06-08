@@ -239,8 +239,11 @@ interface TransferFactory where
         --
         -- Implementations MUST check these parties to avoid unauthorized transfer instructions.
         --
-        -- Implementations SHOULD allow the sender's account parties to call
-        -- this choice.
+        -- Implementations SHOULD
+        --  - complete the transfer in a single-step if the actors include all
+        --    parties required to authorize the transfer
+        --  - allow all the sender's account parties to call this choice, so they
+        --    can all initiate a transfer on their own
       extraArgs : ExtraArgs
         -- ^ The extra arguments to pass to the transfer implementation.
     observer transferFactory_transferExtraObservers this arg

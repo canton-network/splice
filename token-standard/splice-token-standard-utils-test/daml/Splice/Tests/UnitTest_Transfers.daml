@@ -1,0 +1,96 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for Splice.TokenStandard.Utils.Internal.Transfers
+module Splice.Tests.UnitTest_Transfers where
+
+import DA.Action (unless)
+import DA.List (sort, dedupSort)
+import DA.Time
+import DA.Text qualified as T
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+-- TODO(#4517): add the missing unit tests for the non-trivial functions in Transfers utils
+
+test_transferFactoryV2_transferExtraObserversDefaultImpl : Script ()
+test_transferFactoryV2_transferExtraObserversDefaultImpl = do
+  TestEnv {..} <- setupTest
+  let choiceArg = V2.TransferFactory_Transfer with
+        transfer = transferV2
+        actors = [alice]
+        extraArgs = emptyExtraArgs
+
+  let expectedPublicObservers = sort [alice, bob, accountProvider1, accountProvider2]
+  checkEq "transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl" expectedPublicObservers $
+    dedupSort $ TSU.transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl choiceArg
+
+  let expectedPrivateObservers = sort [alice, accountProvider1]
+  checkEq "transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl" expectedPrivateObservers $
+    dedupSort $ TSU.transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl choiceArg
+
+
+-- Shared test infra
+--------------------
+
+data TestEnv = TestEnv with
+  admin : Party
+  alice : Party
+  accountProvider1 : Party
+  aliceAccount : V2.Account
+  bob : Party
+  accountProvider2 : Party
+  bobAccount : V2.Account
+  instrId : V2.InstrumentId
+  now : Time
+  transferV2 : V2.Transfer
+
+setupTest : Script TestEnv
+setupTest = do
+  now <- getTime
+  admin <- allocateParty "admin"
+  alice <- allocateParty "alice"
+  accountProvider1 <- allocateParty "accountProvider1"
+  accountProvider2 <- allocateParty "accountProvider2"
+  bob <- allocateParty "bob"
+  let aliceAccount = V2.Account with
+        owner = Some alice
+        provider = Some accountProvider1
+        id = "aliceAccount"
+  let bobAccount = V2.Account with
+        owner = Some bob
+        provider = Some accountProvider2
+        id = "bobAccount"
+  let instrId = V2.InstrumentId with
+        admin
+        id = "X"
+  let transferV2 = V2.Transfer with
+        sender = aliceAccount
+        receiver = bobAccount
+        amount = 10.0
+        instrumentId = instrId
+        inputHoldingCids = []
+        requestedAt = now
+        executeBefore = now `addRelTime` days 7
+        meta = emptyMetadata
+  pure TestEnv with ..
+
+emptyExtraArgs : ExtraArgs
+emptyExtraArgs = ExtraArgs with
+  context = emptyChoiceContext
+  meta = emptyMetadata
+
+checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
+checkEq prefix expected actual =
+  unless (actual == expected) $
+    fail $ T.unlines
+      [ prefix <> ": actual values do not match expected values."
+      , "  actual:   " <> show actual
+      , "  expected: " <> show expected
+      ]

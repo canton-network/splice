@@ -7,8 +7,8 @@ import {
   ActionRequiredSection,
   ActionRequiredData,
 } from '../components/governance/ActionRequiredSection';
-import { Loading, useVotesHooks } from '@lfdecentralizedtrust/splice-common-frontend';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { ContractId } from '@daml/types';
 import {

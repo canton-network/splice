@@ -340,16 +340,13 @@ class LsuIntegrationTest
       walletClient.tap(50.0)
       createTransferPreapprovalEnsuringItExists(walletClient, validatorBackend)
       createAndAcceptExternalPartySetupProposal(validatorBackend, onboarding)
-      eventually() {
-        validatorBackend.lookupTransferPreapprovalByParty(externalParty) should not be empty
-        validatorBackend.scanProxy.lookupTransferPreapprovalByParty(
-          externalParty
-        ) should not be empty
-      }
       validatorBackend
         .getExternalPartyBalance(externalParty)
         .totalUnlockedCoin shouldBe "0.0000000000"
-      walletClient.transferPreapprovalSend(externalParty, 40.0, UUID.randomUUID.toString)
+      // can still fail with no preapproval depending on what scan subset is used
+      eventuallySucceeds() {
+        walletClient.transferPreapprovalSend(externalParty, 40.0, UUID.randomUUID.toString)
+      }
       eventually() {
         validatorBackend
           .getExternalPartyBalance(externalParty)

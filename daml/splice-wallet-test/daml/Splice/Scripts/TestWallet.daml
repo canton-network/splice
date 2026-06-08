@@ -483,8 +483,8 @@ testInsufficientFundsBatchAmuletPaymentRequests = script do
   -- trying to fulfill the request for 10,000 Amulet will fail
   context <- getPaymentTransferContext app alice
   -- first command errors, second command is not executed as WalletAppInstall_ExecuteBatch does not catch exceptions
-  submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
-    [aliceValidator.primaryParty] [alice.primaryParty, app.dso] $ exerciseCmd install WalletAppInstall_ExecuteBatch with
+  submitMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
+    (actAs aliceValidator.primaryParty <> foldMap readAs [alice.primaryParty, app.dso]) $ exerciseCmd install WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet]
       operations = [CO_AppPayment transferRequest3, CO_AppPayment transferRequest4]
       context
@@ -929,7 +929,9 @@ testInsufficientFundsBatchSubscriptions = script do
   context <- getPaymentTransferContext app alice
   amulet <- tap  app alice 5.0
   -- TODO(#2957): remove read-as DSO party.
-  submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds") [alice.primaryParty, validator] [app.dso] $
+  submitMustFail''
+    (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
+    (actAs alice.primaryParty <> actAs validator <> readAs app.dso) $
     exerciseCmd install WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet]
       operations = [CO_SubscriptionAcceptAndMakeInitialPayment subscriptionRequestCid]
@@ -951,7 +953,9 @@ testInsufficientFundsBatchSubscriptions = script do
   runNextIssuance app
   amulet <- tap app alice 5.0
   -- TODO(#2957): remove read-as DSO party.
-  submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds") [alice.primaryParty, validator] [app.dso] $
+  submitMustFail''
+    (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
+    (actAs alice.primaryParty <> actAs validator <> readAs app.dso) $
     exerciseCmd install WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet]
       operations = [CO_SubscriptionMakePayment subscriptionIdleStateCid]
@@ -997,7 +1001,7 @@ executeAmuletOperationMustFail app user op check = do
   context <- getPaymentTransferContext app user
   amulets <- queryFilter @Amulet user.primaryParty (\amulet -> amulet.owner == user.primaryParty)
   -- TODO(#2957): remove read-as DSO party.
-  submitMultiMustFail'' check [install.validatorParty] [install.endUserParty, install.validatorParty, app.dso] $
+  submitMustFail'' check (actAs install.validatorParty <> foldMap readAs [install.endUserParty, install.validatorParty, app.dso]) $
     exerciseCmd installCid WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet._1 | amulet <- amulets]
       operations = [op]

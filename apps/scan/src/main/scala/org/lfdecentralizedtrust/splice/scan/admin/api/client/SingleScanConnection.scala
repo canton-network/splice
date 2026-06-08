@@ -478,6 +478,15 @@ class SingleScanConnection private[client] (
       )
     )
 
+  override def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetMigrationId(),
+    )
+
   override def lookupTransferPreapprovalByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
       tc: TraceContext,

@@ -11,6 +11,7 @@ import org.lfdecentralizedtrust.splice.automation.{
   SqlIndexInitializationTrigger,
 }
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   ParticipantAdminConnection,
   RetryProvider,
   SpliceLedgerClient,
@@ -43,6 +44,7 @@ class SvSvAutomationService(
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
     retryProvider: RetryProvider,
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig],
+    packageVersionSupport: PackageVersionSupport,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -58,6 +60,7 @@ class SvSvAutomationService(
       ledgerClient,
       retryProvider,
       config.parameters,
+      packageVersionSupport,
     ) {
   override def companion: org.lfdecentralizedtrust.splice.sv.automation.SvSvAutomationService.type =
     SvSvAutomationService

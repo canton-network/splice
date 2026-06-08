@@ -2333,19 +2333,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -2356,8 +2359,8 @@
           "host": "info.sv-2.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-1:5012"
+          "scanUrl": "http://scan-app.sv-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -3023,9 +3026,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
           "onboardingName": "Digital-Asset-2",
@@ -3236,9 +3236,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
           "participantAddress": "participant",
@@ -3592,19 +3589,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -3615,8 +3615,8 @@
           "host": "info.sv-1.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-da-1:5012"
+          "scanUrl": "http://scan-app.sv-da-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -4120,9 +4120,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
@@ -4312,9 +4309,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "participantAddress": "participant",

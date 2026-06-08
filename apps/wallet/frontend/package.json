@@ -1,5 +1,5 @@
 {
-  "name": "@lfdecentralizedtrust/splice-wallet-frontend",
+  "name": "@canton-network/splice-wallet-frontend",
   "version": "0.1.0",
   "browserslist": {
     "production": [
@@ -21,9 +21,9 @@
     "@daml.js/splice-api-token-metadata": "file:../../common/frontend/daml.js/splice-api-token-metadata-v1-1.0.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "@lfdecentralizedtrust/scan-proxy-openapi": "^0.0.1",
-    "@lfdecentralizedtrust/splice-common-frontend": "0.1.0",
-    "@lfdecentralizedtrust/splice-common-frontend-utils": "0.1.0",
+    "@canton-network/scan-proxy-openapi": "^0.0.1",
+    "@canton-network/splice-common-frontend": "0.1.0",
+    "@canton-network/splice-common-frontend-utils": "0.1.0",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@tanstack/react-query": "5.90.20",
@@ -39,8 +39,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
-    "@lfdecentralizedtrust/splice-common-test-utils": "^0.1.0",
-    "@lfdecentralizedtrust/splice-common-test-vite-utils": "^0.1.0",
+    "@canton-network/splice-common-test-utils": "^0.1.0",
+    "@canton-network/splice-common-test-vite-utils": "^0.1.0",
     "@tanstack/eslint-plugin-query": "5.91.3",
     "@tanstack/react-query-devtools": "5.91.2",
     "@testing-library/jest-dom": "^6.6.2",

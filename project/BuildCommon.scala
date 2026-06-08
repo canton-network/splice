@@ -1618,7 +1618,7 @@ object BuildCommon {
       val log = streams.value.log
       val cacheDir = streams.value.cacheDirectory / directory
 
-      val npmName = s"@lfdecentralizedtrust/$unscopedNpmName"
+      val npmName = s"@canton-network/$unscopedNpmName"
       val openApiSpecFile = baseDirectory.value / subPath / openApiSpec
       val template = templateDirectory.value
       val outputDir = outputPrefix.fold(baseDirectory.value)(new java.io.File(_)) / directory

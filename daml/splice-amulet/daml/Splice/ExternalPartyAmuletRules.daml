@@ -9,6 +9,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
+import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
@@ -21,6 +22,7 @@ import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
 import Splice.Amulet
+import Splice.AmuletConfig (getTokenStandardMaxTTL)
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer
 import Splice.AmuletAllocation as AmuletAllocationV1
@@ -130,7 +132,8 @@ template ExternalPartyAmuletRules
         admin = dso
         meta = emptyMetadata
 
-      transferFactory_transferImpl self arg = amulet_transferFactory_transferImpl this self arg
+      transferFactory_transferImpl _self arg =
+        amulet_transferFactoryV1_transferImpl this [arg.transfer.sender] arg
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
 
     interface instance V2.TransferFactory for ExternalPartyAmuletRules where
@@ -140,7 +143,9 @@ template ExternalPartyAmuletRules
 
       transferFactory_transferExtraObservers = transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl
 
-      transferFactory_transferImpl = transferFactory_v2_senderActor_transferImpl
+      transferFactory_transferImpl =
+        transferFactoryV2_transferDefaultImplUsingV1 $ amulet_transferFactoryV1_transferImpl this
+
       transferFactory_publicFetchImpl = publicFetchDefaultImpl this
 
 
@@ -330,16 +335,18 @@ data TransferCommand_ExpireResult = TransferCommand_ExpireResult
 -- Token standard transfer factory
 ----------------------------------
 
-amulet_transferFactory_transferImpl
+amulet_transferFactoryV1_transferImpl
   : ExternalPartyAmuletRules
-  -> ContractId Api.Token.TransferInstructionV1.TransferFactory
+  -> [Party]
   -> Api.Token.TransferInstructionV1.TransferFactory_Transfer
   -> Update Api.Token.TransferInstructionV1.TransferInstructionResult
-amulet_transferFactory_transferImpl this _self arg = do
-  let Api.Token.TransferInstructionV1.TransferFactory_Transfer {transfer, extraArgs} = arg
+amulet_transferFactoryV1_transferImpl this actors arg = do
+  let Api.Token.TransferInstructionV1.TransferFactory_Transfer {expectedAdmin, transfer, extraArgs} = arg
   let dso = this.dso
+  checkActors actors [[transfer.sender], [transfer.sender, transfer.receiver]]
+
   -- validate call to factory and retrieve context
-  requireExpectedAdminMatch arg.expectedAdmin dso
+  requireExpectedAdminMatch expectedAdmin dso
 
   -- == validate each field of the transfer specification ==
   -- sender: nothing to validate
@@ -348,63 +355,67 @@ amulet_transferFactory_transferImpl this _self arg = do
   forA_ optPreapprovalCid \preapprovalCid ->
     fetchChecked (ForOwner with dso; owner = transfer.receiver) preapprovalCid
   -- instrumentId:
-  let expectedInstrumentId = amuletInstrumentId this.dso
+  let expectedInstrumentId = amuletInstrumentId dso
   require
     ("Expected instrumentId " <> show expectedInstrumentId <> " matches actual instrumentId " <> show transfer.instrumentId)
     (expectedInstrumentId == transfer.instrumentId)
   -- amount:
   require "Amount must be positive" (transfer.amount > 0.0)
   -- requestedAt:
-  assertDeadlineExceeded "Transfer.requestedAt" transfer.requestedAt
-  -- executeBefore:
-  assertWithinDeadline "Transfer.executeBefore" transfer.executeBefore
+  assertDeadlineExceeded "transfer.requestedAt" transfer.requestedAt
+  -- executeBefore: must be in the future, but not too far
+  assertWithinDeadline "transfer.executeBefore" transfer.executeBefore
+  (_, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+  let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
+  let transferLifetime = transfer.executeBefore `subTime` transfer.requestedAt
+  require' ("transferLifetime", transferLifetime) isLessOrEqualR
+    ("tokenStandardMaxTTL", getTokenStandardMaxTTL configAmulet)
   -- inputHoldingCids: note that their detailed validation is done in the transfer itself
   require "At least one holding must be provided" (not $ null transfer.inputHoldingCids)
+  -- meta: no extra account information allowed, as Amulet only supports basic accounts
+  ensureNoAccountMeta "transfer" "sender" transfer.meta
+  ensureNoAccountMeta "transfer" "receiver" transfer.meta
 
-  -- TODO(#4665): limit time between requestedAt and executeBefore, i.e., max lock duration (and add to release notes)
-
-  -- execute the right direction of transfer
   case optPreapprovalCid of
-    None
-      | transfer.receiver == transfer.sender -> do
-          -- execute a self-transfer
-          paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
-          inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-          result <- executeExternalPartyTransfer dso paymentContext Transfer with
-            sender = transfer.sender
-            provider = transfer.sender
-            inputs
-            outputs = [ TransferOutput with
-              receiver = transfer.sender
-              amount = transfer.amount
-              receiverFeeRatio = 0.0
-              lock = None
-              meta = Some transfer.meta]
-            beneficiaries = None
-          pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-            senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
-            output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
-              receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
-            meta = fromOptional emptyMetadata result.meta
+    _ | transfer.receiver `elem` actors -> do
+      -- self-transfer or sender+receiver authorized
+      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
+      inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
+      result <- executeExternalPartyTransfer dso paymentContext Transfer with
+        sender = transfer.sender
+        provider = transfer.sender
+        inputs
+        outputs = [ TransferOutput with
+          receiver = transfer.receiver
+          amount = transfer.amount
+          receiverFeeRatio = 0.0
+          lock = None
+          meta = Some transfer.meta]
+        beneficiaries = None
+      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+        senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
+        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
+          receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
+        meta = fromOptional emptyMetadata result.meta
 
-      | otherwise -> do
-          -- prepare a two-step transfer
-          let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
-          let requestedAt = arg.transfer.requestedAt
-          paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
-          (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
-          -- create the transfer instruction tracking this locked amulet
-          transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
-            transfer = arg.transfer with
-              inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
-            lockedAmulet
-          -- return result
-          pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-            senderChangeCids
-            output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
-              with
-                transferInstructionCid
-            meta
+    None -> do
+      -- prepare a two-step transfer
+      let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
+      let requestedAt = arg.transfer.requestedAt
+      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
+      (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
+      -- create the transfer instruction tracking this locked amulet
+      transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
+        transfer = arg.transfer with
+          inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
+        lockedAmulet
+      -- return result
+      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+        senderChangeCids
+        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
+          with
+            transferInstructionCid
+        meta
 
     Some preapprovalCid -> do
       -- use a payment context with featuring so the preapproval provider can be featured
@@ -448,7 +459,6 @@ amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
     settlement = arg.settlement
     allocation = arg.allocation
     lockedAmulet
-    dso
     expiresAt
     createdAt = arg.requestedAt
     numIterations = 0
@@ -482,13 +492,13 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- settlement.cid: no check
   -- settlement.meta: no check
 
-  -- note: nextIterationFunding is validated in `amulet_allocationFactoryV2_allocateImpl`,
-  -- as it is only supported for V2 factories
-
   -- allocation.settlementDeadline:
   whenSome allocation.settlementDeadline \d -> do
     assertWithinDeadline "Allocation.settlementDeadline" d
 
+  -- allocation.admin:
+  requireMatchExpected ("allocation.admin", allocation.admin) dso
+  -- allocation.authorizer: checked above as part of actors
   -- allocation.transferLegSides:
   let transferLegSides = allocation.transferLegSides
   requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
@@ -502,16 +512,28 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
       -- transferLeg.amount
       require "Transfer amount must be positive" (transferLeg.amount > 0.0)
       -- transferLeg.instrumentId
-      require "Instrument-id must match the factory" (transferLeg.instrumentId == amuletInstrumentIdName)
+      requireMatchExpected ("transferLeg.instrumentId", transferLeg.instrumentId) amuletInstrumentIdName
       -- transferLeg.meta: check no redundant account information
       ensureNoAccountMeta "transferLeg" "sender" transferLeg.meta
       ensureNoAccountMeta "transferLeg" "receiver" transferLeg.meta
 
-  -- requestedAt (of the allocation instruction itself):
+  -- allocation.nextIterationFunding: validated `amulet_allocationFactoryV2_allocateImpl`
+  -- allocation.committed: nothing to validate
+  -- allocation.meta: check no redundant account information
+  ensureNoAccountMeta "allocation" "authorizer" allocation.meta
+
+  -- arg.requestedAt (of the allocation instruction itself):
   assertDeadlineExceeded "requestedAt" requestedAt
+  -- arg.inputHoldingCids: validated by prepareTwoStepTransfer if funidng is required
+  -- arg.extraArgs: no check other than what's done when retrieving reference data
+  -- arg.actors: checked above
+
+  -- compute the allocation expiry time
+  (_, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+  let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
+  expiresAt <- computeAllocationExpiry configAmulet requestedAt allocation.settlementDeadline
 
   -- create locked amulet if required
-  let expiresAt = computeAllocationExpiry requestedAt allocation.settlementDeadline
   if fundingAmount <= 0.0
   then do
     -- return input cids as change, so they can be reused on chaining
@@ -561,8 +583,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
         inputHoldingCids = map upcast arg.inputHoldingCids
         actors = [arg.allocation.transferLeg.sender]
         extraArgs = arg.extraArgs
-  -- TODO(#4665): use `expiresAt` below and enforce max lock duration and add early expiry to V1 allocation
-  (optLockedAmulet, senderChangeCids, _expiresAt, meta) <-
+  (optLockedAmulet, senderChangeCids, expiresAt, meta) <-
     amulet_allocationFactoryV2_allocateImplCore externalAmuletRules argV2 fundingAmount
 
   -- create the amulet allocation
@@ -570,6 +591,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   allocationCid <- toInterfaceContractId <$> create AmuletAllocation with
     allocation = arg.allocation
     lockedAmulet
+    expiresAt = Some expiresAt
   pure V1.AllocationInstructionResult with
     senderChangeCids
     output = V1.AllocationInstructionResult_Completed with allocationCid

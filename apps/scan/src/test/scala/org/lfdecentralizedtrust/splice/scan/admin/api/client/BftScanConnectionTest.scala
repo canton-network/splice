@@ -13,6 +13,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.model.*
+import org.apache.pekko.stream.StreamTcpException
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules as amuletrulesCodegen
@@ -29,7 +30,15 @@ import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
   SpliceLedgerClient,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.ErrorResponse
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  ErrorResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
+  RewardAccountingBatchOfBatches,
+  RewardAccountingRootHashCannotProvide,
+  RewardAccountingRootHashOk,
+  RewardAccountingRootHashUndetermined,
+}
 
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.Bft
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
@@ -54,6 +63,7 @@ import org.slf4j.event.Level
 
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 
 // mock verification triggers this
@@ -132,6 +142,9 @@ class BftScanConnectionTest
   }
   def makeMockFail(mock: SingleScanConnection, failure: Throwable): Unit = {
     when(mock.getDsoPartyId()).thenReturn(Future.failed(failure))
+  }
+  def makeMockReturnMigrationId(mock: SingleScanConnection, migrationId: Long): Unit = {
+    when(mock.getMigrationId()).thenReturn(Future.successful(migrationId))
   }
   def makeMockReturnMigrationInfo(
       mock: SingleScanConnection,
@@ -232,8 +245,52 @@ class BftScanConnectionTest
     StatusCodes.NotFound,
     HttpCommandException.ErrorResponseBody(ErrorResponse("Whatever thing was not found")),
   )
+  val tcpFailure = new StreamTcpException("Connection reset by peer")
+
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
+
+  private def rootHashOk(round: Long, hash: String): GetRewardAccountingRootHashResponse =
+    GetRewardAccountingRootHashResponse(
+      RewardAccountingRootHashOk(status = "Ok", roundNumber = round, rootHash = hash)
+    )
+  def makeMockReturnRootHashOk(mock: SingleScanConnection, round: Long, hash: String): Unit =
+    when(mock.getRewardAccountingRootHash(round))
+      .thenReturn(Future.successful(rootHashOk(round, hash)))
+  def makeMockReturnRootHashUndetermined(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingRootHash(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingRootHashResponse(
+          RewardAccountingRootHashUndetermined(status = "Undetermined")
+        )
+      )
+    )
+  def makeMockReturnRootHashCannotProvide(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingRootHash(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingRootHashResponse(
+          RewardAccountingRootHashCannotProvide(status = "CannotProvide")
+        )
+      )
+    )
+  private val rewardAccountingBatchResponse: GetRewardAccountingBatchResponse =
+    GetRewardAccountingBatchResponse(
+      RewardAccountingBatchOfBatches(batchType = "BatchOfBatches", childHashes = Vector("aa", "bb"))
+    )
+  def makeMockReturnBatch(
+      mock: SingleScanConnection,
+      round: Long,
+      hash: String,
+      resp: Option[GetRewardAccountingBatchResponse],
+  ): Unit =
+    when(mock.getRewardAccountingBatch(round, hash)).thenReturn(Future.successful(resp))
+  def makeMockFailBatch(
+      mock: SingleScanConnection,
+      round: Long,
+      hash: String,
+      failure: Throwable,
+  ): Unit =
+    when(mock.getRewardAccountingBatch(round, hash)).thenReturn(Future.failed(failure))
 
   "BftScanConnection" should {
 
@@ -245,6 +302,19 @@ class BftScanConnectionTest
       for {
         dsoPartyId <- bft.getDsoPartyId()
       } yield dsoPartyId should be(partyIdA)
+    }
+
+    "return the agreed migration id when 2f+1 agree" in {
+      val connections = getMockedConnections(n = 4)
+      val disagreeing = connections.head
+      makeMockReturnMigrationId(disagreeing, 5L)
+      val agreeing = connections.drop(1)
+      agreeing.foreach(makeMockReturnMigrationId(_, 3L))
+      val bft = getBft(connections)
+
+      for {
+        migrationId <- bft.getMigrationId()
+      } yield migrationId should be(3L)
     }
 
     "return the agreed response when 2f+1 agree and log disagreements" in {
@@ -900,6 +970,217 @@ class BftScanConnectionTest
         code should be(StatusCodes.BadGateway)
         message should include("Failed to reach consensus from 5 Scan nodes")
       }
+    }
+  }
+
+  "When targetSuccess is 1, BftScanConnection.executeCall" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "not let a single error response decide the call when n == 2" in {
+      val connections = getMockedConnections(n = 2)
+      makeMockFail(connections.head, tcpFailure)
+      val delayedSuccess =
+        org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(
+          Future.successful(partyIdA)
+        )
+      connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
+
+      for {
+        result <- BftScanConnection.executeCall(call, connections, nTargetSuccess = 1, logger)
+      } yield result should be(partyIdA)
+    }
+
+    // Unlike a transport exception, an http failure still counts towards the quorum.
+    // Although this behaviour is mostly a result of the tech-debt of the
+    // inability for the scan endpoints to specify what responses are expected (like 404)
+    "but let a single http failure decide the call when n == 2" in {
+      val connections = getMockedConnections(n = 2)
+      makeMockFail(connections.head, notFoundFailure)
+      val delayedSuccess =
+        org.apache.pekko.pattern.after(200.millis, actorSystem.scheduler)(
+          Future.successful(partyIdA)
+        )
+      connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure should be(notFoundFailure)
+    }
+
+    "Forward the error response when n == 1" in {
+      val connections = getMockedConnections(n = 1)
+      connections.foreach(makeMockFail(_, tcpFailure))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure should be(tcpFailure)
+    }
+
+    "fall through to ConsensusNotReached when all scans throw  error response" in {
+      val connections = getMockedConnections(n = 3)
+      connections.foreach(makeMockFail(_, tcpFailure))
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(call, connections, nTargetSuccess = 1, logger)
+          .failed
+      } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+    }
+  }
+
+  "BftScanConnection.getRewardAccountingRootHash" should {
+
+    // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
+    "reaches consensus when f+1 scans agree on the same hash" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      when(connections(1).getRewardAccountingRootHash(round))
+        .thenReturn(Future.failed(notFoundFailure), Future.successful(rootHashOk(round, "aabb")))
+      makeMockReturnRootHashUndetermined(connections(2), round)
+      makeMockFail(connections(3), notFoundFailure)
+      val bft = getBft(connections)
+
+      // With n=4, we query only two connections randomly, and even with
+      // retries it can sometimes fail. This eventually is here to avoid flakyness.
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          {
+            eventually() {
+              inside(bft.getRewardAccountingRootHash(round).futureValue) {
+                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                  ok.rootHash should be("aabb")
+                  ok.roundNumber should be(round)
+              }
+            }
+            Future.unit
+          },
+          logs =>
+            logs.exists(l =>
+              l.level == Level.INFO && l.message.contains("Reached consensus from")
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
+
+    "returns Undetermined when no quorum agrees on a hash" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, i) =>
+        makeMockReturnRootHashOk(c, round, s"hash$i")
+      }
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on CannotProvide as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnRootHashCannotProvide(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on Undetermined as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnRootHashUndetermined(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "returns Undetermined when there are no peer scans" in {
+      val bft = getBft(Seq.empty)
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(1L)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
+
+    "logs disagreements at WARN level" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashOk(connections(1), round, "aabb")
+      makeMockReturnRootHashOk(connections(2), round, "ccdd")
+      makeMockReturnRootHashOk(connections(3), round, "ccdd")
+      val bft = getBft(connections)
+
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          bft.getRewardAccountingRootHash(round),
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
+  }
+
+  "BftScanConnection.getRewardAccountingBatch" should {
+
+    "returns None when no scan has the batch" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      connections.foreach(makeMockReturnBatch(_, round, hash, None))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingBatch(round, hash)
+      } yield resp should be(None)
+    }
+
+    "on multiple retries, we can obtain batch even in prescense of failing scans" in {
+      val round = 7L
+      val hash = "abcdabcd"
+      val connections = getMockedConnections(n = 3)
+      makeMockFailBatch(connections(0), round, hash, tcpFailure)
+      makeMockReturnBatch(connections(1), round, hash, Some(rewardAccountingBatchResponse))
+      makeMockReturnBatch(connections(2), round, hash, None)
+      val bft = getBft(connections)
+
+      def attempt(remaining: Int): Future[Option[GetRewardAccountingBatchResponse]] =
+        bft.getRewardAccountingBatch(round, hash).flatMap {
+          case Some(resp) => Future.successful(Some(resp))
+          case None if remaining > 1 => attempt(remaining - 1)
+          case None => Future.successful(None)
+        }
+
+      for {
+        // Each call queries a single random scan, and it does not retry internally.
+        // So if the caller attempts 100 times, we should hit a batch with very high probability.
+        resp <- attempt(100)
+      } yield resp should be(Some(rewardAccountingBatchResponse))
     }
   }
 

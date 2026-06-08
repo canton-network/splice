@@ -97,16 +97,28 @@ class JoiningNodeInitializer(
     actorSystem: ActorSystem,
 ) extends NodeInitializerUtil {
 
-  private lazy val svConnection = OptionT(joiningConfig.traverse { conf =>
-    SvConnection(conf.svClient.adminApi, upgradesConfig, retryProvider, loggerFactory).map {
-      connection =>
-        (conf, connection)
-    }
-  }).getOrElse(
-    sys.error(
-      "An onboarding config is required."
+  private lazy val svConnection: Future[(SvOnboardingConfig.JoinWithKey, SvConnection)] =
+    OptionT(joiningConfig.traverse { conf =>
+      SvConnection(conf.svClient.adminApi, upgradesConfig, retryProvider, loggerFactory).map {
+        connection =>
+          (conf, connection)
+      }
+    }).getOrElse(
+      sys.error(
+        "An onboarding config is required."
+      )
     )
-  )
+
+  private def migrationIdFromSponsorSv(): Future[Long] =
+    svConnection.flatMap { case (_, connection) =>
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "get_migration_id",
+        "Getting migration id from sponsor SV",
+        connection.getMigrationId(),
+        logger,
+      )
+    }
 
   def joinDsoAndOnboardNodes(): Future[
     (
@@ -165,7 +177,7 @@ class JoiningNodeInitializer(
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
         domainConfigO.traverse_(
-          participantAdminConnection.ensureDomainRegisteredNoHandshake(
+          participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
           )
@@ -192,17 +204,32 @@ class JoiningNodeInitializer(
         participantAdminConnection,
       )
       storeKey = SvStore.Key(svParty, dsoPartyId)
+      // We need to vet early so the packages are uploaded when we try to use template
+      // filters in the ACS queries in the store.
+      _ <- joiningConfig.traverse_ { _ =>
+        if (!dsoPartyIsAuthorized) {
+          // If the DSO party has already been authorized we should be far enough to not need this step and deliberately avoid it
+          // to make sure we don't introduce a dependency on the sponsoring SV.
+          svConnection.flatMap { case (_, c) => vetThroughSponsor(c) }
+        } else Future.unit
+      }
+      domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
       svStore = newSvStore(
         storeKey,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore = newDsoStore(
         svStore.key,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
+      )
+      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+        decentralizedSynchronizerId,
+        initConnection,
+        loggerFactory,
       )
       svAutomation = newSvSvAutomationService(
         svStore,
@@ -210,6 +237,7 @@ class JoiningNodeInitializer(
         ledgerClient,
         participantAdminConnection,
         synchronizerNodeService,
+        packageVersionSupport,
       )
       connection = svAutomation.connection(SpliceLedgerConnectionPriority.Low)
       _ <- joiningConfig.fold(Future.unit)(onboardingConfig =>
@@ -218,11 +246,6 @@ class JoiningNodeInitializer(
           config,
           onboardingConfig.name,
         )
-      )
-      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        decentralizedSynchronizerId,
-        connection,
-        loggerFactory,
       )
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
       // We need to first wait to ensure the CometBFT node is caught up
@@ -258,7 +281,7 @@ class JoiningNodeInitializer(
               clock,
               retryProvider,
               loggerFactory,
-              config.domainMigrationId,
+              domainMigrationId,
               config.scan,
             )
             dsoAutomation =
@@ -377,6 +400,34 @@ class JoiningNodeInitializer(
         dsoAutomation,
       )
     }
+  }
+
+  private def vetThroughSponsor(svConnection: SvConnection): Future[Unit] = {
+    logger.info("Vetting packages based on state from sponsor")
+    for {
+      // This is not a BFT read: That's acceptable because
+      // we will only vet packages that have been statically compiled into the app.
+      // At most, we can be tricked into vetting a package a bit too early.
+      dsoInfo <- svConnection.getDsoInfo()
+      amuletRules = dsoInfo.amuletRules
+      synchronizerId = SynchronizerId.tryFromString(
+        amuletRules.payload.configSchedule.initialValue.decentralizedSynchronizer.activeSynchronizer
+      )
+      vetting = new PackageVetting(
+        SvPackageVettingTrigger.packages,
+        clock,
+        participantAdminConnection,
+        loggerFactory,
+        config.latestPackagesOnly,
+        config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
+      )
+      _ <- vetting.vetCurrentPackages(
+        synchronizerId,
+        amuletRules.contract,
+        config.additionalPackagesToUnvet,
+      )
+      _ = logger.info("Packages vetting completed")
+    } yield ()
   }
 
   // Note: This is also used for synchronizer migrations
@@ -523,7 +574,7 @@ class JoiningNodeInitializer(
             dsoPartyToParticipantMapping.nonEmpty || activeDsoPartyToParticipantProposals.isEmpty
           ) {
             logger.info("Reconnecting all domains.")
-            participantAdminConnection.reconnectAllDomains()
+            participantAdminConnection.reconnectAllSynchronizers()
           } else {
             Future.unit
           }
@@ -833,6 +884,7 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
+                domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
@@ -840,7 +892,7 @@ class JoiningNodeInitializer(
                   clock,
                   retryProvider,
                   loggerFactory,
-                  config.domainMigrationId,
+                  domainMigrationId,
                   config.scan,
                 )
                 dsoAutomation = newSvDsoAutomationService(
@@ -890,31 +942,6 @@ class JoiningNodeInitializer(
       )
     }
 
-    private def vetThroughSponsor(svConnection: SvConnection): Future[Unit] = {
-      logger.info("Vetting packages based on state from sponsor")
-      for {
-        // This is not a BFT read: That's acceptable because
-        // we will only vet packages that have been statically compiled into the app.
-        // At most, we can be tricked into vetting a package a bit too early.
-        dsoInfo <- svConnection.getDsoInfo()
-        amuletRules = dsoInfo.amuletRules
-        vetting = new PackageVetting(
-          SvPackageVettingTrigger.packages,
-          clock,
-          participantAdminConnection,
-          loggerFactory,
-          config.latestPackagesOnly,
-          config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
-        )
-        _ <- vetting.vetCurrentPackages(
-          synchronizerId,
-          amuletRules.contract,
-          config.additionalPackagesToUnvet,
-        )
-        _ = logger.info("Packages vetting completed")
-      } yield ()
-    }
-
     private def requestOnboarding(
         svConnection: SvConnection,
         name: String,
@@ -926,14 +953,8 @@ class JoiningNodeInitializer(
         privateKey
       ) match {
         case Right(token) =>
-          // startSvOnboarding creates a contract with the SV as an observer so we need to vet before.
-          // technically we can still get issues if the config changes while we are onboarding. However,
-          // we prevet so this is extremely unlikely and even if we hit it,
-          // we will just crash and retry so it doesn't seem worth the complexity
-          // to wrap everything in a giant retry.
+          logger.info(s"Requesting to be onboarded via the sponsor SV")
           for {
-            _ <- vetThroughSponsor(svConnection)
-            _ = logger.info(s"Requesting to be onboarded via the sponsor SV")
             _ <- retryProvider.retry(
               RetryFor.WaitingOnInitDependency,
               "request_onboarding",

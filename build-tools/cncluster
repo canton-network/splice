@@ -267,10 +267,18 @@ function _assert_lock() {
         fi
 
         # Check lock for CI...
-        if ! approver=$( "$SPLICE_ROOT/build-tools/approved-by.sh" ); then
-            _error "Could not determine approver for CI workflow"
+        approver=""
+        # Check for GHA
+        if env-bool GITHUB_ACTIONS; then
+            approver="${GITHUB_ACTOR:-}"
         fi
 
+        # Check for CCI
+        if env-bool CIRCLECI; then
+            if ! approver=$( "$SPLICE_ROOT/build-tools/approved-by.sh" ); then
+                _error "Could not determine approver for CI workflow"
+            fi
+        fi
         if [[ -n "$approver" ]]; then
             local -a names
             readarray -t names < <( _get_holder_names "$approver" )

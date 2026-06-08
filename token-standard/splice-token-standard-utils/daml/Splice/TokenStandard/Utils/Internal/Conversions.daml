@@ -16,6 +16,7 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   -- * Metadata conversion
   timeToMeta,
   timeFromMeta,
+  expiresAtToMeta,
   maxTime,
   partiesFromMeta,
   partiesToMeta,
@@ -213,7 +214,7 @@ ensureNoAccountMeta path fieldName meta = do
   where
     check k = case TextMap.lookup k meta.values of
       None -> pure ()
-      Some v -> fail $ "Unexpected account information in metadata on v2 choice for '" <> path <> fieldName <> "': " <> show v
+      Some v -> fail $ "Unexpected account information in metadata of '" <> path <> "' in metadata key '" <> k <> "': " <> show v
 
 ensureBasicAccount : Text -> HoldingV2.Account -> Update ()
 ensureBasicAccount fieldName account = do
@@ -236,18 +237,23 @@ partiesToMeta field parties meta
   | null parties = meta
   | otherwise =
       Metadata $
-      TextMap.insert (tokenStandardV2Namespace <> field) (T.intercalate "," (map partyToText parties)) $
+      TextMap.insert field (T.intercalate "," (map partyToText parties)) $
       meta.values
 
 partiesFromMeta : Text -> Metadata -> [Party]
 partiesFromMeta field meta =
-    case TextMap.lookup (tokenStandardV2Namespace <> field) meta.values of
+    case TextMap.lookup field meta.values of
       None -> []
       Some txt -> map tryPartyFromText (T.splitOn "," txt)
   where
     tryPartyFromText p = case partyFromText p of
       None -> error $ "Invalid party in metadata field '" <> field <> "': " <> p
       Some party -> party
+
+-- | Report early expiry of instructions or allocations in the V1 metadata.
+expiresAtToMeta : Optional Time -> Metadata -> Metadata
+expiresAtToMeta None meta = meta
+expiresAtToMeta (Some t) meta = timeToMeta "expiresAt" t meta
 
 
 -- Holding change metadata

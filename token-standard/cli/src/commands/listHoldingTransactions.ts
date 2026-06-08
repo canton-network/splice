@@ -12,7 +12,7 @@ import { renderTransaction, Transaction } from "../txparse/types";
 import {
   DefaultApi as LedgerJsonApi,
   JsGetUpdatesResponse,
-} from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
+} from "@canton-network/canton-json-api-v2-openapi";
 import fs from "fs";
 import { V2TransactionParser } from "../txparse/parserv2";
 
