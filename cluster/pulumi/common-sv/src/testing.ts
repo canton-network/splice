@@ -7,14 +7,10 @@ const CatchupTestThresholdsSchema = z
     sequencerMinEventsPerSecond: z.number().positive(),
     participantMinEventsPerSecond: z.number().positive(),
     mediatorMinEventsPerSecond: z.number().positive(),
-    // pick a backup at least this old
-    minBackupAgeHours: z.number().nonnegative(),
     // delays under which a component is considered "caught up"
-    caughtUpThresholds: z.object({
-      sequencerBlockDelaySeconds: z.number().nonnegative(),
-      participantDelaySeconds: z.number().nonnegative(),
-      mediatorDelaySeconds: z.number().nonnegative(),
-    }),
+    sequencerBlockDelaySeconds: z.number().nonnegative(),
+    participantDelaySeconds: z.number().nonnegative(),
+    mediatorDelaySeconds: z.number().nonnegative(),
   })
   .strict();
 

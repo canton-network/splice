@@ -24,9 +24,9 @@ config=$(get_resolved_config)
 seq_min_eps=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.sequencerMinEventsPerSecond // 1000")
 part_min_eps=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.participantMinEventsPerSecond // 1000")
 med_min_eps=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.mediatorMinEventsPerSecond // 1000")
-seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.sequencerBlockDelaySeconds // 30")
-part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.participantDelaySeconds // 30")
-med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.caughtUpThresholds.mediatorDelaySeconds // 30")
+seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.sequencerBlockDelaySeconds // 30")
+part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.participantDelaySeconds // 30")
+med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.mediatorDelaySeconds // 30")
 
 PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
 
