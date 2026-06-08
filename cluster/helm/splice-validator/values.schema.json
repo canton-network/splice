@@ -209,6 +209,9 @@
         "imageRepo": {
           "type": "string"
         },
+        "imageName": {
+          "type": "string"
+        },
         "imageDigests": {
           "type": "object"
         },
@@ -287,6 +290,9 @@
               "type": "string"
             },
             "secretName": {
+              "type": "string"
+            },
+            "initImage": {
               "type": "string"
             }
           }
