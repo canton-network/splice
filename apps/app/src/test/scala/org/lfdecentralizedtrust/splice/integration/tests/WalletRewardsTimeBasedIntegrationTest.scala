@@ -61,6 +61,13 @@ class WalletRewardsTimeBasedIntegrationTest
         validatorRewards = Seq((bob, 0.33)),
       )
 
+      val rewardCouponV2Amount = BigDecimal(1000.0)
+      clue("Create assigned RewardCouponV2 for bob's validator") {
+        createRewardCouponsV2(
+          Seq((bobValidatorParty, rewardCouponV2Amount, bobValidatorParty))
+        )
+      }
+
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
         val openRounds = sv1ScanBackend
@@ -114,39 +121,16 @@ class WalletRewardsTimeBasedIntegrationTest
         val newBalance = bobValidatorWalletClient.balance().unlockedQty
 
         // We just check that the balance has increased by roughly the right amount,
-        // rather then repeating the calculation for the reward amount
-        // 2.85 USD per faucet coupon
+        // rather then repeating the calculation for the reward amount.
+        // 2.85 USD per faucet coupon; RewardCouponV2 amount is added directly.
         val faucetCouponAmountUsd = 2.85 * openRounds.size
         assertInRange(
           newBalance - prevBalance,
           (
-            walletUsdToAmulet(-0.1 + faucetCouponAmountUsd),
-            walletUsdToAmulet(0.5 + faucetCouponAmountUsd),
+            walletUsdToAmulet(-0.1 + faucetCouponAmountUsd) + rewardCouponV2Amount,
+            walletUsdToAmulet(0.5 + faucetCouponAmountUsd) + rewardCouponV2Amount,
           ),
         )
-      }
-
-      // Mint RewardCouponV2: create an assigned V2 coupon,
-      // advance past the next issuing round, and verify it gets collected.
-      val balanceBeforeV2 = bobValidatorWalletClient.balance().unlockedQty
-      clue("Create assigned RewardCouponV2 for bob's validator") {
-        createRewardCouponsV2(
-          Seq((bobValidatorParty, BigDecimal(0.5), bobValidatorParty))
-        )
-      }
-
-      // 3 ticks for the coupon's round to become an IssuingMiningRound
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-      advanceTimeForRewardAutomationToRunForCurrentRound
-
-      clue("RewardCouponV2 is collected and balance increases") {
-        eventually() {
-          val balanceAfterV2 = bobValidatorWalletClient.balance().unlockedQty
-          // V2 coupon is 0.5 CC, minus transfer fees
-          (balanceAfterV2 - balanceBeforeV2) should be >= BigDecimal(0.4)
-        }
       }
     }
   }
