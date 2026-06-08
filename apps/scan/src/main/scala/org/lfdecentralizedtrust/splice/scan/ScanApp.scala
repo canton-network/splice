@@ -90,7 +90,6 @@ import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStand
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-
 import org.apache.pekko.stream.Materializer
 
 /** Class representing a Scan app instance.
@@ -617,6 +616,19 @@ class ScanApp(
           logger.info(
             s"Configured domain migration id $configuredMigrationId is in sync with the peer scans"
           )
+        }
+        .recoverWith {
+          // Do not block startup if we can't get a consensus response.
+          // This can happen for example if all other scans are running older versions
+          // that do not have the endpoint to get the migration id yet.
+          // Proceeding here is dangerous, but we have to allow it to avoid deadlocks.
+          case ex =>
+            logger.warn(
+              "Could not obtain domain migration id from peer scans. " +
+                "Proceeding without verification of the configured domain migration id against the peers.",
+              ex,
+            )
+            Future.unit
         }
     }
 
