@@ -100,10 +100,6 @@
         sha256 = "59ad235dd20ca6f9cc4119e35c7feb7687563d5f5c448e386d8f8e1643044a69";
       }
       {
-        url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.31.1/pulumi-resource-kubernetes-v4.31.1-linux-amd64.tar.gz";
-        sha256 = "52c43df905c22de017092732ec131e07b7211f54a8c9196550377b1b0cbc4f79";
-      }
-      {
         url = "https://github.com/pulumi/pulumi-kubernetes-cert-manager/releases/download/v0.2.0/pulumi-resource-kubernetes-cert-manager-v0.2.0-linux-amd64.tar.gz";
         sha256 = "d7f0dd82911e62b33d76558dfdb3c1605fb2b55cc2685015984b3e31211dd608";
       }
@@ -232,10 +228,6 @@
       {
         url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.28.0/pulumi-resource-kubernetes-v4.28.0-darwin-amd64.tar.gz";
         sha256 = "bf19238cdb0b21d3e62331894e36b112a91ef283a80a1a3e2682998f6db9edef";
-      }
-      {
-        url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.31.1/pulumi-resource-kubernetes-v4.31.1-darwin-amd64.tar.gz";
-        sha256 = "3be0549a984f216cff74f6998a8bcba3585587f1ba0310c4937757450cd074f2";
       }
       {
         url = "https://github.com/pulumi/pulumi-kubernetes-cert-manager/releases/download/v0.2.0/pulumi-resource-kubernetes-cert-manager-v0.2.0-darwin-amd64.tar.gz";
@@ -368,10 +360,6 @@
         sha256 = "8712ece90af895304ffafb2c8c60da63b68b8a97d4961cc1cf44d4a85c84624c";
       }
       {
-        url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.31.1/pulumi-resource-kubernetes-v4.31.1-linux-arm64.tar.gz";
-        sha256 = "2e8d45c54bc65978549e2d769a87cd43180635858ffff43225b772667683a105";
-      }
-      {
         url = "https://github.com/pulumi/pulumi-kubernetes-cert-manager/releases/download/v0.2.0/pulumi-resource-kubernetes-cert-manager-v0.2.0-linux-arm64.tar.gz";
         sha256 = "5fe23d29e6cf73a8543d5d56bf98ac231864e05a3f9c9258e4b6345c8d3e40a6";
       }
@@ -500,10 +488,6 @@
       {
         url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.28.0/pulumi-resource-kubernetes-v4.28.0-darwin-arm64.tar.gz";
         sha256 = "0a2c100b300e47ca739fd823148b7ac5fce4725452487c996b8e3842f23af270";
-      }
-      {
-        url = "https://github.com/pulumi/pulumi-kubernetes/releases/download/v4.31.1/pulumi-resource-kubernetes-v4.31.1-darwin-arm64.tar.gz";
-        sha256 = "bb65fde5fd1cf1e6af8e248edee9696c1f9778d7207b364a4804b723895754cf";
       }
       {
         url = "https://github.com/pulumi/pulumi-kubernetes-cert-manager/releases/download/v0.2.0/pulumi-resource-kubernetes-cert-manager-v0.2.0-darwin-arm64.tar.gz";

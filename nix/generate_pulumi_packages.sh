@@ -16,7 +16,6 @@ plugins=(
   # currently used
   "pulumi/command=1.2.1"
   "pulumi/gcp=9.25.0"
-  "pulumi/kubernetes=4.31.1"
   "pulumi/random=4.21.0"
   "pulumi/std=2.3.2"
   "pulumi/auth0=3.44.0"
