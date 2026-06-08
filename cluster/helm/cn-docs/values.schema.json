@@ -7,6 +7,12 @@
   "properties": {
     "networkName": {
       "type": "string"
+    },
+    "docsImageName": {
+      "type": "string"
+    },
+    "gcsProxyImageName": {
+      "type": "string"
     }
   }
 }
