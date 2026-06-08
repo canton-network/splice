@@ -153,14 +153,8 @@ class AllocationsFrontendIntegrationTest
       val bobTransferAmount = BigDecimal(6)
 
       val venuePartyHint = s"venue-party-${Random.nextInt()}"
-      val venueParty = splitwellValidatorBackend.onboardUser(
-        splitwellWalletClient.config.ledgerApiUser,
-        Some(
-          PartyId.tryFromProtoPrimitive(
-            s"$venuePartyHint::${splitwellValidatorBackend.participantClient.id.namespace.toProtoPrimitive}"
-          )
-        ),
-      )
+      // We use the same venue party for bob so we can setup the TradeSettlementAgreement using a submit with `actAs = Seq(venueParty, bobParty)`.
+      val venueParty = bobValidatorBackend.getValidatorPartyId()
 
       aliceWalletClient.tap(1000)
       bobWalletClient.tap(1000)
