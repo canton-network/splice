@@ -212,6 +212,9 @@
         "imageName": {
           "type": "string"
         },
+        "ansImageName": {
+          "type": "string"
+        },
         "imageDigests": {
           "type": "object"
         },

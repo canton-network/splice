@@ -3,6 +3,7 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "validator-app"
+ansImageName: "ans-web-ui"
 
 fixedTokens: false
 
