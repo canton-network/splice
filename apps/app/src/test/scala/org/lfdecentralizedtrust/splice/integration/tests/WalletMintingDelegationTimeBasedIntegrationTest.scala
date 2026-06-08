@@ -440,7 +440,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val unclaimedActivityAmount = BigDecimal(200.0)
       val validatorRewardAmount = BigDecimal(500.0)
       val developmentFundAmount = BigDecimal(300.0)
-      val rewardCouponV2Amount = BigDecimal(0.5)
+      val rewardCouponV2Amount = BigDecimal(1000.0)
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
