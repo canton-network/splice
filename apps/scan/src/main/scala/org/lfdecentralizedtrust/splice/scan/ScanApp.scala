@@ -406,7 +406,8 @@ class ScanApp(
         config.rollForwardLsu,
       )
       scanStreamHandler = new HttpScanStreamHandler(
-        config.bulkStorage.s3.map(S3BucketConnection(_, loggerFactory))
+        // FIXME: should be finalized once objects are copied there
+        config.bulkStorage.staging.map(S3BucketConnection(_, loggerFactory))
       )
       contractFetcher = ChoiceContextContractFetcher.createStoreWithLedgerFallback(
         config.parameters.contractFetchLedgerFallbackConfig,

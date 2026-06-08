@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValu
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
 
 import scala.concurrent.ExecutionContext
+import cats.implicits.*
 
 class BulkStorage(
     val acsSnapshotBulkStorage: Option[AcsSnapshotBulkStorageStaging],
@@ -55,8 +56,10 @@ object BulkStorage {
   ): BulkStorage = {
     val logger = loggerFactory.getTracedLogger(classOf[BulkStorage])
 
-    appConfig.s3.fold {
-      logger.debug("s3 connection not configured, not dumping to bulk storage")(tc)
+    (appConfig.staging, appConfig.committed).tupled.fold {
+      logger.debug("s3 staging&committed connections not configured, not dumping to bulk storage")(
+        tc
+      )
       new BulkStorage(
         acsSnapshotBulkStorage = None,
         updateHistoryBulkStorage = None,
@@ -64,8 +67,8 @@ object BulkStorage {
         retryProvider = retryProvider,
         loggerFactory = loggerFactory,
       )
-    } { s3Config =>
-      val s3Connection = S3BucketConnection(s3Config, loggerFactory)
+    } { case (staging, committed) =>
+      val stagingConnection = S3BucketConnection(staging, loggerFactory)
       val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
 
       val acs = new AcsSnapshotBulkStorageStaging(
@@ -73,7 +76,7 @@ object BulkStorage {
         appConfig,
         acsSnapshotStore,
         updateHistory,
-        s3Connection,
+        stagingConnection,
         kvProvider,
         historyMetrics,
         loggerFactory,
@@ -84,7 +87,7 @@ object BulkStorage {
         updateHistory,
         kvProvider,
         currentMigrationId,
-        s3Connection,
+        stagingConnection,
         historyMetrics,
         loggerFactory,
       )
