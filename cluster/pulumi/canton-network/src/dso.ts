@@ -16,7 +16,7 @@ import {
   SvIdKey,
   svKeyFromSecret,
   ValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   configForSv,
@@ -25,7 +25,7 @@ import {
   StaticCometBftConfigWithNodeName,
   StaticSvConfig,
   SvOnboarding,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common-sv';
 
 import { InstalledSv, installSvNode } from './sv';
 
@@ -146,17 +146,14 @@ export class Dso extends pulumi.ComponentResource {
       return found ? found.rewardWeightBps : 10000;
     })();
 
-    const runningMigration = this.args.decentralizedSynchronizerUpgradeConfig.isRunningMigration();
     const sv1 = await this.installSvNode(
       sv1Conf,
-      runningMigration
-        ? { type: 'domain-migration' }
-        : {
-            type: 'found-dso',
-            sv1SvRewardWeightBps,
-            roundZeroDuration: config.optionalEnv('ROUND_ZERO_DURATION'),
-            initialRound: initialRound?.toString(),
-          },
+      {
+        type: 'found-dso',
+        sv1SvRewardWeightBps,
+        roundZeroDuration: config.optionalEnv('ROUND_ZERO_DURATION'),
+        initialRound: initialRound?.toString(),
+      },
       {
         sv1: sv1CometBftConf,
         peers: peerCometBftConfs,
@@ -180,9 +177,7 @@ export class Dso extends pulumi.ComponentResource {
       }
       const [conf, ...remainingConfigs] = configs;
 
-      const onboarding: SvOnboarding = runningMigration
-        ? { type: 'domain-migration' }
-        : this.joinViaSv1(sv1.svApp, svIdKeys[conf.onboardingName]);
+      const onboarding: SvOnboarding = this.joinViaSv1(sv1.svApp, svIdKeys[conf.onboardingName]);
       const cometBft = {
         sv1: sv1CometBftConf,
         peers: peerCometBftConfs.filter(c => c.id !== conf.cometBft.id), // remove self from peer list

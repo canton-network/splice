@@ -3,7 +3,7 @@
 import {
   validatorLicensesHandler,
   dsoInfoHandler,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
 import { http, HttpHandler, HttpResponse } from 'msw';
 import {
   ErrorResponse,
@@ -13,11 +13,11 @@ import {
   LookupEntryByPartyResponse,
   GetOpenAndIssuingMiningRoundsResponse,
   FeatureSupportResponse,
-} from '@lfdecentralizedtrust/scan-openapi';
+} from '@canton-network/scan-openapi';
 
 import { config } from '../../setup/config';
 import { getAmuletRulesResponse } from '../data';
-import { Instrument } from '@lfdecentralizedtrust/token-metadata-openapi';
+import { Instrument } from '@canton-network/token-metadata-openapi';
 
 const amuletNameServiceAcronym = config.spliceInstanceNames.nameServiceNameAcronym;
 

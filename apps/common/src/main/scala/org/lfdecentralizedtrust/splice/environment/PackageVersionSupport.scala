@@ -143,6 +143,28 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceAmulet,
+      now,
+      DarResources.amulet,
+      DarResources.amulet_0_1_19,
+    )
+
+  def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceWallet,
+      now,
+      DarResources.wallet,
+      DarResources.wallet_0_1_16,
+    )
+
   private def isDarSupported(
       parties: Seq[PartyId],
       packageId: PackageIdResolver.Package,

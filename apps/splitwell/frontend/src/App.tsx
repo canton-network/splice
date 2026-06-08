@@ -8,9 +8,9 @@ import {
   PackageIdResolver,
   JsonApiError,
   retryQuery,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
-import { ScanClientProvider } from '@lfdecentralizedtrust/splice-common-frontend/scan-api';
+} from '@canton-network/splice-common-frontend';
+import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
+import { ScanClientProvider } from '@canton-network/splice-common-frontend/scan-api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import React from 'react';

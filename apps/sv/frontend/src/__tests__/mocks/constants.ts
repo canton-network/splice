@@ -5,13 +5,13 @@ import {
   getDsoSetConfigAction,
   getAmuletRulesAddFutureScheduleAction,
   getAmuletRulesSetConfigAction,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 import {
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
   ListVoteRequestByTrackingCidResponse,
-} from '@lfdecentralizedtrust/sv-openapi';
+} from '@canton-network/sv-openapi';
 
 import { AmuletRules } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';

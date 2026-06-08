@@ -10,8 +10,8 @@ import {
   InstalledHelmChart,
   installSpliceHelmChart,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { PartyAllocatorConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
+} from '@canton-network/splice-pulumi-common';
+import { PartyAllocatorConfig } from '@canton-network/splice-pulumi-common-validator';
 
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 

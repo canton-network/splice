@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver.Package.SpliceAmulet
-import org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch
+import org.lfdecentralizedtrust.splice.sv.store.{ExpiredRewardCouponsBatch, IgnoredPartiesStore}
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -34,18 +34,21 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.util.Random
-
 import ExpireRewardCouponsTrigger.Task
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 class ExpireRewardCouponsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val svConfig: SvAppBackendConfig,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with IgnoredAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -56,7 +59,7 @@ class ExpireRewardCouponsTrigger(
       .getExpiredCouponsInBatchesPerRoundAndCouponType(
         dsoRules.domain,
         context.config.enableExpireValidatorFaucet,
-        context.config.ignoredExpiredRewardsPartyIds,
+        ignoredPartiesStore.getAll,
         batchSize =
           PageLimit.tryCreate(svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize),
         numBatches =
@@ -151,7 +154,26 @@ class ExpireRewardCouponsTrigger(
     ) ++ expiredRewardsTask.batch.svRewardCoupons.map(_.contractId)
   )
 
-  override def completeTaskAsDsoDelegate(
+  override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    val informees =
+      (task.batch.validatorCoupons.map(_.payload.user) ++ task.batch.appCoupons.flatMap(c =>
+        Seq(c.payload.provider) ++ c.payload.beneficiary.toScala
+      ) ++
+        task.batch.svRewardCoupons.map(_.payload.beneficiary) ++ task.batch.validatorFaucets.map(
+          _.payload.validator
+        ) ++ task.batch.validatorLivenessActivityRecords.map(_.payload.validator))
+        .map(PartyId.tryFromProtoPrimitive(_))
+        .toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.vettedAmuletVersion.toString,
+      informees,
+      enableUnresponsivePartiesAutoIgnore = true,
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
       expiredRewardsTask: Task,
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {

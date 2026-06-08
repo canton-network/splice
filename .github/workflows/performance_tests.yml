@@ -32,7 +32,7 @@ jobs:
 
       - name: Setup
         id: setup
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
           test_name: oss
@@ -48,7 +48,7 @@ jobs:
           create_credentials_file: true
 
       - name: Run ingestion performance tests
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         env:
           PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
           PERFORMANCE_TESTS_DB_HOST: ${{ secrets.PERFORMANCE_TESTS_DB_HOST }}
@@ -95,7 +95,7 @@ jobs:
 
       # sanity check
       - name: Check logs for errors
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         with:
           # we don't care if some integration test happened to make the repo dirty
           pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
@@ -105,13 +105,13 @@ jobs:
         # if they're successful we don't care too much about the logs - but note that the ingestion are still logged
         # as part of the GHA run itself (meaning: we use println to stdout)
         if: ${{ !success() }}
-        uses: ./splice-shared-gha/.github/actions/sbt/upload_logs
+        uses: ./.github/actions/sbt/upload_logs
         with:
           name: "logs-ingestion-performance-tests"
 
       - name: Report Failures on Slack & Github
         if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
-        uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
+        uses: ./.github/actions/tests/failure_notifications
         with:
           job_subname: "Ingestion Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"
@@ -136,7 +136,7 @@ jobs:
 
       - name: Setup
         id: setup
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
           test_name: oss
@@ -152,7 +152,7 @@ jobs:
           create_credentials_file: true
 
       - name: Run read performance tests
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         env:
           PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
           PERFORMANCE_TESTS_DB_HOST: ${{ secrets.PERFORMANCE_TESTS_DB_HOST }}
@@ -199,20 +199,20 @@ jobs:
 
       # sanity check
       - name: Check logs for errors
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         with:
           pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
           cmd: checkErrors
 
       - name: Upload logs
         if: ${{ !success() }}
-        uses: ./splice-shared-gha/.github/actions/sbt/upload_logs
+        uses: ./.github/actions/sbt/upload_logs
         with:
           name: "logs-read-performance-tests"
 
       - name: Report Failures on Slack & Github
         if: ${{ github.event_name == 'schedule' && (failure() || steps.perf_check.outputs.has_breaches == 'true') }}
-        uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
+        uses: ./.github/actions/tests/failure_notifications
         with:
           job_subname: "Read Tests"
           workload_identity_provider: "${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}"

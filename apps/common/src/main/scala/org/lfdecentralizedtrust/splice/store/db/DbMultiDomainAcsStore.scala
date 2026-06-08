@@ -1145,27 +1145,36 @@ final class DbMultiDomainAcsStore[TXE](
             Sink.foldAsync[Int, Seq[BaseLedgerConnection.ActiveContractsItem]](0) {
               case (acsSizeSoFar, batch) =>
                 val summaryState = MutableIngestionSummary.empty
-                ingestAcsBatch(
-                  offset,
-                  batch.collect { case ActiveContractsItem.ActiveContract(contract) => contract },
-                  batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
-                    unassign
-                  },
-                  batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
-                  summaryState,
-                ).map { _ =>
-                  val newAcsSize = summaryState.acsSizeDiff + acsSizeSoFar
-                  val summary = summaryState
-                    .toIngestionSummary(
-                      synchronizerIdToRecordTime = Map.empty,
-                      offset = offset,
-                      newAcsSize = newAcsSize,
-                      metrics = metrics,
+                logger.debug(
+                  s"Ingesting ACS batch with size: ${batch.size}, total ingested size so far: $acsSizeSoFar"
+                )
+                metrics.ingestionTimePerACSBatch
+                  .timeFuture {
+                    ingestAcsBatch(
+                      offset,
+                      batch.collect { case ActiveContractsItem.ActiveContract(contract) =>
+                        contract
+                      },
+                      batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
+                        unassign
+                      },
+                      batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
+                      summaryState,
                     )
-                  handleIngestionSummary(summary)
-                  logger.debug(show"Ingested ACS batch $summary")
-                  newAcsSize
-                }
+                  }
+                  .map { _ =>
+                    val newAcsSize = summaryState.acsSizeDiff + acsSizeSoFar
+                    val summary = summaryState
+                      .toIngestionSummary(
+                        synchronizerIdToRecordTime = Map.empty,
+                        offset = offset,
+                        newAcsSize = newAcsSize,
+                        metrics = metrics,
+                      )
+                    handleIngestionSummary(summary)
+                    logger.debug(show"Ingested ACS batch $summary")
+                    newAcsSize
+                  }
             }
           )
           // A store is considered initialized if the last ingested offset is set

@@ -11,7 +11,7 @@ import {
   GCP_REGION,
   GCP_ZONE,
   installPostgresPasswordSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 export interface PerformanceTestDb {
   db: gcp.sql.Database;

@@ -1310,7 +1310,12 @@ object SvDsoStore {
           rewardWeight = Some(contract.payload.weight),
         )
       },
-      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
+      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
         DsoAcsStoreRowData(
           contract,
           rewardRound = Some(contract.payload.round.number),
@@ -1319,16 +1324,22 @@ object SvDsoStore {
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.round.number),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
@@ -1504,16 +1515,24 @@ object SvDsoStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
       },
-      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) =>
+            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.holdingFeesOpenRoundNumber.number),
         )
       },
-      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) =>
+            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
+        },
       ) {
         DsoAcsStoreRowData(_)
       },

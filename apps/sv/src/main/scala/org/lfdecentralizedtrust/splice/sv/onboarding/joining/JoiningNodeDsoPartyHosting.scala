@@ -71,7 +71,7 @@ class JoiningNodeDsoPartyHosting(
                     participantId,
                   )
                 _ = logger.info("Disconnecting from all domains")
-                _ <- participantAdminConnection.disconnectFromAllDomains()
+                _ <- participantAdminConnection.disconnectFromAllSynchronizers()
                 _ = logger.info("candidate SV participant disconnected from global domain")
                 response <- retryProvider
                   .retry(
@@ -111,7 +111,7 @@ class JoiningNodeDsoPartyHosting(
                         "Reconnecting to global domain so that the proposal can be recreated from the latest base."
                       )
                       for {
-                        _ <- participantAdminConnection.connectDomain(synchronizerAlias)
+                        _ <- participantAdminConnection.connectSynchronizer(synchronizerAlias)
                         _ <- retryProvider.waitUntil(
                           RetryFor.WaitingOnInitDependency,
                           "party_hosting_serial_observed",
@@ -158,9 +158,9 @@ class JoiningNodeDsoPartyHosting(
           _ = logger.info(
             "Imported Acs snapshot from sponsor SV participant to candidate participant"
           )
-          _ <- participantAdminConnection.reconnectAllDomains()
+          _ <- participantAdminConnection.reconnectAllSynchronizers()
           // Explicitly connect to global domain as that has manualConnect=false
-          _ <- participantAdminConnection.connectDomain(synchronizerAlias)
+          _ <- participantAdminConnection.connectSynchronizer(synchronizerAlias)
           _ = logger.info("candidate SV participant reconnected to global domain")
           _ <- dsoPartyHosting.waitForDsoPartyToParticipantAuthorization(
             synchronizerId,

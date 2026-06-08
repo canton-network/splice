@@ -6,7 +6,7 @@ import {
   Loading,
   ErrorDisplay,
   unitStringToCurrency,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import React from 'react';
 
 import { Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';

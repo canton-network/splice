@@ -3,10 +3,10 @@
 import {
   validatorLicensesHandler,
   dsoInfoHandler,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
 import dayjs from 'dayjs';
 import { http, HttpHandler, HttpResponse, PathParams } from 'msw';
-import { FeatureSupportResponse, SuccessStatusResponse } from '@lfdecentralizedtrust/scan-openapi';
+import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/scan-openapi';
 import {
   ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
@@ -17,7 +17,7 @@ import {
   LookupFeaturedAppRightByContractIdResponse,
   ListVoteRequestByTrackingCidResponse,
   LookupDsoRulesVoteRequestResponse,
-} from '@lfdecentralizedtrust/sv-openapi';
+} from '@canton-network/sv-openapi';
 
 import {
   voteRequest,

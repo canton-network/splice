@@ -22,8 +22,7 @@ tests:
     template: deployment.yaml
     set:
       runtimeDetails:
-        migrationId: 99
-        scanUrl: "https://scan.url"
+        synchronizerSerialId: 101
     documentSelector:
       path: kind
       value: Deployment
@@ -34,4 +33,7 @@ tests:
           value: "nginx"
       - equal:
           path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SCAN_URL')].value
-          value: "https://scan.url"
+          value: "http://scan-app:5012"
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SERIAL_ID')].value
+          value: "101"

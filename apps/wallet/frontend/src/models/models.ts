@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import BigNumber from 'bignumber.js';
-import { AmuletPosition } from '@lfdecentralizedtrust/wallet-openapi';
+import { AmuletPosition } from '@canton-network/wallet-openapi';
 
 import { AmuletTransferInstruction } from '@daml.js/splice-amulet/lib/Splice/AmuletTransferInstruction';
 import {

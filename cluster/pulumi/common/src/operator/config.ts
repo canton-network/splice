@@ -5,12 +5,12 @@ import {
   DeploySvRunbook,
   GitReferenceSchema,
   K8sResourceSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   mustInstallSplitwell,
   mustInstallValidator1,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common-validator';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { merge } from 'lodash';
 import { z } from 'zod';
 

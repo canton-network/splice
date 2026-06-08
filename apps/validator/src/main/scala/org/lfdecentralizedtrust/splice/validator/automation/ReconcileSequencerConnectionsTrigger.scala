@@ -115,6 +115,7 @@ class ReconcileSequencerConnectionsTrigger(
                   SynchronizerConnectionConfig(
                     alias,
                     sequencerConnectionConfig,
+                    synchronizerId = Some(psid),
                   ),
                   reconnectOnSynchronizerConfigurationChange,
                   modifySequencerConnections(sequencerConnectionConfig),

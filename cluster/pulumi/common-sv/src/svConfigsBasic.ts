@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { DeploySvRunbook, isMainNet } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig';
+import { DeploySvRunbook, isMainNet } from '@canton-network/splice-pulumi-common';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 
 import { StaticSvConfigBasic } from './config';
 import { dsoSize, skipExtraSvs } from './dsoConfig';

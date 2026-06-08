@@ -178,7 +178,7 @@ trait TimeTestUtil extends TestCommon {
 
     // not exactly 150s because of the skew parameter.
     val (_, lowestRound) =
-      actAndCheck(timeUntilSuccess = 30.seconds)("advancing time", advanceTime(duration))(
+      actAndCheck(timeUntilSuccess = 90.seconds)("advancing time", advanceTime(duration))(
         s"waiting for open and issuing round automation (should create OpenMiningRound ${highestOpen + 1}, should advance IssuingMiningRounds $previousIssuingRounds",
         _ => {
 

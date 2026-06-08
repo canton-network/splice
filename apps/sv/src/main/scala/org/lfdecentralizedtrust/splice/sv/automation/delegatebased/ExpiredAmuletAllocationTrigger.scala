@@ -66,6 +66,7 @@ class ExpiredAmuletAllocationTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
       informees,
+      enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 
