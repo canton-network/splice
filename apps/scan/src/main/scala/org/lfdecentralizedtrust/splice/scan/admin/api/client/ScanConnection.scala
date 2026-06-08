@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetDsoInfoResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryResponse,
@@ -335,6 +336,11 @@ trait ScanConnection
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[NonNegativeInt]
+
+  def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse]
 
   def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,

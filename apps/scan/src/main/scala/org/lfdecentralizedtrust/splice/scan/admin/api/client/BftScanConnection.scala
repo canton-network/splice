@@ -38,6 +38,7 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetDsoInfoResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
@@ -45,6 +46,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  RewardAccountingActivityTotalsOk,
+  RewardAccountingActivityTotalsUndetermined,
   RewardAccountingRootHashOk,
   RewardAccountingRootHashUndetermined,
 }
@@ -844,6 +847,54 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
+
+  /** This is special because in addition to 'Ok' we can receive
+    * 'Undetermined' - This might indicate that scan is yet to process activity totals for this round
+    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+    *
+    * So simple equality comparison on responses is not possible, and we treat
+    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
+    * that this does not cause grouping in executeCall.
+    *
+    * And if no response could be obtained via bft we respond with 'Undetermined'
+    */
+  override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse] = {
+    val undetermined =
+      GetRewardAccountingActivityTotalsResponse(
+        RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+      )
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
+    else
+      bftCall[RewardAccountingActivityTotalsOk](
+        call = scan =>
+          scan.getRewardAccountingActivityTotals(roundNumber).flatMap {
+            case GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(ok) =>
+              Future.successful(ok)
+            case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined |
+                _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide =>
+              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingActivityTotals",
+        callConfig = callConfig,
+        consensusLogConfig = BftScanConnection.ConsensusLogConfig(
+          disagreementLogLevel = Level.WARN,
+          onlyLogDisagreementsInSuccessResponse = true,
+          agreementLogLevel = Some(Level.INFO),
+        ),
+      )
+        .transform(tryTotals =>
+          Success(
+            tryTotals.toOption.fold(undetermined)(ok =>
+              GetRewardAccountingActivityTotalsResponse(ok)
+            )
+          )
+        )
+  }
 
   /** This is special because in addition to 'Ok' we can receive
     * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
