@@ -1008,7 +1008,7 @@ object BftScanConnection {
       consensusLogConfig.agreementLogLevel.foreach { level =>
         LoggerUtil.logAtLevel(
           level,
-          s"Scans $agreeingScanUrls agreed on the Consensus $consensusResponse",
+          s"Reached consensus from:\n${agreeingScanUrls.mkString("\n")}",
         )
       }
       responses.forEach { (disagreeingResponse, scanUrls) =>
@@ -1019,7 +1019,10 @@ object BftScanConnection {
         if (shouldLog) {
           LoggerUtil.logAtLevel(
             consensusLogConfig.disagreementLogLevel,
-            s"Scans $scanUrls disagreed with the Consensus $consensusResponse and instead returned $disagreeingResponse",
+            s"""The following Scan URLs disagreed with consensus:
+               |${scanUrls.map(url => s"  $url").mkString("\n")}
+               |consensus response: $consensusResponse
+               |disagreeing response: $disagreeingResponse""".stripMargin,
           )
         }
       }
