@@ -430,20 +430,25 @@ class TokenStandardV2AllocationIntegrationTest
 
   "Cancel a DvP and its allocations" in { implicit env =>
     val allocatedOtcTrade = setupAllocatedOtcTrade()
+
+    // CommandFailure on 404 needs to be retried with eventuallySucceeds
+    val (aliceContext, bobContext) = eventuallySucceeds() {
+      val aliceContext = clue("Get choice context for alice's allocation") {
+        val scanResponse =
+          sv1ScanBackend.getAllocationV2CancelContext(allocatedOtcTrade.aliceAllocationId)
+        aliceValidatorBackend.scanProxy.getAllocationV2CancelContext(
+          allocatedOtcTrade.aliceAllocationId
+        ) shouldBe scanResponse
+        scanResponse
+      }
+      val bobContext = clue("Get choice context for bob's allocation") {
+        sv1ScanBackend.getAllocationV2CancelContext(allocatedOtcTrade.bobAllocationId)
+      }
+      (aliceContext, bobContext)
+    }
+
     actAndCheck(
       "Settlement venue cancels the trade", {
-        val aliceContext = clue("Get choice context for alice's allocation") {
-          val scanResponse =
-            sv1ScanBackend.getAllocationV2CancelContext(allocatedOtcTrade.aliceAllocationId)
-          aliceValidatorBackend.scanProxy.getAllocationV2CancelContext(
-            allocatedOtcTrade.aliceAllocationId
-          ) shouldBe scanResponse
-          scanResponse
-        }
-        val bobContext = clue("Get choice context for bob's allocation") {
-          sv1ScanBackend.getAllocationV2CancelContext(allocatedOtcTrade.bobAllocationId)
-        }
-
         def mkExtraArg(context: ChoiceContextWithDisclosures) =
           new metadatav1.ExtraArgs(context.choiceContext, emptyMetadata)
 
@@ -494,10 +499,19 @@ class TokenStandardV2AllocationIntegrationTest
 
   "Withdraw an allocation" in { implicit env =>
     val allocatedOtcTrade = setupAllocatedOtcTrade()
+
+    eventuallySucceeds() {
+      clue("Scan has the withdraw contexts") {
+        sv1ScanBackend.getAllocationV2WithdrawContext(allocatedOtcTrade.aliceAllocationId)
+        sv1ScanBackend.getAllocationV2WithdrawContext(allocatedOtcTrade.bobAllocationId)
+      }
+    }
+
     // sanity check
-    aliceWalletClient.listAmuletAllocations() should have size (1) withClue "AmuletAllocations"
+    aliceWalletClient
+      .listAmuletAllocations() should have size (1) withClue "alice's AmuletAllocations"
     actAndCheck(
-      "Settlement venue withdraw the trade", {
+      "Alice withdraws the allocation", {
         aliceWalletClient.withdrawAmuletAllocationV2(
           new amuletallocationV2Codegen.AmuletAllocationV2.ContractId(
             allocatedOtcTrade.aliceAllocationId.contractId
@@ -506,7 +520,24 @@ class TokenStandardV2AllocationIntegrationTest
       },
     )(
       "Allocation is archived",
-      _ => aliceWalletClient.listAmuletAllocations() shouldBe empty withClue "AmuletAllocations",
+      _ =>
+        aliceWalletClient
+          .listAmuletAllocations() shouldBe empty withClue "alice's AmuletAllocations",
+    )
+
+    bobWalletClient.listAmuletAllocations() should have size (1) withClue "bob's AmuletAllocations"
+    actAndCheck(
+      "Bob withdraws the allocation", {
+        bobWalletClient.withdrawAmuletAllocationV2(
+          new amuletallocationV2Codegen.AmuletAllocationV2.ContractId(
+            allocatedOtcTrade.bobAllocationId.contractId
+          )
+        )
+      },
+    )(
+      "Allocation is archived",
+      _ =>
+        bobWalletClient.listAmuletAllocations() shouldBe empty withClue "alice's AmuletAllocations",
     )
   }
 

@@ -806,6 +806,14 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationV2WithdrawContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationWithdrawContextV2(allocationId))
+    }
+  }
+
   @Help.Summary("List vote requests")
   def listVoteRequests(): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
     consoleEnvironment.run {
