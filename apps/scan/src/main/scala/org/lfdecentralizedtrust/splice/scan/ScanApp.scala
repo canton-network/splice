@@ -533,8 +533,6 @@ class ScanApp(
         logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
         Future.successful(migrationId)
       case None if config.isFirstSv =>
-        // The founding scan has no sponsor to fetch the migration id from, so we bootstrap with 0,
-        // mirroring how the founding SV resolves its migration id (see SV1Initializer).
         logger.info("Resolved domain migration id 0 for the founding scan")
         Future.successful(0L)
       case None =>
