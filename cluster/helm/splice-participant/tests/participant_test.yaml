@@ -21,11 +21,6 @@ set:
 tests:
   - it: "sets labels as expected"
     set:
-      # Explicit migration ID for testing
-      metrics:
-        enabled: true
-        migration:
-          id: 1
       # Extra label for testing
       pod:
         labels:
@@ -44,7 +39,6 @@ tests:
           content:
             # Splice-specific
             app: participant-1
-            migration_id: "1"
             # k8s/Helm standard
             app.kubernetes.io/instance: participant-1
             app.kubernetes.io/managed-by: Helm
@@ -59,7 +53,6 @@ tests:
           content:
             # Splice-specific
             app: participant-1
-            migration_id: "1"
             # k8s/Helm standard
             app.kubernetes.io/instance: participant-1
             app.kubernetes.io/managed-by: Helm

@@ -179,7 +179,6 @@ services:
             canton.scan-apps.scan-app {
               is-first-sv = true
             }
-      - ADDITIONAL_CONFIG_MIGRATION_ID=canton.scan-apps.scan-app.domain-migration-id = 0
       - SPLICE_APP_SCAN_PARTICIPANT_ADDRESS=participant
       - SPLICE_APP_SCAN_SEQUENCER_ADDRESS=sequencer-mediator
       - SPLICE_APP_SCAN_MEDIATOR_ADDRESS=sequencer-mediator
