@@ -12,9 +12,8 @@ source "${SPLICE_ROOT}/cluster/scripts/utils.source"
 
 function usage() {
   _info "Usage: $0 <namespace> <migration_id> [<before_timestamp>]"
-  _info "  before_timestamp: unix timestamp — finds the most recent full backup BEFORE this time."
-  _info "                    If omitted, reads minBackupAgeHours from config (testing.catchup.thresholds)."
-  _info "                    Defaults to now if neither is set."
+  _info "  before_timestamp: unix timestamp — finds the most recent full backup before this time."
+  _info "                    Defaults to now (= latest backup) if omitted."
 }
 
 function is_full_backup_kube() {
@@ -122,25 +121,11 @@ function main() {
   local namespace=$1
   local migration_id=$2
 
-  # Determine before_timestamp:
-  # 1. Explicit 3rd argument takes priority
-  # 2. Otherwise read minBackupAgeHours from config (used by catchup test)
-  # 3. Default to now (= latest backup)
-  local before_timestamp
+  # Determine before_timestamp
   if [ "$#" -ge 3 ] && [ -n "$3" ]; then
     before_timestamp=$3
   else
-    local config
-    config=$(get_resolved_config)
-    local min_backup_age_hours
-    min_backup_age_hours=$(echo "$config" \
-      | yq ".svs.${namespace}.testing.catchup.thresholds.minBackupAgeHours // 0")
-    if [ "$min_backup_age_hours" -gt 0 ]; then
-      before_timestamp=$(( $(date +%s) - min_backup_age_hours * 3600 ))
-      _info "Using minBackupAgeHours=${min_backup_age_hours} → before_timestamp=${before_timestamp}" >&2
-    else
-      before_timestamp=$(date +%s)
-    fi
+    before_timestamp=$(date +%s)
   fi
 
   case "$namespace" in
