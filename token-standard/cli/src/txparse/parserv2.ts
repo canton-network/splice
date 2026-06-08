@@ -3,14 +3,14 @@
 import {
   DefaultApi as LedgerJsonApi,
   JsTransaction,
-} from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
+} from "@canton-network/canton-json-api-v2-openapi";
 import {
   TokenStandardEvent,
   Transaction,
   Holding as HoldingResult,
   Label,
 } from "./types";
-import { Event as LedgerApiEvent } from "@lfdecentralizedtrust/canton-json-api-v2-openapi/dist/models/Event";
+import { Event as LedgerApiEvent } from "@canton-network/canton-json-api-v2-openapi/dist/models/Event";
 import {
   EventLogInterface,
   HoldingInterfaceV2,
