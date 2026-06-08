@@ -16,6 +16,7 @@ plugins=(
   # currently used
   "pulumi/command=1.2.1"
   "pulumi/gcp=9.25.0"
+  "pulumi/kubernetes=4.28.0"
   "pulumi/random=4.21.0"
   "pulumi/std=2.3.2"
   "pulumi/auth0=3.44.0"
@@ -33,7 +34,6 @@ plugins=(
   "pulumi/gcp=8.32.1"
   # Post upgrade
   "pulumi/gcp=9.18.0"
-  "pulumi/kubernetes=4.28.0"
   "pulumi/random=4.19.2"
   "pulumi/github=6.13.1"
   "pulumi/gcp=9.17.0"
