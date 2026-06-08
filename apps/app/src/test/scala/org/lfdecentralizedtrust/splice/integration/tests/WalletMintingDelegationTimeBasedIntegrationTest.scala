@@ -7,7 +7,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
   DevelopmentFundCoupon,
-  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -544,21 +543,10 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             )
 
           // Create RewardCouponV2 (assigned to beneficiary)
-          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-            .submitWithResult(
-              userId = sv1Backend.config.ledgerApiUser,
-              actAs = Seq(dsoParty),
-              readAs = Seq.empty,
-              update = new RewardCouponV2(
-                dsoParty.toProtoPrimitive,
-                beneficiaryParty.party.toProtoPrimitive,
-                issuingRound.round,
-                rewardCouponV2Amount.bigDecimal,
-                env.environment.clock.now.plus(Duration.ofDays(1)).toInstant,
-                true,
-                java.util.Optional.of(beneficiaryParty.party.toProtoPrimitive),
-              ).create,
-            )
+          createRewardCouponsV2(
+            Seq((beneficiaryParty.party, rewardCouponV2Amount, beneficiaryParty.party)),
+            round = Some(issuingRound.round),
+          )
         }
 
         // Advance time to collect all rewards
