@@ -110,6 +110,9 @@ class TokenStandardV2AllocationIntegrationTest
         settleBatch
       )
 
+    // Arguments to create Bob's allocation to receive Alice's incoming transfer.
+    // The allocation for it will be created by `OTCTrade_Settle`, but we need them
+    // here as well to fetch the choice context that we need to pass in.
     val bobMissingAllocationArgs = new allocationinstructionv2.AllocationFactory_Allocate(
       bobAllocationRequest.payload.settlement,
       bobAllocationRequest.payload.allocations.asScala
@@ -283,7 +286,7 @@ class TokenStandardV2AllocationIntegrationTest
   private def setupAllocatedOtcTrade()(implicit env: SpliceTestConsoleEnvironment) = {
     val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
-    // We use the same venue party for bob so we can setup the TradeSettlementAgreement
+    // We use the same venue party for bob so we can setup the TradeSettlementAgreement using a submit with `actAs = Seq(venueParty, bobParty)`.
     val venueParty = bobValidatorBackend.getValidatorPartyId()
 
     // Setup funds for alice and bob
