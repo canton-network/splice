@@ -312,6 +312,27 @@ class DbSvDsoStore(
     } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
   }
 
+  override def listAllConfirmations(
+      limit: Limit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[Confirmation.ContractId, Confirmation]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            Confirmation.COMPANION,
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listAllConfirmations",
+        )
+      limited = applyLimit("listAllConfirmations", limit, result)
+    } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
+  }
+
   override def listAppRewardCouponsOnDomain(
       round: Long,
       synchronizerId: SynchronizerId,
