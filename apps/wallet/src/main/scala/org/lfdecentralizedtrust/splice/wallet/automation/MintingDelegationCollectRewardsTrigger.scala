@@ -53,6 +53,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 
 import org.apache.pekko.stream.Materializer
@@ -464,9 +465,13 @@ class MintingDelegationCollectRewardsTrigger(
       new RewardBeneficiary(party.toProtoPrimitive, pct)
     }
 
-    // headOption is safe: shouldAssign checks nonEmpty before calling
     unassignedV2.headOption match {
-      case None => Future.successful(false)
+      case None =>
+        Future.failed(
+          Status.INTERNAL
+            .withDescription(s"No unassigned RewardCouponV2 contracts to assign for $externalParty")
+            .asRuntimeException()
+        )
       case Some(primaryCoupon) =>
         val additionalCoupons = unassignedV2.drop(1)
 
