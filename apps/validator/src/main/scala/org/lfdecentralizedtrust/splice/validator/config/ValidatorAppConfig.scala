@@ -186,7 +186,7 @@ case class ValidatorAppBackendConfig(
       */
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig] = Map.empty,
 
-    /** The configuration for sharing reward coupons with beneficiaries
+    /** The configuration for sharing app reward coupons from traffic-based app rewards with beneficiaries
       */
     rewardSharingByParty: Map[String, RewardSharingConfig] = Map.empty,
     // We don't make this optional to encourage users to think about it at least. They
