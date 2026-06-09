@@ -223,7 +223,7 @@ class AcsSnapshotBulkStorageTest
 
         clue("Initially, a single snapshot is dumped") {
           eventually(4.minutes) {
-            val persistedTs1 = kvProvider.getLatestAcsSnapshotInBulkStorage().value.futureValue
+            val persistedTs1 = bulkStorage.readLatestProcessedSnapshotTimestamp.futureValue
             persistedTs1 shouldBe Some(TimestampWithMigrationId(ts1, 0))
           }
           assertLatestSnapshotInMetrics(ts1)
@@ -252,7 +252,7 @@ class AcsSnapshotBulkStorageTest
           store.addSnapshot(ts3)
 
           eventually(4.minutes) {
-            val persistedTs3 = kvProvider.getLatestAcsSnapshotInBulkStorage().value.futureValue
+            val persistedTs3 = bulkStorage.readLatestProcessedSnapshotTimestamp.futureValue
             persistedTs3.value shouldBe TimestampWithMigrationId(ts3, 0)
           }
           assertLatestSnapshotInMetrics(ts3)

@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.PekkoRetryingService
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
+import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
 
@@ -27,18 +27,13 @@ abstract class AcsSnapshotBulkStorage(
     appConfig: BulkStorageConfig,
     acsSnapshotStore: AcsSnapshotStore,
     updateHistory: UpdateHistory,
+    kvProvider: ScanKeyValueProvider,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning {
 
-  protected def readLatestProcessedSnapshotTimestamp(implicit
-      tc: TraceContext
-  ): Future[Option[TimestampWithMigrationId]]
-
-  protected def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
-      tc: TraceContext
-  ): Future[Unit]
+  protected val kvStoreKey: String
 
   protected def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
@@ -53,6 +48,26 @@ abstract class AcsSnapshotBulkStorage(
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
 
   protected def updateMetric(ts: TimestampWithMigrationId): Unit
+
+  protected[bulk] def readLatestProcessedSnapshotTimestamp(implicit
+      tc: TraceContext
+  ): Future[Option[TimestampWithMigrationId]] = {
+    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
+    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+  }
+
+  private def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
+      tc: TraceContext
+  ): Future[Unit] = {
+    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
+    kvProvider.store
+      .setValue(kvStoreKey, ts)
+      .map(_ => {
+        logger.info(
+          s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
+        )
+      })
+  }
 
   private def getAcsSnapshotTimestampsAfter(
       start: TimestampWithMigrationId

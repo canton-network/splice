@@ -19,22 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ScanKeyValueProvider(val store: KeyValueStore, val loggerFactory: NamedLoggerFactory)
     extends NamedLogging {
 
-  private val latestAcsSnapshotInBulkStorageKey = "latest_acs_snapshot_in_bulk_storage"
   private val latestUpdatesSegmentInBulkStorageKey = "latest_updates_segment_in_bulk_storage"
-
-  final def setLatestAcsSnapshotsInBulkStorage(
-      ts: TimestampWithMigrationId
-  )(implicit tc: TraceContext): Future[Unit] = store.setValue(
-    latestAcsSnapshotInBulkStorageKey,
-    ts,
-  )
-
-  final def getLatestAcsSnapshotInBulkStorage()(implicit
-      tc: TraceContext,
-      ec: ExecutionContext,
-  ): OptionT[Future, TimestampWithMigrationId] = {
-    store.readValueAndLogOnDecodingFailure(latestAcsSnapshotInBulkStorageKey)
-  }
 
   final def setLatestUpdatesSegmentInBulkStorage(
       segment: UpdatesSegment
@@ -51,7 +36,7 @@ class ScanKeyValueProvider(val store: KeyValueStore, val loggerFactory: NamedLog
 }
 
 object ScanKeyValueProvider {
-  implicit val timestampCodec: Codec[CantonTimestamp] =
+  private implicit val timestampCodec: Codec[CantonTimestamp] =
     Codec
       .from[Long](implicitly, implicitly)
       .iemap(timestamp => CantonTimestamp.fromProtoPrimitive(timestamp).leftMap(_.message))(
@@ -59,6 +44,10 @@ object ScanKeyValueProvider {
       )
   implicit val acsSnapshotTimestampMigrationCodec: Codec[TimestampWithMigrationId] =
     deriveCodec[TimestampWithMigrationId]
+//  implicit val acsSnapshotTimestampMigrationEncoder: Encoder[TimestampWithMigrationId] =
+//    acsSnapshotTimestampMigrationCodec
+//  implicit val acsSnapshotTimestampMigrationDecoder: Decoder[TimestampWithMigrationId] =
+//    acsSnapshotTimestampMigrationCodec
 
   implicit val updatesSegmentCodec: Codec[UpdatesSegment] = deriveCodec[UpdatesSegment]
 }

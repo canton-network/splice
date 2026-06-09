@@ -1,3 +1,6 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -37,23 +40,11 @@ class AcsSnapshotBulkStorageStaging(
       appConfig,
       acsSnapshotStore,
       updateHistory,
+      kvProvider,
       loggerFactory,
     ) {
-  override protected def readLatestProcessedSnapshotTimestamp(implicit
-      tc: TraceContext
-  ): Future[Option[TimestampWithMigrationId]] =
-    kvProvider.getLatestAcsSnapshotInBulkStorage().value
 
-  override protected def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(
-      implicit tc: TraceContext
-  ): Future[Unit] =
-    kvProvider
-      .setLatestAcsSnapshotsInBulkStorage(ts)
-      .map(_ => {
-        logger.info(
-          s"Successfully completed dumping snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
-        )
-      })
+  override val kvStoreKey = "latest_acs_snapshot_in_bulk_storage"
 
   override protected def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
@@ -104,11 +95,8 @@ class AcsSnapshotBulkStorageStaging(
   def getAcsSnapshotAtOrBefore(
       atOrBeforeTimestamp: CantonTimestamp
   )(implicit tc: TraceContext): Future[AcsSnapshotObjects] = {
-
     for {
-      snapshotTs <- kvProvider
-        .getLatestAcsSnapshotInBulkStorage()
-        .value
+      snapshotTs <- readLatestProcessedSnapshotTimestamp
         .map {
           case None =>
             throw Status.NOT_FOUND
