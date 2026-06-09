@@ -32,6 +32,7 @@ import com.digitalasset.canton.integration.util.{
   HasCommandRunnersHelpers,
   HasReassignmentCommandsHelpers,
   TestUtils,
+  TrafficControlUtils,
 }
 import com.digitalasset.canton.integration.{
   CommunityIntegrationTest,
@@ -40,7 +41,6 @@ import com.digitalasset.canton.integration.{
   EnvironmentSetupPlugin,
   SharedEnvironment,
   TestConsoleEnvironment,
-  TrafficTestUtils,
 }
 import com.digitalasset.canton.ledger.participant.state.ReassignmentCommandsBatch.{
   DifferingSynchronizers,
@@ -92,7 +92,7 @@ abstract class ReassignmentServiceIntegrationTest
       .addConfigTransforms(
         // Ensure reassignments are not tripped up by some participants being a little behind.
         ConfigTransforms.updateTargetTimestampForwardTolerance(30.seconds),
-        ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag,
+        ConfigTransforms.enableAlphaMultiSynchronizerTopologyFeatureFlag,
       )
       .withSetup { implicit env =>
         import env.*
@@ -151,7 +151,7 @@ abstract class ReassignmentServiceIntegrationTest
       }
       .withTrafficControl(
         TestUtils.waitForTargetTimeOnSynchronizerNode(wallClock.now, logger),
-        TrafficTestUtils.predictableTraffic,
+        TrafficControlUtils.predictableTraffic,
         topUpAllMembers = true,
         disableCommitments = true,
       )

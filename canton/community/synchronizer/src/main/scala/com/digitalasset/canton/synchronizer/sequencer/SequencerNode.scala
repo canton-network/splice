@@ -328,6 +328,7 @@ class SequencerNodeBootstrap(
           SynchronizerStore(synchronizerId),
           storage,
           indexedStringStore,
+          predecessor = None,
           synchronizerId.protocolVersion,
           timeouts,
           parameters.batchingConfig,
@@ -472,6 +473,7 @@ class SequencerNodeBootstrap(
                   config.topology,
                   Some(crypto.staticSynchronizerParameters),
                   timeouts,
+                  futureSupervisor = futureSupervisor,
                   loggerFactory,
                   // only filter out completed proposals if this is a bootstrap from genesis.
                   cleanupTopologySnapshot = sequencerSnapshot.isEmpty,
@@ -559,15 +561,9 @@ class SequencerNodeBootstrap(
                 logger.info(
                   s"Using config override for lsu sequencing bounds: $lsuSequencingBoundsOverride"
                 )
-                EitherT.fromEither[FutureUnlessShutdown](
-                  LsuSequencingBounds
-                    .create(
-                      lowerBoundSequencingTimeExclusive =
-                        lsuSequencingBoundsOverride.lowerBoundSequencingTimeExclusive,
-                      upgradeTime = lsuSequencingBoundsOverride.upgradeTime,
-                    )
-                    .map(Option(_))
-                )
+                LsuSequencingBounds
+                  .create(lsuSequencingBoundsOverride, synchronizerTopologyStore)
+                  .map(Option(_))
 
               case None =>
                 EitherT
@@ -581,13 +577,14 @@ class SequencerNodeBootstrap(
 
           sequencerSnapshotTimestamp = topologyAndSequencerSnapshot
             .flatMap(_._2)
-            .map(sequencerSnapshot => EffectiveTime(sequencerSnapshot.lastTs))
+            .map(sequencerSnapshot => SequencedTime(sequencerSnapshot.lastTs))
           processorAndClient <- EitherT
             .right(
               TopologyTransactionProcessor
                 .createProcessorAndClientForSynchronizer(
                   synchronizerTopologyStore,
                   upgradeTimeFromPredecessor = lsuSequencingBounds.map(_.upgradeTime),
+                  sequencerSnapshotTimestamp = sequencerSnapshotTimestamp,
                   crypto.pureCrypto,
                   parameters,
                   arguments.config.topology,
@@ -596,7 +593,7 @@ class SequencerNodeBootstrap(
                   arguments.metrics.topologyCache,
                   futureSupervisor,
                   synchronizerLoggerFactory,
-                )(sequencerSnapshotTimestamp)
+                )
             )
           (topologyProcessor, topologyClient) = processorAndClient
           _ = addCloseable(topologyProcessor)
@@ -661,7 +658,6 @@ class SequencerNodeBootstrap(
               crypto,
               cryptoConfig,
               Some(arguments.metrics.kmsMetrics),
-              parameters.batchingConfig.parallelism,
               parameters.cachingConfigs.publicKeyConversionCache,
               parameters.processingTimeouts,
               futureSupervisor,
@@ -679,7 +675,6 @@ class SequencerNodeBootstrap(
             topologyClient,
             staticSynchronizerParameters,
             crypto,
-            parameters.batchingConfig.parallelism,
             parameters.cachingConfigs.publicKeyConversionCache,
             parameters.processingTimeouts,
             futureSupervisor,
@@ -704,15 +699,6 @@ class SequencerNodeBootstrap(
               sequencingTimeLowerBoundExclusive =
                 lsuSequencingBounds.map(_.lowerBoundSequencingTimeExclusive),
               synchronizerLoggerFactory,
-            )
-
-          sequencerSynchronizerParamsLookup: DynamicSynchronizerParametersLookup[
-            SequencerSynchronizerParameters
-          ] =
-            SynchronizerParametersLookup.forSequencerSynchronizerParameters(
-              config.publicApi.overrideMaxRequestSize,
-              topologyClient,
-              loggerFactory,
             )
 
           sequencerChannelServiceO = Option.when(
@@ -755,6 +741,8 @@ class SequencerNodeBootstrap(
               new GrpcSequencerAuthenticationService(
                 authenticationService,
                 staticSynchronizerParameters.protocolVersion,
+                disableReleaseVersionHandshakeCheck =
+                  parameters.disableReleaseVersionHandshakeCheck,
                 loggerFactory,
               )
 
@@ -796,7 +784,8 @@ class SequencerNodeBootstrap(
               authenticationServices.memberAuthenticationService.isMemberCurrentlyActive(member)(
                 tc
               ),
-            sequencerSynchronizerParamsLookup,
+            topologyClient,
+            config.publicApi.overrideMaxRequestSize,
             parameters,
             staticSynchronizerParameters.protocolVersion,
             topologyStateForInitializationService,
@@ -872,7 +861,8 @@ class SequencerNodeBootstrap(
             topologyConfig = config.topology,
             store = synchronizerTopologyStore,
             outboxQueue = new SynchronizerOutboxQueue(timeouts, synchronizerLoggerFactory),
-            dispatchQueueBackpressureLimit = parameters.dispatchQueueBackpressureLimit,
+            dispatchQueueBackpressureLimit =
+              parameters.topologyConfig.dispatchQueueBackpressureLimit,
             disableOptionalTopologyChecks = config.topology.disableOptionalTopologyChecks,
             exitOnFatalFailures = parameters.exitOnFatalFailures,
             timeouts = timeouts,

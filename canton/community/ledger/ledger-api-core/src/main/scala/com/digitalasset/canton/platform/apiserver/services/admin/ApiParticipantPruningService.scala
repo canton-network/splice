@@ -10,7 +10,6 @@ import com.daml.ledger.api.v2.admin.participant_pruning_service.{
 }
 import com.daml.metrics.Tracked
 import com.daml.metrics.api.MetricsContext
-import com.daml.tracing.Telemetry
 import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.ledger.api.ValidationLogger
 import com.digitalasset.canton.ledger.api.grpc.GrpcApiService
@@ -24,10 +23,7 @@ import com.digitalasset.canton.ledger.participant.state.index.{
   IndexUpdateService,
   LedgerEndService,
 }
-import com.digitalasset.canton.logging.LoggingContextWithTrace.{
-  implicitExtractTraceContext,
-  withEnrichedLoggingContext,
-}
+import com.digitalasset.canton.logging.LoggingContextWithTrace.implicitExtractTraceContext
 import com.digitalasset.canton.logging.TracedLoggerOps.TracedLoggerOps
 import com.digitalasset.canton.logging.{
   ErrorLoggingContext,
@@ -38,21 +34,18 @@ import com.digitalasset.canton.logging.{
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.GrpcErrors.AbortedDueToShutdown
 import com.digitalasset.canton.platform.apiserver.ApiException
-import com.digitalasset.canton.platform.apiserver.services.logging
 import com.digitalasset.canton.scheduler.SafeToPruneCommitmentState
+import com.digitalasset.canton.tracing.TraceContextGrpc
 import com.digitalasset.canton.util.Thereafter.syntax.*
-import com.digitalasset.daml.lf.data.Ref
 import io.grpc.protobuf.StatusProto
 import io.grpc.{ServerServiceDefinition, StatusRuntimeException}
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 final class ApiParticipantPruningService private (
     readBackend: IndexParticipantPruningService with LedgerEndService,
     syncService: SyncService,
     metrics: LedgerApiServerMetrics,
-    telemetry: Telemetry,
     safeToPruneCommitmentState: Option[SafeToPruneCommitmentState],
     val loggerFactory: NamedLoggerFactory,
 )(implicit executionContext: ExecutionContext)
@@ -66,73 +59,54 @@ final class ApiParticipantPruningService private (
   override def close(): Unit = ()
 
   override def prune(request: PruneRequest): Future[PruneResponse] = {
-    val loggingContextWithTrace = LoggingContextWithTrace(loggerFactory, telemetry)
+    implicit val loggingContext: LoggingContextWithTrace =
+      LoggingContextWithTrace(loggerFactory)(TraceContextGrpc.fromGrpcContext)
 
-    val submissionIdOrErr = Ref.SubmissionId
-      .fromString(
-        if (request.submissionId.nonEmpty) request.submissionId else UUID.randomUUID().toString
-      )
-      .left
-      .map(err =>
-        invalidArgument(s"submission_id $err")(
-          errorLoggingContext(request.submissionId)(loggingContextWithTrace)
-        )
-      )
+    checkPruningIsNotInProgress { () =>
+      logger.info(s"Pruning up to ${request.pruneUpTo}.")
+      (for {
+        pruneUpTo <- validateRequest(request)
 
-    submissionIdOrErr.fold(
-      t =>
-        Future.failed(
-          ValidationLogger.logFailureWithTrace(logger, request, t)(loggingContextWithTrace)
-        ),
-      submissionId =>
-        withEnrichedLoggingContext(logging.submissionId(submissionId)) { implicit loggingContext =>
-          logger.info(
-            s"Pruning up to ${request.pruneUpTo}, ${loggingContext.serializeFiltered("submissionId")}."
-          )
-          (for {
-            pruneUpTo <- validateRequest(request)
+        // If write service pruning succeeds but ledger api server index pruning fails, the user can bring the
+        // systems back in sync by reissuing the prune request at the currently specified or later offset.
+        _ = logger.debug("Pruning write service")
+        _ <- Tracked.future(
+          metrics.services.pruning.pruneCommandStarted,
+          metrics.services.pruning.pruneCommandCompleted,
+          pruneSyncService(pruneUpTo),
+        )(MetricsContext(("phase", "underlyingLedger")))
 
-            // If write service pruning succeeds but ledger api server index pruning fails, the user can bring the
-            // systems back in sync by reissuing the prune request at the currently specified or later offset.
-            _ = logger.debug("Pruning write service")
-            _ <- Tracked.future(
-              metrics.services.pruning.pruneCommandStarted,
-              metrics.services.pruning.pruneCommandCompleted,
-              pruneSyncService(pruneUpTo, submissionId),
-            )(MetricsContext(("phase", "underlyingLedger")))
+        _ = logger.debug("Getting incomplete reassignments")
+        getIncompleteReassignmentOffsets = (offset: Offset) =>
+          syncService
+            .incompleteReassignmentOffsets(
+              validAt = offset,
+              stakeholders = Set.empty, // getting all incomplete reassignments
+            )
+            .failOnShutdownTo(AbortedDueToShutdown.Error().asGrpcError)
+        previousPrunedOffset <- readBackend.indexDbPrunedUpto
+        incompleteReassignmentOffsets <-
+          getIncompleteReassignmentOffsets(pruneUpTo)
+        previousIncompleteReassignmentOffsets <-
+          previousPrunedOffset
+            .map(getIncompleteReassignmentOffsets)
+            .getOrElse(Future.successful(Vector.empty))
 
-            _ = logger.debug("Getting incomplete reassignments")
-            getIncompleteReassignmentOffsets = (offset: Offset) =>
-              syncService
-                .incompleteReassignmentOffsets(
-                  validAt = offset,
-                  stakeholders = Set.empty, // getting all incomplete reassignments
-                )
-                .failOnShutdownTo(AbortedDueToShutdown.Error().asGrpcError)
-            previousPrunedOffset <- readBackend.indexDbPrunedUpto
-            incompleteReassignmentOffsets <-
-              getIncompleteReassignmentOffsets(pruneUpTo)
-            previousIncompleteReassignmentOffsets <-
-              previousPrunedOffset
-                .map(getIncompleteReassignmentOffsets)
-                .getOrElse(Future.successful(Vector.empty))
+        _ = logger.debug("Pruning Ledger API Server")
+        pruneResponse <- Tracked.future(
+          metrics.services.pruning.pruneCommandStarted,
+          metrics.services.pruning.pruneCommandCompleted,
+          pruneLedgerApiServerIndex(
+            previousPrunedOffset,
+            previousIncompleteReassignmentOffsets,
+            pruneUpTo,
+            incompleteReassignmentOffsets,
+          ),
+        )(MetricsContext(("phase", "ledgerApiServerIndex")))
 
-            _ = logger.debug("Pruning Ledger API Server")
-            pruneResponse <- Tracked.future(
-              metrics.services.pruning.pruneCommandStarted,
-              metrics.services.pruning.pruneCommandCompleted,
-              pruneLedgerApiServerIndex(
-                previousPrunedOffset,
-                previousIncompleteReassignmentOffsets,
-                pruneUpTo,
-                incompleteReassignmentOffsets,
-              ),
-            )(MetricsContext(("phase", "ledgerApiServerIndex")))
-
-          } yield pruneResponse)
-            .thereafter(logger.logErrorsOnCall[PruneResponse](loggingContext.traceContext))
-        }(loggingContextWithTrace),
-    )
+      } yield pruneResponse)
+        .thereafter(logger.logErrorsOnCall[PruneResponse](loggingContext.traceContext))
+    }
   }
 
   private def validateRequest(
@@ -151,15 +125,14 @@ final class ApiParticipantPruningService private (
       )
 
   private def pruneSyncService(
-      pruneUpTo: Offset,
-      submissionId: Ref.SubmissionId,
+      pruneUpTo: Offset
   )(implicit loggingContext: LoggingContextWithTrace): Future[Unit] = {
     import state.PruningResult.*
     logger.info(
       s"About to prune participant ledger up to ${pruneUpTo.unwrap} inclusively starting with the write service."
     )
     syncService
-      .prune(pruneUpTo, submissionId, safeToPruneCommitmentState)
+      .prune(pruneUpTo, safeToPruneCommitmentState)
       .flatMap {
         case NotPruned(status) =>
           Future.failed(new ApiException(StatusProto.toStatusRuntimeException(status)))
@@ -217,15 +190,18 @@ final class ApiParticipantPruningService private (
           )
     } yield pruneUpTo
 
-  private def errorLoggingContext(submissionId: String)(implicit
-      loggingContext: LoggingContextWithTrace
-  ): ErrorLoggingContext =
-    ErrorLoggingContext.withExplicitCorrelationId(
-      logger,
-      loggingContext.toPropertiesMap,
-      loggingContext.traceContext,
-      submissionId,
-    )
+  // Fast-path check to reject early if pruning is already in progress.
+  // The actual serialization guard lives in JdbcLedgerDao.ensurePruningIsNotInProgress.
+  private def checkPruningIsNotInProgress[T](f: () => Future[T])(implicit
+      errorLogger: ErrorLoggingContext
+  ): Future[T] =
+    if (!readBackend.isPruningInProgress) {
+      f()
+    } else {
+      Future.failed(
+        RequestValidationErrors.ParticipantPruningInProgress.Reject().asGrpcError
+      )
+    }
 }
 
 object ApiParticipantPruningService {
@@ -233,7 +209,6 @@ object ApiParticipantPruningService {
       readBackend: IndexParticipantPruningService with LedgerEndService with IndexUpdateService,
       syncService: SyncService,
       metrics: LedgerApiServerMetrics,
-      telemetry: Telemetry,
       safeToPruneCommitmentState: Option[SafeToPruneCommitmentState],
       loggerFactory: NamedLoggerFactory,
   )(implicit
@@ -243,7 +218,6 @@ object ApiParticipantPruningService {
       readBackend,
       syncService,
       metrics,
-      telemetry,
       safeToPruneCommitmentState,
       loggerFactory,
     )

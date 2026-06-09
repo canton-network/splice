@@ -3,17 +3,20 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.time
 
+import cats.data.EitherT
 import cats.syntax.option.*
 import cats.syntax.traverse.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.ErrorLoggingContext
+import com.digitalasset.canton.synchronizer.sequencer.config.LsuSequencingBoundsOverride
 import com.digitalasset.canton.topology.processing.SequencedTime
 import com.digitalasset.canton.topology.store.TopologyStore
 import com.digitalasset.canton.topology.store.TopologyStoreId.SynchronizerStore
 import com.digitalasset.canton.topology.transaction.{LsuAnnouncement, TopologyMapping}
-import com.digitalasset.canton.util.ErrorUtil
+import com.digitalasset.canton.util.{EitherTUtil, ErrorUtil}
+import com.google.common.annotations.VisibleForTesting
 
 import scala.concurrent.ExecutionContext
 
@@ -43,21 +46,51 @@ final case class LsuSequencingBounds private (
 ) {
   require(
     lowerBoundSequencingTimeExclusive <= upgradeTime,
-    s"lowerBoundSequencingTimeExclusive should be <= upgradeTime but found $lowerBoundSequencingTimeExclusive and $upgradeTime",
+    s"lowerBoundSequencingTimeExclusive should be <= upgradeTime but found $lowerBoundSequencingTimeExclusive and $upgradeTime respectively",
   )
 }
 
 object LsuSequencingBounds {
+
+  /** Create an [[LsuSequencingBounds]] from the config.
+    */
   def create(
+      lsuSequencingBoundsOverride: LsuSequencingBoundsOverride,
+      store: TopologyStore[SynchronizerStore],
+  )(implicit
+      errorLoggingContext: ErrorLoggingContext,
+      ec: ExecutionContext,
+  ): EitherT[FutureUnlessShutdown, String, LsuSequencingBounds] = {
+
+    val LsuSequencingBoundsOverride(lowerBoundSequencingTimeExclusive, upgradeTime) =
+      lsuSequencingBoundsOverride
+
+    for {
+      upgradeTimeFromStoreO <- EitherT.liftF(findUpgradeTimeFromPredecessor(store))
+      _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
+        upgradeTimeFromStoreO.isEmpty,
+        "LsuSequencingBoundsOverride cannot be set if an LSU announcement exists in the topology store",
+      )
+
+      lsuSequencingBounds <- EitherT.cond[FutureUnlessShutdown](
+        lowerBoundSequencingTimeExclusive <= upgradeTime,
+        LsuSequencingBounds(lowerBoundSequencingTimeExclusive, upgradeTime),
+        s"lowerBoundSequencingTimeExclusive should be <= upgradeTime but found $lowerBoundSequencingTimeExclusive and $upgradeTime",
+      )
+    } yield lsuSequencingBounds
+  }
+
+  @VisibleForTesting
+  // Bypass all checks. Only for testing
+  def unsafeCreate(
       lowerBoundSequencingTimeExclusive: CantonTimestamp,
       upgradeTime: CantonTimestamp,
-  ): Either[String, LsuSequencingBounds] =
-    Either.cond(
-      lowerBoundSequencingTimeExclusive <= upgradeTime,
-      LsuSequencingBounds(lowerBoundSequencingTimeExclusive, upgradeTime),
-      s"lowerBoundSequencingTimeExclusive should be <= upgradeTime but found $lowerBoundSequencingTimeExclusive and $upgradeTime",
-    )
+  ): LsuSequencingBounds = LsuSequencingBounds(lowerBoundSequencingTimeExclusive, upgradeTime)
 
+  /** Create an [[LsuSequencingBounds]] from a topology store. Returns None if there are no relevant
+    * LSU announcement. An announcement is considered relevant if the successor psid matches the
+    * psid of the topology store.
+    */
   def create(
       store: TopologyStore[SynchronizerStore]
   )(implicit
@@ -77,7 +110,7 @@ object LsuSequencingBounds {
               case Some((_, latestEffectiveTime)) =>
                 /*
                 Note: the require in the LsuSequencingBounds might throw if the invariant is not respected.
-                This is fine because it means that something went terribly wrong: a topology change is effective after ugprade time.
+                This is fine because it means that something went terribly wrong: a topology change is effective after upgrade time.
                  */
                 LsuSequencingBounds(
                   upgradeTime = upgradeTime,
@@ -93,7 +126,7 @@ object LsuSequencingBounds {
     } yield lsuSequencingBounds
   }
 
-  def findUpgradeTimeFromPredecessor(
+  private def findUpgradeTimeFromPredecessor(
       store: TopologyStore[SynchronizerStore]
   )(implicit
       errorLoggingContext: ErrorLoggingContext,

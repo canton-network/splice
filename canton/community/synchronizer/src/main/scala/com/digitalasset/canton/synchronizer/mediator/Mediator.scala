@@ -13,7 +13,7 @@ import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.crypto.SynchronizerCryptoClient
-import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.environment.CantonNodeParameters
 import com.digitalasset.canton.error.MediatorError
 import com.digitalasset.canton.lifecycle.*
@@ -106,6 +106,19 @@ private[mediator] class Mediator(
     extends NamedLogging
     with FlagCloseableAsync
     with HasCloseContext {
+
+  val lsuSuccessorAfterUpgradeTime: Mediator.LsuSuccessorLookup =
+    new Mediator.LsuSuccessorLookup {
+      def getKnownSuccessor(
+          at: CantonTimestamp
+      )(implicit traceContext: TraceContext): FutureUnlessShutdown[Option[SynchronizerSuccessor]] =
+        for {
+          snapshot <- syncCrypto.ips.awaitSnapshot(at)
+          lsuO <- snapshot.announcedLsu()
+
+        } yield lsuO.map { case (successor, _) => successor }
+
+    }
 
   def psid: PhysicalSynchronizerId = sequencerClient.psid
   def protocolVersion: ProtocolVersion = sequencerClient.protocolVersion
@@ -211,15 +224,29 @@ private[mediator] class Mediator(
       newTracedPrehead: Traced[SequencerCounterCursorPrehead]
   ): Unit = newTracedPrehead.withTraceContext { implicit traceContext => newPrehead =>
     // Update the in memory clean pre-head
-    cleanPreheadTimestamp.set(newPrehead.timestamp)
-    // Advance the in-memory watermark and unblock any inspection service streams waiting on it.
-    recordOrderTimeAwaiter.notifyAwaitedFutures(newPrehead.timestamp)
-    FutureUtil.doNotAwait(
-      synchronizeWithClosing("prune mediator deduplication store")(
-        state.deduplicationStore.prune(newPrehead.timestamp)
-      ).onShutdown(logger.info("Not pruning the mediator deduplication store due to shutdown")),
-      "pruning the mediator deduplication store failed",
+    val newCleanPreheadTimestamp = cleanPreheadTimestamp.updateAndGet {
+      /* From the perspective of this handler, it can be called with out-of-order pre-head timestamps
+       * due to concurrent future execution, so take the max out of both new and current.
+       * See [[com.digitalasset.canton.sequencing.handlers.CleanSequencerCounterTracker]]
+       */
+      _.max(newPrehead.timestamp)
+    }
+
+    logger.debug(
+      s"Advanced cached clean prehead timestamp for verdicts watermark to $newCleanPreheadTimestamp (received newPrehead was ${newPrehead.timestamp})"
     )
+
+    // We only need to run this if the prehead was in fact updated to a newer timestamp
+    if (newCleanPreheadTimestamp == newPrehead.timestamp) {
+      // Advance the in-memory watermark and unblock any inspection service streams waiting on it.
+      recordOrderTimeAwaiter.notifyAwaitedFutures(newPrehead.timestamp)
+      FutureUtil.doNotAwait(
+        synchronizeWithClosing("prune mediator deduplication store")(
+          state.deduplicationStore.prune(newPrehead.timestamp)
+        ).onShutdown(logger.info("Not pruning the mediator deduplication store due to shutdown")),
+        "pruning the mediator deduplication store failed",
+      )
+    }
   }
 
   /** Prune all unnecessary data from the mediator state and sequenced events store. Will validate
@@ -307,10 +334,9 @@ private[mediator] class Mediator(
       override def name: String = s"mediator-$mediatorId"
 
       override def subscriptionStartsAt(
-          start: SubscriptionStart,
-          synchronizerTimeTracker: SynchronizerTimeTracker,
+          start: SubscriptionStart
       )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
-        topologyTransactionProcessor.subscriptionStartsAt(start, synchronizerTimeTracker)
+        topologyTransactionProcessor.subscriptionStartsAt(start)
 
       private def sendMalformedRejection(
           rootHashMessages: Seq[OpenEnvelope[RootHashMessage[SerializedRootHashMessagePayload]]],
@@ -417,6 +443,16 @@ private[mediator] class Mediator(
 }
 
 private[mediator] object Mediator {
+
+  trait LsuSuccessorLookup {
+
+    /** Returns the known successor to the current physical synchronizer id.
+      */
+    def getKnownSuccessor(
+        at: CantonTimestamp
+    )(implicit traceContext: TraceContext): FutureUnlessShutdown[Option[SynchronizerSuccessor]]
+  }
+
   sealed trait PruningError {
     def message: String
   }

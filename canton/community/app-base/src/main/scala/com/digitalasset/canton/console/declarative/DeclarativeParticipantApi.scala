@@ -190,7 +190,7 @@ class DeclarativeParticipantApi(
         participantId,
         synchronizerId,
         featureFlags =
-          (ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer +: oldFeatureFlags),
+          (ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer +: oldFeatureFlags),
       )
       queryAdminApi(
         TopologyAdminCommands.Write.Propose(
@@ -211,7 +211,7 @@ class DeclarativeParticipantApi(
               current <- fetchSynchronizerTrustCertificate(sid.synchronizerId)
               currentFeatureFlags = current.headOption.map(_.item.featureFlags).getOrElse(Seq.empty)
               shouldUpdate = !currentFeatureFlags.contains(
-                ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer
+                ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer
               )
               done <-
                 if (shouldUpdate) {
@@ -429,7 +429,14 @@ class DeclarativeParticipantApi(
   ): Either[String, UpdateResult] = {
 
     def fetchUserRights(user: LedgerApiUser): Either[String, DeclarativeUserConfig] = user match {
-      case LedgerApiUser(id, primaryParty, isDeactivated, metadata, identityProviderId) =>
+      case LedgerApiUser(
+            id,
+            primaryParty,
+            isDeactivated,
+            metadata,
+            identityProviderId,
+            primaryPartyAuthentication,
+          ) =>
         queryLedgerApi(
           LedgerApiCommands.Users.Rights.List(id = id, identityProviderId = identityProviderId)
         ).map { rights =>
@@ -446,6 +453,7 @@ class DeclarativeParticipantApi(
               identityProviderAdmin = rights.identityProviderAdmin,
               readAsAnyParty = rights.readAsAnyParty,
             ),
+            primaryPartyAuthentication = primaryPartyAuthentication,
           )(resourceVersion = metadata.resourceVersion)
         }
     }
@@ -510,6 +518,7 @@ class DeclarativeParticipantApi(
           readAsAnyParty = user.rights.readAsAnyParty,
           executeAs = user.rights.executeAs.map(PartyId.tryFromProtoPrimitive).map(_.toLf),
           executeAsAnyParty = user.rights.executeAsAnyParty,
+          primaryPartyAuthentication = user.primaryPartyAuthentication,
         )
       ).map(_ => ())
 
@@ -531,6 +540,9 @@ class DeclarativeParticipantApi(
             annotationsUpdate =
               Option.when(desired.annotations != existing.annotations)(desired.annotations),
             resourceVersionO = existing.resourceVersion.some,
+            primaryPartyAuthenticationUpdate = Option.when(
+              desired.primaryPartyAuthentication != existing.primaryPartyAuthentication
+            )(desired.primaryPartyAuthentication),
           )
         ).map(_ => ())
       } else Either.unit

@@ -27,7 +27,9 @@ service SynchronizerConnectivityService {
   // Reconnect to a registered synchronizer
   rpc ReconnectSynchronizer(ReconnectSynchronizerRequest) returns (ReconnectSynchronizerResponse);
 
-  // Reconfigure a synchronizer connection
+  // Reconfigure an active synchronizer connection
+  // If a logical synchronizer upgrade has been announced, the config for the successor synchronizer
+  // gets updated automatically on the basis of the provided config for the active synchronizer.
   rpc ModifySynchronizer(ModifySynchronizerRequest) returns (ModifySynchronizerResponse);
 
   // Disconnect from a connected synchronizer
@@ -202,6 +204,10 @@ message PerformManualLsuRequest {
     optional bytes custom_trust_certificates = 2;
   }
 
+  message SequencerSuccessors {
+    map<string, SequencerConnection> successors = 1;
+  }
+
   // the current physical synchronizer_id
   string physical_synchronizer_id = 1;
 
@@ -218,8 +224,18 @@ message PerformManualLsuRequest {
   */
   optional google.protobuf.Timestamp upgrade_time = 3;
 
-  // SHOULD contain one entry for each sequencer currently registered by the participant
-  map<string, SequencerConnection> sequencer_successors = 4;
+  /*
+     Contains the list of successors or a new config
+      - The new config allows to replace the existing config.
+        This is useful if one sequencer does not migrate (and thus does not have a successor).
+      - The successors should be used in all other cases.
+  */
+  oneof successor_connection_configuration {
+    // SHOULD contain one entry for each sequencer currently registered by the participant
+    SequencerSuccessors sequencer_successors = 4;
+
+    SynchronizerConnectionConfig config = 5;
+  }
 }
 
 message PerformManualLsuResponse {}

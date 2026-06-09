@@ -92,7 +92,7 @@ class Engine(
   private[this] val stablePackageIds = StablePackages.ids(config.allowedLanguageVersions)
 
   private[engine] val preprocessor =
-    new preprocessing.Preprocessor(
+    new refinement.Preprocessor(
       compiledPackages = compiledPackages,
       loadPackage = loadPackage,
       forbidLocalContractIds = config.forbidLocalContractIds,
@@ -272,7 +272,7 @@ class Engine(
   /** Check if the given transaction is a valid result of some single-submitter command.
     *
     * Formally, for all tx, pcs, pkgs, keys:
-    *   evaluate(validate(tx, ledgerEffectiveTime)) == ResultDone(()) <==> exists cmds. evaluate(submit(cmds)) = tx
+    *   evaluate(validate(tx, ledgerEffectiveTime)) == Result.Unit <==> exists cmds. evaluate(submit(cmds)) = tx
     * where:
     *   evaluate(result) = result.consume(pcs, pkgs, keys)
     *
@@ -500,7 +500,7 @@ class Engine(
     }
   }
 
-  private lazy val enricher = new Enricher(
+  private lazy val enricher = refinement.Enricher(
     compiledPackages,
     loadPackage,
     addTypeInfo = true,
@@ -520,6 +520,33 @@ class Engine(
     val abort = () => {
       machine.abort()
       Some(machine.transactionTrace(config.transactionTraceMaxLength))
+    }
+
+    def checkAllowedDeps(deps: Set[PackageId]): Result[Unit] = {
+      val allowedLangVersions = machine.contractKeyUniqueness match {
+        case ContractStateMachine.Mode.NUCK =>
+          config.allowedLanguageVersions
+        case ContractStateMachine.Mode.NoKey =>
+          config.allowedLanguageVersions.filter(_ < LanguageVersion.featureContractKeys.versionRange.min)
+      }
+
+      val disallowedPackages =
+        deps.view
+          .map(pkgId => (pkgId, compiledPackages.signatures(pkgId).languageVersion))
+          .filterNot { case (pkgId, langVer) =>
+            (
+              (allowedLangVersions.contains(langVer) || stablePackageIds(pkgId))
+            )
+          }
+
+      disallowedPackages.headOption match {
+        case Some((pkgId, pkg)) =>
+          ResultError(
+            Error.Package.AllowedLanguageVersion(pkgId, pkg, allowedLangVersions)
+          )
+        case None =>
+          Result.Unit
+      }
     }
 
     def finish: Result[(SubmittedTransaction, Tx.Metadata, Speedy.Metrics)] =
@@ -545,7 +572,7 @@ class Engine(
                   "transaction encoding/decoding is not idempotent",
                 )
                 // check that impoverishment is indempotent on engine output
-                poor = Enricher.impoverish(tx)
+                poor = refinement.Enricher.impoverish(tx)
                 _ <- Either.cond(
                   tx == poor,
                   (),
@@ -557,7 +584,7 @@ class Engine(
                   .consume()
                   .left
                   .map("transaction enrichment fails: " + _)
-                poor = Enricher.impoverish(rich)
+                poor = refinement.Enricher.impoverish(rich)
                 _ <- Either.cond(
                   tx == poor,
                   (),
@@ -624,7 +651,7 @@ class Engine(
                 ResultError(Error.Interpretation.Internal(loc, errMsg, None))
 
               case None =>
-                ResultDone((tx, meta, machine.metrics))
+                checkAllowedDeps(deps).map(_ => (tx, meta, machine.metrics))
             }
           }
         case Left(err) =>
@@ -861,7 +888,7 @@ class Engine(
         config.iterationsBetweenInterruptions,
       )
       r <- interpret(machine, () => { machine.abort(); None })
-      version = machine.tmplId2TxVersion(interfaceId)
+      version = machine.assignSerializationVersion(hasKey = false)
     } yield Versioned(version, r.toNormalizedValue)
   }
 
@@ -919,7 +946,7 @@ class Engine(
           _ <-
             if (!compiledPackages.contains(pkgId))
               loadPackage(pkgId, language.Reference.Template(templateId.toRef))
-            else ResultDone.Unit
+            else Result.Unit
           sValue <- new ValueTranslator(
             compiledPackages.pkgInterface,
             forbidLocalContractIds = true,
@@ -1076,7 +1103,7 @@ object Engine {
   }
 
   def DevConfig: EngineConfig =
-    EngineConfig(allowedLanguageVersions = LanguageVersion.allLfVersionsRange)
+    EngineConfig(allowedLanguageVersions = LanguageVersion.allLfVersions)
   def DevEngine(loggerFactory: NamedLoggerFactory): Engine = new Engine(DevConfig, loggerFactory)
 
   private def mkInterpretationError(error: IError) =

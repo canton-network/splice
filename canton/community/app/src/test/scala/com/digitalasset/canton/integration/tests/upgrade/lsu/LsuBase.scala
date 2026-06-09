@@ -24,12 +24,19 @@ import com.digitalasset.canton.integration.*
 import com.digitalasset.canton.integration.plugins.UsePostgres
 import com.digitalasset.canton.integration.tests.TrafficBalanceSupport
 import com.digitalasset.canton.integration.tests.upgrade.lsu.LogicalUpgradeUtils.SynchronizerNodes
-import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.Fixture
+import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.{DefaultNewPV, Fixture}
 import com.digitalasset.canton.integration.util.EntitySyntax
 import com.digitalasset.canton.metrics.MetricValue
-import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId}
+import com.digitalasset.canton.metrics.MetricValue.LongPoint
+import com.digitalasset.canton.topology.{
+  Member,
+  ParticipantId,
+  PhysicalSynchronizerId,
+  SynchronizerId,
+}
 import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{SequencerAlias, config}
+import monocle.macros.syntax.lens.*
 
 /** This trait provides helpers for the logical synchronizer upgrade tests. The main goal is to
   * improve readability of each tests by focusing on the behavior we want to test and make it easier
@@ -58,7 +65,11 @@ private[lsu] trait LsuBase
 
   protected def configTransforms: Seq[ConfigTransform] = List(
     ConfigTransforms.disableAutoInit(newOldNodesResolution.keySet),
-    ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag,
+    ConfigTransforms.updateAllParticipantConfigs_(
+      _.focus(_.sequencerClient.maxConnectionRetryDelay)
+        // Retry more frequently so that eventually blocks don't need to wait for too long
+        .replace(config.NonNegativeFiniteDuration.ofSeconds(2))
+    ),
   ) ++ ConfigTransforms.enableAlphaVersionSupport
     ++ ConfigTransforms.setTopologyTransactionRegistrationTimeout(
       // As we advance the clock quite a bit, we need to bump this parameter to avoid sequencing timeouts.
@@ -103,9 +114,9 @@ private[lsu] trait LsuBase
       psid: PhysicalSynchronizerId,
       synchronizerOwners: Set[InstanceReference],
       hasTrafficControl: Boolean = true,
+      reconciliationInterval: config.PositiveDurationSeconds =
+        config.PositiveDurationSeconds.ofSeconds(1),
   ): Unit = {
-    val reconciliationInterval = config.PositiveDurationSeconds.ofSeconds(1)
-
     synchronizerOwners.foreach(
       _.topology.synchronizer_parameters.propose_update(
         psid,
@@ -223,7 +234,7 @@ private[lsu] trait LsuBase
       newSynchronizerNodes = newSynchronizerNodes,
       newOldNodesResolution = newOldNodesResolution,
       oldSynchronizerOwners = env.synchronizerOwners1,
-      newPV = newPVOverride.getOrElse(ProtocolVersion.dev),
+      newPV = newPVOverride.getOrElse(DefaultNewPV),
       // increasing the serial as well, so that the test also works when running with PV=dev
       newSerial = newSerialOverride.getOrElse(currentPsid.serial.increment.toNonNegative),
     )
@@ -312,18 +323,66 @@ object LsuBase {
   import org.scalatest.OptionValues.*
   import org.scalatest.EitherValues.*
 
+  val DefaultNewPV: ProtocolVersion = ProtocolVersion.dev
+
   // Returns the number of received messages per sender
-  def getLsuSequencingTestMetricValues(node: LocalInstanceReference): Map[Member, Long] = {
-    val metricName = "daml.received-lsu-sequencing-test-messages"
-    node.metrics
-      .list(metricName)
-      .get(metricName)
-      .value
-      .collect { case metric: MetricValue.LongPoint =>
+  def getLsuSequencingTestMetricValues(node: LocalInstanceReference): Map[Member, Long] =
+    getMetricValues(node, "daml.received-lsu-sequencing-test-messages").value.collect {
+      case metric: MetricValue.LongPoint =>
         Member.fromProtoPrimitive_(metric.attributes.get("sender").value).value -> metric.value
-      }
-      .toMap
-  }
+    }.toMap
+
+  // Returns the number of handshakes. Key is (participant id, status) where status is "success" or "failure"
+  def getParticipantHandshakesMetricValues(
+      node: LocalInstanceReference
+  ): Map[(ParticipantId, String), Long] = {
+    getMetricValues(node, "daml.sequencer.public-api.handshakes").toList
+      .flatMap(_.collect { case l: LongPoint =>
+        val member = Member
+          .fromProtoPrimitive_(l.attributes.get("member").value)
+          .value
+
+        member match {
+          case p: ParticipantId =>
+            val status = l.attributes.get("status").value
+
+            Some((p, status) -> l.value)
+          case _ => None
+        }
+      })
+      .flatten
+  }.toMap
+
+  // Return the status of the LSU, per successor psid
+  def getLsuStatusMetricValues(
+      node: LocalInstanceReference
+  ): Map[PhysicalSynchronizerId, NonNegativeInt] = {
+    getMetricValues(node, "daml.participant.lsu_status").toList.flatMap(_.collect {
+      case l: LongPoint =>
+        PhysicalSynchronizerId.tryFromString(
+          l.attributes.get("successor_psid").value
+        ) -> NonNegativeInt.tryCreate(l.value.toInt)
+    })
+  }.toMap
+
+  // Return the status of the contact of the successor per psid
+  def getLsuSuccessorContactStatusMetricValues(
+      node: LocalSequencerReference
+  ): Map[PhysicalSynchronizerId, Int] = {
+    getMetricValues(node, "daml.sequencer.lsu_contact_successor_status").toList.flatMap(_.collect {
+      case l: LongPoint =>
+        PhysicalSynchronizerId.tryFromString(
+          l.attributes.get("successor_psid").value
+        ) -> l.value.toInt
+    })
+  }.toMap
+
+  private def getMetricValues(
+      node: LocalInstanceReference,
+      metricName: String,
+  ): Option[Seq[MetricValue]] = node.metrics
+    .list(metricName)
+    .get(metricName)
 
   final case class Fixture(
       currentPsid: PhysicalSynchronizerId,
@@ -342,6 +401,8 @@ object LsuBase {
         newSerial,
         topologyChangeDelay = config.NonNegativeFiniteDuration.Zero,
       )
+
+    val lsid: SynchronizerId = currentPsid.logical
 
     val newPsid: PhysicalSynchronizerId =
       overridePsid.getOrElse(

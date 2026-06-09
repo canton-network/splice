@@ -15,13 +15,16 @@ import com.digitalasset.canton.error.*
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.ErrorLoggingContext
 import com.digitalasset.canton.networking.grpc.GrpcError
-import com.digitalasset.canton.participant.store.SyncPersistentState
+import com.digitalasset.canton.participant.store.{
+  StoredSynchronizerConnectionConfig,
+  SyncPersistentState,
+}
 import com.digitalasset.canton.participant.sync.SyncServiceError.SynchronizerRegistryErrorGroup
 import com.digitalasset.canton.participant.topology.TopologyComponentFactory
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
-import com.digitalasset.canton.sequencing.SequencerConnections
 import com.digitalasset.canton.sequencing.client.RichSequencerClient
 import com.digitalasset.canton.sequencing.client.channel.SequencerChannelClient
+import com.digitalasset.canton.sequencing.client.pool.SequencerConnectionPool
 import com.digitalasset.canton.topology.client.SynchronizerTopologyClientWithInit
 import com.digitalasset.canton.topology.{
   PhysicalSynchronizerId,
@@ -43,12 +46,11 @@ trait SynchronizerRegistry extends AutoCloseable {
     *   set).
     */
   def connect(
-      config: SynchronizerConnectionConfig,
-      synchronizerPredecessor: Option[SynchronizerPredecessor],
+      storedConfig: StoredSynchronizerConnectionConfig
   )(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[
-    Either[SynchronizerRegistryError, (SynchronizerHandle, SequencerConnections)]
+    Either[SynchronizerRegistryError, SynchronizerHandle]
   ]
 
   /** Performs the handshake with the synchronizer.
@@ -58,11 +60,11 @@ trait SynchronizerRegistry extends AutoCloseable {
     *   (with sequencer ids set).
     */
   def pureHandshake(
-      config: SynchronizerConnectionConfig
+      storedConfig: StoredSynchronizerConnectionConfig
   )(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[
-    Either[SynchronizerRegistryError, (SequencerAggregatedInfo, SequencerConnections)]
+    Either[SynchronizerRegistryError, SequencerAggregatedInfo]
   ]
 }
 
@@ -275,6 +277,29 @@ object SynchronizerRegistryError extends SynchronizerRegistryErrorGroup {
       override def logLevel: Level = Level.WARN
 
     }
+
+    @Explanation(
+      "Error indicating that the synchronizer predecessor does not match the one the topology store was initialized with."
+    )
+    object SynchronizerPredecessorMismatch
+        extends ErrorCode(
+          id = "SYNCHRONIZER_PREDECESSOR_MISMATCH",
+          ErrorCategory.InvalidGivenCurrentSystemStateOther,
+        ) {
+      final case class Error(
+          psid: PhysicalSynchronizerId,
+          existingPredecessor: Option[SynchronizerPredecessor],
+          newPredecessor: Option[SynchronizerPredecessor],
+      )(implicit
+          val loggingContext: ErrorLoggingContext
+      ) extends CantonError.Impl(
+            cause =
+              s"The synchronizer predecessor for $psid has changed: existing=$existingPredecessor, new=$newPredecessor"
+          )
+          with SynchronizerRegistryError
+
+      override def logLevel: Level = Level.WARN
+    }
   }
 
   object HandshakeErrors extends ErrorGroup() {
@@ -445,4 +470,5 @@ trait SynchronizerHandle extends AutoCloseable {
 
   def syncCrypto: SynchronizerCryptoClient
 
+  def connectionPool: SequencerConnectionPool
 }

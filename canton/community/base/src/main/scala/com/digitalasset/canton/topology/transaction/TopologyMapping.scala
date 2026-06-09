@@ -27,11 +27,7 @@ import com.digitalasset.canton.protocol.v30.Enums
 import com.digitalasset.canton.protocol.v30.Enums.ParticipantFeatureFlag
 import com.digitalasset.canton.protocol.v30.NamespaceDelegation.Restriction
 import com.digitalasset.canton.protocol.v30.TopologyMapping.Mapping
-import com.digitalasset.canton.protocol.{
-  DynamicSequencingParameters,
-  DynamicSynchronizerParameters,
-  v30,
-}
+import com.digitalasset.canton.protocol.{DynamicSynchronizerParameters, SequencingParameters, v30}
 import com.digitalasset.canton.resource.ToDbPrimitive
 import com.digitalasset.canton.sequencing.GrpcSequencerConnection
 import com.digitalasset.canton.serialization.ProtoConverter
@@ -189,8 +185,7 @@ object TopologyMapping {
         extends Code("mds", v30Code.TOPOLOGY_MAPPING_CODE_MEDIATOR_SYNCHRONIZER_STATE)
     case object SequencerSynchronizerState
         extends Code("sds", v30Code.TOPOLOGY_MAPPING_CODE_SEQUENCER_SYNCHRONIZER_STATE)
-
-    case object SequencingDynamicParametersState
+    case object SequencingParametersState
         extends Code("sep", v30Code.TOPOLOGY_MAPPING_CODE_SEQUENCING_DYNAMIC_PARAMETERS_STATE)
     case object PartyToKeyMapping
         extends Code("ptk", v30Code.TOPOLOGY_MAPPING_CODE_PARTY_TO_KEY_MAPPING)
@@ -209,9 +204,10 @@ object TopologyMapping {
       VettedPackages,
       PartyToParticipant,
       SynchronizerParametersState,
+      SequencingParametersState,
       MediatorSynchronizerState,
       SequencerSynchronizerState,
-      SequencingDynamicParametersState,
+      SequencingParametersState,
       PartyToKeyMapping,
       LsuAnnouncement,
       LsuSequencerConnectionSuccessor,
@@ -393,7 +389,7 @@ object TopologyMapping {
       case Mapping.SynchronizerParametersState(value) =>
         SynchronizerParametersState.fromProtoV30(value)
       case Mapping.SequencingDynamicParametersState(value) =>
-        DynamicSequencingParametersState.fromProtoV30(value)
+        SequencingParametersState.fromProtoV30(value)
       case Mapping.MediatorSynchronizerState(value) => MediatorSynchronizerState.fromProtoV30(value)
       case Mapping.SequencerSynchronizerState(value) =>
         SequencerSynchronizerState.fromProtoV30(value)
@@ -832,14 +828,22 @@ object KeyMapping {
       keys: NonEmpty[Set[SigningPublicKey]],
       maxKeys: Int,
   ): Either[String, Unit] =
-    Either.cond(keys.sizeIs <= maxKeys, (), s"At most $maxKeys can be specified.")
+    Either.cond(
+      keys.sizeIs <= maxKeys,
+      (),
+      s"At most $maxKeys key(s) can be specified, got ${keys.size}.",
+    )
 
   def validateKeysSize(
       keys: NonEmpty[Seq[PublicKey]],
       maxKeys: Int,
   ): Either[String, Unit] =
     for {
-      _ <- Either.cond(keys.sizeIs <= maxKeys, (), s"At most $maxKeys can be specified.")
+      _ <- Either.cond(
+        keys.sizeIs <= maxKeys,
+        (),
+        s"At most $maxKeys key(s) can be specified, got ${keys.size}.",
+      )
     } yield ()
 }
 
@@ -1163,17 +1167,16 @@ object SynchronizerTrustCertificate extends TopologyMappingCompanion {
       )(Some("ExternalSigningLocalContractsInSubview"))
 
     /** When this feature flag is enabled, the participant will allow to reassign contracts between
-      * synchronizers. Note that this feature is still under development and thus unsafe. Should not
-      * be used in production.
+      * synchronizers. This feature is in alpha and should not be used in production.
       */
-    val EnableUnsafeMultiSynchronizer: ParticipantTopologyFeatureFlag =
+    val EnableAlphaMultiSynchronizer: ParticipantTopologyFeatureFlag =
       ParticipantTopologyFeatureFlag(
-        v30.Enums.ParticipantFeatureFlag.PARTICIPANT_FEATURE_FLAG_ENABLE_UNSAFE_MULTI_SYNCHRONIZER.value
-      )(Some("EnableUnsafeMultiSynchronizer"))
+        v30.Enums.ParticipantFeatureFlag.PARTICIPANT_FEATURE_FLAG_ENABLE_ALPHA_MULTI_SYNCHRONIZER.value
+      )(Some("EnableAlphaMultiSynchronizer"))
 
     val knownTopologyFeatureFlags: Seq[ParticipantTopologyFeatureFlag] = Seq(
       ExternalSigningLocalContractsInSubview,
-      EnableUnsafeMultiSynchronizer,
+      EnableAlphaMultiSynchronizer,
     )
 
     def fromProtoV30(
@@ -1889,12 +1892,14 @@ object PartyToParticipant extends TopologyMappingCompanion {
       .distinct
       .flatMap(deduplicateParticipantsWithDifferentPermissionsMap.get)
 
-    val keysValid = partySigningKeysWithThreshold.traverse_(signingKeysWithThreshold =>
-      KeyMapping.validateKeysSizeSet(
-        signingKeysWithThreshold.keys,
-        MaxKeys,
+    val keysValid = partySigningKeysWithThreshold
+      .traverse_(signingKeysWithThreshold =>
+        KeyMapping.validateKeysSizeSet(
+          signingKeysWithThreshold.keys,
+          MaxKeys,
+        )
       )
-    )
+      .leftMap(err => s"Invalid PartyToParticipant: $err")
 
     for {
       _ <- keysValid
@@ -2000,19 +2005,19 @@ object SynchronizerParametersState extends TopologyMappingCompanion {
   }
 }
 
-/** Dynamic sequencing parameter settings for the synchronizer
+/** Sequencing parameter settings for the synchronizer
   *
   * Each synchronizer has a set of sequencing parameters that can be changed at runtime. These
   * changes are authorized by the owner of the synchronizer and distributed to all nodes
   * accordingly.
   */
-final case class DynamicSequencingParametersState(
+final case class SequencingParametersState(
     synchronizerId: SynchronizerId,
-    parameters: DynamicSequencingParameters,
+    parameters: SequencingParameters,
 ) extends TopologyMapping {
 
-  override def companion: DynamicSequencingParametersState.type = DynamicSequencingParametersState
-  override protected def pretty: Pretty[DynamicSequencingParametersState] = prettyOfClass(
+  override def companion: SequencingParametersState.type = SequencingParametersState
+  override protected def pretty: Pretty[SequencingParametersState] = prettyOfClass(
     param("synchronizerId", _.synchronizerId),
     param("parameters", _.parameters),
   )
@@ -2036,29 +2041,29 @@ final case class DynamicSequencingParametersState(
       previous: Option[TopologyTransaction[TopologyChangeOp, TopologyMapping]]
   ): RequiredAuth = RequiredNamespaces(synchronizerId)
 
-  override def uniqueKey: MappingHash = SynchronizerParametersState.uniqueKey(synchronizerId)
+  override def uniqueKey: MappingHash = SequencingParametersState.uniqueKey(synchronizerId)
 }
 
-object DynamicSequencingParametersState extends TopologyMappingCompanion {
+object SequencingParametersState extends TopologyMappingCompanion {
 
   def uniqueKey(synchronizerId: SynchronizerId): MappingHash =
     TopologyMapping.buildUniqueKey(code)(_.addString(synchronizerId.toProtoPrimitive))
 
-  override def code: TopologyMapping.Code = Code.SequencingDynamicParametersState
+  override def code: TopologyMapping.Code = Code.SequencingParametersState
 
   def fromProtoV30(
       value: v30.DynamicSequencingParametersState
-  ): ParsingResult[DynamicSequencingParametersState] = {
+  ): ParsingResult[SequencingParametersState] = {
     val v30.DynamicSequencingParametersState(synchronizerIdP, sequencingParametersP) = value
     for {
       synchronizerId <- SynchronizerId.fromProtoPrimitive(synchronizerIdP, "synchronizer_id")
-      representativeProtocolVersion <- DynamicSequencingParameters.protocolVersionRepresentativeFor(
+      representativeProtocolVersion <- SequencingParameters.protocolVersionRepresentativeFor(
         ProtoVersion(30)
       )
       parameters <- sequencingParametersP
-        .map(DynamicSequencingParameters.fromProtoV30)
-        .getOrElse(Right(DynamicSequencingParameters.default(representativeProtocolVersion)))
-    } yield DynamicSequencingParametersState(synchronizerId, parameters)
+        .map(SequencingParameters.fromProtoV30)
+        .getOrElse(Right(SequencingParameters.default(representativeProtocolVersion)))
+    } yield SequencingParametersState(synchronizerId, parameters)
   }
 }
 

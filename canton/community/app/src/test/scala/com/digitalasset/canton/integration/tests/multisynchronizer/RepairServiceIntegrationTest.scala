@@ -50,7 +50,7 @@ abstract class RepairServiceIntegrationTest
   override lazy val environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition.P1_S2M1_S2M1
       .addConfigTransforms(
-        ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag
+        ConfigTransforms.enableAlphaMultiSynchronizerTopologyFeatureFlag
       )
       .withSetup { implicit env =>
         import env.*
@@ -209,7 +209,11 @@ abstract class RepairServiceIntegrationTest
               daId.logical,
               acmeId.logical,
             )
-            forAll(reinitCmtsResult)(_.acsTimestamp.isDefined shouldBe true)
+            forAll(reinitCmtsResult) { result =>
+              withClue(s"For synchronizer ${result.synchronizerId} ") {
+                result.acsTimestamp shouldBe defined
+              }
+            }
 
             // TODO(i23735): When we fix that, we should have no more ACS_COMMITMENT_INTERNAL_ERROR logs, and the
             //  log suppression and the comment below should be removed

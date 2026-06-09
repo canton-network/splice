@@ -10,11 +10,7 @@ import com.digitalasset.daml.lf.data.Ref._
 import com.digitalasset.daml.lf.data.{BackStack, FrontStack, ImmArray}
 import com.digitalasset.daml.lf.engine.ResultNeedContract.Response
 import com.digitalasset.daml.lf.language.Ast._
-import com.digitalasset.daml.lf.transaction.{
-  FatContractInstance,
-  GlobalKey,
-  NeedKeyProgression,
-}
+import com.digitalasset.daml.lf.transaction.{FatContractInstance, GlobalKey, NeedKeyProgression}
 import com.digitalasset.daml.lf.value.Value._
 import scalaz.Monad
 
@@ -63,8 +59,7 @@ sealed trait Result[+A] extends Product with Serializable {
   private[lf] def consume(
       pcs: PartialFunction[ContractId, FatContractInstance] = PartialFunction.empty,
       pkgs: PartialFunction[PackageId, Package] = PartialFunction.empty,
-      keys: PartialFunction[GlobalKey, Vector[FatContractInstance]] =
-        PartialFunction.empty,
+      keys: PartialFunction[GlobalKey, Vector[FatContractInstance]] = PartialFunction.empty,
       hashingMethod: ContractId => Hash.HashingMethod = _ => Hash.HashingMethod.TypedNormalForm,
       idValidator: (ContractId, Hash) => Boolean = (_, _) => true,
   ): Either[Error, A] = {
@@ -97,7 +92,8 @@ final case class ResultInterruption[A](continue: () => Result[A], abort: () => O
   */
 final case class ResultDone[A](result: A) extends Result[A]
 object ResultDone {
-  val Unit: ResultDone[Unit] = new ResultDone(())
+  private[engine] val Unit: ResultDone[Unit] = new ResultDone(())
+  private[engine] val None: ResultDone[scala.None.type] = new ResultDone(scala.None)
 }
 
 /** Indicates that the command (re)interpretation has failed.
@@ -194,16 +190,17 @@ final case class ResultNeedKey[A](
 
 /** Indicates that the interpretation will likely need to resolve the given contract keys.
   * The caller may resolve the keys in parallel to the interpretation, but does not have to.
+  * The keys map associates each key with the maximum number of contracts to prefetch for it.
   */
 final case class ResultPrefetch[A](
     contractIds: Seq[ContractId],
-    keys: Seq[GlobalKey],
+    keys: Map[GlobalKey, Int],
     resume: () => Result[A],
 ) extends Result[A]
 
 object Result {
 
-  val unit: ResultDone[Unit] = ResultDone(())
+  val Unit: ResultDone[Unit] = ResultDone.Unit
 
   // fails with ResultError if the package is not found
   private[lf] def needPackage[A](
@@ -308,7 +305,7 @@ object Result {
 
   def assert(assertion: Boolean)(err: Error): Result[Unit] =
     if (assertion)
-      ResultDone.Unit
+      Result.Unit
     else
       ResultError(err)
 

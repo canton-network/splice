@@ -13,11 +13,9 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.int
   TopologyActivationTime,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.endpointToTestBftNodeId
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.{
-  BftNodeId,
-  EpochLength,
-}
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.BftNodeId
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.OrderingTopology.NodeTopologyInfo
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters.SegmentLength
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
   OrderingTopology,
   SequencingParameters,
@@ -26,15 +24,17 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.simulation.future.SimulationFuture
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.utils.Miscellaneous.TestBootstrapTopologyActivationTime
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.version.ProtocolVersion
 
 import scala.util.Success
 
 class SimulationOrderingTopologyProvider(
     thisNode: BftNodeId,
-    epochLength: EpochLength, // TODO(#24184) make this dynamic sequencing parameter
+    segmentLength: SegmentLength,
     getEndpointsToTopologyData: () => Map[P2PEndpoint, NodeSimulationTopologyData],
     loggerFactory: NamedLoggerFactory,
-) extends OrderingTopologyProvider[SimulationEnv] {
+)(implicit synchronizerProtocolVersion: ProtocolVersion)
+    extends OrderingTopologyProvider[SimulationEnv] {
 
   override def getOrderingTopologyAt(
       activationTimeO: Option[TopologyActivationTime],
@@ -57,7 +57,7 @@ class SimulationOrderingTopologyProvider(
                 .toSet
             )
           }.toMap,
-          epochLength, // TODO(#24184) make this dynamic sequencing parameter
+          segmentLength.epochLength(activeSequencerTopologyData.size.toLong),
           SequencingParameters.Default,
           BaseTest.defaultMaxBytesToDecompress,
           activationTime,

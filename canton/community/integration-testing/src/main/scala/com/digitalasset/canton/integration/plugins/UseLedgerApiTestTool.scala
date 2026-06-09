@@ -4,20 +4,19 @@
 package com.digitalasset.canton.integration.plugins
 
 import better.files.File
+import com.daml.ledger.api.testtool.CliParser
+import com.daml.ledger.api.testtool.runner.{AvailableTests, Config, ConfiguredTests, TestRunner}
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.buildinfo.BuildInfo
-import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.{
   CantonConfig,
   ClientConfig,
   NonNegativeFiniteDuration as NonNegativeFiniteDurationConfig,
 }
-import com.digitalasset.canton.console.BufferedProcessLogger
+import com.digitalasset.canton.console.{LocalParticipantReference, RemoteParticipantReference}
 import com.digitalasset.canton.integration.plugins.UseLedgerApiTestTool.{
   EnvVarTestOverrides,
   LAPITTVersion,
-  getArtifactoryHttpClient,
-  latestVersionFromArtifactory,
+  LedgerTestTool,
 }
 import com.digitalasset.canton.integration.util.ExternalCommandExecutor
 import com.digitalasset.canton.integration.{
@@ -28,19 +27,14 @@ import com.digitalasset.canton.integration.{
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
 import com.digitalasset.canton.platform.apiserver.SeedService.Seeding
 import com.digitalasset.canton.tracing.{NoTracing, TraceContext}
-import com.digitalasset.canton.util.OptionUtil
-import io.circe.*
-import io.circe.generic.semiauto.*
-import io.circe.parser.*
+import com.digitalasset.canton.version.ReleaseVersion
+import com.digitalasset.daml.lf.language.LanguageVersion
 import monocle.macros.syntax.lens.*
+import org.scalatest.Assertions
+import org.scalatest.concurrent.ScalaFutures.*
+import org.scalatest.time.{Seconds, Span}
 
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.net.{Authenticator, PasswordAuthentication, URI}
-import java.nio.file.{Files, Path, StandardCopyOption, StandardOpenOption}
 import scala.concurrent.blocking
-import scala.io.Source
-import scala.sys.process.*
-import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}
 
 /** Plugin to provide the LedgerApiTestTool to a
@@ -51,7 +45,7 @@ import scala.util.{Failure, Success, Try}
 class UseLedgerApiTestTool(
     protected val loggerFactory: NamedLoggerFactory,
     connectedSynchronizersCount: Int,
-    lfVersion: UseLedgerApiTestTool.LfVersion = UseLedgerApiTestTool.LfVersion.Stable,
+    lfVersion: LanguageVersion = LanguageVersion.v2_2,
     // If set, unique benchmark name for uploading benchmark results to datadog.
     benchmarkReportFileO: Option[String] = None,
     version: LAPITTVersion = LAPITTVersion.Latest,
@@ -60,6 +54,9 @@ class UseLedgerApiTestTool(
 ) extends EnvironmentSetupPlugin
     with NoTracing
     with EnvVarTestOverrides {
+
+  protected val ledgerApiTestToolPatience: PatienceConfig =
+    PatienceConfig(timeout = scaled(Span(500, Seconds)))
 
   private def defaultExtraArgumentsSeq: Seq[String] = defaultExtraArguments.flatMap { case (k, v) =>
     Seq(k, v)
@@ -70,49 +67,42 @@ class UseLedgerApiTestTool(
     s"Benchmark report file must start with 'benchmark_', otherwise it won't be reported to DataDog. Found: $benchmarkReportFileO",
   )
 
-  private val testToolName: String = s"ledger-api-test-tool${lfVersion.testToolSuffix}"
-
-  private var testTool: File = _
+  private var testTool: LedgerTestTool = _
 
   private val tempDir = File.newTemporaryDirectory()
 
   private val commandExecutor = new ExternalCommandExecutor(loggerFactory)
 
   override def beforeEnvironmentCreated(config: CantonConfig): CantonConfig = {
-    def ensurePrerequisites(): Unit = {
-      // First ensure we are able to find and invoke java as that is needed to invoke the test tool.
-      commandExecutor.exec(cmd = "java --version", errorHint = "Is 'java' not on the path?")
+    // First ensure we are able to find and invoke java as that is needed to invoke the test tool.
+    commandExecutor.exec(cmd = "java --version", errorHint = "Is 'java' not on the path?")
 
-      lazy val httpClient = getArtifactoryHttpClient
+    def tryDownload(testToolRelease: ReleaseVersion): LedgerTestTool.Assembly = {
+      val otherLfVersions =
+        if (LanguageVersion.stableLfVersions.contains(lfVersion))
+          LanguageVersion.stableLfVersions.takeWhile(_ < lfVersion)
+        else List.empty
 
-      val testToolVersion =
-        version match {
-          case LAPITTVersion.Latest =>
-            latestVersionFromArtifactory(logger)
-          case LAPITTVersion.Explicit(v) => v
-          case LAPITTVersion.LocalJar =>
-            BuildInfo.version
+      // find and download test tool with the higher stable LF version
+      otherLfVersions
+        .foldRight(getOrDownloadTestTool(testToolRelease, lfVersion)) { (otherLfVersion, res) =>
+          res.recoverWith {
+            case error if isMissingArtifact(error) =>
+              logger.info(
+                s"LAPITT for LF $lfVersion is not published for release $testToolRelease. " +
+                  s"Falling back to LF $otherLfVersion. This is NOT a test failure."
+              )
+              getOrDownloadTestTool(testToolRelease, otherLfVersion).orElse(Failure(error))
+          }
         }
-
-      val url =
-        version match {
-          case LAPITTVersion.LocalJar =>
-            // Requires running `sbt ledger-test-tool-<lfVersion>/assembly` first.
-            s"file://${System.getProperty("user.dir")}/community/ledger-test-tool/tool/lf-v${lfVersion.testToolSuffix.tail}/target/scala-2.13/$testToolName-$testToolVersion.jar"
-          case _ =>
-            val relativeUrl =
-              s"com/digitalasset/canton/ledger-api-test-tool_2.13/$testToolVersion/${testToolName}_2.13-$testToolVersion.jar"
-            s"https://digitalasset.jfrog.io/artifactory/canton-internal/$relativeUrl"
-        }
-
-      testTool = File(
-        System.getProperty("user.home")
-      ) / ".cache" / testToolName / s"${testToolName}_2.13-$testToolVersion.jar"
-
-      UseLedgerApiTestTool.download(url, testTool, logger, httpClient)
+        .fold(throw _, identity)
     }
 
-    ensurePrerequisites()
+    testTool = version match {
+      case LAPITTVersion.Local => LedgerTestTool.Local(AvailableTests(lfVersion))
+      case LAPITTVersion.Latest => tryDownload(UseLedgerApiTestTool.latestRelease(logger))
+      case LAPITTVersion.Explicit(release) => tryDownload(release)
+    }
 
     // ensure we use production seeding setting in ledger api conformance and performance tests
     (ConfigTransforms.updateContractIdSeeding(Seeding.Weak) andThen
@@ -130,7 +120,7 @@ class UseLedgerApiTestTool(
       exclude: Seq[String],
       concurrency: Int,
       kv: (String, String)*
-  )(implicit env: TestConsoleEnvironment): String = {
+  )(implicit env: TestConsoleEnvironment): Unit = {
     val excludeParameter = NonEmpty.from(exclude) match {
       case Some(suitesNE) => Seq("--exclude", suitesNE.mkString(","))
       case None => Nil
@@ -143,7 +133,8 @@ class UseLedgerApiTestTool(
       connectedSynchronizersCount = connectedSynchronizersCount,
       testInclusions = suites.split(",").toSeq,
       extraArgs = additionalParameters.toSeq ++ excludeParameter,
-      testParticipants = testParticipants,
+      testParticipants = testParticipants(useJson = false),
+      useJson = false,
     )
   }
 
@@ -151,7 +142,7 @@ class UseLedgerApiTestTool(
       suites: String, // comma-separated list of suites
       exclude: Seq[String],
       kv: (String, String)*
-  )(implicit env: TestConsoleEnvironment): String =
+  )(implicit env: TestConsoleEnvironment): Unit =
     runSuites(suites = suites, exclude = exclude, concurrency = 1, kv*)
 
   def runShardedSuites(
@@ -159,28 +150,58 @@ class UseLedgerApiTestTool(
       numShards: Int,
       exclude: Seq[String],
       concurrentTestRuns: Int = 4,
+      useJson: Boolean,
   )(implicit
       env: TestConsoleEnvironment
-  ): String = {
-    val allTests = execTestTool("--list-all").split("\n")
-    val listing = allTests
+  ): Unit = {
+    val allTests: Seq[String] = testTool match {
+      case LedgerTestTool.Assembly(assemblyJar) =>
+        execTestTool(assemblyJar, Array("--list-all"))
+          .split("\n")
+          .toSeq
+          .filter(_.contains(":"))
+          .map(_.trim)
+      case LedgerTestTool.Local(tests) => ConfiguredTests(tests, Config.default).allTestNames
+    }
+    val filteredTests = allTests
       .filter(line => exclude.forall(not => !line.contains(not)))
-      .filter(_.contains(":"))
-      .map(_.trim)
       .zipWithIndex
-      .filter { case (_, idx) =>
-        idx % numShards == shard
-      }
-      .map(_._1)
+      .collect { case (test, idx) if idx % numShards == shard => test }
 
     runTestsInternal(
       concurrentTestRuns = concurrentTestRuns,
       connectedSynchronizersCount = connectedSynchronizersCount,
-      testInclusions = listing.toSeq,
+      testInclusions = filteredTests,
       extraArgs = defaultExtraArgumentsSeq,
-      testParticipants = testParticipants,
+      testParticipants = testParticipants(useJson),
+      useJson = useJson,
     )
   }
+
+  @SuppressWarnings(Array("com.digitalasset.canton.RequireBlocking"))
+  private def getOrDownloadTestTool(
+      release: ReleaseVersion,
+      lfVersion: LanguageVersion,
+  ): Try[LedgerTestTool.Assembly] = {
+    val testToolName: String = s"ledger-api-test-tool-$lfVersion"
+    val filename = s"$testToolName-${release.fullVersion}.jar"
+    val destination =
+      File(System.getProperty("user.home")) / ".cache" / testToolName / filename
+    // Check if test tool resides in destination. If not, download test tool.
+    blocking(this.synchronized {
+      if (!destination.exists) {
+        logger.info(s"Downloading $filename from S3.")
+        destination.parent.createDirectoryIfNotExists(createParents = true)
+        LAPITTResolver.download(release, lfVersion, destination, logger)
+      } else Success(())
+    }).map(_ => LedgerTestTool.Assembly(destination))
+  }
+
+  private def isMissingArtifact(error: Throwable): Boolean =
+    Option(error.getMessage).exists { msg =>
+      val lower = msg.toLowerCase
+      msg.contains("404") || lower.contains("not found")
+    }
 
   private def runTestsInternal(
       concurrentTestRuns: Int,
@@ -188,7 +209,8 @@ class UseLedgerApiTestTool(
       testInclusions: Seq[String],
       extraArgs: Seq[String],
       testParticipants: Seq[String],
-  ): String = {
+      useJson: Boolean,
+  ): Unit = {
     val testInclusionsAfterEnvArgConsideration = envArgTestsInclusion
       .map { selectedTests =>
         val filtered = testInclusions.filter(selectedTests.testCaseEnabled)
@@ -204,31 +226,58 @@ class UseLedgerApiTestTool(
         filtered
       }
       .getOrElse(testInclusions)
+    val jsonOpt = if (useJson) Seq("--json-api-mode") else Seq.empty
+    val args = Array(
+      "--concurrent-test-runs",
+      concurrentTestRuns.toString,
+      "--connected-synchronizers",
+      connectedSynchronizersCount.toString,
+      "-v",
+      "--include",
+      testInclusionsAfterEnvArgConsideration.mkString(","),
+    ) ++ jsonOpt ++ extraArgs ++ testParticipants
 
-    execTestTool(
-      Seq(
-        "--concurrent-test-runs",
-        concurrentTestRuns.toString,
-        "--connected-synchronizers",
-        connectedSynchronizersCount.toString,
-        "--include",
-        testInclusionsAfterEnvArgConsideration.mkString(","),
-      ) ++ extraArgs ++ testParticipants: _*
-    )
+    testTool match {
+      case LedgerTestTool.Assembly(assemblyJar) => execTestTool(assemblyJar, args)
+      case LedgerTestTool.Local(tests) =>
+        val config = CliParser.parse(args).getOrElse(sys.error("Invalid config"))
+        val runner = new TestRunner(tests, config)
+        val failures = runner
+          .runInProcess(logger.underlying)
+          .futureValue(config = ledgerApiTestToolPatience, pos = implicitly)
+          .map(test => test.result.left.map(failure => s"${test.name} failed: $failure"))
+          .collect { case Left(failure) => failure }
+        if (failures.nonEmpty)
+          Assertions.fail(
+            s"Some Ledger API tests have failed: ${failures.mkString("\n\t", "\n\t", "")}"
+          )
+    }
   }
 
-  private def execTestTool(option: String*): String =
+  private def execTestTool(assemblyJar: File, args: Array[String]): String =
     commandExecutor.exec(
-      cmd = s"java $javaOpts -jar ${testTool.toString} ${option.mkString(" ")}",
+      cmd = s"java $javaOpts -jar ${assemblyJar.toString} ${args.mkString(" ")}",
       errorHint = s"Failures in aforementioned test suite.",
     )
 
   private def endpointAsString(config: ClientConfig) = s"${config.address}:${config.port.toString}"
 
-  private def testParticipants(implicit env: TestConsoleEnvironment): Seq[String] =
+  private def testParticipants(
+      useJson: Boolean
+  )(implicit env: TestConsoleEnvironment): Seq[String] =
     env.participants.all
       .map { p =>
-        val ledgerApiEndpoint = endpointAsString(p.config.clientLedgerApi)
+        val ledgerApiEndpoint = p match {
+          case remote: RemoteParticipantReference if useJson =>
+            remote.config.ledgerJsonApi
+              .map(_.endpointAsString)
+              .getOrElse(throw new IllegalArgumentException(s"invalid remote reference: $remote"))
+          case local: LocalParticipantReference if useJson =>
+            local.config.httpLedgerApi.clientConfig
+              .map(_.endpointAsString)
+              .getOrElse(throw new IllegalArgumentException(s"invalid local reference: $local"))
+          case _ => endpointAsString(p.config.clientLedgerApi)
+        }
         val adminApiEndpoint = endpointAsString(p.config.clientAdminApi)
         s"$ledgerApiEndpoint;$adminApiEndpoint"
       }
@@ -312,266 +361,77 @@ object UseLedgerApiTestTool {
       }
   }
 
-  sealed trait LfVersion {
-    def testToolSuffix: String
-  }
-
-  object LfVersion {
-    case object Stable extends LfVersion {
-      override def testToolSuffix: String = "-2.1"
-    }
-
-    case object V21 extends LfVersion {
-      override def testToolSuffix: String = "-2.1"
-    }
-
-    case object Dev extends LfVersion {
-      override def testToolSuffix: String = "-2.dev"
-    }
-  }
-
   sealed trait LAPITTVersion
 
   object LAPITTVersion {
-    // The lapitt runs only for the latest version of latest release.
+    // Run the latest released version of the LAPITT.
     case object Latest extends LAPITTVersion
 
-    // The lapitt runs only for the specified version.
-    final case class Explicit(version: String) extends LAPITTVersion
+    // Run the specified version of the LAPITT.
+    final case class Explicit(version: ReleaseVersion) extends LAPITTVersion
 
-    // The lapitt runs with the local lapitt jar.
-    // Requires running `sbt ledger-test-tool-<lfVersion>/assembly` first
-    case object LocalJar extends LAPITTVersion
+    // Run the LAPITT from the classpath.
+    // Requires running `sbt ledger-test-tool/assembly` first
+    case object Local extends LAPITTVersion
   }
 
-  // Check if test tool resides in destination. If not, download test tool.
-  // Ideally we'd rely on sbt and coursier to manage the dependency to avoid having to deal with  caching ourselves,
-  // but these does not seem to be a straightforward way to keep the test tool off from the classpath so that the
-  // fat jar contents don't interfere with canton dependencies (e.g. fastparse).
-  @SuppressWarnings(Array("com.digitalasset.canton.RequireBlocking"))
-  def download(
-      url: String,
-      destination: File,
-      logger: TracedLogger,
-      httpClient: HttpClient,
-      retries: Int = 3,
-  )(implicit
-      tc: TraceContext
-  ): Unit =
-    blocking(this.synchronized {
-      destination.parent.createDirectoryIfNotExists(createParents = true)
-      // We don't want to cache for files, that's very (very) annoying
-      if (url.startsWith("file")) {
-        val source = File(new URI(url))
-        logger.info(s"Copying local file from $source to $destination")
-        Files.copy(source.path, destination.path, StandardCopyOption.REPLACE_EXISTING)
-      } else if (!destination.exists) {
-        downloadFromArtifactory(url, destination, logger, httpClient, retries)
-      }
-    })
+  private sealed trait LedgerTestTool
 
-  private def downloadFromArtifactory(
-      url: String,
-      destination: File,
-      logger: TracedLogger,
-      httpClient: HttpClient,
-      retries: Int,
-  )(implicit tc: TraceContext): Unit = {
-    logger.info(
-      s"File ${destination.toString} does not exist locally. Downloading tool from $url"
-    )
-
-    val processLogger = new BufferedProcessLogger()
-    var response: HttpResponse[Path] = null
-    Try {
-      // not using new URL(url) #> destination.toJava !! processLogger
-      // as IOExceptions during the download will be written to stdout and there is no way to override this
-      // behaviour. https://github.com/scala/scala/blob/2.13.x/src/library/scala/sys/process/ProcessImpl.scala#L192
-
-      val request = HttpRequest.newBuilder(new URI(url)).build()
-      response = httpClient.send(
-        request,
-        HttpResponse.BodyHandlers.ofFileDownload(
-          destination.parent.path,
-          StandardOpenOption.CREATE,
-          StandardOpenOption.WRITE,
-          StandardOpenOption.TRUNCATE_EXISTING,
-        ),
-      )
-      if (response.statusCode() != 200) {
-        sys.error(s"Failed to download ledger api test tool. Response: $response")
-      }
-      logger.debug("Verifying downloaded archive")
-      s"jar -tvf ${destination.toJava.getAbsolutePath}" !! processLogger
-    } match {
-      case Success(str) =>
-        if (str.nonEmpty)
-          logger.info(str)
-        logger.info(processLogger.output("OUTPUT: "))
-      case Failure(t) =>
-        if (retries > 0) {
-          if (destination.exists)
-            destination.delete(swallowIOExceptions = true)
-          logger.info(s"Failed to download from $url. Exception ${t.getMessage}. Will retry")
-          logger.info(processLogger.output("OUTPUT: "))
-          Threading.sleep(2000)
-          downloadFromArtifactory(url, destination, logger, httpClient, retries - 1)
-        } else {
-          logger.error(
-            s"Failed to download from $url. Exception ${t.getMessage}. Giving up",
-            t,
-          )
-          logger.warn(processLogger.output("OUTPUT: "))
-          throw t
-        }
-    }
-  }
-
-  final case class ArtifactoryItem(uri: String, folder: Boolean)
-
-  implicit val artifactoryItemDecoder: Decoder[ArtifactoryItem] = deriveDecoder[ArtifactoryItem]
-
-  private def credentialsFromNetrcFile: (Option[String], Option[String]) = {
-    val netrcPath = System.getProperty("user.home") + "/.netrc"
-    val machine = "digitalasset.jfrog.io"
-
-    lazy val netrcFile = Source.fromFile(netrcPath)
-    lazy val content = netrcFile.mkString
-
-    lazy val pattern = s"(?m)^machine\\s+$machine\\s+login\\s+(\\S+)\\s+password\\s+(\\S+)".r
-
-    val usernameO =
-      pattern.findFirstMatchIn(content).map(_.group(1))
-    val passwordO =
-      pattern.findFirstMatchIn(content).map(_.group(2))
-
-    netrcFile.close()
-
-    (usernameO, passwordO)
-  }
-
-  private def allToolVersionsFromArtifactory(httpClient: HttpClient) = {
-    val artifactoryDirectoryUrl =
-      "https://digitalasset.jfrog.io/artifactory/api/storage/canton-internal/com/digitalasset/canton/ledger-api-test-tool_2.13"
-    val request = HttpRequest.newBuilder(new URI(artifactoryDirectoryUrl)).build()
-    val response = httpClient.send(
-      request,
-      HttpResponse.BodyHandlers.ofString(),
-    )
-    if (response.statusCode() != 200)
-      sys.error(
-        s"Failed to fetch ledger api test tool versions from $artifactoryDirectoryUrl. Response: $response"
-      )
-
-    // from jfrog api a json object is returned which contains the folders in children field
-    val json = parse(response.body) match {
-      case Left(err) => sys.error(s"Failed to parse artifactory response body: ${err.getMessage}")
-      case Right(j) => j
-    }
-
-    val files = json.hcursor.downField("children").as[Seq[ArtifactoryItem]] match {
-      case Left(err) => sys.error(s"Failed to decode artifactory children: ${err.getMessage}")
-      case Right(seq) => seq
-    }
-
-    files
-      .map(_.uri)
-      .map(str => if (str.startsWith("/")) str.drop(1) else str)
-      .filterNot(_.contains("100000000"))
-  }
-
-  private val versionPattern: Regex = """^(\d+\.\d+\.\d+)-(ad-hoc|snapshot)\.(\d{8}\.\d{4}).*""".r
-
-  def extractVersionString: PartialFunction[String, String] = {
-    case versionPattern(majorMinorPatch, _, _) =>
-      majorMinorPatch // keep only major.minor.patch versions
+  private object LedgerTestTool {
+    final case class Assembly(assemblyJar: File) extends LedgerTestTool
+    final case class Local(tests: AvailableTests) extends LedgerTestTool
   }
 
   // finds all major.minor.patch releases
-  def findAllReleases(toolVersions: Seq[String]): Seq[String] =
-    toolVersions
-      .collect(extractVersionString)
-      .distinct
+  def findAllCoreVersions(toolReleases: Seq[ReleaseVersion]): Seq[(Int, Int, Int)] =
+    toolReleases.map(_.majorMinorPatch).distinct.sorted
+
+  // finds versions of the release given and sorts them in ascending order
+  def findMatchingVersions(
+      toolReleases: Seq[ReleaseVersion],
+      majorMinorPatch: (Int, Int, Int),
+  ): Seq[ReleaseVersion] =
+    toolReleases
+      .filter(_.majorMinorPatch == majorMinorPatch)
       .sorted
 
-  // finds version of the release given and sorts them by the date produced
-  def findMatchingVersions(toolVersions: Seq[String], latestRelease: String): Seq[String] =
-    toolVersions
-      .collect { // keep only specific major.minor.patch version
-        case v @ versionPattern(`latestRelease`, _, date) => (v, date)
-      }
-      .sortBy(_._2) // sort by time
-      .map(_._1)
-
-  def latestVersionFromArtifactory(logger: TracedLogger)(implicit
-      tc: TraceContext
-  ): String = {
-    val toolVersions = allToolVersionsFromArtifactory(getArtifactoryHttpClient)
-    val releases = findAllReleases(toolVersions)
-    val latestRelease = releases.lastOption.getOrElse(
+  def latestRelease(
+      logger: TracedLogger,
+      includeAdHoc: Boolean = true,
+      includeSnapshot: Boolean = true,
+  )(implicit tc: TraceContext): ReleaseVersion = {
+    val toolReleases: Seq[ReleaseVersion] = LAPITTResolver.listAllReleases().filter { r =>
+      (includeAdHoc || !r.isAdHoc) && (includeSnapshot || !r.isSnapshot)
+    }
+    val latestCoreVersion = findAllCoreVersions(toolReleases).lastOption.getOrElse(
       throw new RuntimeException(
-        s"No releases found in artifactory among the following files: $toolVersions"
+        s"No releases found among the following versions: ${toolReleases.map(_.fullVersion)}"
       )
     )
 
-    val matchingVersions = findMatchingVersions(toolVersions, latestRelease)
+    val matchingVersions = findMatchingVersions(toolReleases, latestCoreVersion)
     val matchingVersion = matchingVersions.lastOption.getOrElse(
-      throw new RuntimeException(
-        s"No matching version found for release $latestRelease"
-      )
+      throw new RuntimeException(s"No matching version found for release $latestCoreVersion")
     )
-    logger.debug(s"found $matchingVersion as latest version of $latestRelease in the artifactory ")
+    logger.debug(s"found ${matchingVersion.fullVersion} as latest version of $latestCoreVersion")
 
     matchingVersion
   }
 
-  def releasesFromArtifactory(logger: TracedLogger)(implicit
-      tc: TraceContext
-  ): Seq[String] = {
-    val httpClient: HttpClient = getArtifactoryHttpClient
-
-    val toolVersions = allToolVersionsFromArtifactory(httpClient)
-    val releases = findAllReleases(toolVersions)
-
-    val latestVersionForAllReleases = for {
-      release <- releases
-    } yield {
-      findMatchingVersions(toolVersions, release).lastOption
+  def latestReleases(
+      logger: TracedLogger,
+      includeAdHoc: Boolean = false,
+      includeSnapshot: Boolean = true,
+  )(implicit tc: TraceContext): Seq[ReleaseVersion] = {
+    val toolVersions = LAPITTResolver.listAllReleases().filter { r =>
+      (includeAdHoc || !r.isAdHoc) && (includeSnapshot || !r.isSnapshot)
     }
 
-    logger.debug(
-      s"found $latestVersionForAllReleases as latest versions for each release in the artifactory "
-    )
+    val coreVersions = findAllCoreVersions(toolVersions)
+    val latestReleases = coreVersions.flatMap(findMatchingVersions(toolVersions, _).lastOption)
+    logger.debug(s"found $latestReleases as latest versions for each release")
 
-    latestVersionForAllReleases.flatten
+    latestReleases
   }
 
-  lazy val getArtifactoryHttpClient: HttpClient =
-    HttpClient
-      .newBuilder()
-      .authenticator(new Authenticator {
-        override def getPasswordAuthentication: PasswordAuthentication =
-          new PasswordAuthentication(
-            sys.env
-              .get("ARTIFACTORY_USER")
-              .flatMap(OptionUtil.emptyStringAsNone)
-              .orElse(sys.env.get("ARTIFACTORY_USERNAME").flatMap(OptionUtil.emptyStringAsNone))
-              .orElse(credentialsFromNetrcFile._1.flatMap(OptionUtil.emptyStringAsNone))
-              .getOrElse(
-                throw new IllegalArgumentException(
-                  "env vars ARTIFACTORY_USER or ARTIFACTORY_USERNAME not set or empty" +
-                    "and no login entry found in the netrc file (if existing)"
-                )
-              ),
-            sys.env
-              .get("ARTIFACTORY_PASSWORD")
-              .flatMap(OptionUtil.emptyStringAsNone)
-              .orElse(sys.env.get("ARTIFACTORY_TOKEN").flatMap(OptionUtil.emptyStringAsNone))
-              .orElse(credentialsFromNetrcFile._2)
-              .getOrElse("")
-              .toCharArray,
-          )
-
-      })
-      .build()
 }
