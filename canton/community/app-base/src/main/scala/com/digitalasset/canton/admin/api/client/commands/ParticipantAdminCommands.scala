@@ -3,16 +3,26 @@
 
 package com.digitalasset.canton.admin.api.client.commands
 
-import cats.syntax.option.*
 import cats.syntax.either.*
+import cats.syntax.option.*
 import cats.syntax.traverse.*
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   DefaultUnboundedTimeout,
   ServerEnforcedTimeout,
   TimeoutType,
 }
-import com.digitalasset.canton.admin.api.client.data as admin
 import com.digitalasset.canton.admin.api.client.data.PackageDescription.PackageContents
+import com.digitalasset.canton.admin.api.client.data.{
+  DarContents,
+  DarDescription,
+  InFlightCount,
+  ListConnectedSynchronizersResult,
+  NodeStatus,
+  PackageDescription,
+  ParticipantPruningSchedule,
+  ParticipantStatus,
+  PartyOnboardingFlagStatus,
+}
 import com.digitalasset.canton.admin.participant.v30
 import com.digitalasset.canton.admin.participant.v30.PackageServiceGrpc.PackageServiceStub
 import com.digitalasset.canton.admin.participant.v30.ParticipantInspectionServiceGrpc.ParticipantInspectionServiceStub
@@ -25,7 +35,6 @@ import com.digitalasset.canton.admin.participant.v30.PruningServiceGrpc.PruningS
 import com.digitalasset.canton.admin.participant.v30.ResourceManagementServiceGrpc.ResourceManagementServiceStub
 import com.digitalasset.canton.admin.participant.v30.SynchronizerConnectivityServiceGrpc.SynchronizerConnectivityServiceStub
 import com.digitalasset.canton.admin.participant.v30.{
-  PerformManualLsuRequest,
   RepairCommitmentsUsingAcsRequest,
   RepairCommitmentsUsingAcsResponse,
 }
@@ -88,7 +97,6 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, MILLISECONDS}
-import scala.util.chaining.*
 
 object ParticipantAdminCommands {
 
@@ -105,7 +113,7 @@ object ParticipantAdminCommands {
 
     final case class List(filterName: String, limit: PositiveInt)
         extends PackageCommand[v30.ListPackagesRequest, v30.ListPackagesResponse, Seq[
-          admin.PackageDescription
+          PackageDescription
         ]] {
       override protected def createRequest() = Right(
         v30.ListPackagesRequest(limit = limit.value, filterName = filterName)
@@ -119,10 +127,8 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.ListPackagesResponse
-      ): Either[String, Seq[admin.PackageDescription]] =
-        response.packageDescriptions
-          .traverse(admin.PackageDescription.fromProto)
-          .leftMap(_.toString)
+      ): Either[String, Seq[PackageDescription]] =
+        response.packageDescriptions.traverse(PackageDescription.fromProto).leftMap(_.toString)
     }
 
     final case class GetContents(packageId: String)
@@ -151,7 +157,7 @@ object ParticipantAdminCommands {
           response
         (for {
           desc <- ProtoConverter.parseRequired(
-            admin.PackageDescription.fromProto,
+            PackageDescription.fromProto,
             "description",
             descriptionP,
           )
@@ -169,7 +175,7 @@ object ParticipantAdminCommands {
         extends PackageCommand[
           v30.GetPackageReferencesRequest,
           v30.GetPackageReferencesResponse,
-          Seq[admin.DarDescription],
+          Seq[DarDescription],
         ] {
       override protected def createRequest() = Right(v30.GetPackageReferencesRequest(packageId))
 
@@ -181,22 +187,16 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.GetPackageReferencesResponse
-      ): Either[String, Seq[admin.DarDescription]] = {
+      ): Either[String, Seq[DarDescription]] = {
         val v30.GetPackageReferencesResponse(darsP) =
           response
         (for {
-          dars <- darsP.traverse(admin.DarDescription.fromProtoV30)
+          dars <- darsP.traverse(DarDescription.fromProtoV30)
         } yield dars).leftMap(_.toString)
       }
     }
 
-    final case class DarData(
-        darPath: String,
-        description: String,
-        expectedMainPackageId: String,
-        // We sometimes want to upload DARs that are inside JARs, which is hard with just a path.
-        darDataO: Option[ByteString] = None,
-    )
+    final case class DarData(darPath: String, description: String, expectedMainPackageId: String)
     final case class UploadDar(
         dars: Seq[DarData],
         synchronizerId: Option[SynchronizerId],
@@ -210,17 +210,12 @@ object ParticipantAdminCommands {
           .traverse(dar =>
             for {
               _ <- Either.cond(dar.darPath.nonEmpty, (), "Provided DAR path is empty")
-              filenameAndDarData <- dar.darDataO.fold(loadDarData(dar.darPath))(darData =>
-                Right(Paths.get(dar.darPath).getFileName.toString -> darData)
-              )
+              filenameAndDarData <- loadDarData(dar.darPath)
               (filename, darData) = filenameAndDarData
               descriptionOrFilename =
                 if (dar.description.isEmpty)
                   PathUtils.getFilenameWithoutExtension(Path.of(filename))
                 else dar.description
-              _ = logger.info(s"Sending upload dar for ${descriptionOrFilename}")(
-                TraceContext.empty
-              )
             } yield v30.UploadDarRequest.UploadDarData(
               darData,
               Some(descriptionOrFilename),
@@ -284,9 +279,8 @@ object ParticipantAdminCommands {
           expectedMainPackageId: String,
           requestHeaders: Map[String, String],
           logger: TracedLogger,
-          darDataO: Option[ByteString],
       ): UploadDar = UploadDar(
-        Seq(DarData(darPath, description, expectedMainPackageId, darDataO)),
+        Seq(DarData(darPath, description, expectedMainPackageId)),
         synchronizerId,
         vetAllPackages = vetAllPackages,
         synchronizeVetting = synchronizeVetting,
@@ -417,11 +411,7 @@ object ParticipantAdminCommands {
     }
 
     final case class GetDarContents(mainPackageId: String)
-        extends PackageCommand[
-          v30.GetDarContentsRequest,
-          v30.GetDarContentsResponse,
-          admin.DarContents,
-        ] {
+        extends PackageCommand[v30.GetDarContentsRequest, v30.GetDarContentsResponse, DarContents] {
       override protected def createRequest() = Right(v30.GetDarContentsRequest(mainPackageId))
 
       override protected def submitRequest(
@@ -432,8 +422,8 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.GetDarContentsResponse
-      ): Either[String, admin.DarContents] =
-        admin.DarContents.fromProtoV30(response).leftMap(_.toString)
+      ): Either[String, DarContents] =
+        DarContents.fromProtoV30(response).leftMap(_.toString)
 
     }
 
@@ -494,11 +484,7 @@ object ParticipantAdminCommands {
     }
 
     final case class ListDars(filterName: String, limit: PositiveInt)
-        extends PackageCommand[
-          v30.ListDarsRequest,
-          v30.ListDarsResponse,
-          Seq[admin.DarDescription],
-        ] {
+        extends PackageCommand[v30.ListDarsRequest, v30.ListDarsResponse, Seq[DarDescription]] {
       override protected def createRequest(): Either[String, v30.ListDarsRequest] = Right(
         v30.ListDarsRequest(limit = limit.value, filterName = filterName)
       )
@@ -511,8 +497,8 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.ListDarsResponse
-      ): Either[String, Seq[admin.DarDescription]] =
-        response.dars.traverse(admin.DarDescription.fromProtoV30).leftMap(_.toString)
+      ): Either[String, Seq[DarDescription]] =
+        response.dars.traverse(DarDescription.fromProtoV30).leftMap(_.toString)
     }
 
   }
@@ -725,7 +711,7 @@ object ParticipantAdminCommands {
     }
 
     final case class ImportPartyAcs(
-        inputStream: java.io.InputStream,
+        file: File,
         synchronizer: Synchronizer,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
@@ -750,7 +736,7 @@ object ParticipantAdminCommands {
           service: PartyManagementServiceStub,
           request: Unit,
       ): Future[v30.ImportPartyAcsResponse] =
-        ResourceUtil.withResource(inputStream) { inputStream =>
+        ResourceUtil.withResource(new FileInputStream(file)) { inputStream =>
           val isFirstChunk = new AtomicBoolean(true)
           GrpcStreamingUtils.streamToServer(
             service.importPartyAcs,
@@ -784,7 +770,7 @@ object ParticipantAdminCommands {
     ) extends GrpcAdminCommand[
           v30.ClearPartyOnboardingFlagRequest,
           v30.ClearPartyOnboardingFlagResponse,
-          admin.PartyOnboardingFlagStatus,
+          PartyOnboardingFlagStatus,
         ] {
 
       override type Svc = PartyManagementServiceStub
@@ -809,8 +795,8 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.ClearPartyOnboardingFlagResponse
-      ): Either[String, admin.PartyOnboardingFlagStatus] =
-        admin.PartyOnboardingFlagStatus.fromProtoV30(response).leftMap(_.message)
+      ): Either[String, PartyOnboardingFlagStatus] =
+        PartyOnboardingFlagStatus.fromProtoV30(response).leftMap(_.message)
     }
   }
 
@@ -911,51 +897,6 @@ object ParticipantAdminCommands {
             inputStream,
           )
         }
-
-      override protected def handleResponse(
-          response: v30.ImportAcsResponse
-      ): Either[String, Unit] = Right(())
-    }
-
-    final case class ImportAcsBytes(
-        acsChunk: Seq[ByteString],
-        workflowIdPrefix: String,
-        contractImportMode: ContractImportMode,
-        representativePackageIdOverride: RepresentativePackageIdOverride,
-        excludedStakeholders: Set[PartyId],
-        synchronizerId: SynchronizerId,
-    ) extends GrpcAdminCommand[
-          Unit,
-          v30.ImportAcsResponse,
-          Unit,
-        ] {
-
-      override type Svc = ParticipantRepairServiceStub
-
-      override def createService(channel: ManagedChannel): ParticipantRepairServiceStub =
-        v30.ParticipantRepairServiceGrpc.stub(channel)
-
-      override protected def createRequest(): Either[String, Unit] =
-        Right(())
-
-      override protected def submitRequest(
-          service: ParticipantRepairServiceStub,
-          request: Unit,
-      ): Future[v30.ImportAcsResponse] = {
-        GrpcStreamingUtils.streamToServerChunked(
-          service.importAcs,
-          acsChunk.map(chunk =>
-            v30.ImportAcsRequest(
-              chunk,
-              Some(workflowIdPrefix),
-              Some(contractImportMode.toProtoV30),
-              excludedStakeholders.map(_.toProtoPrimitive).toSeq,
-              Some(representativePackageIdOverride.toProtoV30),
-              Some(synchronizerId.toProtoPrimitive),
-            )
-          ),
-        )
-      }
 
       override protected def handleResponse(
           response: v30.ImportAcsResponse
@@ -1416,7 +1357,7 @@ object ParticipantAdminCommands {
           v30.ListConnectedSynchronizersRequest,
           v30.ListConnectedSynchronizersResponse,
           Seq[
-            admin.ListConnectedSynchronizersResult
+            ListConnectedSynchronizersResult
           ],
         ] {
 
@@ -1434,9 +1375,9 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.ListConnectedSynchronizersResponse
-      ): Either[String, Seq[admin.ListConnectedSynchronizersResult]] =
+      ): Either[String, Seq[ListConnectedSynchronizersResult]] =
         response.connectedSynchronizers.traverse(
-          admin.ListConnectedSynchronizersResult.fromProtoV30(_).leftMap(_.toString)
+          ListConnectedSynchronizersResult.fromProtoV30(_).leftMap(_.toString)
         )
 
     }
@@ -1600,44 +1541,21 @@ object ParticipantAdminCommands {
         currentPsid: PhysicalSynchronizerId,
         successorPsid: PhysicalSynchronizerId,
         upgradeTime: Option[CantonTimestamp],
-        /*
-         Either the successors or the new config.
-         This is abusing a bit the right-biased either but introducing a trait just for this call was overkill.
-         */
-        successorConnectionConfiguration: Either[
-          Map[SequencerId, GrpcConnection],
-          SynchronizerConnectionConfig,
-        ],
+        sequencerSuccessors: Map[SequencerId, GrpcConnection],
     ) extends Base[v30.PerformManualLsuRequest, v30.PerformManualLsuResponse, Unit] {
 
-      override protected def createRequest(): Either[String, v30.PerformManualLsuRequest] = {
-        val conf: PerformManualLsuRequest.SuccessorConnectionConfiguration =
-          successorConnectionConfiguration.fold(
-            successors =>
-              v30.PerformManualLsuRequest.SuccessorConnectionConfiguration
-                .SequencerSuccessors(
-                  successors
-                    .map { case (sequencerId, connection) =>
-                      sequencerId.toProtoPrimitive -> connection.toProtoV30
-                        .transformInto[v30.PerformManualLsuRequest.SequencerConnection]
-                    }
-                    .pipe(v30.PerformManualLsuRequest.SequencerSuccessors(_))
-                ),
-            newConfig =>
-              v30.PerformManualLsuRequest.SuccessorConnectionConfiguration.Config(
-                newConfig.toProtoV30
-              ),
-          )
-
+      override protected def createRequest(): Either[String, v30.PerformManualLsuRequest] =
         v30
           .PerformManualLsuRequest(
             physicalSynchronizerId = currentPsid.toProtoPrimitive,
             successorPhysicalSynchronizerId = successorPsid.toProtoPrimitive,
             upgradeTime = upgradeTime.map(_.toProtoTimestamp),
-            successorConnectionConfiguration = conf,
+            sequencerSuccessors = sequencerSuccessors.map { case (sequencerId, connection) =>
+              sequencerId.toProtoPrimitive -> connection.toProtoV30
+                .transformInto[v30.PerformManualLsuRequest.SequencerConnection]
+            },
           )
           .asRight
-      }
 
       override protected def submitRequest(
           service: SynchronizerConnectivityServiceStub,
@@ -2170,7 +2088,7 @@ object ParticipantAdminCommands {
         extends Base[
           v30.CountInFlightRequest,
           v30.CountInFlightResponse,
-          admin.InFlightCount,
+          InFlightCount,
         ] {
 
       override protected def createRequest(): Either[String, v30.CountInFlightRequest] =
@@ -2184,7 +2102,7 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.CountInFlightResponse
-      ): Either[String, admin.InFlightCount] =
+      ): Either[String, InFlightCount] =
         for {
           pendingSubmissions <- ProtoConverter
             .parseNonNegativeInt("CountInFlight.pending_submissions", response.pendingSubmissions)
@@ -2193,7 +2111,7 @@ object ParticipantAdminCommands {
             .parseNonNegativeInt("CountInFlight.pending_transactions", response.pendingTransactions)
             .leftMap(_.toString)
         } yield {
-          admin.InFlightCount(pendingSubmissions, pendingTransactions)
+          InFlightCount(pendingSubmissions, pendingTransactions)
         }
     }
 
@@ -2552,7 +2470,7 @@ object ParticipantAdminCommands {
         extends Base[
           pruning.v30.GetParticipantScheduleRequest,
           pruning.v30.GetParticipantScheduleResponse,
-          Option[admin.ParticipantPruningSchedule],
+          Option[ParticipantPruningSchedule],
         ] {
       override protected def createRequest()
           : Right[String, pruning.v30.GetParticipantScheduleRequest] =
@@ -2568,10 +2486,10 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: pruning.v30.GetParticipantScheduleResponse
-      ): Either[String, Option[admin.ParticipantPruningSchedule]] =
+      ): Either[String, Option[ParticipantPruningSchedule]] =
         response.schedule.fold(
-          Right(None): Either[String, Option[admin.ParticipantPruningSchedule]]
-        )(admin.ParticipantPruningSchedule.fromProtoV30(_).bimap(_.message, Some(_)))
+          Right(None): Either[String, Option[ParticipantPruningSchedule]]
+        )(ParticipantPruningSchedule.fromProtoV30(_).bimap(_.message, Some(_)))
     }
   }
 
@@ -2647,7 +2565,7 @@ object ParticipantAdminCommands {
         extends GrpcAdminCommand[
           v30.ParticipantStatusRequest,
           v30.ParticipantStatusResponse,
-          admin.NodeStatus[admin.ParticipantStatus],
+          NodeStatus[ParticipantStatus],
         ] {
 
       override type Svc = ParticipantStatusServiceStub
@@ -2667,8 +2585,8 @@ object ParticipantAdminCommands {
 
       override protected def handleResponse(
           response: v30.ParticipantStatusResponse
-      ): Either[String, admin.NodeStatus[admin.ParticipantStatus]] =
-        admin.ParticipantStatus.fromProtoV30(response).leftMap(_.message)
+      ): Either[String, NodeStatus[ParticipantStatus]] =
+        ParticipantStatus.fromProtoV30(response).leftMap(_.message)
     }
   }
 

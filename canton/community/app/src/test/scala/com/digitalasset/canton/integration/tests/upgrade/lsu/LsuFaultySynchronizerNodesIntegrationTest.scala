@@ -3,7 +3,7 @@
 
 package com.digitalasset.canton.integration.tests.upgrade.lsu
 
-import com.digitalasset.canton.console.{CommandFailure, ParticipantReference}
+import com.digitalasset.canton.console.{LocalParticipantReference, ParticipantReference}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.integration.*
 import com.digitalasset.canton.integration.EnvironmentDefinition.S4M4
@@ -11,7 +11,6 @@ import com.digitalasset.canton.integration.bootstrap.NetworkBootstrapper
 import com.digitalasset.canton.integration.plugins.UseReferenceBlockSequencer.MultiSynchronizer
 import com.digitalasset.canton.integration.plugins.{UseBftSequencer, UsePostgres}
 import com.digitalasset.canton.integration.tests.upgrade.lsu.LogicalUpgradeUtils.SynchronizerNodes
-import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.Fixture
 import com.digitalasset.canton.integration.util.TestUtils.waitForTargetTimeOnSequencer
 import com.digitalasset.canton.logging.LogEntry
 import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
@@ -80,6 +79,7 @@ final class LsuFaultySynchronizerNodesIntegrationTest extends LsuBase {
     )
 
   private var automaticallyUpgraded: Seq[ParticipantReference] = _
+  private var manuallyUpgraded: Seq[LocalParticipantReference] = _
 
   override lazy val environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition.P4S7M7_Config
@@ -100,6 +100,7 @@ final class LsuFaultySynchronizerNodesIntegrationTest extends LsuBase {
         )
 
         automaticallyUpgraded = Seq(participant1, participant3)
+        manuallyUpgraded = Seq(participant2, participant4)
 
         participants.all.dars.upload(CantonExamplesPath)
 
@@ -113,15 +114,13 @@ final class LsuFaultySynchronizerNodesIntegrationTest extends LsuBase {
           Seq(sequencer5, sequencer6, sequencer7),
           Seq(mediator5, mediator6, mediator7),
         )
-
-        fixture = fixtureWithDefaults()
       }
-
-  private var fixture: Fixture = _
 
   "Logical synchronizer upgrade" should {
     "work when there are faulty synchronizer nodes" in { implicit env =>
       import env.*
+
+      val fixture = fixtureWithDefaults()
 
       participant1.health.ping(participant2)
       participant1.health.ping(participant3)
@@ -242,49 +241,18 @@ final class LsuFaultySynchronizerNodesIntegrationTest extends LsuBase {
       }
 
       pingF.futureValue // ping should succeed
-    }
 
-    "manual upgrade can be performed" in { implicit env =>
-      import env.*
+      manuallyUpgraded.foreach { p =>
+        p.repair.perform_late_lsu(
+          currentPhysicalSynchronizerId = fixture.currentPsid,
+          successorPhysicalSynchronizerId = fixture.newPsid,
+          announcedUpgradeTime = fixture.upgradeTime,
+          successorConfig = synchronizerConnectionConfig(sequencer5),
+        )
+        p.synchronizers.reconnect_all()
+      }
 
-      participant4.synchronizers.perform_manual_lsu(
-        currentPsid = fixture.currentPsid,
-        successorPsid = fixture.newPsid,
-        upgradeTime = Some(fixture.upgradeTime),
-        config = synchronizerConnectionConfig(sequencer5),
-      )
-      participant4.synchronizers.reconnect_all()
-    }
-
-    "an error in the new config can be fixed" in { implicit env =>
-      import env.*
-
-      val expectedError = s"expected Some(${fixture.newPsid}), got ${fixture.currentPsid}"
-
-      loggerFactory.assertThrowsAndLogs[CommandFailure](
-        participant2.synchronizers.perform_manual_lsu(
-          currentPsid = fixture.currentPsid,
-          successorPsid = fixture.newPsid,
-          upgradeTime = Some(fixture.upgradeTime),
-          // wrong synchronizer
-          config = synchronizerConnectionConfig(sequencer1),
-        ),
-        _.warningMessage should include(expectedError), // connection pool
-        // failure of the command
-        _.errorMessage should (include(expectedError) and include("FAILED_LSU")),
-      )
-
-      participant2.synchronizers.modify(
-        synchronizerAlias = daName,
-        modifier = _ => synchronizerConnectionConfig(sequencer5),
-      )
-
-      participant2.synchronizers.reconnect_all()
-    }
-
-    "and nodes can interact again" in { implicit env =>
-      import env.*
-
+      // Activity should be possible for all participants
       participant1.health.ping(participant2)
       participant3.health.ping(participant4)
     }

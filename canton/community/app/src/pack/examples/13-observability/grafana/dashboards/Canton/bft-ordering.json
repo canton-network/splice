@@ -4,8 +4,8 @@
       {
         "builtIn": 1,
         "datasource": {
-          "type": "datasource",
-          "uid": "grafana"
+          "type": "grafana",
+          "uid": "-- Grafana --"
         },
         "enable": true,
         "hide": true,
@@ -353,7 +353,7 @@
         "type": "prometheus",
         "uid": "$DS"
       },
-      "description": "Total number of blocks ordered and output to the read path. When there is no traffic, a block can be empty.",
+      "description": "Latest block number ordered and available for the read path. When there is no traffic, a block can be empty.",
       "fieldConfig": {
         "defaults": {
           "color": {

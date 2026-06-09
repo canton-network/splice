@@ -256,12 +256,11 @@ object SequencerClientFactory {
                 .Backoff(
                   logger,
                   closeContext.context,
-                  maxRetries = retry.Forever,
-                  initialDelay = config.startupConnectionRetryDelay.asFiniteApproximation,
-                  maxDelay = config.maxConnectionRetryDelay.asFiniteApproximation,
+                  retry.Forever,
+                  config.startupConnectionRetryDelay.asFiniteApproximation,
+                  config.maxConnectionRetryDelay.asFiniteApproximation,
                   "Traffic State Initialization",
-                  longDescription =
-                    s"Initialize traffic state from a BFT read with threshold ${sequencerConnections.sequencerTrustThreshold} from ${sequencerConnections.connections.length} total connections",
+                  s"Initialize traffic state from a BFT read with threshold ${sequencerConnections.sequencerTrustThreshold} from ${sequencerConnections.connections.length} total connections",
                   retryLogLevel = Some(Level.INFO),
                 )
                 .unlessShutdown(

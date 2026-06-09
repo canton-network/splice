@@ -88,7 +88,7 @@ final class MediatorRestartTest
           val recordTime = CantonTimestamp
             .fromProtoTimestamp(completion.synchronizerTime.value.recordTime.value)
             .value
-          mediator1.inspection.verdicts_until_complete(
+          mediator1.inspection.verdicts(
             recordTime.immediatePredecessor,
             PositiveInt.one,
             timeout = NonNegativeDuration.ofSeconds(5),
@@ -212,14 +212,12 @@ final class MediatorRestartTest
               )
               .value
             mediator1.inspection
-              .verdicts_until_complete(
+              .verdicts(
                 recordTime.immediatePredecessor,
                 PositiveInt.one,
                 timeout = NonNegativeDuration.ofSeconds(5),
               )
               .loneElement
-              .verdict
-              .value
               .verdict
               .isVerdictResultRejected shouldBe true
           },

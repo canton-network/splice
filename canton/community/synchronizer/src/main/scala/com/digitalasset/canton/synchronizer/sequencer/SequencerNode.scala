@@ -559,9 +559,15 @@ class SequencerNodeBootstrap(
                 logger.info(
                   s"Using config override for lsu sequencing bounds: $lsuSequencingBoundsOverride"
                 )
-                LsuSequencingBounds
-                  .create(lsuSequencingBoundsOverride, synchronizerTopologyStore)
-                  .map(Option(_))
+                EitherT.fromEither[FutureUnlessShutdown](
+                  LsuSequencingBounds
+                    .create(
+                      lowerBoundSequencingTimeExclusive =
+                        lsuSequencingBoundsOverride.lowerBoundSequencingTimeExclusive,
+                      upgradeTime = lsuSequencingBoundsOverride.upgradeTime,
+                    )
+                    .map(Option(_))
+                )
 
               case None =>
                 EitherT
