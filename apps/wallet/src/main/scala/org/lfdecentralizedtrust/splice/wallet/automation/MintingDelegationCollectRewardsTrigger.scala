@@ -55,7 +55,6 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 
-import java.time.Duration
 import org.apache.pekko.stream.Materializer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -402,7 +401,7 @@ class MintingDelegationCollectRewardsTrigger(
     val now = context.clock.now.toInstant
     val minTtl = config.minTtlAfterSharing.asJava
     coupons.exists { c =>
-      Duration.between(now, c.payload.expiresAt).compareTo(minTtl) <= 0
+      !c.payload.expiresAt.isAfter(now.plus(minTtl))
     }
   }
 
