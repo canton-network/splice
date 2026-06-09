@@ -616,13 +616,14 @@ class DbScanAppRewardsStoreTest
         } yield succeed
       }
 
-      "fail when reward amount exceeds issuance" in {
+      "fail when reward amount exceeds issuance by more than tolerance" in {
         for {
           (store, historyId) <- newStore()
-          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
+          // Reward exceeds issuance by 2x tolerance (0.002 > 0.001)
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.002))
           result <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(5.0))),
+              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
               "test.assertRewardAmountWithinIssuance",
             )
           ).failed
@@ -818,6 +819,20 @@ class DbScanAppRewardsStoreTest
           .failed
       } yield {
         result shouldBe a[Exception]
+      }
+    }
+
+    "computeAndStoreRewards — rolls back when reward exceeds issuance" in {
+      for {
+        // Use a negative tolerance so any positive reward triggers the assertion
+        (store, historyId) <- newStore(rewardIssuanceTolerance = BigDecimal(-1.0))
+        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
+        result <- store
+          .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
+          .failed
+      } yield {
+        result.getMessage should include("exceeds totalIssuance")
       }
     }
 
@@ -1143,7 +1158,9 @@ class DbScanAppRewardsStoreTest
 
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
-  private def newStore(): Future[(DbScanAppRewardsStore, Long)] = {
+  private def newStore(
+      rewardIssuanceTolerance: BigDecimal = BigDecimal(0.001)
+  ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
@@ -1169,7 +1186,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         appActivityRecordStore,
-        rewardIssuanceTolerance = BigDecimal(0.001),
+        rewardIssuanceTolerance,
         loggerFactory,
       )
       (store, updateHistory.historyId)
