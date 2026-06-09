@@ -189,7 +189,13 @@ object ParticipantAdminCommands {
       }
     }
 
-    final case class DarData(darPath: String, description: String, expectedMainPackageId: String)
+    final case class DarData(
+        darPath: String,
+        description: String,
+        expectedMainPackageId: String,
+        // We sometimes want to upload DARs that are inside JARs, which is hard with just a path.
+        darDataO: Option[ByteString] = None,
+    )
     final case class UploadDar(
         dars: Seq[DarData],
         synchronizerId: Option[SynchronizerId],
@@ -203,9 +209,7 @@ object ParticipantAdminCommands {
           .traverse(dar =>
             for {
               _ <- Either.cond(dar.darPath.nonEmpty, (), "Provided DAR path is empty")
-              filenameAndDarData <- dar.darDataO.fold(loadDarData(dar.darPath))(darData =>
-                Right(Paths.get(dar.darPath).getFileName.toString -> darData)
-              )
+              filenameAndDarData <- loadDarData(dar.darPath)
               (filename, darData) = filenameAndDarData
               descriptionOrFilename =
                 if (dar.description.isEmpty)
@@ -743,7 +747,7 @@ object ParticipantAdminCommands {
           service: PartyManagementServiceStub,
           request: Unit,
       ): Future[v30.ImportPartyAcsResponse] =
-        ResourceUtil.withResource(inputStream) { inputStream =>
+        ResourceUtil.withResource(new FileInputStream(file)) { inputStream =>
           val isFirstChunk = new AtomicBoolean(true)
           GrpcStreamingUtils.streamToServer(
             service.importPartyAcs,
