@@ -1454,9 +1454,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
           amount.bigDecimal,
           now.plus(java.time.Duration.ofDays(1)).toInstant,
           true,
-          beneficiaryO.fold(java.util.Optional.empty[String]())(b =>
-            java.util.Optional.of(b.toProtoPrimitive)
-          ),
+          beneficiaryO.map(_.toProtoPrimitive).toJava,
         ).create.commands.asScala
       },
     )
