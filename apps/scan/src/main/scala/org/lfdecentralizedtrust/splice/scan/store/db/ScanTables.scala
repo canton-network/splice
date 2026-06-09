@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.scan.store.{
   AbortTransferInstructionTxLogEntry,
+  AddSvTxLogEntry,
   AppRewardTxLogEntry,
   BalanceChangeTxLogEntry,
   ClosedMiningRoundTxLogEntry,
@@ -269,6 +270,10 @@ object ScanTables extends AcsTables {
               ),
             )
           case entry: AbortTransferInstructionTxLogEntry =>
+            ScanTxLogRowData(
+              entry = entry
+            )
+          case entry: AddSvTxLogEntry =>
             ScanTxLogRowData(
               entry = entry
             )

@@ -40,6 +40,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
+  AddSvTxLogEntry,
   OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
@@ -141,7 +142,7 @@ class DbScanStore(
         userVersion = acsStoreDescriptorUserVersion,
       ),
       txLogStoreDescriptor = StoreDescriptor(
-        version = 1,
+        version = 2,
         name = "DbScanStore",
         party = key.dsoParty,
         participant = participantId,
@@ -672,6 +673,15 @@ class DbScanStore(
   override def lookupLatestSvRewardWeightChange(
       svParty: PartyId,
       effectiveBefore: Option[String],
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    lookupLatestUpdateSvRewardWeight(svParty, effectiveBefore).flatMap {
+      case some @ Some(_) => Future.successful(some)
+      case None => lookupInitialSvRewardWeight(svParty, effectiveBefore)
+    }
+
+  private def lookupLatestUpdateSvRewardWeight(
+      svParty: PartyId,
+      effectiveBefore: Option[String],
   )(implicit tc: TraceContext): Future[Option[Long]] = {
     val svPartyPath =
       "entry_data->'result'->'request'->'action'->'value'->'dsoAction'->'value'->>'svParty'"
@@ -692,13 +702,41 @@ class DbScanStore(
             where = where,
             orderLimit = sql"order by vote_effective_at desc limit 1",
           ).headOption,
-          "lookupLatestSvRewardWeightChange",
+          "lookupLatestUpdateSvRewardWeight",
         )
         .value
     } yield row
       .map(txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig))
       .flatMap(_.result)
       .flatMap(newRewardWeightOf)
+  }
+
+  private def lookupInitialSvRewardWeight(
+      svParty: PartyId,
+      effectiveBefore: Option[String],
+  )(implicit tc: TraceContext): Future[Option[Long]] = {
+    val datePath = "entry_data->>'date'"
+    val where = (sql"""
+           entry_type = ${EntryType.AddSvTxLogEntry} and
+           entry_data->>'svParty' = ${svParty.toProtoPrimitive}""" ++ (effectiveBefore match {
+      case Some(e) => sql" and #$datePath < ${lengthLimited(e)}"
+      case None => sql""
+    })).toActionBuilder
+    for {
+      row <- storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = where,
+            orderLimit = sql"order by #$datePath desc limit 1",
+          ).headOption,
+          "lookupInitialSvRewardWeight",
+        )
+        .value
+    } yield row
+      .map(txLogEntryFromRow[AddSvTxLogEntry](txLogConfig))
+      .map(_.newSvRewardWeight)
   }
 
   private def newRewardWeightOf(result: DsoRules_CloseVoteRequestResult): Option[Long] =
