@@ -59,6 +59,9 @@ case class ScanAppBackendConfig(
     enableAppActivityRecordAndTrafficIngestion: Boolean = true,
     serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
+    // Max rounding error tolerated wrt actual total of minting allowances
+    // and the per-round minting allowance from the CC whitepaper.
+    rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the

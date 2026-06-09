@@ -714,6 +714,7 @@ class ValidatorApp(
             config.parameters,
             scanConnection,
             packageVersionSupport,
+            config.rewardSharingConfigByParty,
           )
           val walletManager = new UserWalletManager(
             ledgerClient,
@@ -734,6 +735,7 @@ class ValidatorApp(
             validatorTopupConfig,
             config.walletSweep,
             config.autoAcceptTransfers,
+            config.rewardSharingConfigByParty,
             dedupDuration,
             config.parameters,
           )
