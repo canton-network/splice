@@ -11,6 +11,9 @@
     "imageRepo": {
       "type": "string"
     },
+    "participantImageName": {
+      "type": "string"
+    },
     "imageDigests": {
       "type": "object"
     },
@@ -63,6 +66,9 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "initImage": {
+          "type": "string"
         }
       }
     },
