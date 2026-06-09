@@ -818,8 +818,8 @@ class DbScanAppRewardsStore(
       if (totalRewardAmount > params.totalIssuanceForFeaturedAppRewards + tolerance) {
         throw Status.INTERNAL
           .withDescription(
-            s"Round $roundNumber: totalAppRewardAmount ($totalRewardAmount) " +
-              s"exceeds totalIssuance (${params.totalIssuanceForFeaturedAppRewards}) " +
+            s"Round $roundNumber: actual total app reward minting allowance ($totalRewardAmount) " +
+              s"exceeds minting curve allowance (${params.totalIssuanceForFeaturedAppRewards}) " +
               s"by more than tolerance ($tolerance)"
           )
           .asRuntimeException()
