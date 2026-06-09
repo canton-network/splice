@@ -29,6 +29,12 @@
             automatically at start-up from its database. The value must be removed from both the helm chart and
             the docker-compose configuration.
 
+      - Helm Charts
+
+          - All Helm charts now support overriding full image names.
+            It is possible to override the default image names using new Helm values.
+            This change helps deployments that require specific naming conventions for images.
+
       .. Important::
 
           The migration id must still be kept for participant database naming for backwards compatibility (``persistance.databaseName`` helm value,
