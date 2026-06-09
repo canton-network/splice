@@ -7,7 +7,7 @@ import sbt.*
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
   val version: String = "3.5.0-snapshot.20260401.14638.0.v9a1531c5"
-  val canton_library_version = "3.5.0-snapshot.20260407.18566.0.v64d1d1e6"
+  val canton_library_version = "3.5.3"
   val daml_language_versions = Seq("2.1")
   val daml_libraries_version = version
   // Defined in `../nix/dpm-sdk-sources.json`, as the compiler version is also used by
@@ -80,19 +80,11 @@ object CantonDependencies {
   lazy val scalapb_runtime_grpc =
     "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
 
-  lazy val daml_test_evidence_tag =
-    "com.daml" %% "test-evidence-tag" % canton_library_version
-  lazy val daml_test_evidence_scalatest =
-    "com.daml" %% "test-evidence-scalatest" % canton_library_version
-  lazy val daml_test_evidence_generator_scalatest =
-    "com.daml" %% "test-evidence-generator" % canton_library_version
   lazy val daml_lf_archive_reader = "com.daml" %% "daml-lf-archive" % canton_library_version
   lazy val daml_lf_data = "com.daml" %% "daml-lf-data" % canton_library_version
   lazy val daml_lf_engine = "com.daml" %% "daml-lf-engine" % canton_library_version
   lazy val daml_lf_language = "com.daml" %% "daml-lf-language" % canton_library_version
   lazy val daml_lf_transaction = "com.daml" %% "daml-lf-transaction" % canton_library_version
-  lazy val daml_lf_transaction_test_lib =
-    "com.daml" %% "daml-lf-transaction-test-lib" % canton_library_version
   lazy val daml_lf_api_type_signature =
     "com.daml" %% "daml-lf-api-type-signature" % canton_library_version
   lazy val daml_libs_scala_grpc_test_utils =
@@ -139,7 +131,7 @@ object CantonDependencies {
   lazy val daml_rs_grpc_pekko = "com.daml" %% "rs-grpc-pekko" % canton_library_version
 
   lazy val daml_testing_utils =
-    "com.digitalasset.canton" %% "testing-utils" % canton_library_version
+    "com.daml" %% "testing-utils" % canton_library_version
 
   lazy val bouncycastle_bcprov_jdk15on =
     "org.bouncycastle" % "bcprov-jdk18on" % bouncy_castle_version
