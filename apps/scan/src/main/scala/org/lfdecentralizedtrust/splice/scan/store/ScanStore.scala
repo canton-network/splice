@@ -174,6 +174,10 @@ trait ScanStore
       tc: TraceContext
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 
+  def lookupLatestSvRewardWeightChange(svParty: PartyId, effectiveBefore: Option[String])(implicit
+      tc: TraceContext
+  ): Future[Option[Long]]
+
   def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[
