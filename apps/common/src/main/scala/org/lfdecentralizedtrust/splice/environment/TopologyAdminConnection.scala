@@ -8,13 +8,34 @@ import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.admin.api.client.commands.{GrpcAdminCommand, SynchronizerTimeCommands, TopologyAdminCommands, VaultAdminCommands}
+import com.digitalasset.canton.admin.api.client.commands.{
+  GrpcAdminCommand,
+  SynchronizerTimeCommands,
+  TopologyAdminCommands,
+  VaultAdminCommands,
+}
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Init.GetIdResult
 import com.digitalasset.canton.admin.api.client.data.topology
-import com.digitalasset.canton.admin.api.client.data.topology.{BaseResult, ListNamespaceDelegationResult, ListOwnerToKeyMappingResult, ListSynchronizerParametersStateResult}
-import com.digitalasset.canton.config.{ApiLoggingConfig, ClientConfig, NonNegativeDuration, NonNegativeFiniteDuration}
+import com.digitalasset.canton.admin.api.client.data.topology.{
+  BaseResult,
+  ListNamespaceDelegationResult,
+  ListOwnerToKeyMappingResult,
+  ListSynchronizerParametersStateResult,
+}
+import com.digitalasset.canton.config.{
+  ApiLoggingConfig,
+  ClientConfig,
+  NonNegativeDuration,
+  NonNegativeFiniteDuration,
+}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
-import com.digitalasset.canton.crypto.{EncryptionPublicKey, Fingerprint, PublicKey, SigningKeyUsage, SigningPublicKey}
+import com.digitalasset.canton.crypto.{
+  EncryptionPublicKey,
+  Fingerprint,
+  PublicKey,
+  SigningKeyUsage,
+  SigningPublicKey,
+}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.grpc.ByteStringStreamObserver
@@ -39,8 +60,15 @@ import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{AuthorizedStateChanged, TopologySnapshot, TopologyTransactionType}
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.{AuthorizedState, ProposalSignedByOwnKey}
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
+  AuthorizedStateChanged,
+  TopologySnapshot,
+  TopologyTransactionType,
+}
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.{
+  AuthorizedState,
+  ProposalSignedByOwnKey,
+}
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.nowarn
