@@ -93,10 +93,6 @@ export async function installParticipant(
       participantAdminUserNameFrom: auth0UserNameEnvVarSource('validator'),
       metrics: {
         enable: true,
-        migration: {
-          id: migrationId,
-          active: true,
-        },
       },
       additionalJvmOptions: getAdditionalJvmOptions(
         validatorConfig.participant?.additionalJvmOptions

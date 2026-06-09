@@ -38,6 +38,7 @@ export type SvOnboarding =
       keys: CnInput<SvIdKey>;
       sponsorRelease: pulumi.Resource;
       sponsorApiUrl: string;
+      sponsorScanUrl: string;
     };
 
 export interface ScanBigQueryConfig {

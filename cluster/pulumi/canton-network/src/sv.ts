@@ -588,9 +588,9 @@ function installScan(
     additionalJvmOptions: getAdditionalJvmOptions(config.scanApp?.additionalJvmOptions),
     failOnAppVersionMismatch: failOnAppVersionMismatch,
     participantAddress: participant.internalClusterAddress,
-    migration: {
-      id: decentralizedSynchronizerMigrationConfig.activeMigrationId,
-    },
+    ...(config.onboarding.type == 'join-with-key'
+      ? { sponsorScanUrl: config.onboarding.sponsorScanUrl }
+      : {}),
     ...synchronizerValues,
     enablePostgresMetrics: true,
     logLevel: config.logging?.appsLogLevel,

@@ -102,6 +102,60 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
+  "listSortedAssignedRewardCouponV2s" should {
+    "return correct results" in {
+      for {
+        store <- mkTransferInputStore(user)
+        // for each round i, create 2 assigned coupons with amount i and 2i
+        _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
+          for {
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(2 * n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+          } yield ()
+        )
+        // unassigned coupon in round 2 — should be excluded from results
+        _ <- dummyDomain.create(
+          rewardCouponV2(round = 2, provider = user, amount = numeric(20), beneficiary = None),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        store.listSortedAssignedRewardCouponV2s(Map.empty).futureValue shouldBe empty
+        val roundsToFilter = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
+        // assigned coupons listed in ascending round order, descending amount per round;
+        // the unassigned coupon (amount=20) in round 2 is excluded
+        store
+          .listSortedAssignedRewardCouponV2s(
+            roundsToFilter.map(r => r.payload.round -> r.payload).toMap
+          )
+          .futureValue
+          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          4.0, 2.0, // round 2 (unassigned 20.0 excluded)
+          6.0, 3.0, // round 3
+          8.0, 4.0, // round 4
+        )
+      }
+    }
+  }
+
   /** A AmuletRules_Mint exercise event with one child Amulet create event */
   protected def mintTransaction(
       receiver: PartyId,

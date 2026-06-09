@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
 }
+
 import org.lfdecentralizedtrust.splice.store.Limit
 
 import java.time.Instant
@@ -61,9 +62,11 @@ case class ScanAppBackendConfig(
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the
-    // update history). It only needs to be configured to bootstrap a node that does not yet
-    // have any migration id in its DB (e.g. the network-founding scan or a freshly joining scan).
-    domainMigrationId: Option[Long] = None,
+    // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
+    // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
+    // migration id is fetched from the sponsor scan configured via `sponsorScanUrl`, the same way
+    // a joining SV fetches it from its sponsoring SV.
+    sponsorScanUrl: Option[NetworkAppClientConfig] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     spliceInstanceNames: SpliceInstanceNamesConfig,
     updateHistoryBackfillEnabled: Boolean = true,

@@ -6,6 +6,7 @@ import org.lfdecentralizedtrust.splice.util.{SpliceUtil, TimeTestUtil, WalletTes
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
+  RewardCouponV2,
   ValidatorRewardCoupon,
 }
 
@@ -28,6 +29,7 @@ class WalletRewardsTimeBasedIntegrationTest
   override protected lazy val sanityChecksIgnoredRootCreates = Seq(
     AppRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
     ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
+    RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID,
   )
 
   "A wallet" should {
@@ -58,6 +60,13 @@ class WalletRewardsTimeBasedIntegrationTest
         appRewards = Seq((bobValidatorParty, 0.33, false)),
         validatorRewards = Seq((bob, 0.33)),
       )
+
+      val rewardCouponV2Amount = BigDecimal(1000.0)
+      clue("Create assigned RewardCouponV2 for bob's validator") {
+        createRewardCouponsV2(
+          Seq((bobValidatorParty, rewardCouponV2Amount, bobValidatorParty))
+        )
+      }
 
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
@@ -112,14 +121,14 @@ class WalletRewardsTimeBasedIntegrationTest
         val newBalance = bobValidatorWalletClient.balance().unlockedQty
 
         // We just check that the balance has increased by roughly the right amount,
-        // rather then repeating the calculation for the reward amount
-        // 2.85 USD per faucet coupon
+        // rather then repeating the calculation for the reward amount.
+        // 2.85 USD per faucet coupon; RewardCouponV2 amount is added directly.
         val faucetCouponAmountUsd = 2.85 * openRounds.size
         assertInRange(
           newBalance - prevBalance,
           (
-            walletUsdToAmulet(-0.1 + faucetCouponAmountUsd),
-            walletUsdToAmulet(0.5 + faucetCouponAmountUsd),
+            walletUsdToAmulet(-0.1 + faucetCouponAmountUsd) + rewardCouponV2Amount,
+            walletUsdToAmulet(0.5 + faucetCouponAmountUsd) + rewardCouponV2Amount,
           ),
         )
       }
