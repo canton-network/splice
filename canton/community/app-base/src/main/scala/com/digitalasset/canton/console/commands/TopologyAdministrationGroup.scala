@@ -9,33 +9,16 @@ import cats.syntax.traverse.*
 import com.daml.nameof.NameOf.functionFullName
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.RpcError
+import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Init.GetIdResult
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Write.GenerateTransactions
 import com.digitalasset.canton.admin.api.client.commands.{GrpcAdminCommand, TopologyAdminCommands}
 import com.digitalasset.canton.admin.api.client.data.topology.*
-import com.digitalasset.canton.admin.api.client.data.{
-  DynamicSynchronizerParameters as ConsoleDynamicSynchronizerParameters,
-  SequencingParameters,
-  TopologyQueueStatus,
-}
+import com.digitalasset.canton.admin.api.client.data.{SequencingParameters, TopologyQueueStatus, DynamicSynchronizerParameters as ConsoleDynamicSynchronizerParameters}
+import com.digitalasset.canton.{config, networking}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.{ConsoleCommandTimeout, NonNegativeDuration}
-import com.digitalasset.canton.console.CommandErrors.{CommandError, GenericCommandError}
-import com.digitalasset.canton.console.ConsoleEnvironment.Implicits.*
-import com.digitalasset.canton.console.{
-  AdminCommandRunner,
-  CommandErrors,
-  CommandSuccessful,
-  ConsoleCommandResult,
-  ConsoleEnvironment,
-  ConsoleMacros,
-  FeatureFlag,
-  FeatureFlagFilter,
-  Help,
-  Helpful,
-  InstanceReference,
-}
+import com.digitalasset.canton.console.{AdminCommandRunner, CommandErrors, ConsoleCommandResult, ConsoleEnvironment, ConsoleMacros, FeatureFlag, FeatureFlagFilter, Help, Helpful, InstanceReference}
 import com.digitalasset.canton.console.CommandErrors.GenericCommandError
-import com.digitalasset.canton.console.FeatureFlag.Preview
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -46,18 +29,8 @@ import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Authorized
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.*
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
-import com.digitalasset.canton.topology.admin.v30.{
-  ExportTopologySnapshotResponse,
-  ExportTopologySnapshotV2Response,
-  GenesisStateResponse,
-  GenesisStateV2Response,
-  SequencerLsuStateResponse,
-}
-import com.digitalasset.canton.topology.store.{
-  StoredTopologyTransaction,
-  StoredTopologyTransactions,
-  TimeQuery,
-}
+import com.digitalasset.canton.topology.admin.v30.{ExportTopologySnapshotResponse, ExportTopologySnapshotV2Response, GenesisStateResponse, GenesisStateV2Response, SequencerLsuStateResponse}
+import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, StoredTopologyTransactions, TimeQuery}
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Replace

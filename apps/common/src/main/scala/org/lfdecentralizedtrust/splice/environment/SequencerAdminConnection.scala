@@ -190,7 +190,7 @@ class SequencerAdminConnection(
       traceContext: TraceContext
   ): Future[Map[TopologyMapping.Code, Int]] = {
     runCmd(
-      TopologyAdminCommands.Read.ListAll(
+      TopologyAdminCommands.Read.ListAllV2(
         query = BaseQuery(
           store = store,
           proposals = false,
@@ -200,7 +200,7 @@ class SequencerAdminConnection(
           protocolVersion = None,
         ),
         filterNamespace = "",
-        excludeMappings = Seq.empty,
+        includeMappings = Seq.empty,
       )
     ).map(_.result.groupMapReduce(_.mapping.code)(_ => 1)(_ + _))
   }
@@ -546,7 +546,7 @@ class SequencerAdminConnection(
   override def isNodeInitialized()(implicit traceContext: TraceContext): Future[Boolean] = {
     getStatus.map {
       case NodeStatus.Failure(_) => false
-      case NodeStatus.NotInitialized(_, _) => false
+      case NodeStatus.NotInitialized(_, _, _) => false
       case NodeStatus.Success(_) => true
     }
   }

@@ -142,5 +142,9 @@ case class SharedSpliceAppParameters(
 
   def dispatchQueueBackpressureLimit: NonNegativeInt = ???
 
+  override def topologyConfig: TopologyConfig = ???
+
+  override def sanitizePublicErrorMessages: Boolean = true
+
   override def enableTestingFeatures = false
 }

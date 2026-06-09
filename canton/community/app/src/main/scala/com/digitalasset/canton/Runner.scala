@@ -18,12 +18,12 @@ import scala.util.control.NonFatal
 /** Result for exposing the process exit code. All logging is expected to take place inside the
   * runner.
   */
-trait Runner extends NamedLogging {
+trait Runner[C <: SharedCantonConfig[C]] extends NamedLogging {
 
-  def run(environment: Environment): Unit
+  def run(environment: Environment[C]): Unit
 
   // TODO(#24954): Convert to using declarative api, when it becomes available
-  def uploadDar(environment: Environment)(darPath: String): Unit = {
+  def uploadDar(environment: Environment[C])(darPath: String): Unit = {
     val consoleEnvironment = environment.createConsole()
     consoleEnvironment.participants.local
       .flatMap(_.underlying)
@@ -41,15 +41,15 @@ trait Runner extends NamedLogging {
   }
 }
 
-class ServerRunner(
+class ServerRunner[C <: SharedCantonConfig[C]](
     bootstrapScript: Option[CantonScript] = None,
     override val loggerFactory: NamedLoggerFactory,
     exitAfterBootstrap: Boolean = false,
     dars: Seq[String] = Seq.empty,
-) extends Runner
+) extends Runner[C]
     with NoTracing {
 
-  def run(environment: Environment): Unit =
+  def run(environment: Environment[C]): Unit =
     try {
       def start(): Unit =
         environment
@@ -80,14 +80,14 @@ class ServerRunner(
     }
 }
 
-class ConsoleInteractiveRunner(
+class ConsoleInteractiveRunner[C <: SharedCantonConfig[C]](
     noTty: Boolean = false,
     bootstrapScript: Option[CantonScript],
     postScriptCallback: => Unit,
     override val loggerFactory: NamedLoggerFactory,
     dars: Seq[String] = Seq.empty,
-) extends Runner {
-  def run(environment: Environment): Unit = {
+) extends Runner[C] {
+  def run(environment: Environment[C]): Unit = {
     val success =
       try {
         val consoleEnvironment = environment.createConsole()
@@ -101,20 +101,22 @@ class ConsoleInteractiveRunner(
           },
         )
       } catch {
-        case NonFatal(_) => false
+        case NonFatal(e) =>
+          logger.error(e.getMessage)(TraceContext.empty)
+          false
       }
     sys.exit(if (success) 0 else 1)
   }
 }
 
-class ConsoleScriptRunner(
+class ConsoleScriptRunner[C <: SharedCantonConfig[C]](
     scriptPath: CantonScript,
     override val loggerFactory: NamedLoggerFactory,
-) extends Runner {
+) extends Runner[C] {
   private val Ok = 0
   private val Error = 1
 
-  override def run(environment: Environment): Unit = {
+  override def run(environment: Environment[C]): Unit = {
     val exitCode =
       ConsoleScriptRunner.run(environment, scriptPath, logger) match {
         case Right(_unit) =>

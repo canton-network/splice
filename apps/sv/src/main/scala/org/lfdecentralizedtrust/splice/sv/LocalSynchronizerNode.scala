@@ -306,7 +306,7 @@ class LocalSynchronizerNode(
         "initialize_mediator",
         "Initializing mediator",
         mediatorAdminConnection.getStatus.flatMap {
-          case NodeStatus.NotInitialized(_, _) =>
+          case NodeStatus.NotInitialized(_, _, _) =>
             mediatorAdminConnection.initialize(
               synchronizerId,
               internalSequencerConnection,
@@ -456,7 +456,7 @@ class LocalSynchronizerNode(
         "initializer_sequencer",
         "Initializing sequencer",
         sequencerAdminConnection.getStatus.flatMap {
-          case NodeStatus.NotInitialized(_, _) =>
+          case NodeStatus.NotInitialized(_, _, _) =>
             for {
               _ <- sequencerAdminConnection.initializeFromOnboardingState(
                 onboardingState

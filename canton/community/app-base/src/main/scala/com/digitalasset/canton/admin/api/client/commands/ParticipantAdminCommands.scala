@@ -6,11 +6,7 @@ package com.digitalasset.canton.admin.api.client.commands
 import cats.syntax.either.*
 import cats.syntax.option.*
 import cats.syntax.traverse.*
-import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
-  DefaultUnboundedTimeout,
-  ServerEnforcedTimeout,
-  TimeoutType,
-}
+import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{DefaultUnboundedTimeout, ServerEnforcedTimeout, TimeoutType}
 import com.digitalasset.canton.admin.api.client.data as admin
 import com.digitalasset.canton.admin.api.client.data.PackageDescription.PackageContents
 import com.digitalasset.canton.admin.participant.v30
@@ -24,11 +20,7 @@ import com.digitalasset.canton.admin.participant.v30.PingServiceGrpc.PingService
 import com.digitalasset.canton.admin.participant.v30.PruningServiceGrpc.PruningServiceStub
 import com.digitalasset.canton.admin.participant.v30.ResourceManagementServiceGrpc.ResourceManagementServiceStub
 import com.digitalasset.canton.admin.participant.v30.SynchronizerConnectivityServiceGrpc.SynchronizerConnectivityServiceStub
-import com.digitalasset.canton.admin.participant.v30.{
-  PerformManualLsuRequest,
-  RepairCommitmentsUsingAcsRequest,
-  RepairCommitmentsUsingAcsResponse,
-}
+import com.digitalasset.canton.admin.participant.v30.{PerformManualLsuRequest, RepairCommitmentsUsingAcsRequest, RepairCommitmentsUsingAcsResponse}
 import com.digitalasset.canton.admin.pruning
 import com.digitalasset.canton.admin.pruning.v30.WaitCommitmentsSetup
 import com.digitalasset.canton.config.NonNegativeDuration
@@ -37,17 +29,10 @@ import com.digitalasset.canton.data.{CantonTimestamp, CantonTimestampSecond}
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.participant.admin.ResourceLimits
-import com.digitalasset.canton.participant.admin.data.{
-  ContractImportMode,
-  PartyReplicationStatus,
-  RepresentativePackageIdOverride,
-}
+import com.digitalasset.canton.participant.admin.data.{ContractImportMode, PartyReplicationStatus, RepresentativePackageIdOverride}
 import com.digitalasset.canton.participant.admin.party.PartyParticipantPermission
 import com.digitalasset.canton.participant.admin.traffic.TrafficStateAdmin
-import com.digitalasset.canton.participant.pruning.AcsCommitmentProcessor.{
-  ReceivedCmtState,
-  SentCmtState,
-}
+import com.digitalasset.canton.participant.pruning.AcsCommitmentProcessor.{ReceivedCmtState, SentCmtState}
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.protocol.LfContractId
 import com.digitalasset.canton.protocol.messages.{AcsCommitment, CommitmentPeriod}
@@ -57,22 +42,9 @@ import com.digitalasset.canton.sequencing.protocol.TrafficState
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.time.PositiveSeconds
 import com.digitalasset.canton.topology.transaction.{GrpcConnection, ParticipantPermission}
-import com.digitalasset.canton.topology.{
-  ConfiguredPhysicalSynchronizerId,
-  ParticipantId,
-  PartyId,
-  PhysicalSynchronizerId,
-  SequencerId,
-  SynchronizerId,
-}
+import com.digitalasset.canton.topology.{ConfiguredPhysicalSynchronizerId, ParticipantId, PartyId, PhysicalSynchronizerId, SequencerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.{
-  BinaryFileUtil,
-  GrpcStreamingUtils,
-  OptionUtil,
-  PathUtils,
-  ResourceUtil,
-}
+import com.digitalasset.canton.util.{BinaryFileUtil, GrpcStreamingUtils, OptionUtil, PathUtils, ResourceUtil}
 import com.digitalasset.canton.{ReassignmentCounter, SequencerCounter, SynchronizerAlias, config}
 import com.google.protobuf.ByteString
 import com.google.protobuf.timestamp.Timestamp
@@ -81,7 +53,7 @@ import io.grpc.stub.StreamObserver
 import io.grpc.{Context, ManagedChannel}
 import io.scalaland.chimney.dsl.*
 
-import java.io.{File, FileInputStream, IOException}
+import java.io.{File, FileInputStream, IOException, InputStream}
 import java.nio.file.{Files, Path, Paths}
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -722,7 +694,7 @@ object ParticipantAdminCommands {
     }
 
     final case class ImportPartyAcs(
-        file: File,
+        is: InputStream,
         synchronizerId: SynchronizerId,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
@@ -747,7 +719,7 @@ object ParticipantAdminCommands {
           service: PartyManagementServiceStub,
           request: Unit,
       ): Future[v30.ImportPartyAcsResponse] =
-        ResourceUtil.withResource(new FileInputStream(file)) { inputStream =>
+        ResourceUtil.withResource(is) { inputStream =>
           val isFirstChunk = new AtomicBoolean(true)
           GrpcStreamingUtils.streamToServer(
             service.importPartyAcs,

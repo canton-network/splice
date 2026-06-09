@@ -252,9 +252,8 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
     Config.bootstrapFile.map(CantonScriptFromFile.apply)
 
   val environment = environmentFactory.create(Config.startupConfig, loggerFactory)
-  val runner: Runner = cliOptions.command match {
+  val runner: Runner[Config] = cliOptions.command match {
     case Some(Command.Sandbox(Mode.Deamon)) =>
-      startupConfigFileMonitoring(environment)
       new ServerRunner(
         bootstrapScript,
         loggerFactory,
@@ -262,7 +261,6 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
         cliOptions.dars,
       )
     case Some(Command.Sandbox(Mode.Interactive)) =>
-      startupConfigFileMonitoring(environment)
       new ConsoleInteractiveRunner(
         cliOptions.noTty,
         bootstrapScript,
@@ -270,14 +268,12 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
         loggerFactory,
       )
     case Some(Command.Daemon) =>
-      startupConfigFileMonitoring(environment)
       new ServerRunner(bootstrapScript, loggerFactory)
     case Some(Command.RunScript(script)) => ConsoleScriptRunner(script, loggerFactory)
     case Some(Command.Generate(target)) =>
       Generate.process(target, Config.startupConfig)
       sys.exit(0)
     case _ =>
-      startupConfigFileMonitoring(environment)
       new ConsoleInteractiveRunner(
         cliOptions.noTty,
         bootstrapScript,

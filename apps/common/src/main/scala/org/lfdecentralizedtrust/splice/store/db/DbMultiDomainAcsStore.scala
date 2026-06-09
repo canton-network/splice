@@ -1337,7 +1337,7 @@ final class DbMultiDomainAcsStore[TXE](
                   acsInserts.toList ++ incompleteOutInserts ++ incompleteInInserts
                 ),
               "ingestAcsBatch",
-            )
+            )(implicitly, implicitly, _ => false)
         } yield ()
       }
     }
@@ -1372,7 +1372,11 @@ final class DbMultiDomainAcsStore[TXE](
           .sequentialTraverse(steps) {
             case batch: IngestTransactionTreesBatch =>
               storage
-                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
+                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")(
+                  implicitly,
+                  implicitly,
+                  _ => false,
+                )
                 .map { summaryState =>
                   val lastTree = batch.batch.last.tree
                   val synchronizerIdToRecordTime = batch.batch
@@ -1407,7 +1411,7 @@ final class DbMultiDomainAcsStore[TXE](
                 .queryAndUpdate(
                   ingestReassignment(reassignment.offset, reassignment.transfer),
                   "ingestReassignment",
-                )
+                )(implicitly, implicitly, _ => false)
                 .map { summaryState =>
                   val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
                   state

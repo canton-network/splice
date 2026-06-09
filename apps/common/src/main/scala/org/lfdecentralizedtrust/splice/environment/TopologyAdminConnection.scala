@@ -47,7 +47,7 @@ import com.digitalasset.canton.time.{Clock, FetchTimeResponse}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
-import com.digitalasset.canton.topology.admin.v30.ExportTopologySnapshotResponse
+import com.digitalasset.canton.topology.admin.v30.ExportTopologySnapshotV2Response
 import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, TimeQuery}
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
@@ -446,7 +446,7 @@ abstract class TopologyAdminConnection(
       tc: TraceContext
   ): Future[Seq[StoredTopologyTransaction[TopologyChangeOp, TopologyMapping]]] = {
     runCmd(
-      TopologyAdminCommands.Read.ListAll(
+      TopologyAdminCommands.Read.ListAllV2(
         query = BaseQuery(
           store = store,
           proposals = proposals,
@@ -456,9 +456,7 @@ abstract class TopologyAdminConnection(
           protocolVersion = None,
         ),
         filterNamespace = filterNamespace.fold("")(_.filterString),
-        excludeMappings =
-          if (includeMappings.isEmpty) Seq.empty
-          else TopologyMapping.Code.all.diff(includeMappings.toSeq).map(_.code),
+        includeMappings = includeMappings.map(_.code).toSeq,
       )
     ).map(_.result)
   }
@@ -591,9 +589,9 @@ abstract class TopologyAdminConnection(
   )(implicit
       traceContext: TraceContext
   ): Future[ByteString] = {
-    val observer = new ByteStringStreamObserver[ExportTopologySnapshotResponse](_.chunk)
+    val observer = new ByteStringStreamObserver[ExportTopologySnapshotV2Response](_.chunk)
     runCmd(
-      TopologyAdminCommands.Read.ExportTopologySnapshot(
+      TopologyAdminCommands.Read.ExportTopologySnapshotV2(
         query = BaseQuery(
           store = store,
           proposals = proposals,
@@ -606,7 +604,7 @@ abstract class TopologyAdminConnection(
         excludeMappings = excludeMappings.map(_.code),
         observer = observer,
       )
-    ).discard
+    )(traceContext).discard
     observer.resultBytes
   }
 
@@ -617,7 +615,7 @@ abstract class TopologyAdminConnection(
       traceContext: TraceContext
   ): Future[Unit] = {
     runCmd(
-      TopologyAdminCommands.Write.ImportTopologySnapshot(
+      TopologyAdminCommands.Write.ImportTopologySnapshotV2(
         topologyTransactions,
         store,
         waitToBecomeEffective = None,

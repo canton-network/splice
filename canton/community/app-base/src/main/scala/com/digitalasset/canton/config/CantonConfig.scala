@@ -737,7 +737,10 @@ private[canton] object CantonNodeParameterConverter {
       sanitizePublicErrorMessages = parent.monitoring.sanitizePublicErrorMessages,
     )
 
-  def protocol(parent: CantonConfig, config: ProtocolConfig): CantonNodeParameters.Protocol =
+  def protocol(
+      parent: SharedCantonConfig[?],
+      config: ProtocolConfig,
+  ): CantonNodeParameters.Protocol =
     CantonNodeParameters.Protocol.Impl(
       alphaVersionSupport = parent.parameters.alphaVersionSupport || config.alphaVersionSupport,
       betaVersionSupport = parent.parameters.betaVersionSupport || config.betaVersionSupport,

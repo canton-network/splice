@@ -14,7 +14,7 @@ abstract class BaseParticipantClientConfig(
   override def clientLedgerApi: FullClientConfig = ledgerApi.clientConfig
 
   def participantClientConfigWithAdminToken: RemoteParticipantConfig =
-    RemoteParticipantConfig(adminApi, ledgerApi.clientConfig, ledgerApi.authConfig.adminToken)
+    RemoteParticipantConfig(adminApi, ledgerApi.clientConfig, token = ledgerApi.authConfig.adminToken)
 }
 
 /** Configuration to connect the console to a participant running remotely.
