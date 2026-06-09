@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+mediatorImageName: "canton-mediator"
 
 enableHealthProbes: true
 
@@ -37,6 +38,7 @@ mediator:
     secretName: "postgres-secrets"
     databaseName: cantonnet_mediator
     port: 5432
+    initImage: "postgres:14"
 
 metrics:
   enable: false
