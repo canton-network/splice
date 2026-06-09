@@ -2,6 +2,9 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "svImageName": {
+      "type": "string"
+    },
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
@@ -465,6 +468,9 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 65535
+            },
+            "initImage": {
+              "type": "string"
             }
           }
         },
