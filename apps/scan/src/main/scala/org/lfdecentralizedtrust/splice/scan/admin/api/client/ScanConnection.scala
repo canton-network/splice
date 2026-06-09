@@ -317,6 +317,11 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
 
+  def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]]
+
   def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,

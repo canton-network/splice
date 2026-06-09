@@ -499,6 +499,14 @@ class BftScanConnection(
     "listVoteRequestResults",
   )
 
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = bftCall(
+    _.getPreviousSvRewardWeight(svParty, effectiveBefore),
+    "getPreviousSvRewardWeight",
+  )
+
   override def getImportUpdates(
       migrationId: Long,
       afterUpdateId: String,

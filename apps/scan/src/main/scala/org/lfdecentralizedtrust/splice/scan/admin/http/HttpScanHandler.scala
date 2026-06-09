@@ -35,6 +35,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Accepted
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -73,6 +76,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ListBulkUpdateHistoryObjectsRequest,
   ListVoteResultsRequest,
   MaybeCachedContractWithState,
+  PreviousSvRewardWeightRequest,
+  PreviousSvRewardWeightResponse,
   UpdateHistoryItem,
   UpdateHistoryItemV2WithHash,
   UpdateHistoryRequestV2,
@@ -102,6 +107,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillin
 import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
+  Limit,
   PageLimit,
   SortOrder,
   VotesStore,
@@ -2141,6 +2147,48 @@ class HttpScanHandler(
               .toVector,
             page.nextPageToken.map(BigInt(_)),
           )
+        )
+      }
+    }
+  }
+
+  override def getPreviousSvRewardWeight(
+      respond: ScanResource.GetPreviousSvRewardWeightResponse.type
+  )(
+      body: PreviousSvRewardWeightRequest
+  )(extracted: TraceContext): Future[ScanResource.GetPreviousSvRewardWeightResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getPreviousSvRewardWeight") { _ => _ =>
+      for {
+        page <- votesStore.listVoteRequestResults(
+          actionName = Some("SRARC_UpdateSvRewardWeight"),
+          accepted = Some(true),
+          requester = None,
+          effectiveFrom = None,
+          effectiveTo = body.effectiveBefore,
+          limit = PageLimit.tryCreate(Limit.DefaultMaxPageSize),
+          after = None,
+        )
+      } yield {
+        val weight = page.resultsInPage
+          .flatMap(result =>
+            (result.request.action, result.outcome) match {
+              case (arc: ARC_DsoRules, accepted: VRO_Accepted) =>
+                arc.dsoAction match {
+                  case srarc: SRARC_UpdateSvRewardWeight
+                      if srarc.dsoRules_UpdateSvRewardWeightValue.svParty == body.svParty =>
+                    Some(
+                      accepted.effectiveAt -> srarc.dsoRules_UpdateSvRewardWeightValue.newRewardWeight
+                    )
+                  case _ => None
+                }
+              case _ => None
+            }
+          )
+          .maxByOption(_._1.toEpochMilli)
+          .map(_._2)
+        ScanResource.GetPreviousSvRewardWeightResponse.OK(
+          PreviousSvRewardWeightResponse(rewardWeight = weight.map(_.toString))
         )
       }
     }

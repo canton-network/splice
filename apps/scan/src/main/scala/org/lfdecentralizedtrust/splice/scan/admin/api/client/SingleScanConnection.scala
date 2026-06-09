@@ -579,6 +579,14 @@ class SingleScanConnection private[client] (
     ),
   )
 
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.GetPreviousSvRewardWeight(svParty, effectiveBefore),
+  )
+
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
