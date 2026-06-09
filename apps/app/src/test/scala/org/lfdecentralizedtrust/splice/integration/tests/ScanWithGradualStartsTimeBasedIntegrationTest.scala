@@ -85,11 +85,20 @@ class ScanWithGradualStartsTimeBasedIntegrationTest
           }
         }
         clue("Ensure ValidatorLivenessActivityRecord are received") {
+          val targetRound =
+            sv1ScanBackend
+              .getOpenAndIssuingMiningRounds()
+              ._1
+              .head
+              .contract
+              .payload
+              .round
+              .number
           eventually() {
             Seq(sv1WalletClient, aliceValidatorWalletClient, bobValidatorWalletClient).foreach {
               walletClient =>
-                ensureValidatorLivenessActivityRecordReceivedForCurrentRound(
-                  sv1ScanBackend,
+                ensureValidatorLivenessActivityRecordReceivedForRound(
+                  targetRound,
                   walletClient,
                 )
             }
