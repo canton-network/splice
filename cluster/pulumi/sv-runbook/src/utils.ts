@@ -17,7 +17,7 @@ export async function getValidator1PartyId(): Promise<string> {
       ? `http://validator-app.validator1:5003/api/validator/v0/validator-user`
       : `https://wallet.validator1.${CLUSTER_HOSTNAME}/api/validator/v0/validator-user`;
     const response = await fetch(validatorApiUrl);
-    const json = await response.json();
+    const json = (await response.json()) as { party_id?: string };
     if (!response.ok) {
       throw new Error(`Response is not OK: ${JSON.stringify(json)}`);
     } else if (!json.party_id) {
