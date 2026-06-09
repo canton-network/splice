@@ -709,20 +709,20 @@ template DsoRules with
     -- Note: Implement in phase 2
     choice DsoRules_OffboardSvNode : DsoRules_OffboardSvNodeResult
       with
-        sv : Party
+        svOperator : Party
       controller dso
       do
-        require "There is more than one sv" (Map.size svs > 1)
-        case Map.lookup sv svs of
-          None -> fail "Not a sv"
+        require "There is more than one sv node" (Map.size svs > 1)
+        case Map.lookup svOperator svs of
+          None -> fail "Not an SV node operator"
           Some info -> do
             -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
             -- revoking that sv's rights in the CometBFT network and the topology state.
-            let newSvs = Map.delete sv svs
+            let newSvs = Map.delete svOperator svs
             -- We optimize for prompt removal of a sv if the vote said so.
             -- and instead just choose the sv with the lexicographically smallest name.
             let (newDsoDelegate, newEpoch)
-                  | sv == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
+                  | svOperator == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
                   | otherwise        = (dsoDelegate, epoch)
             let offboardedSvInfo = OffboardedSvInfo with
                     name = info.name
@@ -733,7 +733,7 @@ template DsoRules with
               epoch = newEpoch
               dsoDelegate = newDsoDelegate
               svs = newSvs
-              offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
+              offboardedSvs = Map.insert svOperator offboardedSvInfo offboardedSvs
               config
               initialTrafficState
               isDevNet
@@ -847,15 +847,15 @@ template DsoRules with
     -- the first round in which the new SV will receive rewards.
     nonconsuming choice DsoRules_AddConfirmedSvNode : DsoRules_AddConfirmedSvNodeResult
       with
-        sv : Party
+        svOperatorCandidate : Party
         svNodeOnboardingConfirmedCid : ContractId SvNodeOnboardingConfirmed
-      controller sv
+      controller svOperatorCandidate
       do
-        svNodeOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svNodeOnboardingConfirmedCid
+        svNodeOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = svOperatorCandidate) svNodeOnboardingConfirmedCid
         assertWithinDeadline "svNodeOnboardingConfirmed.expiresAt" svNodeOnboardingConfirmed.expiresAt
 
         addSvNodeResult <- exercise self DsoRules_AddSvNode with
-          newSvOperatorParty = sv
+          newSvOperatorParty = svOperatorCandidate
           newSvNodeName = svNodeOnboardingConfirmed.svNodeName
           newSvNodeParticipantId = svNodeOnboardingConfirmed.svNodeParticipantId
 
@@ -1291,11 +1291,11 @@ template DsoRules with
           -- ^ The beneficiary distribution contract for the hosted SV being offboarded.
         svRewardStateCid : ContractId SvRewardState
           -- ^ The reward state contract for the hosted SV being offboarded.
-        sv : Party
-          -- ^ An SV operator completing the offboarding.
-      controller sv
+        svOperator : Party
+          -- ^ An SV node operator completing the offboarding.
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         instruction <- fetchAndArchive (ForDso with dso) instructionCid
         let hostedSvsMap = fromOptional Map.empty hostedSvs
         case Map.lookup instruction.hostedSv hostedSvsMap of
@@ -1360,11 +1360,11 @@ template DsoRules with
           -- ^ The DSO instruction authorizing the SV operator update.
         hostedSvRewardBeneficiariesCid : ContractId HostedSvRewardBeneficiaries
           -- ^ The beneficiary distribution contract for the hosted SV being updated.
-        sv : Party
-          -- ^ An SV operator completing the update.
-      controller sv
+        svOperator : Party
+          -- ^ An SV node operator completing the update.
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         instruction <- fetchAndArchive (ForDso with dso) instructionCid
         let hostedSvsMap = fromOptional Map.empty hostedSvs
         case Map.lookup instruction.hostedSv hostedSvsMap of
@@ -1400,14 +1400,13 @@ template DsoRules with
           -- ^ The existing beneficiary distribution contract to replace.
         newBeneficiaries : [(Party, Decimal)]
           -- ^ The full beneficiary distribution to set.
-        sv : Party
-          -- ^ The SV operator hosting the hosted SV whose beneficiary distribution is being managed.
-      controller sv
+        svOperator : Party
+          -- ^ The SV node operator hosting the hosted SV whose beneficiary distribution is being managed.
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         hostedSvRewardBeneficiaries <- fetchAndArchive (ForDso with dso) hostedSvRewardBeneficiariesCid
         let hostedSv = hostedSvRewardBeneficiaries.hostedSv
-            svOperator = hostedSvRewardBeneficiaries.svOperator
         case Map.lookup hostedSv (fromOptional Map.empty hostedSvs) of
           None -> fail "Hosted SV party is not registered"
           Some _ -> do
@@ -1417,7 +1416,7 @@ template DsoRules with
                   <> show hostedSv
                   <> " is managed by the SV operator "
                   <> show svOperator
-              ) $ svOperator == sv
+              ) $ svOperator == hostedSvRewardBeneficiaries.svOperator
             require "New beneficiaries must differ from the existing beneficiaries" $
               newBeneficiaries /= hostedSvRewardBeneficiaries.beneficiaries
 
@@ -1452,11 +1451,11 @@ template DsoRules with
         svsMigrationData : [HostedSvMigrationData]
         openRoundCid : ContractId OpenMiningRound
         rewardStateCid : ContractId SvRewardState
-        sv : Party -- ^ The SV operator performing the migration.
-      controller sv
+        svOperator : Party -- ^ The SV node operator performing the migration.
+      controller svOperator
       do
-        case Map.lookup sv svs of
-          None -> fail "SV is not an SV operator"
+        case Map.lookup svOperator svs of
+          None -> fail "SV is not an SV node operator"
           Some svInfo -> do
             -- Sanity checks
             let (hostedSvParties, rewardWeights) = unzip $ (\d -> (d.hostedSvParty, d.hostedSvRewardWeight)) <$> svsMigrationData
@@ -1470,7 +1469,7 @@ template DsoRules with
 
             -- Invalidate the SV operator's legacy reward weight.
             let newSv = svInfo with svRewardWeight = 0
-                newSvs = Map.insert sv newSv svs
+                newSvs = Map.insert svOperator newSv svs
             updatedDsoRulesWithLegacyWeightInvalidated <- create this with svs = newSvs
 
             -- Archive SvRewardState
@@ -1485,7 +1484,7 @@ template DsoRules with
                       newHostedSvName = svMigrationData.hostedSvName
                       newHostedSvRewardWeight = svMigrationData.hostedSvRewardWeight
                       joinedAsOfRound = openRound.round
-                      svOperator = sv
+                      svOperator
 
                   -- replace the default HostedSvRewardBeneficiaries if beneficiaries are provided
                   unless (null svMigrationData.beneficaries) do
@@ -1496,7 +1495,7 @@ template DsoRules with
                     void $ create HostedSvRewardBeneficiaries with
                       dso
                       hostedSv = svMigrationData.hostedSvParty
-                      svOperator = sv
+                      svOperator
                       beneficiaries = svMigrationData.beneficaries
 
                   pure newDsoRulesCid
@@ -1624,10 +1623,10 @@ template DsoRules with
     nonconsuming choice DsoRules_ExpireSvNodeOnboardingRequest : DsoRules_ExpireSvNodeOnboardingRequestResult
       with
         cid: ContractId SvNodeOnboardingRequest
-        sv : Party
-      controller sv
+        svOperator : Party
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         exercise cid SvNodeOnboardingRequest_Expire
         return DsoRules_ExpireSvNodeOnboardingRequestResult
 
@@ -1641,24 +1640,24 @@ template DsoRules with
         _ <- getAndValidateSvParty this sv
         -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
         svOnboardingRequest <- fetchAndArchive (ForDso with dso) svOnboardingRequestCid
-        let maybeSv = Map.lookup svOnboardingRequest.candidateParty svs
-        require "SV party is an SV" (isSome maybeSv)
-        require "SV name matches" ((fromSome maybeSv).name == svOnboardingRequest.candidateName)
+        let sv = Map.lookup svOnboardingRequest.candidateParty svs
+        require "SV party is an SV" (isSome sv)
+        require "SV name matches" ((fromSome sv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
 
     -- Note: Implement in phase 2
     nonconsuming choice DsoRules_ArchiveSvNodeOnboardingRequest : DsoRules_ArchiveSvNodeOnboardingRequestResult
       with
         svNodeOnboardingRequestCid: ContractId SvNodeOnboardingRequest
-        sv : Party
-      controller sv
+        svOperator : Party
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
         svNodeOnboardingRequest <- fetchAndArchive (ForDso with dso) svNodeOnboardingRequestCid
-        let maybeSv = Map.lookup svNodeOnboardingRequest.candidateParty svs
-        require "SV party is an SV" (isSome maybeSv)
-        require "SV name matches" ((fromSome maybeSv).name == svNodeOnboardingRequest.candidateName)
+        let maybeSvOperator = Map.lookup svNodeOnboardingRequest.candidateParty svs
+        require "SV party is an SV node operator" (isSome maybeSvOperator)
+        require "SV name matches" ((fromSome maybeSvOperator).name == svNodeOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvNodeOnboardingRequestResult
 
     -- Note: Deprecate in phase 2
@@ -1736,10 +1735,10 @@ template DsoRules with
     choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvNodeOnboardingConfirmedResult
       with
         cid: ContractId SvNodeOnboardingConfirmed
-        sv : Party
-      controller sv
+        svOperator : Party
+      controller svOperator
       do
-        _ <- getAndValidateSvParty this (Some sv)
+        _ <- getAndValidateSvParty this (Some svOperator)
         svOnboardingConfirmed <- fetchButArchiveLater (ForDso with dso) cid
         exercise cid SvNodeOnboardingConfirmed_Expire
         -- register the sv as offboarded so it's PartyToParticipant mapping for the DSO party gets removed
@@ -1981,11 +1980,11 @@ template DsoRules with
         -- configured beneficiary. The total beneficiary weight percentage must be less than or
         -- equal to 1.0. Any remaining weight is issued to the SV itself.
         svRewardStatesWithBeneficiaries : [(ContractId SvRewardState, ContractId HostedSvRewardBeneficiaries)]
-        sv : Party -- ^ The SV operator hosting the SVs.
-      controller sv
+        svOperator : Party -- ^ The SV node operator hosting the SVs.
+      controller svOperator
       do
-        case Map.lookup sv svs of
-          None -> fail "SV is not an SV operator"
+        case Map.lookup svOperator svs of
+          None -> fail "SV is not an SV node operator"
           Some _ -> do
             -- check round
             now <- getTime
@@ -2008,7 +2007,7 @@ template DsoRules with
                   Some (hostedSv, hostedSvInfo) -> do
                     require
                       ("Only SV operator " <> show hostedSvInfo.svOperator <> " can create SV rewards for hosted SV " <> show hostedSv)
-                      (hostedSvInfo.svOperator == sv)
+                      (hostedSvInfo.svOperator == svOperator)
 
                     let svRewardWeight = hostedSvInfo.svRewardWeight
                     hostedSvRewardBeneficiaries <- fetchChecked (ForDso with dso) hostedSvRewardBeneficiariesCid
@@ -2017,7 +2016,7 @@ template DsoRules with
                       beneficiaries -> do
                         require
                           "HostedSvRewardBeneficiaries contract belongs to the SV operator creating the rewards"
-                          (hostedSvRewardBeneficiaries.svOperator == sv)
+                          (hostedSvRewardBeneficiaries.svOperator == svOperator)
                         require
                           "HostedSvRewardBeneficiaries contract belongs to the corresponding hosted SV"
                           (hostedSvRewardBeneficiaries.hostedSv == hostedSv)

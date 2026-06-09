@@ -99,7 +99,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hsv1SvRewardBeneficiariesCid
       newBeneficiaries = hsv1ExtraBeneficiaries
-      sv = sv5
+      svOperator = sv5
 
   assertHostedSvRewardBeneficiariesForSvAndOperator app hsv1 sv5
     HostedSvRewardBeneficiaries with
@@ -121,7 +121,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv5
+      svOperator = sv5
 
   let expectedHostedSvCoupons = expectedSvCoupons hsv1Weight hostedSvBeneficiaries
   assertSvCouponBeneficiariesForSv hsv1 round expectedHostedSvCoupons
@@ -141,7 +141,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv5
+      svOperator = sv5
 
 
   -- Updating SV weight
@@ -168,7 +168,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv5
+      svOperator = sv5
 
   let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
   assertSvCouponBeneficiariesForSv hsv1 round expectedHostedSvCoupons
@@ -193,7 +193,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_UpdateSvOperatorForHostedSv with
       instructionCid
       hostedSvRewardBeneficiariesCid
-      sv = sv1
+      svOperator = sv1
 
   assertHostedSvInfoForParty app hsv1
     (mkHostedSvInfo hsv1Name hsv1JoinedAsOfRound updatedHostedSvWeight sv1)
@@ -214,7 +214,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv5
+      svOperator = sv5
   -- sv5 does not create coupons for the migrated hosted SV
   assertSvCouponBeneficiariesForSv hsv1 round []
 
@@ -224,7 +224,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv1
+      svOperator = sv1
 
   let expectedHostedSvCoupons = expectedSvCoupons updatedHostedSvWeight hostedSvBeneficiaries
   assertSvCouponBeneficiariesForSv hsv1 round expectedHostedSvCoupons
@@ -242,7 +242,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvRewardBeneficiariesCid = hsv1SvRewardBeneficiariesCid
       newBeneficiaries = []
-      sv = sv1
+      svOperator = sv1
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
@@ -251,7 +251,7 @@ test_SvWeightsFullyOnledger = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv1
+      svOperator = sv1
 
   let expectedHostedSvCouponsAfterClear = [(hsv1, updatedHostedSvWeight)]
   assertSvCouponBeneficiariesForSv hsv1 round expectedHostedSvCouponsAfterClear
@@ -277,7 +277,7 @@ test_SvWeightsFullyOnledger = do
       instructionCid
       hostedSvRewardBeneficiariesCid
       svRewardStateCid
-      sv = sv1
+      svOperator = sv1
 
   [(_, rules)] <- query @DsoRules app.dso
   Map.lookup hsv1 (getHostedSvsMap rules) === None
@@ -364,7 +364,7 @@ test_SvWeightsMigration = do
     svsMigrationData
     openRoundCid = roundCid
     rewardStateCid = sv1RewardStateCid
-    sv = sv1
+    svOperator = sv1
 
   -- Check sv1 weight as SV operator is invalidated
   sv1SvInfo <- getSvInfoByParty app sv1
@@ -401,7 +401,7 @@ test_SvWeightsMigration = do
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
       openRoundCid = roundCid
       svRewardStatesWithBeneficiaries
-      sv = sv1
+      svOperator = sv1
 
   assertSvCouponBeneficiariesForSv sv1 round sv1Beneficiaries
   assertSvCouponBeneficiariesForSv hsv1 round hostedSvBeneficiaries
@@ -467,7 +467,7 @@ testSvNodeOnboarding = do
   setTime svNodeOnboardingConfirmed.expiresAt
 
   submitMustFail (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
-    sv = svX
+    svOperatorCandidate = svX
     svNodeOnboardingConfirmedCid
 
   -- reset the time to now
@@ -475,7 +475,7 @@ testSvNodeOnboarding = do
 
   -- svX completes its own onboarding by adding itself to the DsoRules
   submit (actAs svX <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AddConfirmedSvNode with
-    sv = svX
+    svOperatorCandidate = svX
     svNodeOnboardingConfirmedCid
 
   checkSvStatusReports app
