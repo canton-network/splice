@@ -130,6 +130,11 @@ class BftScanConnection(
     val retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
     val connectionMetrics: Option[ScanConnectionMetrics] = None,
+    // We added disableBackgroundRefresh flag to prevent the temporary bootstrap connection (used in bft-custom mode)
+    // from automatically starting a background PeriodicAction that tries to connect to all scans.
+    // In the future, before removing disableBackgroundRefresh flag, refactor the bootstrapWithSeedNodes();
+    // BftCustom should not reuse the AllDsoScansBft class to fetch the initial DsoRules.
+    val disableBackgroundRefresh: Boolean = false,
 )(implicit protected val ec: ExecutionContextExecutor, protected val mat: Materializer)
     extends FlagCloseableAsync
     with NamedLogging
@@ -141,7 +146,7 @@ class BftScanConnection(
   private val refreshAction: Option[PeriodicAction] = scanList match {
     case _: BftScanConnection.TrustSingle =>
       None
-    case bft: BftScanConnection.Bft =>
+    case bft: BftScanConnection.Bft if !disableBackgroundRefresh =>
       Some(
         new PeriodicAction(
           clock,
@@ -164,6 +169,7 @@ class BftScanConnection(
           )
         })
       )
+    case _ => None
   }
 
   override def listVoteRequests()(implicit
@@ -1478,6 +1484,7 @@ object BftScanConnection {
       builder: (Uri, NonNegativeFiniteDuration) => Future[SingleScanConnection],
       refreshScanUrlsCallback: Seq[(String, String)] => Future[Unit],
       connectionMetrics: Option[ScanConnectionMetrics],
+      disableBackgroundRefresh: Boolean = false,
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -1526,6 +1533,7 @@ object BftScanConnection {
             retryProvider,
             loggerFactory,
             connectionMetrics,
+            disableBackgroundRefresh,
           )
           logger.info(s"Bootstrapping with seed nodes to fetch the full network scan list.")
           Future.successful(connection)
@@ -1605,10 +1613,13 @@ object BftScanConnection {
             if (ts.useLastKnownConnectionsForInitialization) { persistScanUrlsCallback }
             else { _ => Future.unit },
             connectionMetrics,
+            disableBackgroundRefresh = true,
           )
 
           // Use the temporary connection to get a consensus on the full list of scans
-          allScans <- Bft.getScansInDsoRules(tempBftConnection)
+          allScans <- Bft.getScansInDsoRules(tempBftConnection).andThen { case _ =>
+            tempBftConnection.close()
+          }
 
           trustedScans = allScans.filter(scan => ts.svNames.toList.contains(scan.svName))
 

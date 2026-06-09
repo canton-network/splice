@@ -102,6 +102,70 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
+  "listSortedMintableRewardCouponV2s" should {
+    "return correct results" in {
+      for {
+        store <- mkTransferInputStore(user)
+        // for each round i, create 2 assigned coupons with amount i and 2i
+        _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
+          for {
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(2 * n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+          } yield ()
+        )
+        // unassigned coupon in round 2 — should be excluded when includeUnassigned is false
+        _ <- dummyDomain.create(
+          rewardCouponV2(round = 2, provider = user, amount = numeric(20), beneficiary = None),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        store
+          .listSortedMintableRewardCouponV2s(Map.empty, includeUnassigned = false)
+          .futureValue shouldBe empty
+        val roundsToFilter = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
+        val issuingMap = roundsToFilter.map(r => r.payload.round -> r.payload).toMap
+        // assigned coupons listed in ascending round order, descending amount per round;
+        // the unassigned coupon (amount=20) in round 2 is excluded
+        store
+          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = false)
+          .futureValue
+          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          4.0, 2.0, // round 2 (unassigned 20.0 excluded)
+          6.0, 3.0, // round 3
+          8.0, 4.0, // round 4
+        )
+        // with includeUnassigned, the unassigned coupon (20.0) appears in round 2
+        store
+          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = true)
+          .futureValue
+          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          20.0, 4.0, 2.0, // round 2 (unassigned 20.0 included)
+          6.0, 3.0, // round 3
+          8.0, 4.0, // round 4
+        )
+      }
+    }
+  }
+
   /** A AmuletRules_Mint exercise event with one child Amulet create event */
   protected def mintTransaction(
       receiver: PartyId,

@@ -5,6 +5,13 @@ import com.digitalasset.canton.config.CantonConfig
 import com.typesafe.config.ConfigFactory
 import org.scalatest.wordspec.AsyncWordSpec
 
+import org.lfdecentralizedtrust.splice.wallet.config.{
+  AppRewardBeneficiaryConfig,
+  RewardSharingConfig,
+}
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.topology.PartyId
+
 class SpliceConfigTest extends AsyncWordSpec with BaseTest {
   private implicit val elc: com.digitalasset.canton.logging.ErrorLoggingContext = SpliceConfig.elc
   val config = ConfigFactory.parseFile(
@@ -76,6 +83,138 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       )
       val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Right[?, ?]]
+    }
+  }
+
+  // Shared helper for RewardSharingConfig tests
+  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig =
+    RewardSharingConfig(
+      minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
+      beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
+        AppRewardBeneficiaryConfig(
+          PartyId.tryFromProtoPrimitive(s"party$i::1220"),
+          pct,
+        )
+      },
+    )
+
+  private val provider = PartyId.tryFromProtoPrimitive("provider::1220")
+
+  "RewardSharingConfig.providerRemainder" should {
+    Seq(
+      ("no beneficiaries", Seq.empty[BigDecimal], BigDecimal(1.0)),
+      ("single beneficiary", Seq(BigDecimal(0.3)), BigDecimal(0.7)),
+      ("two beneficiaries", Seq(BigDecimal(0.3), BigDecimal(0.2)), BigDecimal(0.5)),
+      ("full allocation", Seq(BigDecimal(1.0)), BigDecimal(0.0)),
+      ("near-total", Seq(BigDecimal(0.5), BigDecimal(0.49)), BigDecimal(0.01)),
+    ).foreach { case (desc, percentages, expected) =>
+      s"return $expected for $desc" in {
+        mkSharingCfg(percentages*).providerRemainder shouldBe expected
+      }
+    }
+  }
+
+  "RewardSharingConfig.allBeneficiaries" should {
+    "include provider with remainder" in {
+      val all = mkSharingCfg(BigDecimal(0.3), BigDecimal(0.2)).allBeneficiaries(provider)
+      all should have size 3
+      all.last.beneficiary shouldBe provider
+      all.last.percentage shouldBe BigDecimal(0.5)
+    }
+
+    "exclude provider when fully allocated" in {
+      val all = mkSharingCfg(BigDecimal(1.0)).allBeneficiaries(provider)
+      all should have size 1
+      all.headOption.value.beneficiary shouldBe PartyId.tryFromProtoPrimitive("party0::1220")
+    }
+
+    "return only provider when no beneficiaries" in {
+      val all = mkSharingCfg().allBeneficiaries(provider)
+      all should have size 1
+      all.headOption.value.beneficiary shouldBe provider
+      all.headOption.value.percentage shouldBe BigDecimal(1.0)
+    }
+  }
+
+  "RewardSharingConfig.allDamlBeneficiaries" should {
+    "convert percentages to Daml Decimal scale 10" in {
+      val all = mkSharingCfg(BigDecimal(0.3), BigDecimal(0.2)).allDamlBeneficiaries(provider)
+      all should have size 3
+      all.map(_._2.scale()) shouldBe Seq(10, 10, 10)
+    }
+
+    Seq(
+      ("two-way split", Seq(BigDecimal(0.3), BigDecimal(0.2))),
+      ("three-way split", Seq(BigDecimal(0.33), BigDecimal(0.33), BigDecimal(0.33))),
+      ("high precision", Seq(BigDecimal(0.123456789), BigDecimal(0.876543210))),
+      ("single beneficiary", Seq(BigDecimal(0.5))),
+      ("full allocation", Seq(BigDecimal(1.0))),
+      ("no beneficiaries", Seq.empty[BigDecimal]),
+    ).foreach { case (desc, percentages) =>
+      s"$desc sums to exactly 1.0 at Daml precision" in {
+        val all = mkSharingCfg(percentages*).allDamlBeneficiaries(provider)
+        val sum = all.map(_._2).foldLeft(java.math.BigDecimal.ZERO)(_.add(_))
+        sum.compareTo(java.math.BigDecimal.ONE) shouldBe 0
+      }
+    }
+  }
+
+  "rewardSharingConfigByParty" should {
+
+    def mkHoconConfig(beneficiaries: String): String =
+      s"""
+        |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+        |  "alice::1220abc" = {
+        |    beneficiaries = [$beneficiaries]
+        |    min-ttl-after-sharing = 30h
+        |  }
+        |}
+        """.stripMargin
+
+    def mkBeneficiary(name: String, percentage: String): String =
+      s"""{ beneficiary = "$name::1220", percentage = $percentage }"""
+
+    def beneficiariesFromPcts(percentages: String): String =
+      percentages
+        .split(",")
+        .map(_.trim)
+        .filter(_.nonEmpty)
+        .zipWithIndex
+        .map { case (pct, i) => mkBeneficiary(s"party$i", pct) }
+        .mkString(", ")
+
+    Seq(
+      ("two beneficiaries", "0.3, 0.2"),
+      ("single beneficiary", "0.5"),
+      ("small percentage", "0.01"),
+      ("percentage exactly 1.0", "1.0"),
+      ("exact total split", "0.6, 0.4"),
+      ("three-way even split", "0.33, 0.33, 0.33"),
+      ("high precision", "0.123456789, 0.876543210"),
+      ("empty beneficiaries", ""),
+    ).foreach { case (desc, percentages) =>
+      s"accept $desc ($percentages)" in {
+        val overwrite =
+          ConfigFactory.parseString(mkHoconConfig(beneficiariesFromPcts(percentages)))
+        val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+        SpliceConfig.loadAndValidate(validConfig) shouldBe a[Right[?, ?]]
+      }
+    }
+
+    Seq(
+      ("percentage > 1.0", "1.5", "must be in (0.0, 1.0]"),
+      ("percentage = 0", "0.0", "must be in (0.0, 1.0]"),
+      ("negative percentage", "-0.1", "must be in (0.0, 1.0]"),
+      ("sum > 1.0", "0.6, 0.5", "must sum to at most 1.0"),
+    ).foreach { case (desc, percentage, expectedError) =>
+      s"reject $desc" in {
+        val beneficiaries =
+          if (percentage.contains(",")) beneficiariesFromPcts(percentage)
+          else mkBeneficiary("charlie", percentage)
+        val overwrite = ConfigFactory.parseString(mkHoconConfig(beneficiaries))
+        val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+        SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(expectedError)
+      }
     }
   }
 }

@@ -3,8 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.wallet.config
 
+import com.google.common.annotations.VisibleForTesting
 import org.lfdecentralizedtrust.splice.config.{HttpClientConfig, NetworkAppClientConfig}
+import org.lfdecentralizedtrust.splice.util.SpliceUtil
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.topology.PartyId
 
@@ -42,3 +45,36 @@ final case class WalletSweepConfig(
 final case class AutoAcceptTransfersConfig(
     fromParties: Seq[PartyId] = Seq()
 )
+
+/** A beneficiary that receives a share of the provider's app reward coupons.
+  * @param beneficiary the party receiving the share
+  * @param percentage fraction of the reward in (0.0, 1.0]; per-party percentages must sum to at most 1.0
+  */
+final case class AppRewardBeneficiaryConfig(
+    beneficiary: PartyId,
+    percentage: BigDecimal,
+)
+
+/** Configuration for sharing traffic-based app reward coupons with beneficiaries.
+  * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;
+  *   e.g., 30h means share when 30h of coupon lifetime remains (6h after creation for 36h coupons)
+  * @param beneficiaries parties to share rewards with and their percentages;
+  *   the provider keeps the remainder (1.0 - sum of percentages)
+  */
+final case class RewardSharingConfig(
+    minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
+    beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
+) {
+  def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
+
+  @VisibleForTesting
+  def allBeneficiaries(provider: PartyId): Seq[AppRewardBeneficiaryConfig] = {
+    val remainder = providerRemainder
+    beneficiaries ++
+      (if (remainder > 0) Seq(AppRewardBeneficiaryConfig(provider, remainder))
+       else Seq.empty)
+  }
+
+  def allDamlBeneficiaries(provider: PartyId): Seq[(PartyId, java.math.BigDecimal)] =
+    allBeneficiaries(provider).map(b => (b.beneficiary, SpliceUtil.damlDecimal(b.percentage)))
+}
