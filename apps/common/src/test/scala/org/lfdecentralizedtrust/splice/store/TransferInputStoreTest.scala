@@ -138,26 +138,23 @@ abstract class TransferInputStoreTest extends StoreTestBase {
           createdEventObservers = Seq(user),
         )(store.multiDomainAcsStore)
       } yield {
-        store
-          .listSortedMintableRewardCouponV2s(Map.empty, includeUnassigned = false)
-          .futureValue shouldBe empty
-        val roundsToFilter = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
-        val issuingMap = roundsToFilter.map(r => r.payload.round -> r.payload).toMap
         // assigned coupons listed in ascending round order, descending amount per round;
         // the unassigned coupon (amount=20) in round 2 is excluded
         store
-          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = false)
+          .listSortedMintableRewardCouponV2s(includeUnassigned = false)
           .futureValue
           .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          2.0, 1.0, // round 1
           4.0, 2.0, // round 2 (unassigned 20.0 excluded)
           6.0, 3.0, // round 3
           8.0, 4.0, // round 4
         )
         // with includeUnassigned, the unassigned coupon (20.0) appears in round 2
         store
-          .listSortedMintableRewardCouponV2s(issuingMap, includeUnassigned = true)
+          .listSortedMintableRewardCouponV2s(includeUnassigned = true)
           .futureValue
           .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          2.0, 1.0, // round 1
           20.0, 4.0, 2.0, // round 2 (unassigned 20.0 included)
           6.0, 3.0, // round 3
           8.0, 4.0, // round 4
