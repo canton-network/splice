@@ -3,6 +3,8 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 mediatorImageName: "canton-mediator"
+sequencerCometbftImageName: "canton-cometbft-sequencer"
+sequencerImageName: "canton-sequencer"
 
 enableHealthProbes: true
 
@@ -25,6 +27,7 @@ sequencer:
     secretName: "postgres-secrets"
     databaseName: cantonnet_sequencer
     port: 5432
+    initImage: "postgres:14"
   resources:
     limits:
       memory: 8Gi
