@@ -29,11 +29,6 @@
             automatically at start-up from its database. The value must be removed from both the helm chart and
             the docker-compose configuration.
 
-          - Fixed a bug where validators using the ``bft-custom`` scan client configuration
-            would incorrectly attempt to establish scan connections with all scan nodes during
-            the validator startup. The scan client now strictly confines all scan connections to
-            configured, trusted SV endpoints.
-
       .. Important::
 
           The migration id must still be kept for participant database naming for backwards compatibility (``persistance.databaseName`` helm value,
@@ -45,3 +40,11 @@
 
         - ``/v0/activities``
 
+  - Bug fixes
+
+    - Validator
+
+        - Fixed a bug where validators using the ``bft-custom`` scan client configuration
+          would incorrectly attempt to establish scan connections with all scan nodes during
+          the validator startup. The scan client now strictly confines all scan connections to
+          configured, trusted SV endpoints.
