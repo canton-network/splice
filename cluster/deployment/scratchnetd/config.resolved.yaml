@@ -200,6 +200,9 @@ sv:
         /api/scan/v0/active-synchronizer-serial:
           name: 'activeSynchronizerSerial'
           type: 'unlimited'
+        /api/scan/v0/admin/sv/previous-sv-reward-weight:
+          name: 'sv-previous-sv-reward-weight'
+          type: 'unlimited'
         /api/scan/v0/admin/sv/voterequests:
           name: 'sv-voterequests'
           type: 'unlimited'
