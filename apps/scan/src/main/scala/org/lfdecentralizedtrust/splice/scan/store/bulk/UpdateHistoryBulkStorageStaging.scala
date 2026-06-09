@@ -70,7 +70,7 @@ class UpdateHistoryBulkStorageStaging(
       })
   }
 
-  // TODO: everything below is for fetching bulk storage updates, and should probably be moved to the committed bucket instead of staging, once that exists
+  // TODO(#5884): everything below is for fetching bulk storage updates, and should probably be moved to the committed bucket instead of staging, once that exists
   def getUpdatesBetweenDates(
       afterRecordTime: CantonTimestamp,
       atOrBeforeRecordTime: CantonTimestamp,
