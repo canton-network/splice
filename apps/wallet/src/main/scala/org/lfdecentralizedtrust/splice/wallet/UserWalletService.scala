@@ -96,7 +96,7 @@ class UserWalletService(
     walletManager,
     retryProvider,
     scanConnection,
-    hasRewardSharing = rewardSharing.isDefined,
+    mintUnassignedRewardCouponsV2 = rewardSharing.isEmpty,
     loggerFactory,
   )
 

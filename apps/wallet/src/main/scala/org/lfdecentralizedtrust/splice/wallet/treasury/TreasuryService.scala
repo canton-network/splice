@@ -123,7 +123,7 @@ class TreasuryService(
     walletManager: UserWalletManager,
     override protected[this] val retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
-    hasRewardSharing: Boolean,
+    mintUnassignedRewardCouponsV2: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, mat: Materializer)
     extends NamedLogging
@@ -1094,7 +1094,7 @@ class TreasuryService(
     for {
       rewardCouponV2Inputs <- userStore.listSortedMintableRewardCouponV2s(
         issuingRoundsMap,
-        includeUnassigned = !hasRewardSharing,
+        includeUnassigned = mintUnassignedRewardCouponsV2,
         PageLimit.tryCreate(maxNumInputs),
       )
       rewardCouponV2AmuletQuantity = rewardCouponV2Inputs.map(_._2).sum
