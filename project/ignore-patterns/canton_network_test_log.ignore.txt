@@ -162,8 +162,3 @@ Ryuk has been disabled
 
 # Calls to this have retries; if the retries were not enough, we'll get a louder error.
 api/sv/v0/onboard/validator (POST) resulted in a timeout
-
-# com.daml.testing-utils seems to bring its own logback-test.xml, but it doesn't seem to break anything so we just ignore it
-Resource.*logback-test.xml.*occurs
-Setting level of logger.*to WARN
-Propagating WARN level on Logger
