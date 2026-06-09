@@ -67,11 +67,9 @@ function latest_full_backup_run_id_gcloud() {
   local is_sv=$3
   local expected_components=$4
   local before_timestamp=$5
-  local num_components
-  num_components=$(echo "$expected_components" | wc -w)
   local stack
 
-  declare -A run_ids_dict
+  declare -A backup_id_dict
 
   for component in $expected_components; do
     stack=$(get_stack_for_namespace_component "$namespace" "$component")
@@ -80,35 +78,26 @@ function latest_full_backup_run_id_gcloud() {
 
     local cloudsql_id
     cloudsql_id=$(get_cloudsql_id "$full_component_instance" "$stack")
-    # We always create backups with a description field while this field could be missing for automated backups done by Google Cloud.
-    # So we filter those out while looking for the most recent backup.
-    mapfile -t run_ids < <(gcloud sql backups list --instance "$cloudsql_id" --filter=type="ON_DEMAND" --format=json | jq -r --argjson ts "$before_timestamp" '.[] | select(has("description")) | select(.description | tonumber <= $ts) | .description')
-    run_ids_dict[$component]="${run_ids[*]}"
+
+    local backup_id
+    backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | .id')
+
+    if [ -z "$backup_id" ] || [ "$backup_id" == "null" ]; then
+      _error "No backup found for component $component (instance $cloudsql_id) before timestamp $before_timestamp"
+    fi
+
+    backup_id_dict[$component]="$backup_id"
   done
 
   if [ "$is_sv" == "true" ]; then
-    mapfile -t cometbft_run_ids < <(kubectl get volumesnapshot -n "$namespace" --sort-by=.metadata.creationTimestamp -o json | jq "[.items[] | select(.metadata.annotations[\"migrationId\"] == \"$migration_id\") | select(.metadata.name | contains(\"cometbft\"))]" | jq -r '.[].metadata.name // empty' | grep -o '[^-]*$' | awk -v ts="$before_timestamp" '$1 <= ts' | sort -rn | uniq )
-    run_ids_dict["cometbft"]="${cometbft_run_ids[*]}"
-    ((num_components++))
+    backup_id_dict["cometbft"]=""
   fi
 
-  declare -A count_dict
-  for key in "${!run_ids_dict[@]}"; do
-    for value in ${run_ids_dict[$key]}; do
-      if [ -z "${count_dict[$value]+_}" ]; then
-        count_dict[$value]=0
-      fi
-      ((count_dict[$value]++))
-    done
+  local result=""
+  for component in "${!backup_id_dict[@]}"; do
+    result="${result:+$result,}$component:${backup_id_dict[$component]}"
   done
-
-  largest_run_id=$(for key in "${!count_dict[@]}"; do
-    if [ "${count_dict[$key]}" -eq "$num_components" ]; then
-      echo "$key"
-    fi
-  done | sort -n | tail -n 1)
-
-  echo "$largest_run_id"
+  echo "$result"
 }
 
 function main() {
@@ -151,8 +140,8 @@ function main() {
     backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
     echo "$backup_run_id"
   elif [ "$type" == "canton:cloud:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
-    echo "$backup_run_id"
+    backup_map_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
+    echo "$backup_map_id"
   elif [ -z "$type" ]; then
     _error "No postgres instance $full_instance found in stack ${stack}. Is the cluster deployed with split DB instances?"
   else
