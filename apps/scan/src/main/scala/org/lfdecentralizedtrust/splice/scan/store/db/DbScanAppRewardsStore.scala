@@ -1010,5 +1010,7 @@ class DbScanAppRewardsStore(
       action: DBIOAction[T, NoStream, Effect.All],
       operationName: String,
   )(implicit tc: TraceContext): Future[T] =
-    futureUnlessShutdownToFuture(storage.queryAndUpdate(action, operationName)(implicitly, implicitly, _ => false))
+    futureUnlessShutdownToFuture(
+      storage.queryAndUpdate(action, operationName)(implicitly, implicitly, _ => false)
+    )
 }

@@ -299,7 +299,8 @@ class NodeInitializer(
         connection.getStatus.map[Either[String, Unit]] {
           case NodeStatus.Failure(msg) => Left(s"Node is in failure state: $msg")
           // the first step in the canton init process
-          case NodeStatus.NotInitialized(_, Some(WaitingForId), _) => Left("Node is waiting for an ID")
+          case NodeStatus.NotInitialized(_, Some(WaitingForId), _) =>
+            Left("Node is waiting for an ID")
           case NodeStatus.NotInitialized(_, _, _) => Right(())
           case NodeStatus.Success(_) => Right(())
         },

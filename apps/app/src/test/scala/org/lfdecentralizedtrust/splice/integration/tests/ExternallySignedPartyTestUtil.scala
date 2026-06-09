@@ -8,9 +8,15 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{ExternalPartySetupProposal, TransferPreapproval}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
+  ExternalPartySetupProposal,
+  TransferPreapproval,
+}
 import org.lfdecentralizedtrust.splice.console.{LedgerApiExtensions, ValidatorAppBackendReference}
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{PrepareAcceptExternalPartySetupProposalResponse, SignedTopologyTx}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  PrepareAcceptExternalPartySetupProposalResponse,
+  SignedTopologyTx,
+}
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.TestCommon
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
@@ -109,8 +115,15 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
   // The parameters here are just defaults so don't really matter
   def crypto(implicit ec: ExecutionContext) = new JcePureCrypto(
     CryptoProvider.Jce.symmetric.default,
-    CryptoScheme.create(CryptoSchemeConfig[SigningAlgorithmSpec](), CryptoProvider.Jce.signingAlgorithms).value,
-    CryptoScheme.create(CryptoSchemeConfig[EncryptionAlgorithmSpec](), CryptoProvider.Jce.encryptionAlgorithms).value,
+    CryptoScheme
+      .create(CryptoSchemeConfig[SigningAlgorithmSpec](), CryptoProvider.Jce.signingAlgorithms)
+      .value,
+    CryptoScheme
+      .create(
+        CryptoSchemeConfig[EncryptionAlgorithmSpec](),
+        CryptoProvider.Jce.encryptionAlgorithms,
+      )
+      .value,
     CryptoProvider.Jce.hash.default,
     CryptoProvider.Jce.pbkdf.value.default,
     CachingConfigs.defaultPublicKeyConversionCache,
