@@ -286,7 +286,7 @@ class ScanApp(
           storage,
           updateHistory,
           appActivityRecordStore,
-          config.rewardIssuanceTolerance,
+          config.rewardMintingAllowanceTolerance,
           loggerFactory,
         )
       )

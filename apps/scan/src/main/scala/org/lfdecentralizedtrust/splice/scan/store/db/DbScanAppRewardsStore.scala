@@ -119,7 +119,7 @@ class DbScanAppRewardsStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     appActivityRecordStore: DbAppActivityRecordStore,
-    rewardIssuanceTolerance: BigDecimal,
+    rewardMintingAllowanceTolerance: BigDecimal,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -814,7 +814,7 @@ class DbScanAppRewardsStore(
           where history_id = $historyId
             and round_number = $roundNumber
     """.as[BigDecimal].head.map { totalRewardAmount =>
-      val tolerance = rewardIssuanceTolerance
+      val tolerance = rewardMintingAllowanceTolerance
       if (totalRewardAmount > params.totalIssuanceForFeaturedAppRewards + tolerance) {
         throw Status.INTERNAL
           .withDescription(

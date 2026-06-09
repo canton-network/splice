@@ -830,7 +830,7 @@ class DbScanAppRewardsStoreTest
     "computeAndStoreRewards — rolls back when reward exceeds issuance" in {
       for {
         // Use a negative tolerance so any positive reward triggers the assertion
-        (store, historyId) <- newStore(rewardIssuanceTolerance = BigDecimal(-1.0))
+        (store, historyId) <- newStore(rewardMintingAllowanceTolerance = BigDecimal(-1.0))
         _ <- insertSentinelRecords(historyId, roundNumber)
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
         result <- store
@@ -1164,7 +1164,7 @@ class DbScanAppRewardsStoreTest
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   private def newStore(
-      rewardIssuanceTolerance: BigDecimal = BigDecimal(0.001)
+      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001)
   ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
@@ -1191,7 +1191,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         appActivityRecordStore,
-        rewardIssuanceTolerance,
+        rewardMintingAllowanceTolerance,
         loggerFactory,
       )
       (store, updateHistory.historyId)
