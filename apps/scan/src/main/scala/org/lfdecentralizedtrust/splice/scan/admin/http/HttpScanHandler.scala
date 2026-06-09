@@ -99,7 +99,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.scan.store.bulk.{
   BulkStorage,
   AcsSnapshotBulkStorageStaging,
-  UpdateHistoryBulkStorage,
+  UpdateHistoryBulkStorageStaging,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
@@ -2576,7 +2576,7 @@ class HttpScanHandler(
   }
 
   private def getBulkStorage()
-      : Option[(AcsSnapshotBulkStorageStaging, UpdateHistoryBulkStorage, Uri)] = {
+      : Option[(AcsSnapshotBulkStorageStaging, UpdateHistoryBulkStorageStaging, Uri)] = {
     for {
       acs <- bulkStorage.acsSnapshotBulkStorage
       update <- bulkStorage.updateHistoryBulkStorage

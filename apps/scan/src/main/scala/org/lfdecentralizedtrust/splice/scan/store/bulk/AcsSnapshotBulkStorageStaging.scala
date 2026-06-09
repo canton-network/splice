@@ -20,6 +20,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.OptionT
 import cats.implicits.*
+import com.daml.metrics.api.MetricHandle
 import com.digitalasset.canton.data.CantonTimestamp
 import io.grpc.Status
 import org.apache.pekko.NotUsed
@@ -44,7 +45,11 @@ class AcsSnapshotBulkStorageStaging(
       loggerFactory,
     ) {
 
+  override val description = "ACS Snapshot Bulk Storage (Staging)"
   override val kvStoreKey = "latest_acs_snapshot_in_bulk_storage"
+
+  protected val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp] =
+    historyMetrics.BulkStorage.latestAcsSnapshot
 
   override protected def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
@@ -87,11 +92,7 @@ class AcsSnapshotBulkStorageStaging(
       })
   }
 
-  override protected def updateMetric(ts: TimestampWithMigrationId): Unit = {
-    historyMetrics.BulkStorage.latestAcsSnapshot.updateValue(ts.timestamp)
-  }
-
-  // FIXME: consider moving this up to AcsSnapshotBulkStorage, we'll probably need something similar for both staging and completed buckets
+  // TODO: this should be read from the committed bucket once that exists, not from staging
   def getAcsSnapshotAtOrBefore(
       atOrBeforeTimestamp: CantonTimestamp
   )(implicit tc: TraceContext): Future[AcsSnapshotObjects] = {

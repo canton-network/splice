@@ -21,7 +21,7 @@ import scala.concurrent.ExecutionContext
 
 class BulkStorage(
     val acsSnapshotBulkStorage: Option[AcsSnapshotBulkStorageStaging],
-    val updateHistoryBulkStorage: Option[UpdateHistoryBulkStorage],
+    val updateHistoryBulkStorage: Option[UpdateHistoryBulkStorageStaging],
     services: Seq[PekkoRetryingService[?]],
     override protected val retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
@@ -78,7 +78,7 @@ object BulkStorage {
         historyMetrics,
         loggerFactory,
       )
-      val updates = new UpdateHistoryBulkStorage(
+      val updates = new UpdateHistoryBulkStorageStaging(
         storageConfig,
         appConfig,
         updateHistory,

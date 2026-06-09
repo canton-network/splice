@@ -224,7 +224,7 @@ class UpdateHistoryBulkStorageTest
         val retryProvider =
           RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
 
-        val svc = new UpdateHistoryBulkStorage(
+        val bulkStorage = new UpdateHistoryBulkStorageStaging(
           bulkStorageTestConfig,
           appConfig,
           mockStore.store,
@@ -233,7 +233,9 @@ class UpdateHistoryBulkStorageTest
           bucketConnection,
           new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
           loggerFactory,
-        ).asRetryableService(
+        )
+
+        val svc = bulkStorage.asRetryableService(
           AutomationConfig(pollingInterval =
             NonNegativeFiniteDuration.ofSeconds(1)
           ), // Fast retries
@@ -241,10 +243,11 @@ class UpdateHistoryBulkStorageTest
           retryProvider,
         )
 
-        (retryProvider, svc)
+        (retryProvider, bulkStorage, svc)
       }
 
       def assertLatestSegmentInDb(
+          bulkStorage: UpdateHistoryBulkStorageStaging,
           fromHour: Int,
           fromMigration: Int,
           toHour: Int,
@@ -264,7 +267,7 @@ class UpdateHistoryBulkStorageTest
             toMigration.toLong,
           ),
         )
-        kvProvider.getLatestUpdatesSegmentInBulkStorage().value.futureValue.value shouldBe segment
+        bulkStorage.readLatestProcessedSegment.futureValue.value shouldBe segment
       }
 
       def assertLatestSegmentInMetrics(hour: Int) =
@@ -273,14 +276,14 @@ class UpdateHistoryBulkStorageTest
           .toInstant(ZoneOffset.UTC)
           .toEpochMilli * 1000
 
-      val (retryProvider, svc) = newRetryProviderAndUpdatesBulkStorageService(0L)
+      val (retryProvider, bulkStorage, svc) = newRetryProviderAndUpdatesBulkStorageService(0L)
       Using.resources(
         svc,
         retryProvider,
       ) { (_, _) =>
         clue("First 2000 events end at 08:07:10, so expecting segments up to 08:00") {
           eventually() {
-            assertLatestSegmentInDb(6, 0, 8, 0)
+            assertLatestSegmentInDb(bulkStorage, 6, 0, 8, 0)
 
             assertLatestSegmentInMetrics(8)
           }
@@ -289,7 +292,7 @@ class UpdateHistoryBulkStorageTest
         clue("Ingest 2000 more updates, up to 13:14, expecting segments up to 12:00") {
           mockStore.mockIngestion(2000)
           eventually() {
-            assertLatestSegmentInDb(10, 0, 12, 0)
+            assertLatestSegmentInDb(bulkStorage, 10, 0, 12, 0)
             assertLatestSegmentInMetrics(12)
           }
 
@@ -300,12 +303,12 @@ class UpdateHistoryBulkStorageTest
       // then start a new one with the new migration and ingest updates in the new migration
 
       mockStore.mockMigration()
-      val (retryProvider1, svc1) = newRetryProviderAndUpdatesBulkStorageService(1L)
+      val (retryProvider1, bulkStorage1, svc1) = newRetryProviderAndUpdatesBulkStorageService(1L)
       Using.resources(svc1, retryProvider1) { (_, _) =>
         clue("500 more updates in the new migration, up to 15:03") {
           mockStore.mockIngestion(500)
           eventually() {
-            assertLatestSegmentInDb(12, 0, 14, 1)
+            assertLatestSegmentInDb(bulkStorage1, 12, 0, 14, 1)
             assertLatestSegmentInMetrics(14)
           }
         }
@@ -342,7 +345,7 @@ class UpdateHistoryBulkStorageTest
         )
       )
       val mockKvProvider = new ScanKeyValueProvider(mockKvStore, loggerFactory)
-      val svc = new UpdateHistoryBulkStorage(
+      val svc = new UpdateHistoryBulkStorageStaging(
         bulkStorageTestConfig,
         appConfig,
         mock[UpdateHistory],
