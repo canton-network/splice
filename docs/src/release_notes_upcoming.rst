@@ -35,6 +35,9 @@
         reduce some confusion around the sponsor having a special role
         for a validator after the initial onboarding.
 
+      - Limit the maximal amount that can be tapped in a single transaction to 100M CC
+        to avoid problems in downstream processing of very large total supply amounts.
+
       - These changes require a Daml upgrade to the following versions:
 
           ================== =======
