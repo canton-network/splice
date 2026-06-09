@@ -36,7 +36,7 @@ class ExternalPartyWalletService(
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
-    rewardSharingO: Option[RewardSharingConfig],
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -70,7 +70,7 @@ class ExternalPartyWalletService(
     scanConnection,
     loggerFactory,
     packageVersionSupport,
-    rewardSharingO,
+    rewardSharingConfig,
   )
 
   override def onClosed(): Unit = {

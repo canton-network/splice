@@ -50,7 +50,7 @@ class UserWalletAutomationService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
-    rewardSharing: Option[RewardSharingConfig],
+    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
     paramsConfig: SpliceParametersConfig,
 )(implicit
@@ -178,8 +178,8 @@ class UserWalletAutomationService(
   }
 
   // TODO(#5787): replace with RewardSharingTrigger registration;
-  // foreach suppresses the unused parameter warning until then.
-  rewardSharing.foreach { _ => () }
+  // suppresses the unused parameter warning until then.
+  locally { val _ = rewardSharingConfig }
 
   registerTrigger(
     new AmuletMetricsTrigger(triggerContext, store, scanConnection)

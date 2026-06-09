@@ -159,11 +159,11 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
   }
 
-  "rewardSharingByParty" should {
+  "rewardSharingConfigByParty" should {
 
     def mkHoconConfig(beneficiaries: String): String =
       s"""
-        |canton.validator-apps.aliceValidator.reward-sharing-by-party = {
+        |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
         |  "alice::1220abc" = {
         |    beneficiaries = [$beneficiaries]
         |    min-ttl-after-sharing = 30h

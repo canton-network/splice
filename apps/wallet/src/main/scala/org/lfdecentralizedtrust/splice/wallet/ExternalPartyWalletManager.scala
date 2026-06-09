@@ -44,7 +44,7 @@ class ExternalPartyWalletManager(
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
-    rewardSharingByParty: Map[String, RewardSharingConfig],
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -174,7 +174,7 @@ class ExternalPartyWalletManager(
       params,
       scanConnection,
       packageVersionSupport,
-      rewardSharingByParty.get(externalParty.toProtoPrimitive),
+      rewardSharingConfigByParty.getOrElse(externalParty.toProtoPrimitive, RewardSharingConfig()),
     )
     (externalPartyRetryProvider, walletService)
   }

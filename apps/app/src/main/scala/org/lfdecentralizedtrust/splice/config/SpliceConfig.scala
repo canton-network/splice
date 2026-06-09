@@ -815,7 +815,9 @@ object SpliceConfig {
               s"domains.global.url must not be set for an SV unless disableSvValidatorBftSequencerConnection is also set"
             ),
           )
-          _ <- conf.rewardSharingByParty.foldLeft(Right(()): Either[ConfigValidationFailed, Unit]) {
+          _ <- conf.rewardSharingConfigByParty.foldLeft(
+            Right(()): Either[ConfigValidationFailed, Unit]
+          ) {
             case (Left(err), _) => Left(err)
             case (Right(()), (party, sharingConfig)) =>
               for {

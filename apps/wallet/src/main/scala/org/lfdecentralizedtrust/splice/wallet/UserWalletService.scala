@@ -50,7 +50,7 @@ class UserWalletService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
-    rewardSharing: Option[RewardSharingConfig],
+    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
     params: SpliceParametersConfig,
 )(implicit
@@ -96,7 +96,7 @@ class UserWalletService(
     walletManager,
     retryProvider,
     scanConnection,
-    mintUnassignedRewardCouponsV2 = rewardSharing.isEmpty,
+    mintUnassignedRewardCouponsV2 = rewardSharingConfig.beneficiaries.isEmpty,
     loggerFactory,
   )
 
@@ -114,7 +114,7 @@ class UserWalletService(
     validatorTopupConfigO,
     walletSweep,
     autoAcceptTransfers,
-    rewardSharing,
+    rewardSharingConfig,
     dedupDuration,
     params,
   )

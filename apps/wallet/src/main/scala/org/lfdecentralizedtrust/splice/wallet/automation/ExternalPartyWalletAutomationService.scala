@@ -34,7 +34,7 @@ class ExternalPartyWalletAutomationService(
     scanConnection: BftScanConnection,
     override protected val loggerFactory: NamedLoggerFactory,
     packageVersionSupport: PackageVersionSupport,
-    rewardSharingO: Option[RewardSharingConfig],
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -66,7 +66,7 @@ class ExternalPartyWalletAutomationService(
       store,
       scanConnection,
       connection(SpliceLedgerConnectionPriority.Low),
-      rewardSharingO,
+      rewardSharingConfig,
     )
   )
 }

@@ -61,7 +61,7 @@ class MintingDelegationCollectRewardsTrigger(
     store: ExternalPartyWalletStore,
     scanConnection: BftScanConnection,
     spliceLedgerConnection: SpliceLedgerConnection,
-    rewardSharingO: Option[RewardSharingConfig],
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -288,7 +288,7 @@ class MintingDelegationCollectRewardsTrigger(
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
       rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
         issuingRoundsMap,
-        includeUnassigned = rewardSharingO.isEmpty,
+        includeUnassigned = rewardSharingConfig.beneficiaries.isEmpty,
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()

@@ -46,7 +46,7 @@ class WalletRewardsTimeBasedIntegrationTest
             // Specify a RewardConfig for Alice's validator,
             // so that unassigned RewardCouponV2 should not get minted
             c.copy(
-              rewardSharingByParty = Map(
+              rewardSharingConfigByParty = Map(
                 aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
                   beneficiaries = Seq(

@@ -188,7 +188,7 @@ case class ValidatorAppBackendConfig(
 
     /** The configuration for sharing app reward coupons from traffic-based app rewards with beneficiaries
       */
-    rewardSharingByParty: Map[String, RewardSharingConfig] = Map.empty,
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig] = Map.empty,
     // We don't make this optional to encourage users to think about it at least. They
     // can always set it to an empty string.
     contactPoint: String,
