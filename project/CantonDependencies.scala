@@ -30,7 +30,7 @@ object CantonDependencies {
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
   lazy val awaitility = "org.awaitility" % "awaitility" % "4.2.0"
-  lazy val grpc_version = "1.77.0"
+  lazy val grpc_version = "1.81.0"
   lazy val logback_version = "1.5.3"
   lazy val slf4j_version = "2.0.6"
   lazy val log4j_version = "2.17.0"
@@ -143,7 +143,7 @@ object CantonDependencies {
   lazy val grpc_netty_shaded = "io.grpc" % "grpc-netty-shaded" % grpc_version
   lazy val grpc_stub = "io.grpc" % "grpc-stub" % grpc_version
   lazy val grpc_services = "io.grpc" % "grpc-services" % grpc_version
-  lazy val google_common_protos = "com.google.api.grpc" % "proto-google-common-protos" % "2.41.0"
+  lazy val google_common_protos = "com.google.api.grpc" % "proto-google-common-protos" % "2.59.2"
 
   lazy val scopt = "com.github.scopt" %% "scopt" % "4.0.0"
 
