@@ -27,7 +27,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions 
 import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.*
 import org.lfdecentralizedtrust.splice.store.TxLogStore
-import org.lfdecentralizedtrust.splice.store.events.{DsoRulesAddSv, DsoRulesCloseVoteRequest}
+import org.lfdecentralizedtrust.splice.store.events.{
+  DsoBootstrapCreate,
+  DsoRulesAddSv,
+  DsoRulesCloseVoteRequest,
+}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.dollarsToCC
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
 import org.lfdecentralizedtrust.splice.util.{
@@ -485,6 +489,13 @@ class ScanTxLogParser(
             } else {
               State.empty
             }
+          case DsoBootstrapCreate(contract) =>
+            State.fromBootstrapGenesis(
+              EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, root.getNodeId),
+              synchronizerId,
+              tree,
+              contract,
+            )
           case _ => State.empty
         }
 
@@ -1007,6 +1018,23 @@ object ScanTxLogParser {
           date = tree.getEffectiveAt.toString,
           svParty = PartyId.tryFromProtoPrimitive(node.argument.value.newSvParty),
           newSvRewardWeight = node.argument.value.newSvRewardWeight,
+        )
+      )
+    }
+
+    def fromBootstrapGenesis(
+        eventId: String,
+        synchronizerId: SynchronizerId,
+        tree: Transaction,
+        contract: DsoBootstrapCreate.ContractType,
+    ): State = {
+      State(
+        AddSvTxLogEntry(
+          eventId = eventId,
+          domainId = synchronizerId,
+          date = tree.getEffectiveAt.toString,
+          svParty = PartyId.tryFromProtoPrimitive(contract.payload.sv1Party),
+          newSvRewardWeight = contract.payload.sv1RewardWeight,
         )
       )
     }
