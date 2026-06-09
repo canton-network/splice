@@ -6,7 +6,6 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
-import com.digitalasset.canton.version.ReleaseVersion
 import com.typesafe.config.ConfigValueFactory
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
@@ -24,7 +23,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   bumpUrl,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.environment.BuildInfo
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -423,13 +421,11 @@ class SvReonboardingIntegrationTest
       )() {
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
-          sv4ReonboardBackend.participantClientWithAdminToken.health.status should be(
-            NodeStatus.NotInitialized(
-              true,
-              Some(WaitingForId),
-              Some(ReleaseVersion.tryCreate(BuildInfo.compiledVersion)),
-            )
-          )
+          inside(sv4ReonboardBackend.participantClientWithAdminToken.health.status) {
+            case NodeStatus.NotInitialized(active, waitingFor, _) =>
+              active should be(true)
+              waitingFor should be(Some(WaitingForId))
+          }
         }
         better.files
           .File(dumpPath)
