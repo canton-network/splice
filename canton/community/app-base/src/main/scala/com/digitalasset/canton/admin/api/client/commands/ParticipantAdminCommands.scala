@@ -63,6 +63,7 @@ import com.digitalasset.canton.topology.{
   PartyId,
   PhysicalSynchronizerId,
   SequencerId,
+  Synchronizer,
   SynchronizerId,
 }
 import com.digitalasset.canton.tracing.TraceContext
@@ -81,7 +82,7 @@ import io.grpc.stub.StreamObserver
 import io.grpc.{Context, ManagedChannel}
 import io.scalaland.chimney.dsl.*
 
-import java.io.{File, FileInputStream, IOException, InputStream}
+import java.io.{File, FileInputStream, IOException}
 import java.nio.file.{Files, Path, Paths}
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -209,7 +210,9 @@ object ParticipantAdminCommands {
           .traverse(dar =>
             for {
               _ <- Either.cond(dar.darPath.nonEmpty, (), "Provided DAR path is empty")
-              filenameAndDarData <- loadDarData(dar.darPath)
+              filenameAndDarData <- dar.darDataO.fold(loadDarData(dar.darPath))(darData =>
+                Right(Paths.get(dar.darPath).getFileName.toString -> darData)
+              )
               (filename, darData) = filenameAndDarData
               descriptionOrFilename =
                 if (dar.description.isEmpty)
@@ -722,8 +725,8 @@ object ParticipantAdminCommands {
     }
 
     final case class ImportPartyAcs(
-        is: InputStream,
-        synchronizerId: SynchronizerId,
+        inputStream: java.io.InputStream,
+        synchronizer: Synchronizer,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
         representativePackageIdOverride: RepresentativePackageIdOverride,
@@ -747,7 +750,7 @@ object ParticipantAdminCommands {
           service: PartyManagementServiceStub,
           request: Unit,
       ): Future[v30.ImportPartyAcsResponse] =
-        ResourceUtil.withResource(is) { inputStream =>
+        ResourceUtil.withResource(inputStream) { inputStream =>
           val isFirstChunk = new AtomicBoolean(true)
           GrpcStreamingUtils.streamToServer(
             service.importPartyAcs,
@@ -755,7 +758,7 @@ object ParticipantAdminCommands {
               val isFirst = isFirstChunk.getAndSet(false)
               v30.ImportPartyAcsRequest(
                 ByteString.copyFrom(bytes),
-                synchronizerId = Option.when(isFirst)(synchronizerId.toProtoPrimitive),
+                synchronizerId = Option.when(isFirst)(synchronizer.toProtoPrimitive),
                 workflowIdPrefix =
                   if (isFirst) OptionUtil.emptyStringAsNone(workflowIdPrefix) else None,
                 contractImportMode = Option.when(isFirst)(contractImportMode.toProtoV30),
