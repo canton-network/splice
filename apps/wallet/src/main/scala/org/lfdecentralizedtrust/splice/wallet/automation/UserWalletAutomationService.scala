@@ -177,7 +177,8 @@ class UserWalletAutomationService(
     )
   }
 
-  // TODO(#5787): register RewardSharingTrigger when implemented
+  // TODO(#5787): replace with RewardSharingTrigger registration;
+  // foreach suppresses the unused parameter warning until then.
   rewardSharing.foreach { _ => () }
 
   registerTrigger(
