@@ -62,8 +62,8 @@ final case class AppRewardBeneficiaryConfig(
   *   the provider keeps the remainder (1.0 - sum of percentages)
   */
 final case class RewardSharingConfig(
-    minTtlAfterSharing: NonNegativeFiniteDuration,
-    beneficiaries: Seq[AppRewardBeneficiaryConfig],
+    minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
+    beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
 ) {
   def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
 
