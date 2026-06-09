@@ -422,7 +422,7 @@ class SvReonboardingIntegrationTest
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
           sv4ReonboardBackend.participantClientWithAdminToken.health.status should be(
-            NodeStatus.NotInitialized(true, Some(WaitingForId))
+            NodeStatus.NotInitialized(true, Some(WaitingForId), None)
           )
         }
         better.files
