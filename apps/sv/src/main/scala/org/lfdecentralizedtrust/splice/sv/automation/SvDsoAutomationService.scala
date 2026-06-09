@@ -489,6 +489,8 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
       )
     )
     registerTrigger(
