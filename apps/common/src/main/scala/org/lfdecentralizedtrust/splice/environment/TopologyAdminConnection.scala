@@ -47,7 +47,7 @@ import com.digitalasset.canton.time.{Clock, FetchTimeResponse}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
-import com.digitalasset.canton.topology.admin.v30.ExportTopologySnapshotV2Response
+import com.digitalasset.canton.topology.admin.v30.ExportTopologySnapshotResponse
 import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, TimeQuery}
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
@@ -582,6 +582,8 @@ abstract class TopologyAdminConnection(
         TopologyResult(base, mapping)
       }
     }
+  // ImportTopologySnapshot currently causes a PROTO_DESERIALIZATION_FAILURE
+  @nowarn("msg=deprecated")
   private def exportTopologySnapshot(
       store: TopologyStoreId,
       proposals: Boolean,
@@ -590,9 +592,9 @@ abstract class TopologyAdminConnection(
   )(implicit
       traceContext: TraceContext
   ): Future[ByteString] = {
-    val observer = new ByteStringStreamObserver[ExportTopologySnapshotV2Response](_.chunk)
+    val observer = new ByteStringStreamObserver[ExportTopologySnapshotResponse](_.chunk)
     runCmd(
-      TopologyAdminCommands.Read.ExportTopologySnapshotV2(
+      TopologyAdminCommands.Read.ExportTopologySnapshot(
         query = BaseQuery(
           store = store,
           proposals = proposals,
