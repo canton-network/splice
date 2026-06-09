@@ -576,12 +576,12 @@ class DbScanAppRewardsStoreTest
 
     }
 
-    // -- assertRewardAmountWithinIssuance tests --------------------------------
+    // -- assertMintingAllowanceWithinMintingCurve tests --------------------------------
     // Tested directly with fake round totals because normal computation
     // cannot trigger the assertion — the tranche formula guarantees
     // totalReward <= totalIssuance. This check is a safety net for bugs.
 
-    "assertRewardAmountWithinIssuance" should {
+    "assertMintingAllowanceWithinMintingCurve" should {
 
       def mkParams(totalIssuance: BigDecimal): RewardIssuanceParams =
         RewardIssuanceParams(
@@ -609,8 +609,9 @@ class DbScanAppRewardsStoreTest
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
           _ <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
-              "test.assertRewardAmountWithinIssuance",
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
             )
           )
         } yield succeed
@@ -623,12 +624,15 @@ class DbScanAppRewardsStoreTest
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.002))
           result <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
-              "test.assertRewardAmountWithinIssuance",
+              store.assertMintingAllowanceWithinMintingCurve(
+                roundNumber,
+                mkParams(BigDecimal(10.0)),
+              ),
+              "test.assertMintingAllowanceWithinMintingCurve",
             )
           ).failed
         } yield {
-          result.getMessage should include("exceeds totalIssuance")
+          result.getMessage should include("exceeds minting curve allowance")
         }
       }
 
@@ -638,8 +642,9 @@ class DbScanAppRewardsStoreTest
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0005))
           _ <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              store.assertRewardAmountWithinIssuance(roundNumber, mkParams(BigDecimal(10.0))),
-              "test.assertRewardAmountWithinIssuance",
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
             )
           )
         } yield succeed
@@ -832,7 +837,7 @@ class DbScanAppRewardsStoreTest
           .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
           .failed
       } yield {
-        result.getMessage should include("exceeds totalIssuance")
+        result.getMessage should include("exceeds minting curve allowance")
       }
     }
 

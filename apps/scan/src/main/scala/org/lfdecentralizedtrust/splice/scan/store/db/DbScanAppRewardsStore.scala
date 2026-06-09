@@ -648,7 +648,7 @@ class DbScanAppRewardsStore(
           totalWeight <- getAppActivityRoundTotalWeightAction(roundNumber)
           params = inputs.deriveIssuanceParams(totalWeight)
           _ <- computeRewardTotalsAction(roundNumber, params)
-          _ <- assertRewardAmountWithinIssuance(roundNumber, params)
+          _ <- assertMintingAllowanceWithinMintingCurve(roundNumber, params)
           _ <- computeRewardHashesAction(roundNumber, batchSize)
         } yield ())
           .map(_ => logger.debug(s"Computed and stored rewards for round $roundNumber."))
@@ -805,7 +805,7 @@ class DbScanAppRewardsStore(
     *
     * Called inside a transactional block which rolls back if it fails.
     */
-  private[store] def assertRewardAmountWithinIssuance(
+  private[store] def assertMintingAllowanceWithinMintingCurve(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
