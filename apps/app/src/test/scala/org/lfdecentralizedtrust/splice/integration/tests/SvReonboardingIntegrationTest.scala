@@ -6,6 +6,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
+import com.digitalasset.canton.version.ReleaseVersion
 import com.typesafe.config.ConfigValueFactory
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
@@ -423,7 +424,11 @@ class SvReonboardingIntegrationTest
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
           sv4ReonboardBackend.participantClientWithAdminToken.health.status should be(
-            NodeStatus.NotInitialized(true, Some(WaitingForId), Some(BuildInfo.compiledVersion))
+            NodeStatus.NotInitialized(
+              true,
+              Some(WaitingForId),
+              Some(ReleaseVersion.tryCreate(BuildInfo.compiledVersion)),
+            )
           )
         }
         better.files
