@@ -13,7 +13,7 @@ import Daml.Script
 
 import DA.Action
 import DA.Foldable (forA_)
-import DA.Map as Map hiding (filter)
+import DA.Map qualified as Map
 import DA.List (dedupSort)
 import DA.Optional
 import DA.Set qualified as Set
@@ -39,7 +39,6 @@ import Splice.Testing.Utils
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenV1_RegistryV1
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
-import Splice.Testing.TokenStandard.RegistryApiV2 qualified as RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 
 import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistryV1
@@ -52,8 +51,12 @@ import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 data TestEnvironment = TestEnvironment
   with
     venue : Party
+    venueAccount : V2.Account
+    venueSpecialAccount : V2.Account
     alice : Party
+    aliceAccount : V2.Account
     bob : Party
+    bobAccount : V2.Account
     charlie : Party
     dora : Party
     allParties : [Party]
@@ -63,7 +66,6 @@ data TestEnvironment = TestEnvironment
     tty2Registry : TestTokenV2_RegistryV2.TestTokenV2Registry
     registries : MultiRegistry.MultiRegistry
     amuletId : V2.InstrumentId
-    -- TODO(#4515): add the registry for the private asset
 
 data TestInstrumentId
   = AM  -- amulet
@@ -76,7 +78,6 @@ data TestHolding = TestHolding with
     amount : Decimal
     locked : Bool
     instrumentId : TestInstrumentId
-    -- TODO(#4517): test funding from locked holdings, and expired locked holdings
   deriving (Eq, Show)
 
 mkH : TestInstrumentId -> Party -> Decimal -> TestHolding
@@ -86,8 +87,8 @@ mkLH : TestInstrumentId -> Party -> Decimal -> TestHolding
 mkLH instrumentId owner amount = TestHolding owner amount True instrumentId
 
 data TestLeg = TestLeg with
-    sender : Party
-    receiver : Party
+    sender : V2.Account
+    receiver : V2.Account
     amount : Decimal
     instrumentId : TestInstrumentId
   deriving (Eq, Show)
@@ -132,8 +133,8 @@ singleTransferTest TestEnvironment{..} =
     expectedFinalHoldings = [mkH AM bob 1.0, mkH AM alice 99.0]
   where
     aliceToBob = TestLeg with
-        sender = alice
-        receiver = bob
+        sender = aliceAccount
+        receiver = bobAccount
         amount = 1.0
         instrumentId = AM
 
@@ -168,8 +169,6 @@ singleTransferTest_allV2_cancel = runTest $ \env@TestEnvironment{..} ->
       locksToExpireBeforeWithdrawal = []
     expectedFinalHoldings = [mkH AM alice 99.0, mkH AM alice 1.0]
 
--- TODO(#4517): expand coverage of cancellation and withdrawal tests
-
 
 -- Test suite: bilateral DvPs with fees
 ---------------------------------------
@@ -185,8 +184,9 @@ bilateralDvPWithFeeTest TestEnvironment{..} =
       , mkH X2 bob 50.0
       ]
     transferLegs =
-      [ aliceToBob, bobToVenue
+      [ aliceToBob, bobToVenueAM
       , bobToAliceX2
+      , bobToVenueX2
       ]
     expectedNumRequests = 3
     expectedNumAllocationsV1 = 0
@@ -194,31 +194,36 @@ bilateralDvPWithFeeTest TestEnvironment{..} =
     expectedHoldingsAfterAllocation =
       [ mkLH AM alice 20.0, mkH AM alice 80.0
       , mkH AM bob 100.0
-      , mkH X2 bob 10.0, mkLH X2 bob 40.0
+      , mkH X2 bob 8.0, mkLH X2 bob 42.0
       ]
     testWorkflow = SettleTrade
     expectedFinalHoldings =
       [ mkH AM alice 80.0
       , mkH X2 alice 40.0
-      , mkH AM bob 100.0, mkH AM bob 19.0, mkH X2 bob 10.0
-      , mkH AM venue 1.0
+      , mkH AM bob 100.0, mkH AM bob 19.0, mkH X2 bob 8.0
+      , mkH AM venue 1.0, mkH X2 venue 2.0
       ]
   where
     aliceToBob = TestLeg with
-        sender = alice
-        receiver = bob
+        sender = aliceAccount
+        receiver = bobAccount
         amount = 20.0
         instrumentId = AM
     bobToAliceX2 = TestLeg with
-        sender = bob
-        receiver = alice
+        sender = bobAccount
+        receiver = aliceAccount
         amount = 40.0
         instrumentId = X2
-    bobToVenue = TestLeg with
-        sender = bob
-        receiver = venue
+    bobToVenueAM = TestLeg with
+        sender = bobAccount
+        receiver = basicAccount venue
         amount = 1.0
         instrumentId = AM
+    bobToVenueX2 = TestLeg with
+        sender = bobAccount
+        receiver = venueSpecialAccount
+        amount = 2.0
+        instrumentId = X2
 
 bilateralDvPWithFeeTest_onlyV2 = runTest $ \env ->
   bilateralDvPWithFeeTest env
@@ -234,36 +239,36 @@ bilateralDvPWithFeeTest_bobV1 = runTest $ \env@TestEnvironment{..} ->
   (bilateralDvPWithFeeTest env) with
     partiesWithV1Wallet = [bob]
     expectedNumAllocationsV1 = 0
-    expectedNumAllocationsV2 = 4
+    expectedNumAllocationsV2 = 5
     partiesWithSettlementAgreements = [bob]
     expectedHoldingsAfterAllocation =
       [ mkLH AM alice 20.0, mkH AM alice 80.0
       , mkH AM bob 99.0, mkLH AM bob 1.0  -- Bob allocate Amulet, as V1 allocation flows don't do netting
-      , mkH X2 bob 10.0, mkLH X2 bob 40.0
+      , mkH X2 bob 8.0, mkLH X2 bob 40.0, mkLH X2 bob 2.0
       ]
     expectedFinalHoldings =
       [ mkH AM alice 80.0
       , mkH X2 alice 40.0
-      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 10.0
-      , mkH AM venue 1.0
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 8.0
+      , mkH AM venue 1.0, mkH X2 venue 2.0
       ]
 
 bilateralDvPWithFeeTest_allV1 = runTest $ \env@TestEnvironment{..} ->
   (bilateralDvPWithFeeTest env) with
     partiesWithV1Wallet = [alice, bob]
     expectedNumAllocationsV1 = 0
-    expectedNumAllocationsV2 = 3
+    expectedNumAllocationsV2 = 4  -- one for each sender of a leg
     partiesWithSettlementAgreements = [alice, bob]
     expectedHoldingsAfterAllocation =
       [ mkLH AM alice 20.0, mkH AM alice 80.0
       , mkH AM bob 99.0, mkLH AM bob 1.0  -- Bob allocate Amulet, as V1 allocation flows don't do netting
-      , mkH X2 bob 10.0, mkLH X2 bob 40.0
+      , mkH X2 bob 8.0, mkLH X2 bob 40.0, mkLH X2 bob 2.0
       ]
     expectedFinalHoldings =
       [ mkH AM alice 80.0
       , mkH X2 alice 40.0
-      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 10.0
-      , mkH AM venue 1.0
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 8.0
+      , mkH AM venue 1.0, mkH X2 venue 2.0
       ]
 
 bilateralDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
@@ -274,7 +279,7 @@ bilateralDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
     expectedFinalHoldings =
       [ mkH AM alice 80.0, mkH AM alice 20.0
       , mkH AM bob 100.0
-      , mkH X2 bob 10.0, mkH X2 bob 40.0
+      , mkH X2 bob 8.0, mkH X2 bob 42.0
       ]
 
 
@@ -297,7 +302,7 @@ multiDvPWithFeeTest TestEnvironment{..} =
       [ aliceToBob, bobToVenue, bobToAliceX2, bobToAliceY2
       , bobToAliceX1
       ]
-    expectedNumRequests = 3
+    expectedNumRequests = 2
     expectedNumAllocationsV1 = 1
     expectedNumAllocationsV2 = 4
     expectedHoldingsAfterAllocation =
@@ -317,28 +322,28 @@ multiDvPWithFeeTest TestEnvironment{..} =
       ]
   where
     aliceToBob = TestLeg with
-        sender = alice
-        receiver = bob
+        sender = aliceAccount
+        receiver = bobAccount
         amount = 20.0
         instrumentId = AM
     bobToAliceX1 = TestLeg with
-        sender = bob
-        receiver = alice
+        sender = bobAccount
+        receiver = aliceAccount
         amount = 40.0
         instrumentId = X1
     bobToAliceX2 = TestLeg with
-        sender = bob
-        receiver = alice
+        sender = bobAccount
+        receiver = aliceAccount
         amount = 5.0
         instrumentId = X2
     bobToAliceY2 = TestLeg with
-        sender = bob
-        receiver = alice
+        sender = bobAccount
+        receiver = aliceAccount
         amount = 0.3
         instrumentId = Y2
     bobToVenue = TestLeg with
-        sender = bob
-        receiver = venue
+        sender = bobAccount
+        receiver = venueAccount
         amount = 1.0
         instrumentId = AM
 
@@ -351,6 +356,47 @@ multiDvPWithFeeTest_alice_v1 = runTest $ \env@TestEnvironment{..} ->
     expectedNumAllocationsV1 = 1  -- allocation for bobToAliceX1
     expectedNumAllocationsV2 = 3  -- alice's V1 wallet does not create a receipt allocation
 
+multiDvPWithFeeTest_bob_v1 = runTest $ \env@TestEnvironment{..} ->
+  (multiDvPWithFeeTest env) with
+    partiesWithV1Wallet = [bob]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0
+      , mkH X1 bob 10.0, mkLH X1 bob 40.0
+      , mkH X2 bob 15.0, mkLH X2 bob 5.0, mkLH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
+    expectedNumAllocationsV1 = 1  -- allocation of bob for bobToAliceX1
+    expectedNumAllocationsV2 = 5  -- bob (to venue AM, alice X2, alice Y2), alice (AM send, X2 receipt)
+    expectedFinalHoldings =
+      [ mkH AM alice 80.0
+      , mkH X1 alice 40.0
+      , mkH X2 alice 5.0, mkH Y2 alice 0.3
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 15.0, mkH Y2 bob 2.7
+      , mkH X1 bob 10.0
+      , mkH AM venue 1.0
+      ]
+
+multiDvPWithFeeTest_all_v1 = runTest $ \env@TestEnvironment{..} ->
+  (multiDvPWithFeeTest env) with
+    partiesWithV1Wallet = [alice, bob]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0
+      , mkH X1 bob 10.0, mkLH X1 bob 40.0
+      , mkH X2 bob 15.0, mkLH X2 bob 5.0, mkLH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
+    expectedNumAllocationsV1 = 1  -- allocation of bob for bobToAliceX1
+    expectedNumAllocationsV2 = 4  -- bob (to venue AM, alice X2, alice Y2), alice (AM send)
+    expectedFinalHoldings =
+      [ mkH AM alice 80.0
+      , mkH X1 alice 40.0
+      , mkH X2 alice 5.0, mkH Y2 alice 0.3
+      , mkH AM bob 99.0, mkH AM bob 20.0, mkH X2 bob 15.0, mkH Y2 bob 2.7
+      , mkH X1 bob 10.0
+      , mkH AM venue 1.0
+      ]
+
+multiDvPWithFeeTest_onlyV2_cancel : Script ()
 multiDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
   (multiDvPWithFeeTest env) with
     testWorkflow = WithdrawAndCancel with
@@ -363,21 +409,132 @@ multiDvPWithFeeTest_onlyV2_cancel = runTest $ \env@TestEnvironment{..} ->
       , mkH X2 bob 15.0, mkH X2 bob 5.0, mkH Y2 bob 0.3, mkH Y2 bob 2.7
       ]
 
--- TODO(#4517): test withdrawal with an expired and one unexpired lock
+multiDvPWithFeeTest_allV1_cancel = runTest $ \env@TestEnvironment{..} ->
+  (multiDvPWithFeeTest env) with
+    partiesWithV1Wallet = [alice, bob]
+    testWorkflow = WithdrawAndCancel with
+      withdrawers = []
+      locksToExpireBeforeWithdrawal = [mkLH AM alice 20.0]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0
+      , mkH X1 bob 10.0, mkLH X1 bob 40.0
+      , mkH X2 bob 15.0, mkLH X2 bob 5.0, mkLH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
+    expectedNumAllocationsV1 = 1  -- allocation of bob for bobToAliceX1
+    expectedNumAllocationsV2 = 4  -- bob (to venue AM, alice X2, alice Y2), alice (AM send)
+    expectedFinalHoldings =
+      [ mkH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkH AM bob 1.0
+      , mkH X1 bob 10.0, mkH X1 bob 40.0
+      , mkH X2 bob 15.0, mkH X2 bob 5.0, mkH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
 
--- TODO(#4517): add negative tests showing that bob must approve their forwarding allocation
+multiDvPWithFeeTest_allV1_withdraw_then_cancel = runTest $ \env@TestEnvironment{..} ->
+  (multiDvPWithFeeTest env) with
+    partiesWithV1Wallet = [alice, bob]
+    testWorkflow = WithdrawAndCancel with
+      withdrawers = [alice, bob]
+      locksToExpireBeforeWithdrawal = [mkLH AM alice 20.0]
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkLH AM bob 1.0
+      , mkH X1 bob 10.0, mkLH X1 bob 40.0
+      , mkH X2 bob 15.0, mkLH X2 bob 5.0, mkLH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
+    expectedNumAllocationsV1 = 1  -- allocation of bob for bobToAliceX1
+    expectedNumAllocationsV2 = 4  -- bob (to venue AM, alice X2, alice Y2), alice (AM send)
+    expectedFinalHoldings =
+      [ mkH AM alice 20.0, mkH AM alice 80.0
+      , mkH AM bob 99.0, mkH AM bob 1.0
+      , mkH X1 bob 10.0, mkH X1 bob 40.0
+      , mkH X2 bob 15.0, mkH X2 bob 5.0, mkH Y2 bob 0.3, mkH Y2 bob 2.7
+      ]
 
--- TODO(#4517): add cancellation/withdrawal and mixed version settlement test variants for this scenario as well
+-- | The example from CIP-112 (https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md#42-uxflow-example-in-detail)
+-- with Amulet and X2 taking the place of USD and X.
+cipExampleTest : TestEnvironment -> TestTrade
+cipExampleTest TestEnvironment{..} =
+  TestTrade with
+    partiesWithV1Wallet = []
+    partiesWithSettlementAgreements = []
+    initialHoldings =
+      [ mkH AM alice 100.0
+      ]
+    transferLegs =
+      [ -- TransferLeg with sender=alice; receiver=bob; amount=1.0; instrumentId=x,
+        TestLeg with
+          sender = aliceAccount
+          receiver = bobAccount
+          amount = 1.0
+          instrumentId = X2
+        -- TransferLeg with sender=bob; receiver=alice; amount=10.0; instrumentId=usd,
+      , TestLeg with
+          sender = bobAccount
+          receiver = aliceAccount
+          amount = 10.0
+          instrumentId = AM
+        -- TransferLeg with sender=alice; receiver=app; amount=0.1; instrumentId=usd,
+      , TestLeg with
+          sender = aliceAccount
+          receiver = venueAccount
+          amount = 0.1
+          instrumentId = AM
 
--- TODO(#4517): add the example from the CIP, and test for corner cases like cyclic trades that fully net with the max Decimal amount
+        -- TransferLeg with sender=bob; receiver=carol; amount=1.0; instrumentId=x,
+      , TestLeg with
+          sender = bobAccount
+          receiver = basicAccount charlie
+          amount = 1.0
+          instrumentId = X2
+        -- TransferLeg with sender=carol; receiver=bob; amount=11.0; instrumentId=usd,
+      , TestLeg with
+          sender = basicAccount charlie
+          receiver = bobAccount
+          amount = 11.0
+          instrumentId = AM
+        -- TransferLeg with sender=bob; receiver=app; amount=0.11; instrumentId=usd,
+      , TestLeg with
+          sender = bobAccount
+          receiver = venueAccount
+          amount = 0.11
+          instrumentId = AM
 
--- TODO(#4517): test that duplicate allocations of the same leg cannot be settled
+        -- TransferLeg with sender=carol; receiver=alice; amount=1.0; instrumentId=x,
+      , TestLeg with
+          sender = basicAccount charlie
+          receiver = aliceAccount
+          amount = 1.0
+          instrumentId = X2
+        -- TransferLeg with sender=alice; receiver=carol; amount=12.0; instrumentId=usd,
+      , TestLeg with
+          sender = aliceAccount
+          receiver = basicAccount charlie
+          amount = 12.0
+          instrumentId = AM
+        -- TransferLeg with sender=carol; receiver=app; amount=0.12; instrumentId=usd,
+      , TestLeg with
+          sender = basicAccount charlie
+          receiver = venueAccount
+          amount = 0.12
+          instrumentId = AM
+      ]
+    expectedNumRequests = 3
+    expectedNumAllocationsV1 = 0
+    expectedNumAllocationsV2 = 6
+    expectedHoldingsAfterAllocation =
+      [ mkLH AM alice 2.1, mkH AM alice 97.9
+      ]
+    testWorkflow = SettleTrade
+    expectedFinalHoldings =
+      [ mkH AM alice 97.9
+      , mkH AM bob 0.89
+      , mkH AM charlie 0.88
+      , mkH AM venue 0.33
+      ]
 
--- TODO(#4515): test allocation workflow with different accounts for cash and security leg
-
--- TODO(#4515): test V2 wallet accepting allocation request from a V1 app using mix of V1 and V2 assets
-
--- TODO(#4515): test multiple-accounts for TT2; provider authorization for allocation; multiple instrument-ids in TT2
+cipExampleTest_onlyV2 = runTest $ \env ->
+  cipExampleTest env
 
 
 -- Test exececution infrastructure
@@ -411,11 +568,11 @@ runTest mkTest = do
   let tradeLegs = do
         (i, TestLeg{..}) <- zip [1..length test.transferLegs] test.transferLegs
         let iid = mkInstrumentId env instrumentId
-        let reason = T.intercalate "-" ["trade-leg", show i, partyToText sender, partyToText receiver]
+        let reason = T.intercalate "-" ["trade-leg", show i, partyToText (regularAccountOwner sender), partyToText (regularAccountOwner receiver)]
         let leg = V2.TransferLeg with
               transferLegId = "leg" <> show i
-              sender = basicAccount sender
-              receiver = basicAccount receiver
+              sender
+              receiver
               amount
               instrumentId = iid.id
               meta = reasonToMeta reason emptyMetadata
@@ -445,6 +602,7 @@ runTest mkTest = do
       then do
         reqs <- WalletClientV2.listAllocationRequestsV1 trader
         forA_ reqs $ \(_, req) -> do
+          debug req
           WalletClientV2.acceptAndCreateRequestedAllocationsV1 env.registries trader req
       else do
         reqs <- WalletClientV2.listAllocationRequestsV2 (basicAccount trader) trader
@@ -500,19 +658,24 @@ runTest mkTest = do
 
       -- withdraw allocations for the specified withdrawers
       forA_ withdrawers $ \withdrawer -> do
-        -- TODO(#4517): V1 withdraw
+        -- withdraw V2 allocations first
         allocs <- queryInterface @V2.Allocation withdrawer
         forA_ allocs $ \(allocCid, optAllocView) -> do
-          -- TODO(#4517): also test lock expiry
-          Some allocView <- pure optAllocView
-          registry <- MultiRegistry.getRegistryApiV2 env.registries allocView.allocation.admin
-          context <- RegistryApiV2.getAllocation_WithdrawContext registry allocCid emptyMetadata
-          submitWithDisclosures' withdrawer context.disclosures $ exerciseCmd allocCid
-            V2.Allocation_Withdraw with
-              actors = [withdrawer]
-              extraArgs = ExtraArgs with
-                context = context.choiceContext
-                meta = emptyMetadata
+          let Some allocView = optAllocView
+          WalletClientV2.withdrawAllocationV2 env.registries withdrawer (allocCid, allocView)
+        allocsAfterV2 <- queryInterface @V2.Allocation withdrawer
+        unless (null allocsAfterV2) $ fail $ T.unlines
+          [ "Expected all V2 allocations for withdrawer " <> show withdrawer <> " to be withdrawn, but some remain: " <> show allocsAfterV2
+          ]
+        -- withdraw remaining V1-only allocations
+        allocs <- queryInterface @V1.Allocation withdrawer
+        forA_ allocs $ \(allocCid, optAllocView) -> do
+          let Some allocView = optAllocView
+          WalletClientV2.withdrawAllocationV1 env.registries withdrawer (allocCid, allocView)
+        allocsAfterV1 <- queryInterface @V1.Allocation withdrawer
+        unless (null allocsAfterV1) $ fail $ T.unlines
+          [ "Expected all V1 allocations for withdrawer " <> show withdrawer <> " to be withdrawn, but some remain: " <> show allocsAfterV1
+          ]
 
       -- cancel trade
       trades <- TradingAppV2.queryTradesWithAllocations env.venue
@@ -523,8 +686,6 @@ runTest mkTest = do
 
   -- check final holdings
   checkHoldings env ("holdings after " <> show test.testWorkflow) test.expectedFinalHoldings
-
-  -- TODO(#4517): check that featured app reward coupons get created, if that is still required
 
   -- check that no allocations or allocation requests are left over
   [] <- queryInterface @V1.Allocation env.venue
@@ -541,6 +702,13 @@ setupTestEnvironment = do
     WalletClientV2.createBatchingUtility p
     pure p
   let [venue, alice, bob, charlie, dora] = allParties
+  let venueAccount = basicAccount venue
+  let venueSpecialAccount = V2.Account with
+        owner = Some venue
+        provider = None
+        id = "special-account"
+  let aliceAccount = basicAccount alice
+  let bobAccount = basicAccount bob
 
   -- amulet registry setup
   registryV2 <- AmuletRegistryV2.initialize AmuletRegistryV2.defaultAmuletRegistryConfig

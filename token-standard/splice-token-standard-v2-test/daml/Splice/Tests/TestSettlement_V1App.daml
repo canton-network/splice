@@ -164,18 +164,9 @@ setupOtcTrade  = do
   submitWithDisclosuresMustFail' alice enrichedChoice.disclosures $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
-  -- alice accepts allocation request directly via her wallet
-  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
-    expectedAdmin = registry.admin
-    allocation = aliceAlloc
-    inputHoldingCids
-    requestedAt = now
-    extraArgs = emptyExtraArgs
-  result <- submitWithDisclosures' alice enrichedChoice.disclosures $
-    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-
-  -- check metadata
-  expectNoBurn result.meta
+  -- alice accepts allocation request directly using a V2 wallet
+  [(_, req)] <- WalletClientV2.listAllocationRequestsV1 alice
+  WalletClientV2.acceptAndCreateRequestedAllocationsV1 env.registries alice req
 
   -- check lock context
   [(_, lockedHolding)] <- WalletClient.listLockedHoldings alice yId

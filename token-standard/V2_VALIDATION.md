@@ -245,3 +245,11 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Use consistent naming for all metadata keys: `providerMetaKey`, `accountIdMetaKey`, `expiresAtMetaKey`, and `extraExecutorsMetaKey`
 - Fix a namespacing mistake in the computation of the `expiresAtMetaKey`
 - Remove redundant `textMapZipWithDefault`. Use `textMapMergeWithDefault` instead
+- Removed the trivial `allocationRequestV2_withdrawImplV2Only` and `allocationRequestV2_rejectImplV2Only` functions,
+  as inlining their logic makes the code more readable
+- Fix `ensureIsReceiptAllocation` so that it does not allow creating an iterated allocation (and add tests for that)
+- Reintroduce the `downcast V2.AllocationRequestView` function that automatically determines the settlement deadline
+  based on the maximum of the ones of the allocations in the request, which is usually what one wants. This makes
+  it more convenient to implement dual version allocation request templates.
+- Change `OTCTrade_RequestAllocations` to not create requests for the trading venue itself, as the venue's allocations
+  are created as part of the settlement transaction itself.

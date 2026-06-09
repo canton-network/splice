@@ -29,7 +29,7 @@ import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest)
 
 
--- TODO(#4517): also run these test cases for TestTokenV2
+-- TODO(#4514): also run these test cases for TestTokenV2
 
 
 -- Testing V1.AllocationFactory_Allocate
@@ -409,8 +409,8 @@ test_settleBatchV2_duplicateAllocs_same_cid = test_settleBatchV2_generic $ \Sett
         extraArgs = emptyExtraArgs
         actors = [provider]
   pure $ (,) choiceArg $
-    expectMessageContains "Expected unique allocated authorizations, but found duplicates" <>
-    expectMessageContains "side = ReceiverSide"
+    expectMessageContains "Expected unique transferLegIds of allocated authorizations, but found duplicates" <>
+    expectMessageContains "ReceiverSide"
 
 test_settleBatchV2_duplicateAllocs_different_cid : Script ()
 test_settleBatchV2_duplicateAllocs_different_cid = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
@@ -425,8 +425,8 @@ test_settleBatchV2_duplicateAllocs_different_cid = test_settleBatchV2_generic $ 
         extraArgs = emptyExtraArgs
         actors = [provider]
   pure $ (,) choiceArg $
-    expectMessageContains "Expected unique allocated authorizations, but found duplicates" <>
-    expectMessageContains "side = ReceiverSide"
+    expectMessageContains "Expected unique transferLegIds of allocated authorizations, but found duplicates" <>
+    expectMessageContains "ReceiverSide"
 
 test_settleBatchV2_nonIterated_noExtraLegs : Script ()
 test_settleBatchV2_nonIterated_noExtraLegs = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
@@ -440,7 +440,8 @@ test_settleBatchV2_nonIterated_noExtraLegs = test_settleBatchV2_generic $ \Settl
         extraArgs = emptyExtraArgs
         actors = [provider]
   pure $ (,) choiceArg $
-    expectMessageContains "'finalizedAllocation.extraTransferLegSides' is not equal to 'expected value'"
+    expectMessageContains "'finalizedAllocation.extraTransferLegSides' is not equal to 'expected value'" <>
+    expectMessageContains "expected value: []"
 
 test_settleBatchV2_nonIterated_noNextIterationFunding : Script ()
 test_settleBatchV2_nonIterated_noNextIterationFunding = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
@@ -594,6 +595,37 @@ test_allocationv2_Settle_wrongActor = do
       extraArgs = emptyExtraArgs
       actors = [alice]
 
+test_allocationv1_Settle_after_settlementDeadline : Script ()
+test_allocationv1_Settle_after_settlementDeadline = do
+  (TestEnv{..}) <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1
+  setTime allocationV1.settlement.settleBefore
+  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+
+  submitMustFail''
+    (expectErrorId "stdlib.daml.com/deadline-exceeded")
+    (actAs provider <> actAs instrId.admin) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
+      extraTransferLegSides = []
+      nextIterationFunding = None
+      extraArgs = emptyExtraArgs
+      actors = [provider, instrId.admin]
+
+test_allocationv2_Settle_after_settlementDeadline : Script ()
+test_allocationv2_Settle_after_settlementDeadline = do
+  (TestEnv{..}) <- setupTest
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
+    settlementDeadline = Some $ now `addRelTime` days 1
+  passTime (days 1)
+  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+
+  submitMustFail''
+    (expectErrorId "stdlib.daml.com/deadline-exceeded")
+    (actAs provider <> actAs instrId.admin) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
+      extraTransferLegSides = []
+      nextIterationFunding = None
+      extraArgs = emptyExtraArgs
+      actors = [provider, instrId.admin]
+
 
 -- Test V2.Allocation_Cancel
 ----------------------------
@@ -657,3 +689,21 @@ test_allocationv2_Withdraw_wrongActor = do
     (actAs provider) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
       extraArgs = emptyExtraArgs
       actors = [provider]
+
+test_allocationv2_Withdraw_committed_expired_but_deadlineNotReached : Script ()
+test_allocationv2_Withdraw_committed_expired_but_deadlineNotReached = do
+  (TestEnv{..}) <- setupTest
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
+    committed = True
+    settlementDeadline = Some $ now `addRelTime` days 365
+
+  [(aliceAllocCid, allocView)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  let Some expiresAt = allocView.expiresAt
+  setTime (expiresAt `addRelTime` days 1)
+
+  submitMustFail''
+    ( expectMessageContains "Cannot withdraw a committed allocation before its settlement deadline"
+    )
+    (actAs alice) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
+      extraArgs = emptyExtraArgs
+      actors = [alice]

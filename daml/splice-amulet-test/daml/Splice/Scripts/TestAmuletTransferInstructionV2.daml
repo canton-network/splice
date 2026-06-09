@@ -31,7 +31,7 @@ import Splice.Testing.Utils
 import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
 import qualified Splice.Scripts.Util
 
--- TODO(#4517): also run these test cases for TestTokenV2
+-- TODO(#4514): also run these test cases for TestTokenV2
 
 -- Happy-path test cases
 ------------------------

@@ -98,10 +98,6 @@ module Splice.TokenStandard.Utils.Internal.Allocations (
   allocationRequestV2_rejectDefaultImplUsingV1,
   allocationRequestV2_withdrawDefaultImplUsingV1,
 
-  -- ** V2 for V2-only templates
-  allocationRequestV2_rejectDefaultImplV2Only,
-  allocationRequestV2_withdrawDefaultImplV2Only,
-
   -- * Allocation factory implementations
 
   -- ** V2 Choice observers
@@ -233,9 +229,6 @@ isValidAllocationSpecificationV2 validInstrumentId AllocationV2.AllocationSpecif
       validateNoAccountMeta "sender" leg.meta &&
       validateNoAccountMeta "receiver" leg.meta
 
-
--- TODO(#4517): add negative test cases for checking receipt allocations
-
 -- | Check that the allocation factory call creates a receipt allocation for the given account.
 ensureIsReceiptAllocation
   : [Party] -- ^ Expected executors of the receipt allocation
@@ -244,21 +237,24 @@ ensureIsReceiptAllocation
   -> AllocationInstructionV2.AllocationFactory_Allocate
   -> Update ()
 ensureIsReceiptAllocation executors receiver receiptAccount choiceArg = do
-  let (AllocationInstructionV2.AllocationFactory_Allocate with
-        allocation; requestedAt = _ignore; inputHoldingCids; extraArgs; actors) = choiceArg
-  let (ExtraArgs with context = _ignore; meta) = extraArgs
-  let (AllocationV2.AllocationSpecification with transferLegSides; authorizer) = allocation
-  requireMatchExpected ("choiceArg.settlement.executor", choiceArg.settlement.executors) executors
-  require' ("choiceArg.allocation.authorizer", authorizer) isEqualR ("receiptAccount", receiptAccount)
-  -- restrict to single actor choices with the receiver as the actor
-  requireMatchExpected ("choiceArg.actors", actors) [receiver]
-  -- require all transfer legs to be receipts
-  forA_ transferLegSides $ \leg -> do
-    require ("transferLeg[" <> leg.transferLegId <> "] is a receipt leg") (leg.side == AllocationV2.ReceiverSide)
-  -- no holdings for funding
-  require' ("choiceArg.inputHoldingCids", inputHoldingCids) isEqualR ("emptyList", [])
-  -- no extra metadata to avoid accidental delegation over special functionality
-  require' ("choiceArg.extraArgs.meta", meta) isEqualR ("emptyMetadata", emptyMetadata)
+  case choiceArg of
+    AllocationInstructionV2.AllocationFactory_Allocate settlement allocation _requestedAt inputHoldingCids extraArgs actors ->
+      case allocation of
+        AllocationV2.AllocationSpecification _admin authorizer transferLegSides _settlementDeadline nextIterationFunding committed _meta -> do
+          requireMatchExpected ("choiceArg.settlement.executor", settlement.executors) executors
+          require' ("choiceArg.allocation.authorizer", authorizer) isEqualR ("receiptAccount", receiptAccount)
+          -- restrict to single actor choices with the receiver as the actor
+          requireMatchExpected ("choiceArg.actors", actors) [receiver]
+          -- require all transfer legs to be receipts
+          forA_ transferLegSides $ \leg -> do
+            require ("transferLeg[" <> leg.transferLegId <> "] is a receipt leg") (leg.side == AllocationV2.ReceiverSide)
+          -- no next iteration funding nor committed allocation
+          require' ("choiceArg.allocation.nextIterationFunding", nextIterationFunding) isEqualR ("None", None)
+          require' ("choiceArg.allocation.committed", committed) isEqualR ("False", False)
+          -- no holdings for funding
+          require' ("choiceArg.inputHoldingCids", inputHoldingCids) isEqualR ("emptyList", [])
+          -- no extra metadata to avoid accidental delegation over special functionality
+          require' ("choiceArg.extraArgs.meta", extraArgs.meta) isEqualR ("emptyMetadata", emptyMetadata)
 
 
 -- Allocation choices
@@ -288,7 +284,6 @@ ensureWithdrawIsAllowed allocation =
         isPastDeadline <- isLedgerTimeGT deadline
         unless isPastDeadline $
           failWithStatus (cannotWithdrawCommittedAllocationFailure (Some deadline))
-
 
 -- | Default implementation for the `V2.Allocation_Withdraw` for a template that
 -- implements the `V1.Allocation` interface.
@@ -359,9 +354,6 @@ settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin arg =
 settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl
   : AllocationV2.SettlementFactory_SettleBatch -> [Party]
 settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl _arg = []
-
-
--- TODO(#4517): re-review this implementation jointly to focus the increase in test coverage
 
 -- | Default implementation for settling a batch of allocations.
 --
@@ -443,12 +435,13 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
 
     pure (finalizedAlloc, adjustedAllocView)
 
-  -- ensure there are no duplicate authorizations
+  -- ensure there are no duplicate authorizations, even when looking just at the transfer-leg ids
   let allocatedAuthorizations = do
         (_, allocationView) <- allocations
         leg <- allocationView.allocation.transferLegSides
         pure (allocationView.allocation.authorizer, leg)
-  requireUnique "allocated authorizations" allocatedAuthorizations
+  requireUnique "transferLegIds of allocated authorizations"
+    [ (authorizer, leg.transferLegId, leg.side) | (authorizer, leg) <- allocatedAuthorizations ]
 
   -- check that exactly the required allocations are present
   let requiredAuthorizations = Set.fromList $ concatMap transferLegSidesWithAuthorizer transferLegs
@@ -874,8 +867,8 @@ allocationRequestV2_rejectDefaultImplUsingV1 allowedActors self arg = do
       pure AllocationRequestV2.AllocationRequest_RejectResult with
         meta = result.meta
     _actors ->
-      -- Fallback to direct implementation, as V1 does not support multiple actors.
-      allocationRequestV2_rejectDefaultImplV2Only allowedActors self arg
+      pure AllocationRequestV2.AllocationRequest_RejectResult with
+        meta = emptyMetadata
 
 -- | Default implementation for the `V2.AllocationRequest_Withdraw` choice of a
 -- template that implements the `V1.AllocationRequest` interface.
@@ -899,8 +892,8 @@ allocationRequestV2_withdrawDefaultImplUsingV1 this self arg = do
       pure AllocationRequestV2.AllocationRequest_WithdrawResult with
         meta = result.meta
     _executors -> do
-      -- Fallback to direct implementation, as V1 does not support multiple executors
-      allocationRequestV2_withdrawDefaultImplV2Only this self arg
+      pure AllocationRequestV2.AllocationRequest_WithdrawResult with
+        meta = emptyMetadata
   where
     thisView = view this
 

@@ -311,7 +311,6 @@ genericTestBatchedTransfer TestSetup {..} = do
   WalletClientV2.executeTSABatch registries dora (daccept <> doraMerge <> doraMerge)
 
   -- charlie accepts their offer
-  -- TODO(#4813): actually reject as part of a batch, once we have the support for that in the batching utility
   caccept <- acceptTransferInstructionV2s registries charlie instrY
   (result, changes) <- WalletClientV2.executeTSABatch registries charlie caccept
 

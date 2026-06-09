@@ -1200,7 +1200,7 @@ function subcmd_no_illegal_daml_references() {
       '(?<![a-z])cc(?!(e233922|ou|ept|essor|g[.]github))'
       'global(?!(ly|[.]))' # TODO (DACH-NY/canton-network-node#17137): revisit
       'CC(?!(OUNT))'
-      '(?<!(Map|Set)[.])(?<!sequencer )member(?!(ship| of"|Id|.*[tT]raffic))'
+      '(?<!(Map|Set)[.])(?<!sequencer )member(?!(ship| of|Id|.*[tT]raffic))'
       # Allow only Dso as in DsoRules in comments
       '[-][-] .*Dso(?!(Rules))'
       # Disallow dso in comments other than dsoParty
@@ -1211,7 +1211,7 @@ function subcmd_no_illegal_daml_references() {
       '(dso|Dso|DSO).*ssue'
       'ssue.*(dso|Dso|DSO)'
       # No Github issue links, but allow links to docs
-      '(?<!hyperledger-labs\.)github(?!.io/hashlink)'
+      '(?<!hyperledger-labs\.)github(?!.io/hashlink)(?!.com/canton-foundation/cips)'
 
       )
     for pattern in "${illegal_patterns[@]}"; do

@@ -199,11 +199,6 @@ module Splice.TokenStandard.Utils (
   allocationRequestV2_rejectDefaultImplUsingV1,
   allocationRequestV2_withdrawDefaultImplUsingV1,
 
-  -- ** V2 for V2-only templates
-  allocationRequestV2_rejectDefaultImplV2Only,
-  allocationRequestV2_withdrawDefaultImplV2Only,
-  -- TODO(#4517): ensure these functions are tested
-
   -- * Allocation factory implementations
 
   -- ** V2 Choice observers

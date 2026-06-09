@@ -6,7 +6,6 @@ module Splice.AmuletAllocation (
   AmuletAllocation(..),
 
   -- * Construction
-  allocationToTwoStepTransfer,
   mkAllocationLockContext,
 
   -- * Expiry
@@ -105,7 +104,6 @@ template AmuletAllocation
         let leg = allocation.transferLeg
         let dso = leg.instrumentId.admin
         archiveAndCheckActors self arg.actors [[dso, allocation.settlement.executor]]
-        -- TODO(#4517): add test for this deadline
         assertWithinDeadline "allocation.settlement.settleBefore" allocation.settlement.settleBefore
         -- Archive locked amulet to execute the debit (extra checks part of defensive programming)
         la <- fetchAndArchive (ForOwner with dso, owner = leg.sender) lockedAmulet
@@ -181,8 +179,8 @@ transferAmuletAllocation amuletAllocation extraArgs = do
 
 unlockAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update [ContractId V1.Holding]
 unlockAmuletAllocation amuletAllocation extraArgs = do
-  let lockExpiresAt = amuletAllocation.allocation.settlement.settleBefore
-  abortTwoStepTransfer lockExpiresAt amuletAllocation.lockedAmulet extraArgs
+  let expiresAt = fromOptional amuletAllocation.allocation.settlement.settleBefore amuletAllocation.expiresAt
+  abortTwoStepTransfer expiresAt amuletAllocation.lockedAmulet extraArgs
 
 
 instance HasCheckedFetch AmuletAllocation ForDso where
