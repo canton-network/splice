@@ -25,11 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
-import org.lfdecentralizedtrust.splice.wallet.config.{
-  AutoAcceptTransfersConfig,
-  RewardSharingConfig,
-  WalletSweepConfig,
-}
+import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
@@ -50,7 +46,6 @@ class UserWalletAutomationService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
-    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
     paramsConfig: SpliceParametersConfig,
 )(implicit
@@ -176,10 +171,6 @@ class UserWalletAutomationService(
       )
     )
   }
-
-  // TODO(#5787): replace with RewardSharingTrigger registration;
-  // suppresses the unused parameter warning until then.
-  locally { val _ = rewardSharingConfig }
 
   registerTrigger(
     new AmuletMetricsTrigger(triggerContext, store, scanConnection)
