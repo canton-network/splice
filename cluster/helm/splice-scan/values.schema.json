@@ -28,6 +28,12 @@
         "imageRepo": {
           "type": "string"
         },
+        "scanImageName": {
+          "type": "string"
+        },
+        "scanUiImageName": {
+          "type": "string"
+        },
         "imageDigests": {
           "type": "object"
         },
@@ -116,6 +122,9 @@
             },
             "txLogStoreDescriptorUserVersion": {
               "type": "integer"
+            },
+            "initImage": {
+              "type": "string"
             }
           }
         },
