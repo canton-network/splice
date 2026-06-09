@@ -161,6 +161,7 @@ object ConfigValidations extends NamedLogging {
       config: CantonConfig
   ): Validated[NonEmpty[Seq[String]], Unit] = {
     val CantonConfig(
+      _,
       participants,
       sequencers,
       mediators,

@@ -611,7 +611,7 @@ object P2PGrpcConnectionState {
                     (
                       this,
                       updatedState,
-                      true,
+                      true
                     )
                 } { _ =>
                   this ->
@@ -638,7 +638,7 @@ object P2PGrpcConnectionState {
               updatedState -> (
                 this,
                 updatedState,
-                true,
+                true
               )
             } { _ =>
               this -> (this, this, false)

@@ -51,7 +51,7 @@ class UseLedgerApiTestTool(
     version: LAPITTVersion = LAPITTVersion.Latest,
     javaOpts: String = "-Xmx500m",
     defaultExtraArguments: Map[String, String] = Map("--timeout-scale-factor" -> "4"),
-) extends EnvironmentSetupPlugin
+) extends EnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
     with NoTracing
     with EnvVarTestOverrides {
 

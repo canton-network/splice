@@ -50,6 +50,7 @@ import com.digitalasset.canton.{LedgerParticipantId, SynchronizerAlias, config}
 import com.google.common.annotations.VisibleForTesting
 import io.grpc.Context
 
+import java.io.FileInputStream
 import java.time.Instant
 import java.util.UUID
 
@@ -882,7 +883,7 @@ class ParticipantPartiesAdministrationGroup(
     consoleEnvironment.run {
       reference.adminCommand(
         ParticipantAdminCommands.PartyManagement.ImportPartyAcs(
-          new java.io.File(importFilePath),
+          new FileInputStream(new java.io.File(importFilePath)),
           synchronizerId,
           if (workflowIdPrefix.nonEmpty) workflowIdPrefix else s"import-${UUID.randomUUID}",
           contractImportMode,

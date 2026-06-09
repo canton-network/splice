@@ -4,6 +4,7 @@
 package com.digitalasset.canton
 
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
+import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.console.{HeadlessConsole, InteractiveConsole}
 import com.digitalasset.canton.crypto.{Hash, HashAlgorithm, HashPurpose}
 import com.digitalasset.canton.environment.Environment
@@ -180,21 +181,21 @@ final case class CantonScriptFromFile(scriptPath: File) extends CantonScript {
 }
 
 object ConsoleScriptRunner extends NoTracing {
-  def apply(
+  def apply[C <: SharedCantonConfig[C]](
       scriptPath: File,
       loggerFactory: NamedLoggerFactory,
-  ): ConsoleScriptRunner =
+  ): ConsoleScriptRunner[C] =
     new ConsoleScriptRunner(CantonScriptFromFile(scriptPath), loggerFactory)
 
-  def run(
-      environment: Environment,
+  def run[C <: SharedCantonConfig[C]](
+      environment: Environment[C],
       scriptPath: File,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] =
     run(environment, CantonScriptFromFile(scriptPath), logger)
 
-  def run(
-      environment: Environment,
+  def run[C <: SharedCantonConfig[C]](
+      environment: Environment[C],
       cantonScript: CantonScript,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] = {

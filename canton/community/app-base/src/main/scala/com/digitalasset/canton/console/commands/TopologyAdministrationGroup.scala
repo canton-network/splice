@@ -34,6 +34,8 @@ import com.digitalasset.canton.console.{
   Helpful,
   InstanceReference,
 }
+import com.digitalasset.canton.console.CommandErrors.GenericCommandError
+import com.digitalasset.canton.console.FeatureFlag.Preview
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -42,6 +44,7 @@ import com.digitalasset.canton.grpc.{ByteStringStreamObserver, OutputFileStreamO
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Authorized
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.*
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
 import com.digitalasset.canton.topology.admin.v30.{
   ExportTopologySnapshotResponse,
@@ -64,10 +67,9 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.BinaryFileUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
-import com.digitalasset.canton.{config, networking}
 import com.digitalasset.daml.lf.data.Ref.PackageId
 import com.google.protobuf.ByteString
-import io.grpc.Context
+import io.grpc.{Context, Status}
 
 import java.net.URI
 import java.time.Duration
@@ -190,7 +192,7 @@ class TopologyAdministrationGroup(
       waitForReady,
     )
 
-  private def getIdCommand(): ConsoleCommandResult[UniqueIdentifier] =
+  private def getIdCommand(): ConsoleCommandResult[GetIdResult] =
     adminCommand(TopologyAdminCommands.Init.GetId())
 
   // small cache to avoid repetitive calls to fetchId (as the id is immutable once set)
@@ -203,15 +205,13 @@ class TopologyAdministrationGroup(
   private[console] def idHelper[T](
       apply: UniqueIdentifier => T
   ): T =
-    apply(idCache.get() match {
-      case Some(v) => v
-      case None =>
-        val r = consoleEnvironment.run {
-          getIdCommand()
-        }
-        idCache.set(Some(r))
-        r
-    })
+    maybeIdHelper(apply).getOrElse(
+      throw Status.UNAVAILABLE
+        .withDescription(
+          s"Node does not have an Id assigned yet."
+        )
+        .asRuntimeException()
+    )
 
   private[console] def maybeIdHelper[T](
       apply: UniqueIdentifier => T
@@ -219,14 +219,11 @@ class TopologyAdministrationGroup(
     (idCache.get() match {
       case Some(v) => Some(v)
       case None =>
-        consoleEnvironment.run {
-          CommandSuccessful(getIdCommand() match {
-            case CommandSuccessful(v) =>
-              idCache.set(Some(v))
-              Some(v)
-            case _: CommandError => None
-          })
+        val r = consoleEnvironment.run {
+          getIdCommand()
         }
+        r.uniqueIdentifier.foreach(id => idCache.set(Some(id)))
+        r.uniqueIdentifier
     }).map(apply)
 
   @Help.Summary("Topology synchronisation helpers", FeatureFlag.Preview)
@@ -2714,9 +2711,9 @@ class TopologyAdministrationGroup(
               (
                 serial.increment,
                 // first filter out all existing packages that either get re-added (i.e. modified) or removed
-                item.packages.filter(vp => !allChangedPackageIds.contains(vp.packageId))
-                // now we can add all the adds the also haven't been in the remove set
-                  ++ adds,
+                item.packages.filter(vp =>
+                  !allChangedPackageIds.contains(vp.packageId)
+                ) /* now we can add all the adds the also haven't been in the remove set */ ++ adds,
               )
             case Some(
                   ListVettedPackagesResult(
@@ -2869,7 +2866,7 @@ class TopologyAdministrationGroup(
           adminCommand(
             TopologyAdminCommands.Read.ListMediatorSynchronizerState(
               BaseQuery(
-                synchronizerId,
+                synchronizerId.map(TopologyStoreId.Synchronizer(_)),
                 proposals,
                 timeQuery,
                 operation,
@@ -3061,7 +3058,7 @@ class TopologyAdministrationGroup(
         mustFullyAuthorize: Boolean = false,
     ): SignedTopologyTransaction[TopologyChangeOp, MediatorSynchronizerState] = {
 
-      val mediatorStateResult = list(synchronizerId = synchronizerId, group = Some(group))
+      val mediatorStateResult = list(synchronizerId = Some(synchronizerId), group = Some(group))
         .maxByOption(_.context.serial)
         .getOrElse(throw new IllegalArgumentException(s"Unknown mediator group $group"))
 
