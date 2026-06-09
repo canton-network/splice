@@ -6,6 +6,7 @@ package com.digitalasset.canton.tracing
 import io.grpc.*
 import io.grpc.Context as GrpcContext
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall
+import io.grpc.stub.AbstractStub
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
 import io.opentelemetry.api.trace.{Span, Tracer}
 
@@ -166,7 +167,7 @@ object TraceContextGrpc {
 
       val context = GrpcContext
         .current()
-        .withValue(TraceContextKey, traceContext)
+        .withValue(TraceContextThreadLocalKey, traceContext)
 
       val nextServerCallListener = Contexts.interceptCall(context, call, headers, next)
       new ServerCallListener(nextServerCallListener, span)

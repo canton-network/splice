@@ -717,6 +717,7 @@ object BuildCommon {
           scalatestScalacheck,
           testcontainers,
           testcontainers_postgresql,
+          daml_testing_utils,
         ),
 
         // This library contains a lot of testing helpers that previously existing in testing scope

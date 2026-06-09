@@ -537,6 +537,7 @@ object Backoff {
     config.initialDelay.underlying,
     config.maxDelay.unwrap,
     operationName,
+    None,
     longDescription,
     actionable,
     retryLogLevel,

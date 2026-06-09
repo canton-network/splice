@@ -1256,11 +1256,11 @@ object IndexServiceImpl {
         lazy val trimmedTransactions =
           transactions.dropWhile(r => pruningOffset >= updatesToOffset(r))
         val fetchedEnoughForFirstPage =
+          // Trivial exclusion -- no overlap with pruning
           calculatedEndInclusive.exists(
             _ < pruningOffset
-          ) // Trivial exclusion -- no overlap with pruning
-            || transactions.sizeIs < limit // Fetched up to calculatedEndInclusive -- if page is shorter it's the last page, so OK.
-            || trimmedTransactions.lengthIs >= getUpdatesPageRequest.maxPageSize + 1 // Non-trivial case where we need to look into transactions
+            // Fetched up to calculatedEndInclusive -- if page is shorter it's the last page, so OK.
+          ) || transactions.sizeIs < limit || trimmedTransactions.lengthIs >= getUpdatesPageRequest.maxPageSize + 1 // Non-trivial case where we need to look into transactions
 
         if (fetchedEnoughForFirstPage) {
           buildAscendingPage(
