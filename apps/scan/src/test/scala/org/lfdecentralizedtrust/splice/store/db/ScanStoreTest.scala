@@ -24,10 +24,15 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
+  DsoRules_AddSv,
+  DsoRules_AddSvResult,
+  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -42,7 +47,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMe
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
+import org.lfdecentralizedtrust.splice.store.events.{DsoRulesAddSv, DsoRulesCloseVoteRequest}
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.damlDecimal
 import org.lfdecentralizedtrust.splice.util.*
@@ -475,6 +480,61 @@ abstract class ScanStoreTest
           val store = mkStore().futureValue
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
+        }
+      }
+
+      "lookupLatestSvRewardWeightChange" should {
+
+        "fall back to the AddSv weight when there is no prior UpdateSvRewardWeight, and prefer the vote result otherwise" in {
+          val sv = userParty(42)
+          val addSvAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          val voteAt = addSvAt.plusSeconds(10)
+          val updateWeightAction = new ARC_DsoRules(
+            new SRARC_UpdateSvRewardWeight(
+              new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, 50000L)
+            )
+          )
+          val vr =
+            voteRequest(requester = userParty(1), votes = Seq.empty, action = updateWeightAction)
+          for {
+            store <- mkStore()
+            // Onboarding via DsoRules_AddSv produces an `asv` entry; this is what the
+            // store-descriptor bump re-derives from UpdateHistory during backfilling.
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesAddSv.choice.name,
+              new DsoRules_AddSv(
+                sv.toProtoPrimitive,
+                "sv42",
+                10000L,
+                "sv42Participant",
+                new Round(1L),
+              ).toValue,
+              new DsoRules_AddSvResult(new DsoRules.ContractId(nextCid())).toValue,
+              txEffectiveAt = addSvAt,
+              recordTime = addSvAt,
+            )(store.multiDomainAcsStore)
+            onlyAddSv <- store.lookupLatestSvRewardWeightChange(sv, None)
+            unknown <- store.lookupLatestSvRewardWeightChange(userParty(999), None)
+            _ <- dummyDomain.create(vr)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(vr.contractId),
+              mkVoteRequestResult(vr, effectiveAt = voteAt).toValue,
+              txEffectiveAt = voteAt,
+              recordTime = voteAt,
+            )(store.multiDomainAcsStore)
+            withVote <- store.lookupLatestSvRewardWeightChange(sv, None)
+            beforeVote <- store.lookupLatestSvRewardWeightChange(sv, Some(voteAt.toString))
+          } yield {
+            onlyAddSv shouldBe Some(10000L)
+            unknown shouldBe None
+            withVote shouldBe Some(50000L)
+            beforeVote shouldBe Some(10000L)
+          }
         }
       }
 
