@@ -130,6 +130,10 @@ class BftScanConnection(
     val retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
     val connectionMetrics: Option[ScanConnectionMetrics] = None,
+    // We added disableBackgroundRefresh flag to prevent the temporary bootstrap connection (used in bft-custom mode)
+    // from automatically starting a background PeriodicAction that tries to connect to all scans.
+    // In the future, before removing disableBackgroundRefresh flag, refactor the bootstrapWithSeedNodes();
+    // BftCustom should not reuse the AllDsoScansBft class to fetch the initial DsoRules.
     val disableBackgroundRefresh: Boolean = false,
 )(implicit protected val ec: ExecutionContextExecutor, protected val mat: Materializer)
     extends FlagCloseableAsync
@@ -1613,9 +1617,9 @@ object BftScanConnection {
           )
 
           // Use the temporary connection to get a consensus on the full list of scans
-          allScans <- Bft.getScansInDsoRules(tempBftConnection)
-
-          _ = tempBftConnection.close()
+          allScans <- Bft.getScansInDsoRules(tempBftConnection).andThen { case _ =>
+            tempBftConnection.close()
+          }
 
           trustedScans = allScans.filter(scan => ts.svNames.toList.contains(scan.svName))
 
