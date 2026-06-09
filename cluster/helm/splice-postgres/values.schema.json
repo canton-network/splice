@@ -6,6 +6,9 @@
     "imageRepo": {
       "type": "string"
     },
+    "postgresImage": {
+      "type": "string"
+    },
     "imagePullPolicy": {
       "type": "string"
     },
