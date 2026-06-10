@@ -71,7 +71,25 @@ function latest_full_backup_run_id_gcloud() {
 
   declare -A backup_id_dict
 
+  # participant backup must be newer than cn-apps backup
+  stack=$(get_stack_for_namespace_component "$namespace" "participant")
+  instance="$(create_component_instance "participant" "$migration_id" "$namespace")"
+  local participant_cloudsql_id
+  participant_cloudsql_id=$(get_cloudsql_id "$namespace-$instance-pg" "$stack")
+  local participant_entry
+  participant_entry=$(gcloud sql backups list --instance "$participant_cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | "\(.id) \(.endTime)"')
+  local participant_backup_id
+  participant_backup_id=$(echo "$participant_entry" | awk '{print $1}')
+  local participant_end_time
+  participant_end_time=$(echo "$participant_entry" | awk '{print $2}')
+  if [ -z "$participant_backup_id" ] || [ "$participant_backup_id" == "null" ]; then
+    _error "No backup found for participant (instance $participant_cloudsql_id) before timestamp $before_timestamp"
+  fi
+  backup_id_dict["participant"]="$participant_backup_id"
+
   for component in $expected_components; do
+    [ "$component" == "participant" ] && continue
+
     stack=$(get_stack_for_namespace_component "$namespace" "$component")
     instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
     local full_component_instance="$namespace-$instance-pg"
@@ -80,7 +98,12 @@ function latest_full_backup_run_id_gcloud() {
     cloudsql_id=$(get_cloudsql_id "$full_component_instance" "$stack")
 
     local backup_id
-    backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | .id')
+    if [ "$component" == "cn-apps" ]; then
+      # cn-apps backup must be older than participant backup
+      backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --arg pt "$participant_end_time" '[.[] | select(.endTime <= $pt)] | first | .id')
+    else
+      backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | .id')
+    fi
 
     if [ -z "$backup_id" ] || [ "$backup_id" == "null" ]; then
       _error "No backup found for component $component (instance $cloudsql_id) before timestamp $before_timestamp"
