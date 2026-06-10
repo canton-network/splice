@@ -27,7 +27,6 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 }
 
 import java.time.Duration
-import scala.concurrent.duration.DurationInt
 
 /** Tests the RewardSharingTrigger in isolation: verifies that unassigned
   * RewardCouponV2 contracts are correctly assigned to beneficiaries with
@@ -141,7 +140,7 @@ class RewardSharingTimeBasedIntegrationTest
       // Sharing trigger resumes — both coupons are past TTL, so the
       // trigger batches them in a single AssignBeneficiaries call.
       clue("Unassigned coupons are consumed and assigned coupons created") {
-        eventually(40.seconds) {
+        eventually() {
           val allCoupons = listV2Coupons()
 
           allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe
