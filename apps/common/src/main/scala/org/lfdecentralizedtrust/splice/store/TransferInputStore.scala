@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.Future
@@ -114,6 +114,24 @@ trait TransferInputStore extends AppStore with LimitHelpers {
             )) => (x._1.payload.round.number, -x._2)
           )
         ),
+    )
+
+  /** Returns unassigned RewardCouponV2 contracts (beneficiary is empty),
+    * ordered by expiresAt ascending.
+    */
+  def listUnassignedRewardCouponsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
+  ]] =
+    for {
+      coupons <- multiDomainAcsStore.listContracts(RewardCouponV2.COMPANION)
+    } yield applyLimit(
+      "listUnassignedRewardCouponsV2",
+      limit,
+      coupons
+        .filter(_.payload.beneficiary.isEmpty)
+        .sortBy(_.payload.expiresAt),
     )
 
   /** Returns mintable RewardCouponV2 sorted by round ascending, amount descending.

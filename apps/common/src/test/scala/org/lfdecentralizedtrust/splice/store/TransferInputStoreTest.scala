@@ -163,6 +163,60 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
+  "listUnassignedRewardCouponsV2" should {
+    "return only unassigned coupons ordered by expiresAt ascending" in {
+      val now = java.time.Instant.now()
+      for {
+        store <- mkTransferInputStore(user)
+        // assigned coupon — should be excluded
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 1,
+            provider = user,
+            amount = numeric(5),
+            beneficiary = Some(user),
+            expiresAt = now.plusSeconds(100),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        // unassigned coupon expiring later
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 2,
+            provider = user,
+            amount = numeric(10),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(300),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        // unassigned coupon expiring sooner
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 3,
+            provider = user,
+            amount = numeric(20),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(200),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        val results = store.listUnassignedRewardCouponsV2().futureValue
+        // only unassigned coupons returned
+        results should have size 2
+        // ordered by expiresAt ascending: 200s before 300s
+        results.map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          20.0,
+          10.0,
+        )
+      }
+    }
+  }
+
   /** A AmuletRules_Mint exercise event with one child Amulet create event */
   protected def mintTransaction(
       receiver: PartyId,
