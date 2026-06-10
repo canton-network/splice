@@ -46,10 +46,10 @@ class AcsSnapshotBulkStorageStaging(
     ) {
 
   override val description = "ACS Snapshot Bulk Storage (Staging)"
-  override val kvStoreKey = "latest_acs_snapshot_in_bulk_storage"
+  override val kvStoreKey = "latest_acs_snapshot_in_staging_bulk_storage"
 
   protected val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp] =
-    historyMetrics.BulkStorage.latestAcsSnapshot
+    historyMetrics.BulkStorage.latestAcsSnapshotStaging
 
   override protected def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId

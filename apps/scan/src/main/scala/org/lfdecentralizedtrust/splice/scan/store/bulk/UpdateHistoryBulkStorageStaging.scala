@@ -42,11 +42,12 @@ class UpdateHistoryBulkStorageStaging(
       currentMigrationId,
       loggerFactory,
     ) {
+
   override val description = "Update History Bulk Storage (Staging)"
-  override val kvStoreKey = "latest_updates_segment_in_bulk_storage"
+  override val kvStoreKey = "latest_updates_segment_in_staging_bulk_storage"
 
   override val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp] =
-    historyMetrics.BulkStorage.latestUpdatesSegment
+    historyMetrics.BulkStorage.latestUpdatesSegmentStaging
 
   override protected def processSegment(
       segment: UpdatesSegment
