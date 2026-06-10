@@ -150,6 +150,8 @@ class WalletRewardsTimeBasedIntegrationTest
         .futureValue
         .trigger[CollectRewardsAndMergeAmuletsTrigger]
 
+      val prevBobBalance = bobValidatorWalletClient.balance().unlockedQty
+
       // Pause bob's minting trigger so we can observe his assigned
       // (unminted) coupon from alice's sharing, while alice's triggers
       // run freely (sharing + minting).
@@ -193,6 +195,28 @@ class WalletRewardsTimeBasedIntegrationTest
             bobAssigned should not be empty withClue
               "Bob should have an assigned coupon from alice's sharing"
           }
+        }
+      }
+
+      // Verify minting with no-sharing-config: bob's own V2 coupon is
+      // minted directly, and alice's shared 40% is also minted into
+      // bob's balance.
+      val aliceShareToBob = rewardCouponV2Amount * BigDecimal(0.4)
+      val faucetCouponAmountUsd = 2.85 * openRounds.size
+      clue("Bob's balance reflects his own V2 coupon + alice's shared 40%") {
+        eventually() {
+          val newBobBalance = bobValidatorWalletClient.balance().unlockedQty
+          assertInRange(
+            newBobBalance - prevBobBalance,
+            (
+              walletUsdToAmulet(
+                -0.1 + faucetCouponAmountUsd
+              ) + rewardCouponV2Amount + aliceShareToBob,
+              walletUsdToAmulet(
+                0.5 + faucetCouponAmountUsd
+              ) + rewardCouponV2Amount + aliceShareToBob,
+            ),
+          )
         }
       }
     }
