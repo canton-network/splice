@@ -5,6 +5,14 @@
     "imageName": {
       "type": "string"
     },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"

@@ -31,6 +31,14 @@
         "imageName": {
           "type": "string"
         },
+        "ui": {
+          "type": "object",
+          "properties": {
+            "imageName": {
+              "type": "string"
+            }
+          }
+        },
         "imageDigests": {
           "type": "object"
         },
