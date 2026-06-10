@@ -1836,6 +1836,27 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)
+      extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferFactoryResponse,
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferFactoryResponse] = {
+      client.getTransferFactory(arg, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferFactoryResponse.OK(response) =>
+      Right(response)
+    }
+  }
+
   case class GetTransferInstructionAcceptContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ) extends TokenStandardTransferInstructionBaseCommand[

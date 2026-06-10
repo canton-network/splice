@@ -610,6 +610,12 @@ class BftScanConnection(
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     bftCall(_.getTransferFactoryRaw(arg), "getTransferFactoryRaw")
 
+  def getTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.TransferFactoryWithChoiceContext] =
+    bftCall(_.getTransferFactoryV2Raw(arg), "getTransferFactoryV2Raw")
+
   def getTransferInstructionAcceptContextV2(
       instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(

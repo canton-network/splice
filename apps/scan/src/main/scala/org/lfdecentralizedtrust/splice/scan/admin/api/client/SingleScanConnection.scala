@@ -729,6 +729,12 @@ class SingleScanConnection private[client] (
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryRaw(arg))
 
+  def getTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.TransferFactoryWithChoiceContext] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryV2Raw(arg))
+
   def listSvBftSequencers()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
