@@ -2484,6 +2484,35 @@ object HttpScanAppClient {
     ] = { case allocation.v2.GetAllocationCancelContextResponse.OK(context) => Right(context) }
   }
 
+  case class GetAllocationV2WithdrawContextRaw(
+      allocationId: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardAllocationV2BaseCommand[
+        allocation.v2.GetAllocationWithdrawContextResponse,
+        allocation.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: AV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocation.v2.GetAllocationWithdrawContextResponse] = {
+      client.getAllocationWithdrawContext(
+        allocationId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      allocation.v2.GetAllocationWithdrawContextResponse,
+      Either[String, allocation.v2.definitions.ChoiceContext],
+    ] = { case allocation.v2.GetAllocationWithdrawContextResponse.OK(context) => Right(context) }
+  }
+
   case class GetAllocationCancelContext(allocationId: allocationv1.Allocation.ContractId)
       extends TokenStandardAllocationV1BaseCommand[
         allocation.v1.GetAllocationCancelContextResponse,

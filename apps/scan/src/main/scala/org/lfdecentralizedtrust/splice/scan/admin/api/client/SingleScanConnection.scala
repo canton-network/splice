@@ -818,6 +818,18 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAllocationV2CancelContextRaw(allocationCid, body),
     )
 
+  def getAllocationV2WithdrawContextRaw(
+      allocationCid: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationV2WithdrawContextRaw(allocationCid, body),
+    )
+
   def getAllocationWithdrawContextRaw(
       allocationCid: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,

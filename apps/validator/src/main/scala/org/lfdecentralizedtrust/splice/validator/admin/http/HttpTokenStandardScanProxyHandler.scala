@@ -129,8 +129,14 @@ class HttpTokenStandardScanProxyHandler(
       respond: allocation.v2.Resource.GetAllocationWithdrawContextResponse.type
   )(allocationId: String, body: allocation.v2.definitions.GetChoiceContextRequest)(
       extracted: AuthenticatedRequest
-  ): Future[allocation.v2.Resource.GetAllocationWithdrawContextResponse] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5326").asRuntimeException())
+  ): Future[allocation.v2.Resource.GetAllocationWithdrawContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationWithdrawContext") { implicit tc => _ =>
+      scanConnection
+        .getAllocationV2WithdrawContextRaw(allocationId, body)
+        .map(allocation.v2.Resource.GetAllocationWithdrawContextResponse.OK(_))
+    }
+  }
 
   override def getAllocationCancelContext(
       respond: allocation.v2.Resource.GetAllocationCancelContextResponse.type
