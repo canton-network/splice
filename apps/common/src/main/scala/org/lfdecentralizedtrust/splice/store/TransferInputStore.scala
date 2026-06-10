@@ -116,54 +116,48 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         ),
     )
 
-  /** Returns unassigned RewardCouponV2 contracts (beneficiary is empty),
-    * ordered by expiresAt ascending.
+  /** Returns RewardCouponV2 contracts filtered by assignment status and
+    * sorted according to the specified order. Implemented in DB stores
+    * with SQL-level filtering to avoid page-limit issues.
     */
-  def listUnassignedRewardCouponsV2(
-      limit: Limit = defaultLimit
-  )(implicit tc: TraceContext): Future[Seq[
-    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
-  ]] =
-    for {
-      coupons <- multiDomainAcsStore.listContracts(RewardCouponV2.COMPANION)
-    } yield applyLimit(
-      "listUnassignedRewardCouponsV2",
-      limit,
-      coupons
-        .filter(_.payload.beneficiary.isEmpty)
-        .sortBy(_.payload.expiresAt),
-    )
-
-  /** Returns mintable RewardCouponV2 sorted by round ascending, amount descending.
-    * When `includeUnassigned` is true, includes coupons where the party is provider
-    * with no beneficiary.
-    */
-  def listSortedMintableRewardCouponV2s(
-      includeUnassigned: Boolean,
+  def listRewardCouponsV2(
+      filter: RewardCouponV2Filter,
+      sortOrder: RewardCouponV2SortOrder,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
-    (Contract[RewardCouponV2.ContractId, RewardCouponV2], BigDecimal)
-  ]] =
-    for {
-      rewards <- multiDomainAcsStore.listContracts(
-        RewardCouponV2.COMPANION
-      )
-    } yield applyLimit(
-      "listSortedMintableRewardCouponV2s",
-      limit,
-      rewards
-        .filter { rw =>
-          rw.payload.beneficiary.isPresent ||
-          (includeUnassigned && rw.payload.beneficiary.isEmpty)
-        }
-        .map(rw => (rw.contract, BigDecimal(rw.payload.amount)))
-        .sorted(
-          Ordering[(Long, BigDecimal)].on(
-            (x: (
-                Contract.Has[RewardCouponV2.ContractId, RewardCouponV2],
-                BigDecimal,
-            )) => (x._1.payload.round.number, -x._2)
-          )
-        ),
-    )
+    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
+  ]]
+}
+
+sealed trait RewardCouponV2Filter {
+  def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean
+}
+
+object RewardCouponV2Filter {
+  case object UnassignedOnly extends RewardCouponV2Filter {
+    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean =
+      rw.payload.beneficiary.isEmpty
+  }
+  case object AssignedOnly extends RewardCouponV2Filter {
+    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean =
+      rw.payload.beneficiary.isPresent
+  }
+  case object All extends RewardCouponV2Filter {
+    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean = true
+  }
+}
+
+sealed trait RewardCouponV2SortOrder {
+  def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]]
+}
+
+object RewardCouponV2SortOrder {
+  case object ByExpiresAtAsc extends RewardCouponV2SortOrder {
+    def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]] =
+      Ordering.by(_.payload.expiresAt)
+  }
+  case object ByRoundAscAmountDesc extends RewardCouponV2SortOrder {
+    def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]] =
+      Ordering[(Long, BigDecimal)].on(rw => (rw.payload.round.number, -BigDecimal(rw.payload.amount)))
+  }
 }
