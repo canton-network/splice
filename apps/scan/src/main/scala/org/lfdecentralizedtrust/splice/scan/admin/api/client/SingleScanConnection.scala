@@ -919,6 +919,15 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
     )
 
+  def getAllocationInstructionWithdrawContext(
+    allocationInstructionCid: String,
+    body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationInstructionWithdrawContextRaw(allocationInstructionCid, body),
+    )
+
   override def getActivePhysicalSynchronizerSerial()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
