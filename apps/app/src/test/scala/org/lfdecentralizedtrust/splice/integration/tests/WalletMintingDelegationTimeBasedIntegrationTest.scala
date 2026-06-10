@@ -49,7 +49,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
   private val DefaultAmuletMergeLimit = 10
   // Pre-generate key pairs so external party IDs are known at config time
-  private val sharingBeneficiary = preGenerateExternalParty("sharing_beneficiary")
+  private val sharingAppProvider = preGenerateExternalParty("sharing_app_provider")
   private val sharingRecipient = preGenerateExternalParty("sharing_recipient")
 
   // We create many coupons directly, so avoid running sanity checks
@@ -61,13 +61,13 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withTrafficTopupsDisabled
       .addConfigTransforms((_, config) =>
-        // Configure sharing for the "sharing_beneficiary" external party:
+        // Configure sharing for the "sharing_app_provider" external party:
         // 40% to "sharing_recipient", remainder stays with provider.
         updateAllValidatorConfigs { case (name, c) =>
           if (name == "aliceValidator") {
             c.copy(
               rewardSharingConfigByParty = Map(
-                sharingBeneficiary.partyId.toProtoPrimitive -> RewardSharingConfig(
+                sharingAppProvider.partyId.toProtoPrimitive -> RewardSharingConfig(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(25),
                   beneficiaries = Seq(
                     AppRewardBeneficiaryConfig(sharingRecipient.partyId, BigDecimal(0.4))
@@ -661,7 +661,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       aliceWalletClient.tap(100.0)
       aliceValidatorWalletClient.tap(100.0)
 
-      val beneficiaryParty = onboardExternalParty(aliceValidatorBackend, sharingBeneficiary)
+      val beneficiaryParty = onboardExternalParty(aliceValidatorBackend, sharingAppProvider)
       createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, beneficiaryParty)
 
       val recipientParty = onboardExternalParty(aliceValidatorBackend, sharingRecipient)
