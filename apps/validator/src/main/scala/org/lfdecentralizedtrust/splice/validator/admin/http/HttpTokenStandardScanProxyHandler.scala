@@ -354,7 +354,17 @@ class HttpTokenStandardScanProxyHandler(
       body: transferinstruction.v2.definitions.GetChoiceContextRequest,
   )(
       extracted: AuthenticatedRequest
-  ): Future[transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse] = ???
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getTransferInstructionRejectContextV2") { implicit tc => _ =>
+      scanConnection
+        .getTransferInstructionRejectContextV2Raw(
+          transferInstructionId,
+          body,
+        )
+        .map(transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse.OK(_))
+    }
+  }
 
   override def getTransferInstructionWithdrawContext(
       respond: transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse.type

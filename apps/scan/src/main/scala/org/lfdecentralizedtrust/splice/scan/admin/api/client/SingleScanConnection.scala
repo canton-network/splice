@@ -707,6 +707,18 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionRejectContextRaw(transferInstructionCid, body),
     )
 
+  def getTransferInstructionRejectContextV2Raw(
+      transferInstructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionRejectContextV2Raw(transferInstructionCid, body),
+    )
+
   def getTransferFactory(choiceArgs: transferinstructionv1.TransferFactory_Transfer)(implicit
       ec: ExecutionContext,
       tc: TraceContext,

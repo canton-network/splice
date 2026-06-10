@@ -2009,6 +2009,34 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferInstructionRejectContextV2Raw(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionRejectContextResponse,
+        transferinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionRejectContextResponse] = {
+      client.getTransferInstructionRejectContext(
+        transferInstructionId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferInstructionRejectContextResponse.OK(context) =>
+      Right(context)
+    }
+  }
+
   case class GetTransferInstructionRejectContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ) extends TokenStandardTransferInstructionBaseCommand[
