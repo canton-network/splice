@@ -317,8 +317,8 @@ tests:
   - it: "allows setting cometbft sequencer image and primary initImage"
     set:
       imageRepo: "secure-registry.example.com"
-      sequencerCometbftImageName: "custom-cometbft-sequencer"
-      sequencer.persistence.initImage: "secure-registry.example.com/postgres:14-primary"
+      sequencer.cometbft.imageName: "custom-cometbft-sequencer"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
     documentSelector:
       path: kind
       value: Deployment
@@ -334,9 +334,9 @@ tests:
     set:
       sequencer.driver.type: "cantonbft"
       imageRepo: "secure-registry.example.com"
-      sequencerImageName: "custom-standard-sequencer"
-      sequencer.persistence.initImage: "secure-registry.example.com/postgres:14-primary"
-      sequencer.driver.persistence.initImage: "secure-registry.example.com/postgres:14-driver"
+      sequencer.imageName: "custom-standard-sequencer"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
+      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:14-driver"
       sequencer.driver.persistence.host: "dummy-host"
       sequencer.driver.persistence.databaseName: "dummy_db"
     documentSelector:

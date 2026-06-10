@@ -2,9 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-mediatorImageName: "canton-mediator"
-sequencerCometbftImageName: "canton-cometbft-sequencer"
-sequencerImageName: "canton-sequencer"
 
 enableHealthProbes: true
 
@@ -22,12 +19,15 @@ resources:
     memory: 3Gi
 
 sequencer:
+  imageName: "canton-sequencer"
+  cometbft:
+    imageName: "canton-cometbft-sequencer"
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
     databaseName: cantonnet_sequencer
     port: 5432
-    initImage: "postgres:14"
+    initImageName: "postgres:14"
   resources:
     limits:
       memory: 8Gi
@@ -36,12 +36,13 @@ sequencer:
       memory: 4Gi
 
 mediator:
+  imageName: "canton-mediator"
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
     databaseName: cantonnet_mediator
     port: 5432
-    initImage: "postgres:14"
+    initImageName: "postgres:14"
 
 metrics:
   enable: false

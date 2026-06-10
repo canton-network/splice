@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-docsImageName: "docs"
-gcsProxyImageName: "gcs-proxy"
+docs.imageName: "docs"
+gcsProxy.imageName: "gcs-proxy"
 
 enableGcsProxy: false
 

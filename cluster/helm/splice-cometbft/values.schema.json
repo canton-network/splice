@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
-    "cometbftImageName": {
+    "imageName": {
       "type": "string"
     },
     "genesis": {

@@ -50,11 +50,11 @@ tests:
           path: spec.template.spec.volumes[4].persistentVolumeClaim.claimName
           value: custom-pvc-name
 
-  - it: "allows overriding cometbftImageName"
+  - it: "allows overriding imageName"
     template: deployment.yaml
     set:
       imageRepo: "secure-registry.com"
-      cometbftImageName: "approved-cometbft"
+      imageName: "approved-cometbft"
     documentSelector:
       path: kind
       value: Deployment

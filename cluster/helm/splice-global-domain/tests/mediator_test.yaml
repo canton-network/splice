@@ -153,11 +153,11 @@ tests:
               cpu: 200m
               memory: 1Gi
 
-  - it: "allows overriding mediatorImageName and initImage"
+  - it: "allows overriding mediator imageName and initImage"
     set:
       imageRepo: "secure-registry.com"
-      mediatorImageName: "approved-mediator"
-      mediator.persistence.initImage: "secure-registry.com/postgres:14-hardened"
+      mediator.imageName: "approved-mediator"
+      mediator.persistence.initImageName: "secure-registry.com/postgres:14-hardened"
     documentSelector:
       path: kind
       value: Deployment
