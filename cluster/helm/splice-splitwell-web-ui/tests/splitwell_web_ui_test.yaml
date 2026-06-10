@@ -64,7 +64,7 @@ tests:
   - it: "allows overriding splitwell web ui image name"
     set:
       imageRepo: "secure-registry.example.com"
-      splitwellUiImageName: "custom-splitwell-ui"
+      imageName: "custom-splitwell-ui"
       auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
       auth.audience: "mock_audience"
       spliceInstanceNames.networkName: "MockNet"

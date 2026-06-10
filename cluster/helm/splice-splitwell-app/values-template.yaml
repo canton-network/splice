@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-splitwellImageName: "splitwell-app"
+imageName: "splitwell-app"
 defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
 fixedTokens: false
 resources:
@@ -24,7 +24,7 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
-  initImage: "postgres:14"
+  initImageName: "postgres:14"
 
 migration:
   id: 0

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
-    "svImageName": {
+    "imageName": {
       "type": "string"
     },
     "svUiImageName": {
@@ -472,7 +472,7 @@
               "minimum": 1,
               "maximum": 65535
             },
-            "initImage": {
+            "initImageName": {
               "type": "string"
             }
           }

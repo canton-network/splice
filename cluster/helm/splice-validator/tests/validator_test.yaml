@@ -322,7 +322,7 @@ tests:
   - it: "allows overriding imageName and persistence.initImage"
     set:
       imageName: "validator-2"
-      persistence.initImage: "secure-registry.com/postgres:14"
+      persistence.initImageName: "secure-registry.com/postgres:14"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind

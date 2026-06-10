@@ -397,7 +397,7 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: {{ .Release.Name }}-init
-          image: {{ .Values.persistence.initImage}}
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:

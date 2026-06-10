@@ -48,12 +48,12 @@ tests:
 
   - it: "allows overriding walletImageName"
     set:
-      imageRepo: "secure-registry.cme.com"
-      walletImageName: "custom-wallet-ui"
+      imageRepo: "secure-registry.com"
+      wallet.imageName: "custom-wallet-ui"
     documentSelector:
       path: kind
       value: Deployment
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=="wallet-web-ui")].image
-          pattern: "^secure-registry\\.cme\\.com/custom-wallet-ui:"
+          pattern: "^secure-registry\\.com/custom-wallet-ui:"

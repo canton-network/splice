@@ -212,12 +212,6 @@
         "imageName": {
           "type": "string"
         },
-        "ansImageName": {
-          "type": "string"
-        },
-        "walletImageName": {
-          "type": "string"
-        },
         "imageDigests": {
           "type": "object"
         },
@@ -298,7 +292,7 @@
             "secretName": {
               "type": "string"
             },
-            "initImage": {
+            "initImageName": {
               "type": "string"
             }
           }

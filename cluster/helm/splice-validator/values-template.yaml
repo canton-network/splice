@@ -3,8 +3,8 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "validator-app"
-ansImageName: "ans-web-ui"
-walletImageName: "wallet-web-ui"
+wallet:
+  imageName: "wallet-web-ui"
 
 fixedTokens: false
 
@@ -34,7 +34,7 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   enablePgInitContainer: true
-  initImage: "postgres:14"
+  initImageName: "postgres:14"
 
 migration:
   attachPvc: true
@@ -80,7 +80,7 @@ extraInitContainers: []
 # set if ans-web-ui should be deployed
 ansWebUi:
   enabled: true
-
+  imageName: "ans-web-ui"
 # set if validator-web-ui should be deployed
 validatorWebUi:
   enabled: true
