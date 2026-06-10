@@ -21,6 +21,7 @@ import java.time.Duration
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class RewardSharingTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil

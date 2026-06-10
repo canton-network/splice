@@ -32,6 +32,7 @@ import java.time.Duration
 import scala.jdk.CollectionConverters.*
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceWallet_0_1_16
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletMintingDelegationTimeBasedIntegrationTest
     extends IntegrationTest
     with WalletTestUtil

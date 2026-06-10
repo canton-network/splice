@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 
 import scala.concurrent.duration.DurationInt
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletRewardsTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
