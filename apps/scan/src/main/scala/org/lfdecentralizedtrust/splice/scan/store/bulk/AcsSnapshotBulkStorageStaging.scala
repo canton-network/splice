@@ -91,49 +91,4 @@ class AcsSnapshotBulkStorageStaging(
         ts
       })
   }
-
-  // TODO(#5844): this should be read from the committed bucket once that exists, not from staging
-  def getAcsSnapshotAtOrBefore(
-      atOrBeforeTimestamp: CantonTimestamp
-  )(implicit tc: TraceContext): Future[AcsSnapshotObjects] = {
-    for {
-      snapshotTs <- readLatestProcessedSnapshotTimestamp
-        .map {
-          case None =>
-            throw Status.NOT_FOUND
-              .withDescription("no snapshot in bulk storage yet")
-              .asRuntimeException()
-          case Some(ts) if ts.timestamp < atOrBeforeTimestamp =>
-            logger.trace(
-              s"Latest snapshot in bulk storage is at ${ts.timestamp}, which is before the requested timestamp ${atOrBeforeTimestamp}, returning that one"
-            )
-            ts.timestamp
-          case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
-        }
-      prefix = storageConfig.findSegmentFolderPrefixByStartTimestamp(snapshotTs)
-      objects <- s3Connection
-        // A single object currently holds ~700K contracts, we apply a Limit just for safety,
-        // but we don't expect to get anywhere near 1000 such objects in the foreseeable future
-        // (hence the HardLimit, just as a safety precaution).
-        .listObjects(
-          prefix,
-          _.matches(".*ACS_\\d+\\.zstd"),
-          HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-        )
-      objectsWithChecksums <- s3Connection.getChecksums(objects)
-    } yield {
-      if (objects.isEmpty) {
-        throw Status.NOT_FOUND
-          .withDescription(
-            s"No snapshot objects found in bulk storage at expected timestamp at or before $atOrBeforeTimestamp, this may be because the timestamp is before network genesis"
-          )
-          .asRuntimeException()
-      }
-      logger.trace(
-        s"Found snapshot in bulk storage at timestamp $snapshotTs, with objects: ${objects.mkString(", ")}"
-      )
-      AcsSnapshotObjects(snapshotTs, objectsWithChecksums)
-    }
-  }
-
 }

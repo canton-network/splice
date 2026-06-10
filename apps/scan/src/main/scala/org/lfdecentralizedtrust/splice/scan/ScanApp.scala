@@ -253,7 +253,7 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = BulkStorage(
+      bulkStorage = config.bulkStorage.staging.map(_ => BulkStorage(
         scanStorageConfigV1,
         config.bulkStorage,
         acsSnapshotStore,
@@ -265,7 +265,7 @@ class ScanApp(
         backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
         retryProvider,
         loggerFactory,
-      )
+      ))
       // Conditionally create traffic summary ingestion dependencies
       appActivityRecordStoreO =
         if (config.enableAppActivityRecordAndTrafficIngestion) {
@@ -590,7 +590,7 @@ object ScanApp {
       storage: Storage,
       store: ScanStore,
       automation: ScanAutomationService,
-      bulkStorage: BulkStorage,
+      bulkStorage: Option[BulkStorage],
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
       logger: TracedLogger,
@@ -605,8 +605,8 @@ object ScanApp {
     override def close(): Unit = {
       LifeCycle.close(bftSequencersAdminConnections*)(logger)
       LifeCycle.close(cleanups*)(logger)
+      bulkStorage.foreach(LifeCycle.close(_)(logger))
       LifeCycle.close(
-        bulkStorage,
         automation,
         verdictAutomation,
         store,
