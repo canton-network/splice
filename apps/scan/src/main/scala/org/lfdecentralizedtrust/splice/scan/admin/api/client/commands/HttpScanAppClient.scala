@@ -2145,6 +2145,27 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetAllocationFactoryV2Raw(arg: allocationinstruction.v2.definitions.GetFactoryRequest)
+      extends TokenStandardAllocationInstructionV2BaseCommand[
+        allocationinstruction.v2.GetAllocationFactoryResponse,
+        allocationinstruction.v2.definitions.FactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: IV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocationinstruction.v2.GetAllocationFactoryResponse] = {
+      client.getAllocationFactory(arg, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case allocationinstruction.v2.GetAllocationFactoryResponse.OK(response) =>
+      Right(response)
+    }
+  }
+
   case class GetAllocationFactory(choiceArgs: allocationinstructionv1.AllocationFactory_Allocate)
       extends TokenStandardAllocationInstructionBaseCommand[
         allocationinstruction.v1.GetAllocationFactoryResponse,
