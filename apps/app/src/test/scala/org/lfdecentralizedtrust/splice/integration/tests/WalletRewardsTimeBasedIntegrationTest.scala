@@ -112,18 +112,7 @@ class WalletRewardsTimeBasedIntegrationTest
         validatorRewards = Seq((bob, 0.33)),
       )
 
-      // Create unassigned V2 coupons for both validators.
-      // Bob (no sharing config) → treasury mints unassigned coupons.
-      // Alice (has sharing config) → treasury does NOT mint unassigned coupons.
       val rewardCouponV2Amount = BigDecimal(1000.0)
-      clue("Create unassigned RewardCouponV2 for both validators") {
-        createRewardCouponsV2(
-          Seq(
-            (bobValidatorParty, rewardCouponV2Amount, None),
-            (aliceValidatorParty, rewardCouponV2Amount, None),
-          )
-        )
-      }
 
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
@@ -163,12 +152,28 @@ class WalletRewardsTimeBasedIntegrationTest
         .futureValue
         .trigger[CollectRewardsAndMergeAmuletsTrigger]
 
-      val prevBobBalance = bobValidatorWalletClient.balance().unlockedQty
-
       // Pause bob's minting trigger so we can observe his assigned
       // (unminted) coupon from alice's sharing, while alice's triggers
-      // run freely (sharing + minting).
+      // run freely (sharing + minting). V2 coupons must be created after
+      // pausing because they can be minted immediately.
+      var prevBobBalance = BigDecimal(0)
       setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
+        // Create unassigned V2 coupons for both validators.
+        // Bob (no sharing config) → his coupon stays unminted (trigger paused).
+        // Alice (has sharing config) → her coupon is shared then minted.
+        clue("Create unassigned RewardCouponV2 for both validators") {
+          createRewardCouponsV2(
+            Seq(
+              (bobValidatorParty, rewardCouponV2Amount, None),
+              (aliceValidatorParty, rewardCouponV2Amount, None),
+            )
+          )
+        }
+
+        // Capture balance after coupon creation but before advancement,
+        // since bob's trigger is paused and won't mint during advancement.
+        prevBobBalance = bobValidatorWalletClient.balance().unlockedQty
+
         // it takes 3 ticks for the IssuingMiningRound 1 to be created and open.
         advanceRoundsToNextRoundOpening
         advanceRoundsToNextRoundOpening

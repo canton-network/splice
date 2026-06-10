@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 }
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 
 /** Tests the RewardSharingTrigger in isolation: verifies that unassigned
   * RewardCouponV2 contracts are correctly assigned to beneficiaries with
@@ -95,6 +96,10 @@ class RewardSharingTimeBasedIntegrationTest
       .futureValue
     val aliceSharingTrigger = aliceWalletAutomation.trigger[RewardSharingTrigger]
     val aliceMintingTrigger = aliceWalletAutomation.trigger[CollectRewardsAndMergeAmuletsTrigger]
+    val bobMintingTrigger = bobValidatorBackend
+      .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+      .futureValue
+      .trigger[CollectRewardsAndMergeAmuletsTrigger]
 
     def listV2Coupons() =
       aliceValidatorBackend.appState.walletManager
@@ -106,9 +111,10 @@ class RewardSharingTimeBasedIntegrationTest
         .listContracts(RewardCouponV2.COMPANION)
         .futureValue
 
-    // Pause the minting trigger throughout so assigned coupons are not
-    // consumed before we can assert on them.
-    setTriggersWithin(triggersToPauseAtStart = Seq(aliceMintingTrigger)) {
+    // Pause both minting triggers so assigned coupons are not consumed
+    // before we can assert on them. Bob's trigger must also be paused
+    // because V2 coupons can be minted immediately.
+    setTriggersWithin(triggersToPauseAtStart = Seq(aliceMintingTrigger, bobMintingTrigger)) {
       // Pause the sharing trigger while creating coupons and advancing
       // time, so both coupons cross the TTL before the trigger polls.
       setTriggersWithin(triggersToPauseAtStart = Seq(aliceSharingTrigger)) {
@@ -135,7 +141,7 @@ class RewardSharingTimeBasedIntegrationTest
       // Sharing trigger resumes — both coupons are past TTL, so the
       // trigger batches them in a single AssignBeneficiaries call.
       clue("Unassigned coupons are consumed and assigned coupons created") {
-        eventually() {
+        eventually(40.seconds) {
           val allCoupons = listV2Coupons()
 
           allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe

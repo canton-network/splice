@@ -346,7 +346,7 @@ class MintingDelegationCollectRewardsTrigger(
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
       rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
-        includeUnassigned = rewardSharingConfig.beneficiaries.isEmpty
+        includeUnassigned = true
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
