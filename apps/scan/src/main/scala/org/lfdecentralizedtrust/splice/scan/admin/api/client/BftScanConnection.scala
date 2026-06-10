@@ -666,6 +666,14 @@ class BftScanConnection(
     "getTransferInstructionAcceptContextRaw",
   )
 
+  def getTransferInstructionAcceptContextV2Raw(
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
+    _.getTransferInstructionAcceptContextV2Raw(instructionCid, body),
+    "getTransferInstructionAcceptContextV2Raw",
+  )
+
   def getTransferInstructionRejectContextRaw(
       instructionCid: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
