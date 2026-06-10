@@ -33,10 +33,25 @@ object LfTransactionUtil {
     case n: LfNodeQueryByKey => n.result
   }
 
+  def isEffectful(node: LfActionNode): Boolean = node match {
+    case _: LfNodeCreate => true
+    case _: LfNodeFetch => false
+    case n: LfNodeExercises => n.consuming
+    case _: LfNodeQueryByKey => false
+  }
+
   def usedContractId(node: LfActionNode): Vector[LfContractId] = node match {
     case _: LfNodeCreate => Vector.empty
     case n: LfNodeFetch => Vector(n.coid)
     case n: LfNodeExercises => Vector(n.targetCoid)
+    case n: LfNodeQueryByKey => n.result
+  }
+
+  // Used for populating key resolution
+  def queriedContractIds(node: LfActionNode): Vector[LfContractId] = node match {
+    case _: LfNodeCreate => Vector.empty
+    case n: LfNodeFetch => if (n.byKey) Vector(n.coid) else Vector.empty
+    case n: LfNodeExercises => if (n.byKey) Vector(n.targetCoid) else Vector.empty
     case n: LfNodeQueryByKey => n.result
   }
 
@@ -132,19 +147,7 @@ object LfTransactionUtil {
     case n: LfNodeCreate => n.signatories
     case n: LfNodeFetch => n.signatories
     case n: LfNodeExercises => n.signatories
-    case n: LfNodeLookupByKey => n.keyMaintainers
-  }
-
-  def stateKnownTo(node: LfActionNode): Set[LfPartyId] = node match {
-    case n: LfNodeCreate => n.keyOpt.fold(n.stakeholders)(_.maintainers)
-    case n: LfNodeFetch => n.stakeholders
-    case n: LfNodeExercises => n.stakeholders
-    case LfNodeLookupByKey(_, _, key, result, _) =>
-      result match {
-        case None => key.maintainers
-        // TODO(#3013) use signatories or stakeholders
-        case Some(_) => key.maintainers
-      }
+    case n: LfNodeQueryByKey => n.keyMaintainers
   }
 
   /** Yields the the acting parties of the node, if applicable
@@ -163,7 +166,7 @@ object LfTransactionUtil {
 
     case n: LfNodeExercises => n.actingParties
 
-    case nl: LfNodeLookupByKey => nl.keyMaintainers
+    case nl: LfNodeQueryByKey => nl.keyMaintainers
   }
 
   /** Compute the informees of a transaction based on the ledger model definition.
@@ -192,7 +195,7 @@ object LfTransactionUtil {
       case n: LfNodeCreate => n
       case n: LfNodeFetch => n
       case n: LfNodeExercises => n.copy(children = ImmArray.empty)
-      case n: LfNodeLookupByKey => n
+      case n: LfNodeQueryByKey => n
     }
 
   def metadataFromExercise(node: LfNodeExercises): ContractMetadata =

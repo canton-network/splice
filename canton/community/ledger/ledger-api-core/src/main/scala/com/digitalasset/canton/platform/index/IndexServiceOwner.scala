@@ -22,7 +22,7 @@ import com.digitalasset.canton.logging.{
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
 import com.digitalasset.canton.platform.InMemoryState
 import com.digitalasset.canton.platform.apiserver.TimedIndexService
-import com.digitalasset.canton.platform.config.IndexServiceConfig
+import com.digitalasset.canton.platform.config.{IndexServiceConfig, UpdateServiceConfig}
 import com.digitalasset.canton.platform.index.IndexServiceOwner.GetPackagePreferenceForViewsUpgrading
 import com.digitalasset.canton.platform.store.backend.common.MismatchException
 import com.digitalasset.canton.platform.store.cache.*
@@ -37,15 +37,13 @@ import com.digitalasset.canton.platform.store.dao.{
   LedgerReadDao,
 }
 import com.digitalasset.canton.platform.store.interning.StringInterning
-import com.digitalasset.canton.platform.store.{
-  DbSupport,
-  LedgerApiContractStore,
-  PruningOffsetService,
-}
+import com.digitalasset.canton.platform.store.{DbSupport, LedgerApiContractStore}
 import com.digitalasset.canton.store.packagemeta.PackageMetadata
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.actor.Scheduler
+import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
@@ -71,7 +69,9 @@ final class IndexServiceOwner(
     queryExecutionContext: ExecutionContextExecutorService,
     commandExecutionContext: ExecutionContextExecutorService,
     participantContractStore: LedgerApiContractStore,
-    pruningOffsetService: PruningOffsetService,
+    materializer: Materializer,
+    updateServiceConfig: UpdateServiceConfig,
+    scheduler: Scheduler,
 ) extends ResourceOwner[IndexService]
     with NamedLogging {
   private val initializationRetryDelay = 100.millis
@@ -84,7 +84,6 @@ final class IndexServiceOwner(
       stringInterning = inMemoryState.stringInterningView,
       contractLoader = contractLoader,
       lfValueTranslation = lfValueTranslation,
-      pruningOffsetService = pruningOffsetService,
       queryExecutionContext = queryExecutionContext,
       commandExecutionContext = commandExecutionContext,
     )
@@ -98,6 +97,7 @@ final class IndexServiceOwner(
         loggerFactory = loggerFactory,
         contractStore = participantContractStore,
         ledgerEndCache = inMemoryState.ledgerEndCache,
+        maxLookupLimit = config.maxLookupLimit,
       )(commandExecutionContext)
 
       bufferedTransactionsReader = BufferedUpdateReader(
@@ -130,6 +130,9 @@ final class IndexServiceOwner(
         loggerFactory = loggerFactory,
         idleStreamOffsetCheckpointTimeout = config.idleStreamOffsetCheckpointTimeout,
         getPreferredPackages = getPackagePreference,
+        materializer = materializer,
+        executionContext = commandExecutionContext,
+        updateServiceConfig = updateServiceConfig,
       )
     } yield new TimedIndexService(indexService, metrics)
   }
@@ -202,7 +205,6 @@ final class IndexServiceOwner(
       achsStateCache: AchsStateCache,
       stringInterning: StringInterning,
       contractLoader: ContractLoader,
-      pruningOffsetService: PruningOffsetService,
       lfValueTranslation: LfValueTranslation,
       queryExecutionContext: ExecutionContextExecutorService,
       commandExecutionContext: ExecutionContextExecutorService,
@@ -227,9 +229,11 @@ final class IndexServiceOwner(
       incompleteOffsets = incompleteOffsets,
       contractLoader = contractLoader,
       lfValueTranslation = lfValueTranslation,
-      pruningOffsetService = pruningOffsetService,
       contractStore = participantContractStore,
       achsStateCache = achsStateCache,
+      contractPruningMaxRetries = config.contractPruningMaxRetries,
+      contractPruningDelayBeforeRetry = config.contractPruningDelayBeforeRetry.underlying,
+      scheduler = scheduler,
     )(queryExecutionContext)
 
   private object InMemoryStateNotInitialized extends NoStackTrace

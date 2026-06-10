@@ -45,8 +45,8 @@ import ProcessRewardsTriggerBase.*
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -143,7 +143,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   ): Future[GetRewardAccountingBatchResponse] = {
     def bftReadBatch: Future[GetRewardAccountingBatchResponse] =
       for {
-        bftScan <- bftScanConnectionF
+        bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingBatch(round, batchHash)
       } yield response match {
         case Some(batch) =>
@@ -158,7 +158,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       }
 
     for {
-      ownScan <- scanConnectionF
+      ownScan <- getOwnScanConnection()
       response <- ownScan.getRewardAccountingBatch(round, batchHash)
       batch <- response match {
         case Some(batch) => Future.successful(batch)
@@ -171,8 +171,8 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
 class ProcessRewardsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -180,16 +180,16 @@ class ProcessRewardsTrigger(
 ) extends ProcessRewardsTriggerBase(
       context,
       svTaskContext,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = false,
     )
 
 class ProcessRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -197,8 +197,8 @@ class ProcessRewardsDryRunTrigger(
 ) extends ProcessRewardsTriggerBase(
       context,
       svTaskContext,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = true,
     )
 

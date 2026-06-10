@@ -43,6 +43,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   SpliceUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -60,6 +61,7 @@ class MintingDelegationCollectRewardsTrigger(
     store: ExternalPartyWalletStore,
     scanConnection: BftScanConnection,
     spliceLedgerConnection: SpliceLedgerConnection,
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -284,7 +286,9 @@ class MintingDelegationCollectRewardsTrigger(
         Some(issuingRoundsMap.keySet.map(_.number))
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
-      rewardCouponsV2WithQuantity <- store.listSortedAssignedRewardCouponV2s(issuingRoundsMap)
+      rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
+        includeUnassigned = rewardSharingConfig.beneficiaries.isEmpty
+      )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
     } yield CouponsData(

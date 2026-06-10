@@ -826,7 +826,7 @@ class DbAppActivityRecordStoreTest
       storage.underlying.queryAndUpdate(
         store.ensureMetaDBIO(ingestionStart),
         "test.ensureMeta",
-      )
+      )(implicitly, implicitly, _ => false)
     )
 
   private val testDomain = SynchronizerId.tryFromString("test::domain")
@@ -943,7 +943,7 @@ class DbAppActivityRecordStoreTest
           ) returning row_id
         """.as[Long].head,
           "test.insertVerdictRow",
-        )
+        )(implicitly, implicitly, _ => false)
     )
   }
 

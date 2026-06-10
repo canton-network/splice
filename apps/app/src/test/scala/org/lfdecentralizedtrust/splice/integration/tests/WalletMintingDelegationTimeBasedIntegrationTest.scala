@@ -544,7 +544,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
           // Create RewardCouponV2 (assigned to beneficiary)
           createRewardCouponsV2(
-            Seq((beneficiaryParty.party, rewardCouponV2Amount, beneficiaryParty.party)),
+            Seq((beneficiaryParty.party, rewardCouponV2Amount, Some(beneficiaryParty.party))),
             round = Some(issuingRound.round),
           )
         }
@@ -574,7 +574,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               .listDevelopmentFundCoupons()
               .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
             externalPartyWallet.store
-              .listSortedAssignedRewardCouponV2s(issuingRoundsMap)
+              .listSortedMintableRewardCouponV2s(includeUnassigned = true)
               .futureValue shouldBe empty withClue "RewardCouponV2"
           }
         }

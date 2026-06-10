@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{CachingConfigs, CryptoProvider, CryptoSchemeConfig}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
@@ -114,12 +115,20 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
   // The parameters here are just defaults so don't really matter
   def crypto(implicit ec: ExecutionContext) = new JcePureCrypto(
     CryptoProvider.Jce.symmetric.default,
-    CryptoScheme.create(CryptoSchemeConfig(), CryptoProvider.Jce.signingAlgorithms).value,
-    CryptoScheme.create(CryptoSchemeConfig(), CryptoProvider.Jce.encryptionAlgorithms).value,
+    CryptoScheme
+      .create(CryptoSchemeConfig[SigningAlgorithmSpec](), CryptoProvider.Jce.signingAlgorithms)
+      .value,
+    CryptoScheme
+      .create(
+        CryptoSchemeConfig[EncryptionAlgorithmSpec](),
+        CryptoProvider.Jce.encryptionAlgorithms,
+      )
+      .value,
     CryptoProvider.Jce.hash.default,
     CryptoProvider.Jce.pbkdf.value.default,
     CachingConfigs.defaultPublicKeyConversionCache,
     None,
+    PositiveInt.tryCreate(1),
     loggerFactory,
   )
 

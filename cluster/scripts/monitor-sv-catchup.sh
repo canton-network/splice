@@ -28,7 +28,11 @@ seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds
 part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.participantDelaySeconds // 30")
 med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.mediatorDelaySeconds // 30")
 
-PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
+if [[ "$GCP_CLUSTER_BASENAME" == *scratch* ]]; then
+  PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
+else
+  PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.global.canton.network.digitalasset.com"
+fi
 
 outcome="timed_out"
 poll_interval=60
@@ -135,16 +139,16 @@ else
 fi
 
 grafana_base="https://grafana.${GCP_CLUSTER_BASENAME}.global.canton.network.digitalasset.com"
-grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/global-domain-catchup?orgId=1&from=${start_time}&to=${end_time}&timezone=UTC&var-DS=prometheus&var-namespace=${namespace}&var-migration=All&viewPanel=panel-11"
-grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&from=${start_time}&to=${end_time}&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13"
+grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/global-domain-catchup?orgId=1&timezone=UTC&var-DS=prometheus&var-namespace=${namespace}&var-migration=All&viewPanel=panel-11"
+grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13"
 
 message="${icon} *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
 Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
 
 *Per-component peak rates over catchup window:*
-• Sequencer: \`$(printf "%.1f" "$seq_rate_max")\` events/s  (expected throughput ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
-• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected throughput ≥ ${part_min_eps})  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
-• Mediator: \`$(printf "%.1f" "$med_rate_max")\` events/s  (expected throughput ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
+• Sequencer: \`$(printf "%.1f" "$seq_rate_max")\` events/s  (expected ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
+• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected ≥ ${part_min_eps})  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
+• Mediator: \`$(printf "%.1f" "$med_rate_max")\` events/s  (expected ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
 
 *Dashboards:*
 • <${grafana_domain_link}|Sequencer>

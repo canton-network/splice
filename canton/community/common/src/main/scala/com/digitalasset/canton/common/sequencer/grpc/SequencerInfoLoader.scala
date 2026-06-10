@@ -24,7 +24,7 @@ import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown, Un
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
 import com.digitalasset.canton.networking.grpc.ClientChannelParams
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
-import com.digitalasset.canton.sequencing.protocol.{HandshakeRequest, HandshakeResponse}
+import com.digitalasset.canton.sequencing.protocol.HandshakeRequest
 import com.digitalasset.canton.sequencing.{
   GrpcSequencerConnection,
   SequencerConnection,
@@ -39,7 +39,7 @@ import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.Thereafter.syntax.*
 import com.digitalasset.canton.util.retry.NoExceptionRetryPolicy
 import com.digitalasset.canton.util.{FutureUnlessShutdownUtil, LoggerUtil, retry}
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.version.{ProtocolVersion, ReleaseVersion}
 import com.google.common.annotations.VisibleForTesting
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -50,6 +50,7 @@ import scala.annotation.{nowarn, tailrec}
 import scala.concurrent.{ExecutionContextExecutor, Promise}
 
 class SequencerInfoLoader(
+    member: Member,
     timeouts: ProcessingTimeout,
     params: ClientChannelParams,
     clientProtocolVersions: NonEmpty[Seq[ProtocolVersion]],
@@ -66,6 +67,7 @@ class SequencerInfoLoader(
   private def sequencerConnectClientBuilder: SequencerConnectClient.Builder = {
     (synchronizerAlias: SynchronizerAlias, config: SequencerConnection) =>
       SequencerConnectClient(
+        member,
         synchronizerAlias,
         config,
         timeouts,
@@ -187,15 +189,11 @@ class SequencerInfoLoader(
           HandshakeRequest(
             clientProtocolVersions,
             minimumProtocolVersion,
+            ReleaseVersion.current,
           ),
           dontWarnOnDeprecatedPV,
         )
         .leftMap(SequencerInfoLoader.fromSequencerConnectClientError(alias))
-        .subflatMap {
-          case success: HandshakeResponse.Success => success.asRight
-          case HandshakeResponse.Failure(_, reason) =>
-            SequencerInfoLoaderError.HandshakeFailedError(reason).asLeft
-        }
     } yield {
       logger.info(
         s"Version handshake with sequencer $sequencerAlias and synchronizer using protocol version ${success.serverProtocolVersion} succeeded."

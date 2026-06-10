@@ -7,7 +7,6 @@ import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.synchronizer.metrics.BftOrderingMetrics
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.BlacklistLeaderSelectionPolicyConfig
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.Bootstrap
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.OutputMetadataStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.{
@@ -25,7 +24,6 @@ import com.digitalasset.canton.version.ProtocolVersion
 
 class BlacklistLeaderSelectionInitializer[E <: Env[E]](
     thisNode: BftNodeId,
-    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
     protocolVersion: ProtocolVersion,
     store: OutputMetadataStore[E],
     timeouts: ProcessingTimeout,
@@ -49,20 +47,27 @@ class BlacklistLeaderSelectionInitializer[E <: Env[E]](
         stateFromStore(moduleSystem, epochNumber)
     }
 
-  def leaderFromState(
+  def leadersFromState(
       state: BlacklistLeaderSelectionPolicyState,
       orderingTopology: OrderingTopology,
   ): Seq[BftNodeId] =
-    BlacklistLeaderSelectionPolicyStateWithTopology(state, orderingTopology).computeLeaders(
-      blacklistLeaderSelectionPolicyConfig
-    )
+    BlacklistLeaderSelectionPolicyStateWithTopology(state, orderingTopology)
+      .computeLeaders()
+
+  def blacklistedNodesFromState(
+      state: BlacklistLeaderSelectionPolicyState,
+      orderingTopology: OrderingTopology,
+  ): Seq[BftNodeId] =
+    BlacklistLeaderSelectionPolicyStateWithTopology(
+      state,
+      orderingTopology,
+    ).computeBlacklistedNodes()
 
   def leaderSelectionPolicy(
       blacklistLeaderSelectionPolicyState: BlacklistLeaderSelectionPolicyState,
       orderingTopology: OrderingTopology,
   ): LeaderSelectionPolicy[E] = BlacklistLeaderSelectionPolicy.create(
     blacklistLeaderSelectionPolicyState,
-    blacklistLeaderSelectionPolicyConfig,
     orderingTopology,
     store,
     metrics,

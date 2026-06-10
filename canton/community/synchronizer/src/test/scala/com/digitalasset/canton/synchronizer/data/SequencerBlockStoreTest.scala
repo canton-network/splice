@@ -15,8 +15,8 @@ import com.digitalasset.canton.synchronizer.block.data.{
   BlockInfo,
   SequencerBlockStore,
 }
+import com.digitalasset.canton.synchronizer.block.update.InFlightAggregations
 import com.digitalasset.canton.synchronizer.sequencer.*
-import com.digitalasset.canton.synchronizer.sequencer.InFlightAggregation.AggregationBySender
 import com.digitalasset.canton.synchronizer.sequencer.errors.SequencerError.BlockNotFound
 import com.digitalasset.canton.synchronizer.sequencer.store.SequencerStore
 import com.digitalasset.canton.topology.*
@@ -51,8 +51,12 @@ trait SequencerBlockStoreTest
     val aggregationId1 = AggregationId(TestHash.digest(1))
     val aggregationId2 = AggregationId(TestHash.digest(2))
     val aggregationRule1 =
-      AggregationRule(NonEmpty(Seq, alice, bob), PositiveInt.tryCreate(2), testedProtocolVersion)
-    val aggregationRule2 = AggregationRule(
+      AggregationRule.testing(
+        NonEmpty(Seq, alice, bob),
+        PositiveInt.tryCreate(2),
+        testedProtocolVersion,
+      )
+    val aggregationRule2 = AggregationRule.testing(
       NonEmpty(Seq, alice, bob, carlos),
       PositiveInt.tryCreate(3),
       testedProtocolVersion,
@@ -88,7 +92,7 @@ trait SequencerBlockStoreTest
           signatures = Seq.empty,
           sequencingTimestamp = t3,
         )
-        val agg2a = agg2.tryAggregate(agg2Update).value
+        val agg2a = agg2.extendWithValidButMaybeDuplicateAggregation(agg2Update)
         for {
           _ <- allMembers.parTraverse(member =>
             sequencerStore.registerMember(member, CantonTimestamp.now())
@@ -125,7 +129,8 @@ trait SequencerBlockStoreTest
           head.latestBlock.height shouldBe 5
           head.latestBlock.lastTs shouldBe t3
           head.latestBlock.latestSequencerEventTimestamp shouldBe Some(t2)
-          head.inFlightAggregations shouldBe Map(aggregationId2 -> agg2a)
+          head.inFlightAggregations.byId shouldBe Map(aggregationId2 -> agg2a)
+
         }
       }
 
@@ -158,7 +163,7 @@ trait SequencerBlockStoreTest
         } yield {
           val head = headO.value
           head.latestBlock shouldBe BlockInfo(1L, t2, Some(t1), Some(t1))
-          head.inFlightAggregations shouldBe Map(aggregationId1 -> agg1)
+          head.inFlightAggregations.byId shouldBe Map(aggregationId1 -> agg1)
         }
       }
 
@@ -180,7 +185,7 @@ trait SequencerBlockStoreTest
           signatures = Seq.empty,
           sequencingTimestamp = t3,
         )
-        val agg2a = agg2.tryAggregate(agg2Update).value
+        val agg2a = agg2.extendWithValidButMaybeDuplicateAggregation(agg2Update)
         for {
           _ <- allMembers.parTraverse(member =>
             sequencerStore.registerMember(member, CantonTimestamp.now())
@@ -246,15 +251,15 @@ trait SequencerBlockStoreTest
           val block1 = BlockEphemeralState(
             BlockInfo(1, t2, Some(t2), Some(t2)),
             // aggregationId1 had already been expired by the latest block, but here we're getting an old snapshot
-            Map(aggregationId1 -> agg1, aggregationId2 -> agg2),
+            InFlightAggregations.fromMap(Map(aggregationId1 -> agg1, aggregationId2 -> agg2)),
           )
           val block2 = BlockEphemeralState(
             BlockInfo(2, t4, Some(t3), Some(t3)),
-            Map(aggregationId2 -> agg2a),
+            InFlightAggregations.fromMap(Map(aggregationId2 -> agg2a)),
           )
           val block3 = BlockEphemeralState(
             BlockInfo(3, t4, Some(t3), Some(t3)),
-            Map(aggregationId2 -> agg2a),
+            InFlightAggregations.fromMap(Map(aggregationId2 -> agg2a)),
           )
 
           stateAtT1 shouldBe block1
@@ -367,7 +372,7 @@ trait SequencerBlockStoreTest
             Map.empty,
             InternalSequencerPruningStatus(CantonTimestamp.Epoch, Set.empty)
               .toSequencerPruningStatus(CantonTimestamp.now()),
-            Map(aggregationId1 -> agg1),
+            InFlightAggregations.fromMap(Map(aggregationId1 -> agg1)),
             None,
             protocolVersion = testedProtocolVersion,
             trafficPurchased = Seq.empty,
@@ -387,7 +392,7 @@ trait SequencerBlockStoreTest
           result <- store.readHeadUnbounded()
         } yield result.value shouldBe BlockEphemeralState(
           BlockInfo(5, t3, None, None),
-          Map(aggregationId1 -> agg1),
+          InFlightAggregations.fromMap(Map(aggregationId1 -> agg1)),
         )
       }
 

@@ -7,6 +7,7 @@ import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, Re
 import org.lfdecentralizedtrust.splice.scan.store.ScanAppRewardsStore
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
+import io.grpc.Status
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.*
@@ -118,6 +119,7 @@ class DbScanAppRewardsStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     appActivityRecordStore: DbAppActivityRecordStore,
+    rewardMintingAllowanceTolerance: BigDecimal,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -646,6 +648,7 @@ class DbScanAppRewardsStore(
           totalWeight <- getAppActivityRoundTotalWeightAction(roundNumber)
           params = inputs.deriveIssuanceParams(totalWeight)
           _ <- computeRewardTotalsAction(roundNumber, params)
+          _ <- assertMintingAllowanceWithinMintingCurve(roundNumber, params)
           _ <- computeRewardHashesAction(roundNumber, batchSize)
         } yield ())
           .map(_ => logger.debug(s"Computed and stored rewards for round $roundNumber."))
@@ -738,8 +741,6 @@ class DbScanAppRewardsStore(
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
-    // TODO(#4747): assert totalAppRewardAmount <= totalIssuance (with small tolerance)
-    //              and prevent writes if the assertion fails.
     runUpdate(
       computeRewardTotalsAction(roundNumber, params)
         .map(_ => logger.debug(s"Computed reward totals for round $roundNumber."))
@@ -797,6 +798,33 @@ class DbScanAppRewardsStore(
              $unclaimed,
              count(*)
            from inserted_parties""").asUpdate
+  }
+
+  /** Assert that the total reward minting allowance for a round does not exceed
+    * the total issuance.
+    *
+    * Called inside a transactional block which rolls back if it fails.
+    */
+  private[store] def assertMintingAllowanceWithinMintingCurve(
+      roundNumber: Long,
+      params: RewardIssuanceParams,
+  ) = {
+    sql"""select total_app_reward_minting_allowance
+          from #${Tables.appRewardRoundTotals}
+          where history_id = $historyId
+            and round_number = $roundNumber
+    """.as[BigDecimal].head.map { totalRewardAmount =>
+      val tolerance = rewardMintingAllowanceTolerance
+      if (totalRewardAmount > params.totalIssuanceForFeaturedAppRewards + tolerance) {
+        throw Status.INTERNAL
+          .withDescription(
+            s"Round $roundNumber: actual total app reward minting allowance ($totalRewardAmount) " +
+              s"exceeds minting curve allowance (${params.totalIssuanceForFeaturedAppRewards}) " +
+              s"by more than tolerance ($tolerance)"
+          )
+          .asRuntimeException()
+      }
+    }
   }
 
   // -- Computation summary ----------------------------------------------------
@@ -1010,5 +1038,7 @@ class DbScanAppRewardsStore(
       action: DBIOAction[T, NoStream, Effect.All],
       operationName: String,
   )(implicit tc: TraceContext): Future[T] =
-    futureUnlessShutdownToFuture(storage.queryAndUpdate(action, operationName))
+    futureUnlessShutdownToFuture(
+      storage.queryAndUpdate(action, operationName)(implicitly, implicitly, _ => false)
+    )
 }

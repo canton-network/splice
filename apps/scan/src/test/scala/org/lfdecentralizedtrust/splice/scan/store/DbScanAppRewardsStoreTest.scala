@@ -576,6 +576,81 @@ class DbScanAppRewardsStoreTest
 
     }
 
+    // -- assertMintingAllowanceWithinMintingCurve tests --------------------------------
+    // Tested directly with fake round totals because normal computation
+    // cannot trigger the assertion — the tranche formula guarantees
+    // totalReward <= totalIssuance. This check is a safety net for bugs.
+
+    "assertMintingAllowanceWithinMintingCurve" should {
+
+      def mkParams(totalIssuance: BigDecimal): RewardIssuanceParams =
+        RewardIssuanceParams(
+          issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
+          threshold_CC = BigDecimal(0),
+          totalIssuanceForFeaturedAppRewards = totalIssuance,
+          unclaimedAppRewardAmount = BigDecimal(0),
+        )
+
+      def insertRoundTotal(historyId: Long, round: Long, amount: BigDecimal): Future[Unit] =
+        futureUnlessShutdownToFuture(
+          storage.underlying.queryAndUpdate(
+            sqlu"""insert into app_reward_round_totals
+                   (history_id, round_number, total_app_reward_minting_allowance,
+                    total_app_reward_thresholded, total_app_reward_unclaimed,
+                    rewarded_app_provider_parties_count)
+                   values ($historyId, $round, $amount, 0, 0, 1)""".map(_ => ()),
+            "test.insertRoundTotal",
+          )
+        )
+
+      "pass when reward amount is within issuance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          )
+        } yield succeed
+      }
+
+      "fail when reward amount exceeds issuance by more than tolerance" in {
+        for {
+          (store, historyId) <- newStore()
+          // Reward exceeds issuance by 2x tolerance (0.002 > 0.001)
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.002))
+          result <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store.assertMintingAllowanceWithinMintingCurve(
+                roundNumber,
+                mkParams(BigDecimal(10.0)),
+              ),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          ).failed
+        } yield {
+          result.getMessage should include("exceeds minting curve allowance")
+        }
+      }
+
+      "pass when reward amount exceeds issuance within tolerance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0005))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          )
+        } yield succeed
+      }
+    }
+
     // -- computeRewardTotals tests -------------------------------------------
 
     val rewardTotalsTestCases = Seq(
@@ -749,6 +824,20 @@ class DbScanAppRewardsStoreTest
           .failed
       } yield {
         result shouldBe a[Exception]
+      }
+    }
+
+    "computeAndStoreRewards — rolls back when reward exceeds issuance" in {
+      for {
+        // Use a negative tolerance so any positive reward triggers the assertion
+        (store, historyId) <- newStore(rewardMintingAllowanceTolerance = BigDecimal(-1.0))
+        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
+        result <- store
+          .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
+          .failed
+      } yield {
+        result.getMessage should include("exceeds minting curve allowance")
       }
     }
 
@@ -1074,7 +1163,9 @@ class DbScanAppRewardsStoreTest
 
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
-  private def newStore(): Future[(DbScanAppRewardsStore, Long)] = {
+  private def newStore(
+      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001)
+  ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
@@ -1100,6 +1191,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         appActivityRecordStore,
+        rewardMintingAllowanceTolerance,
         loggerFactory,
       )
       (store, updateHistory.historyId)

@@ -125,6 +125,7 @@ abstract class ProtocolProcessor[
       crypto,
       sequencerClient,
       clock,
+      sequencerClient.protocolVersion,
     )
     with RequestProcessor[RequestViewType, SequencedEventUpdate] {
 
@@ -173,6 +174,8 @@ abstract class ProtocolProcessor[
     val recentSnapshot = crypto.create(topologySnapshot)
     val explicitMediatorGroupIndex = steps.explicitMediatorGroup(submissionParam)
     for {
+      _ <- steps.validateSubmittersNotOnboarding(submissionParam, topologySnapshot, participantId)
+
       mediator <- chooseMediator(recentSnapshot.ipsSnapshot, explicitMediatorGroupIndex)
         .leftMap(steps.embedNoMediatorError)
       submissionData <- steps.createSubmission(
@@ -942,7 +945,7 @@ abstract class ProtocolProcessor[
         snapshot.ipsSnapshot
           .participantsWithSupportedFeature(
             Set(participantId),
-            ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer,
+            ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer,
           )
           .map(_.headOption.nonEmpty)
       )
@@ -1056,6 +1059,7 @@ abstract class ProtocolProcessor[
     )
 
     val submissionTopologyTimestamp = rootHashMessage.submissionTopologyTimestamp
+
     for {
       submissionTopologySnapshotO <- EitherT.right(
         SubmissionTopologyHelper.getSubmissionTopologySnapshot(
@@ -1590,9 +1594,13 @@ abstract class ProtocolProcessor[
         pendingRequestData: PendingRequestData
     ): FutureUnlessShutdown[Boolean] =
       for {
-        snapshot <- crypto.awaitSnapshot(requestId.unwrap)
+        snapshot <- crypto.awaitSnapshot(
+          // use topologyTimestamp on pv34, otherwise use sequencing timestamp as aggregation
+          // will now only contain signatures from mediators valid at the sequencing timestamp of
+          // the verdict delivery
+          if (protocolVersion <= ProtocolVersion.v34) requestId.unwrap else resultTs
+        )
         res <- result.verifyMediatorSignatures(snapshot, pendingRequestData.mediator.group).value
-
       } yield {
         res match {
           case Left(err) =>

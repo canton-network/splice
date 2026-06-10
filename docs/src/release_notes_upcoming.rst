@@ -40,3 +40,11 @@
 
         - ``/v0/activities``
 
+  - Bug fixes
+
+    - Validator
+
+        - Fixed a bug where validators using the ``bft-custom`` scan client configuration
+          would incorrectly attempt to establish scan connections with all scan nodes during
+          the validator startup. The scan client now strictly confines all scan connections to
+          configured, trusted SV endpoints.

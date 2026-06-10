@@ -116,11 +116,12 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         ),
     )
 
-  /** Returns assigned RewardCouponV2 sorted by round ascending, amount descending.
-    * Only includes coupons with an assigned beneficiary from the given `activeIssuingRounds`.
+  /** Returns mintable RewardCouponV2 sorted by round ascending, amount descending.
+    * When `includeUnassigned` is true, includes coupons where the party is provider
+    * with no beneficiary.
     */
-  def listSortedAssignedRewardCouponV2s(
-      issuingRoundsMap: Map[Round, IssuingMiningRound],
+  def listSortedMintableRewardCouponV2s(
+      includeUnassigned: Boolean,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
     (Contract[RewardCouponV2.ContractId, RewardCouponV2], BigDecimal)
@@ -130,12 +131,12 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         RewardCouponV2.COMPANION
       )
     } yield applyLimit(
-      "listSortedAssignedRewardCouponV2s",
+      "listSortedMintableRewardCouponV2s",
       limit,
       rewards
         .filter { rw =>
-          rw.payload.beneficiary.isPresent &&
-          issuingRoundsMap.contains(rw.payload.round)
+          rw.payload.beneficiary.isPresent ||
+          (includeUnassigned && rw.payload.beneficiary.isEmpty)
         }
         .map(rw => (rw.contract, BigDecimal(rw.payload.amount)))
         .sorted(

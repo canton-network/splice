@@ -7,6 +7,7 @@ import cats.Eval
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.crypto.{CryptoPureApi, SynchronizerCrypto}
+import com.digitalasset.canton.data.SynchronizerPredecessor
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.ParticipantNodeParameters
 import com.digitalasset.canton.participant.ledger.api.LedgerApiStore
@@ -74,7 +75,7 @@ class InMemoryLogicalSyncPersistentState(
     new InMemoryReassignmentStore(Target(synchronizerIdx.item), loggerFactory)
 
   override val pendingOnboardingClearanceStore: PendingOnboardingClearanceStore =
-    new InMemoryPendingOperationStore(OnboardingClearanceOperation)
+    new InMemoryPendingOperationStore(OnboardingClearanceOperation, loggerFactory)
 
   override val partyReplicationIndexingStoreIfOnPREnabled
       : Option[InMemoryPartyReplicationIndexingStore] =
@@ -89,6 +90,7 @@ class InMemoryPhysicalSyncPersistentState(
     crypto: SynchronizerCrypto,
     override val physicalSynchronizerIdx: IndexedPhysicalSynchronizer,
     val staticSynchronizerParameters: StaticSynchronizerParameters,
+    val predecessor: Option[SynchronizerPredecessor],
     val loggerFactory: NamedLoggerFactory,
     val timeouts: ProcessingTimeout,
     val futureSupervisor: FutureSupervisor,
@@ -99,13 +101,14 @@ class InMemoryPhysicalSyncPersistentState(
 
   val sequencedEventStore = new InMemorySequencedEventStore(loggerFactory, timeouts)
   val requestJournalStore = new InMemoryRequestJournalStore(loggerFactory)
-  val parameterStore = new InMemorySynchronizerParameterStore()
+  val connectivityStatusStore = new InMemorySynchronizerConnectivityStatusStore()
   val sendTrackerStore = new InMemorySendTrackerStore()
-  val submissionTrackerStore = new InMemorySubmissionTrackerStore(loggerFactory)
+  val submissionTrackerStore = new InMemorySubmissionTrackerStore(loggerFactory, timeouts)
 
   override val topologyStore =
     new InMemoryTopologyStore(
       SynchronizerStore(psid),
+      predecessor = predecessor,
       staticSynchronizerParameters.protocolVersion,
       loggerFactory,
       timeouts,

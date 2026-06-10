@@ -204,7 +204,7 @@ class LocalSynchronizerNode(
         logger,
       )
       .flatMap {
-        case Left(NodeStatus.NotInitialized(_, _)) =>
+        case Left(NodeStatus.NotInitialized(_, _, _)) =>
           action
         case Right(NodeStatus.Success(_)) =>
           logger.info("Mediator is already onboarded")
@@ -306,7 +306,7 @@ class LocalSynchronizerNode(
         "initialize_mediator",
         "Initializing mediator",
         mediatorAdminConnection.getStatus.flatMap {
-          case NodeStatus.NotInitialized(_, _) =>
+          case NodeStatus.NotInitialized(_, _, _) =>
             mediatorAdminConnection.initialize(
               synchronizerId,
               internalSequencerConnection,
@@ -364,7 +364,7 @@ class LocalSynchronizerNode(
         logger,
       )
       .flatMap {
-        case Left(NodeStatus.NotInitialized(_, _)) =>
+        case Left(NodeStatus.NotInitialized(_, _, _)) =>
           logger.info("Adding sequencer identity")
           addLocalSequencerIdentity(
             synchronizerAlias,
@@ -412,7 +412,7 @@ class LocalSynchronizerNode(
         logger,
       )
       .flatMap {
-        case Left(NodeStatus.NotInitialized(_, _)) =>
+        case Left(NodeStatus.NotInitialized(_, _, _)) =>
           logger.info("Onboarding sequencer")
           svConnection
             .flatMap(svConnection => preInit().flatMap(_ => onboardLocalSequencer(svConnection)))
@@ -456,7 +456,7 @@ class LocalSynchronizerNode(
         "initializer_sequencer",
         "Initializing sequencer",
         sequencerAdminConnection.getStatus.flatMap {
-          case NodeStatus.NotInitialized(_, _) =>
+          case NodeStatus.NotInitialized(_, _, _) =>
             for {
               _ <- sequencerAdminConnection.initializeFromOnboardingState(
                 onboardingState

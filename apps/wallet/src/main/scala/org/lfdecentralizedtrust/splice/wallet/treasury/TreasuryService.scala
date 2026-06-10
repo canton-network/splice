@@ -123,6 +123,7 @@ class TreasuryService(
     walletManager: UserWalletManager,
     override protected[this] val retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
+    mintUnassignedRewardCouponsV2: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, mat: Materializer)
     extends NamedLogging
@@ -811,10 +812,7 @@ class TreasuryService(
         issuingRoundsMap,
       )
       (rewardCouponV2TotalAmuletQuantity, rewardCouponV2Inputs) <-
-        getRewardCouponV2AndQuantity(
-          maxNumInputs,
-          issuingRoundsMap,
-        )
+        getRewardCouponV2AndQuantity(maxNumInputs)
       (svRewardsTotalAmuletQuantity, svRewardInputs) <- getSvRewardCouponsAndQuantity(
         maxNumInputs,
         issuingRoundsMap,
@@ -1085,15 +1083,13 @@ class TreasuryService(
     } yield (appRewardsAmuletQuantity, appRewardInputs)
 
   private def getRewardCouponV2AndQuantity(
-      maxNumInputs: Int,
-      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      maxNumInputs: Int
   )(implicit
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
     for {
-      // TODO(#5787): eventually support mint of unassigned, unshared RewardCouponV2
-      rewardCouponV2Inputs <- userStore.listSortedAssignedRewardCouponV2s(
-        issuingRoundsMap,
+      rewardCouponV2Inputs <- userStore.listSortedMintableRewardCouponV2s(
+        includeUnassigned = mintUnassignedRewardCouponsV2,
         PageLimit.tryCreate(maxNumInputs),
       )
       rewardCouponV2AmuletQuantity = rewardCouponV2Inputs.map(_._2).sum
