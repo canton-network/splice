@@ -51,6 +51,9 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.util.ShowUtil.*
+import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -279,7 +282,7 @@ class MintingDelegationCollectRewardsTrigger(
         RewardCouponV2.ContractId,
         RewardCouponV2,
       ]],
-  ) {
+  ) extends PrettyPrinting {
     def hasRewards: Boolean =
       livenessActivityRecords.nonEmpty ||
         validatorRewardCoupons.nonEmpty ||
@@ -287,6 +290,15 @@ class MintingDelegationCollectRewardsTrigger(
         rewardCouponsV2.nonEmpty ||
         unclaimedActivityRecords.nonEmpty ||
         developmentFundCoupons.nonEmpty
+
+    override def pretty: Pretty[this.type] = prettyOfClass(
+      param("livenessActivityRecords", _.livenessActivityRecords.size),
+      param("validatorRewardCoupons", _.validatorRewardCoupons.size),
+      param("appRewardCoupons", _.appRewardCoupons.size),
+      param("rewardCouponsV2", _.rewardCouponsV2.size),
+      param("unclaimedActivityRecords", _.unclaimedActivityRecords.size),
+      param("developmentFundCoupons", _.developmentFundCoupons.size),
+    )
   }
 
   private def fetchCouponsData(
@@ -437,13 +449,7 @@ class MintingDelegationCollectRewardsTrigger(
       .yieldUnit()
       .map { _ =>
         logger.debug(
-          s"Collected ${couponsData.livenessActivityRecords.size} liveness activity records, " +
-            s"${couponsData.validatorRewardCoupons.size} validator reward coupons, " +
-            s"${couponsData.appRewardCoupons.size} app reward coupons, " +
-            s"${couponsData.rewardCouponsV2.size} reward coupons V2, " +
-            s"${couponsData.unclaimedActivityRecords.size} unclaimed activity records, " +
-            s"${couponsData.developmentFundCoupons.size} development fund coupons, " +
-            s"and merged ${amuletsToMerge.size} amulets for delegation ${delegation.contractId}"
+          show"Minted $couponsData and merged ${amuletsToMerge.size} amulets for delegation ${PrettyContractId(delegation)}"
         )
         true
       }
@@ -511,8 +517,7 @@ class MintingDelegationCollectRewardsTrigger(
           .yieldUnit()
           .map { _ =>
             logger.debug(
-              s"Assigned ${unassignedV2.size} V2 coupons to ${newBeneficiaries.size} beneficiaries " +
-                s"and minted rewards for delegation ${delegation.contractId}"
+              show"Assigned ${unassignedV2.size} V2 coupons to ${newBeneficiaries.size} beneficiaries, minted $mintCouponsData and merged ${amuletsToMerge.size} amulets for delegation ${PrettyContractId(delegation)}"
             )
             true
           }
