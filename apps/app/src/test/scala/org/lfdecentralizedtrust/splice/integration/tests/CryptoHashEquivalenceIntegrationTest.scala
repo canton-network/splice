@@ -153,6 +153,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         storage,
         updateHistory,
         appActivityRecordStore,
+        BigDecimal(0.001),
         loggerFactory,
       )
       rewardsHistoryId = updateHistory.historyId

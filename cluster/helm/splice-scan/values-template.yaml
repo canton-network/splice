@@ -36,8 +36,6 @@ persistence:
   # set to 1 if previously unset to re-ingest, increment by 1 to subsequently re-ingest, the TxLog store
   # txLogStoreDescriptorUserVersion:
 
-migration:
-  id: 0
 
 failOnAppVersionMismatch: true
 

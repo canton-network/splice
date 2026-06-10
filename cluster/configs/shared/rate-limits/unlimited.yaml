@@ -105,10 +105,6 @@ rateLimits:
     name: sv-voteresults
     type: unlimited
 
-  /api/scan/v0/activities:
-    name: activities
-    type: unlimited
-
   /api/scan/v0/amulet-price:
     name: amulet-price-votes
     type: unlimited

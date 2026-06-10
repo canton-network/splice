@@ -7,11 +7,10 @@ import cats.data.EitherT
 import cats.syntax.either.*
 import cats.syntax.functor.*
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{BatchAggregatorConfig, ProcessingTimeout, TopologyConfig}
 import com.digitalasset.canton.crypto.CryptoPureApi
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, UnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.sequencing.AsyncResult
 import com.digitalasset.canton.topology.*
@@ -25,9 +24,7 @@ import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.Ge
 import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.topology.transaction.checks.TopologyMappingChecks
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.Thereafter.syntax.*
 import com.digitalasset.canton.util.{EitherTUtil, MonadUtil}
-import com.digitalasset.canton.version.ProtocolVersion
 
 import scala.concurrent.ExecutionContext
 
@@ -112,10 +109,10 @@ class TopologyStateProcessorImpl private[processing] (
 
     type Lft = Seq[GenericValidatedTopologyTransaction]
 
-    val lockP = cache.acquireEvictionLock()
+    val (lock, unlockPromise) = cache.acquireEvictionLock()
     val ret = for {
       // synchronise with any pending cache eviction and lock the cache
-      _ <- EitherT.right(lockP)
+      _ <- EitherT.right(lock)
       // first, preload the currently existing state for the given transactions
       _ <- EitherT.right[Lft](preloadCaches(effective, transactions, storeIsEmpty))
 
@@ -193,11 +190,12 @@ class TopologyStateProcessorImpl private[processing] (
     ret
       .leftMap(_ -> AsyncResult.immediateUnit)
       .merge
-      .thereafter { _ =>
+      .transform { res =>
         // Unlock the Topology state cache eviction lock (cache is thread safe / eviction not)
-        lockP.map { promise =>
-          promise.outcome(()).discard
-        }.discard
+        unlockPromise
+          .complete(res.map(_ => UnlessShutdown.unit).recover(_ => UnlessShutdown.unit))
+          .discard
+        res
       }
   }
 
@@ -262,7 +260,7 @@ class TopologyStateProcessorImpl private[processing] (
       case PartyHostingLimits(_, _) => Set.empty
       case VettedPackages(_, _) => Set.empty
       case SynchronizerParametersState(_, _) => Set.empty
-      case DynamicSequencingParametersState(_, _) => Set.empty
+      case SequencingParametersState(_, _) => Set.empty
       case MediatorSynchronizerState(_, _, _, active, observers) =>
         (active.forgetNE ++ observers).map(mid => uidKey(Code.OwnerToKeyMapping, mid.uid)).toSet
       case SequencerSynchronizerState(_, _, active, observers) =>
@@ -311,21 +309,8 @@ class TopologyStateProcessorImpl private[processing] (
         TopologyTransactionRejection.Processor
           .SerialMismatch(actual = toValidate.serial, expected = expected),
       )
-    case None =>
-      val sloppyEnforcement =
-        store.storeId.forSynchronizer.exists(_.protocolVersion < ProtocolVersion.v35)
-      if (sloppyEnforcement)
-        Either.unit
-      else {
-        // starting with pv=35, we will require that newly added proposals start with serial 1
-        // topology transactions might start at a later point
-        Either.cond(
-          !toValidate.isProposal || toValidate.serial == PositiveInt.one,
-          (),
-          TopologyTransactionRejection.Processor
-            .SerialMismatch(actual = toValidate.serial, expected = PositiveInt.one),
-        )
-      }
+    // TODO(#32311): Re-enable validation that newly added proposals start with serial 1
+    case None => Either.unit
   }
 
   private def transactionIsAuthorized(
@@ -394,7 +379,6 @@ class TopologyStateProcessorImpl private[processing] (
       // subsequently activate the given transaction
       tx_mergedProposalSignatures <- EitherT.right(mergeWithPendingProposal(effective, txA))
       (isMerge, tx_deduplicatedAndMerged) = mergeSignatures(tx_inStore, tx_mergedProposalSignatures)
-      // Run mapping specific semantic checks
       _ <- topologyMappingChecks.checkTransaction(
         effective,
         tx_deduplicatedAndMerged,
@@ -477,6 +461,7 @@ object TopologyStateProcessor {
       topologyMappingChecksFactory: TopologyStateLookup => TopologyMappingChecks,
       pureCrypto: PureCrypto,
       timeouts: ProcessingTimeout,
+      futureSupervisor: FutureSupervisor,
       loggerFactoryParent: NamedLoggerFactory,
   )(implicit ec: ExecutionContext) =
     new TopologyStateProcessorImpl(
@@ -488,7 +473,7 @@ object TopologyStateProcessor {
         maxCacheSize = topologyConfig.maxTopologyStateCacheItems,
         enableConsistencyChecks = topologyConfig.enableTopologyStateCacheConsistencyChecks,
         metrics = TopologyStateWriteThroughCache.noOpCacheMetrics,
-        FutureSupervisor.Noop,
+        futureSupervisor,
         timeouts,
         loggerFactoryParent.append("purpose", "initial-validation"),
       ),

@@ -6,12 +6,13 @@ package org.lfdecentralizedtrust.splice.sv.automation
 import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
-import com.digitalasset.canton.config.{ClientConfig, NonNegativeDuration}
+import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.Mutex
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
@@ -21,8 +22,8 @@ import org.lfdecentralizedtrust.splice.automation.{
   SpliceAppAutomationService,
 }
 import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
-  aTrigger,
   TriggerClass,
+  aTrigger,
 }
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
@@ -32,7 +33,11 @@ import org.lfdecentralizedtrust.splice.config.{
 }
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BftScanConnection,
+  ScanConnection,
+  SingleScanConnection,
+}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -104,48 +109,133 @@ class SvDsoAutomationService(
       : org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.type =
     SvDsoAutomationService
 
-  // Shared long-lived connection to the SV's own scan, used by the reward triggers
-  private val scanConnectionF: Future[ScanConnection] = ScanConnection.singleUncached(
-    ScanAppClientConfig(NetworkAppClientConfig(config.scan.internalUrl)),
-    upgradesConfig,
-    clock,
-    retryProvider,
-    loggerFactory,
-    retryConnectionOnInitialFailure = true,
-  )
+  private val mutex = Mutex()
 
-  private val bftScanConnectionF: Future[BftScanConnection] =
-    BftScanConnection.peerScanConnection(
-      () =>
-        BftScanConnection.Bft.getPeerScansFromDsoRules(
-          dsoStore,
-          dsoStore.key.svParty,
-        )(tc, ec),
-      ledgerClient,
-      ScanAppClientConfig.DefaultScansRefreshInterval,
-      ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
-      upgradesConfig,
-      clock,
-      retryProvider,
-      loggerFactory,
-    )(ec, tc, mat, httpClient, templateJsonDecoder)
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
+  @volatile
+  private var ownScanConnectionF: Option[Future[SingleScanConnection]] = None
+
+  /** Returns a [[SingleScanConnection]] to the scan app of our own SV node.
+    *
+    * Note: a [[SingleScanConnection]] does not hold any significant resources, however,
+    * building it involves running a version compatibility check on the scan API,
+    * which can fail if scan is not ready and adds unnecessary overhead.
+    * We therefore create it lazily and cache the result once it succeeds.
+    *
+    * Do not store the result of this method in a long-lived variable,
+    * instead call it every time you need a connection to the local scan app.
+    */
+  private def getOrCreateOwnScanConnection()(implicit
+      tc: TraceContext
+  ): Future[SingleScanConnection] =
+    scala.concurrent.blocking {
+      mutex.exclusive {
+        ownScanConnectionF match {
+          case Some(future) if future.isCompleted && future.value.exists(_.isFailure) =>
+            logger.info(
+              s"Previous attempt to establish scan connection to own scan app failed, retrying..."
+            )
+            ownScanConnectionF = None
+          case _ => // do nothing
+        }
+        ownScanConnectionF match {
+          case Some(future) =>
+            future
+          case None =>
+            val future = ScanConnection
+              .singleUncached(
+                ScanAppClientConfig(NetworkAppClientConfig(config.scan.internalUrl)),
+                upgradesConfig,
+                clock,
+                retryProvider,
+                loggerFactory,
+                retryConnectionOnInitialFailure = false,
+              )
+            ownScanConnectionF = Some(future)
+            future
+        }
+      }
+    }
+
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
+  @volatile
+  private var peerScanConnectionF: Option[Future[BftScanConnection]] = None
+
+  /** Returns a [[BftScanConnection]] to the all peer scan apps, i.e.,
+    * to all scan apps except the scan app of our own SV node.
+    *
+    * Note: similar to [[getOrCreateOwnScanConnection]],
+    * we create the [[BftScanConnection]] lazily and cache the result once it succeeds,
+    * as building it involves running initialization code that can fail during startup.
+    *
+    * Do not store the result of this method in a long-lived variable,
+    * instead call it every time you need a BFT connection to peer scan apps.
+    */
+  private def getOrCreatePeerScanConnection()(implicit
+      tc: TraceContext
+  ): Future[BftScanConnection] =
+    scala.concurrent.blocking {
+      mutex.exclusive {
+        peerScanConnectionF match {
+          case Some(future) if future.isCompleted && future.value.exists(_.isFailure) =>
+            logger.info(
+              s"Previous attempt to establish bft scan connection to peer scan apps failed, retrying..."
+            )
+            peerScanConnectionF = None
+          case _ => // do nothing
+        }
+        peerScanConnectionF match {
+          case Some(future) =>
+            future
+          case None =>
+            val future = BftScanConnection
+              .peerScanConnection(
+                () =>
+                  BftScanConnection.Bft.getPeerScansFromDsoRules(
+                    dsoStore,
+                    dsoStore.key.svParty,
+                  )(tc, ec),
+                ledgerClient,
+                ScanAppClientConfig.DefaultScansRefreshInterval,
+                ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
+                upgradesConfig,
+                clock,
+                retryProvider,
+                loggerFactory,
+              )(ec, tc, mat, httpClient, templateJsonDecoder)
+            peerScanConnectionF = Some(future)
+            future
+        }
+      }
+    }
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    super.closeAsync() :+ AsyncCloseable(
-      "scan-connection",
-      scanConnectionF.transform {
-        case scala.util.Success(c) => scala.util.Try(c.close())
-        case scala.util.Failure(_) => scala.util.Success(())
-      },
-      NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
-    ) :+ AsyncCloseable(
-      "bft-scan-connection",
-      bftScanConnectionF.transform {
-        case scala.util.Success(c) => scala.util.Try(c.close())
-        case scala.util.Failure(_) => scala.util.Success(())
-      },
-      timeouts.shutdownNetwork,
-    )
+    super.closeAsync() ++
+      // super.closeAsync() waits for all triggers to close, so we do not need to worry
+      // about synchronization when closing the scan connections here.
+      ownScanConnectionF
+        .map(connectionF =>
+          AsyncCloseable(
+            "scan-connection",
+            connectionF.transform {
+              case scala.util.Success(c) => scala.util.Try(c.close())
+              case scala.util.Failure(_) => scala.util.Success(())
+            },
+            timeouts.shutdownNetwork,
+          )
+        )
+        .toList ++ peerScanConnectionF
+        .map(connectionF =>
+          AsyncCloseable(
+            "bft-scan-connection",
+            connectionF.transform {
+              case scala.util.Success(c) => scala.util.Try(c.close())
+              case scala.util.Failure(_) => scala.util.Success(())
+            },
+            timeouts.shutdownNetwork,
+          )
+        )
+        .toList
 
   private val packageVettingService = new PackageVettingLookupService(
     config.packageVettingCache,
@@ -172,8 +262,8 @@ class SvDsoAutomationService(
       retryProvider,
       packageVersionSupport,
       packageVettingService,
-      scanConnectionF,
-      bftScanConnectionF,
+      () => getOrCreateOwnScanConnection(),
+      () => getOrCreatePeerScanConnection(),
     )
 
   // required for triggers that must run in sim time as well
@@ -415,8 +505,8 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
-        scanConnectionF,
-        bftScanConnectionF,
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
       )
     )
 
@@ -425,8 +515,8 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
-        scanConnectionF,
-        bftScanConnectionF,
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
       )
     )
 

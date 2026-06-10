@@ -81,9 +81,11 @@ spec:
               tx-log-backfill-batch-size = "{{ .batchSize }}"
             }
         {{- end }}
-        - name: ADDITIONAL_CONFIG_MIGRATION_ID
+        {{- with .Values.sponsorScanUrl }}
+        - name: ADDITIONAL_CONFIG_SPONSOR_SCAN_URL
           value: |
-            canton.scan-apps.scan-app.domain-migration-id = {{ .Values.migration.id }}
+            canton.scan-apps.scan-app.sponsor-scan-url.url = "{{ . }}"
+        {{- end }}
         {{- if .Values.synchronizers }}
         {{- with .Values.synchronizers.current.bftSequencerConfig }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_CURRENT

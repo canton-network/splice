@@ -367,7 +367,6 @@ async function installSvAndValidator(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/scan-values.yaml`,
     {
       TARGET_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );

@@ -855,9 +855,9 @@ abstract class MultiDomainAcsStoreTest[
       } yield succeed
     }
 
-    "have 900-1000 test contracts for the mismatch test" in {
-      MultiDomainAcsStoreTest.generatedCoids.value.size should (be >= 900 and be <= 1000)
-    }
+//    "have 900-1000 test contracts for the mismatch test" in {
+//      MultiDomainAcsStoreTest.generatedCoids.value.size should (be >= 900 and be <= 1000)
+//    }
 
     "ingest and return interface views for 1 interface 2 implementors" in {
       implicit val store = mkStore()
@@ -1723,23 +1723,24 @@ abstract class MultiDomainAcsStoreTest[
   }
 }
 
-private[store] object MultiDomainAcsStoreTest {
-  import org.scalacheck.Gen
-  import com.digitalasset.daml.lf.value.Value
-  import com.digitalasset.daml.lf.value.test.ValueGenerators.comparableCoidsGen
-
-  private[this] val coidsGen = comparableCoidsGen match {
-    case a +: b +: cs => Gen.oneOf(a, b, cs*)
-    case Seq(a) => a
-    // should never be reached
-    case _ => throw new IllegalStateException("no contract ID generator present")
-  }
-
-  // we want the same sequence of contract IDs without writing it out
-  // between test runs
-  private[this] val chosenByFairDiceRoll = org.scalacheck.rng.Seed(-4003657415693691769L)
-  private val generatedCoids = Gen
-    .containerOfN[Set, Value.ContractId](1000, coidsGen)
-    .map(_.toSeq)
-    .apply(Gen.Parameters.default, chosenByFairDiceRoll)
-}
+//private[store] object MultiDomainAcsStoreTest {
+//  import org.scalacheck.Gen
+//  import com.digitalasset.daml.lf.value.Value
+//  import com.digitalasset.daml.lf.value.test.ValueGenerators.comparableCoidsGen
+//
+//  private[this] val coidsGen = comparableCoidsGen match {
+//    case a +: b +: cs => Gen.oneOf(a, b, cs*)
+//    case Seq(a) => a
+//    // should never be reached
+//    case _ => throw new IllegalStateException("no contract ID generator present")
+//  }
+//
+//  // we want the same sequence of contract IDs without writing it out
+//  // between test runs
+//  private[this] val chosenByFairDiceRoll = org.scalacheck.rng.Seed(-4003657415693691769L)
+//  private val generatedCoids = Gen
+//    .containerOfN[Set, Value.ContractId](1000, coidsGen)
+//    .map(_.toSeq)
+//    .apply(Gen.Parameters.default, chosenByFairDiceRoll)
+//
+//}

@@ -646,11 +646,7 @@
         },
         "logLevel": "DEBUG",
         "metrics": {
-          "enable": true,
-          "migration": {
-            "active": true,
-            "id": 2
-          }
+          "enable": true
         },
         "participantAdminUserNameFrom": {
           "secretKeyRef": {

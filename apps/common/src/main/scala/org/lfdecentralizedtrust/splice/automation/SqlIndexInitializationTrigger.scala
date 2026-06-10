@@ -221,7 +221,7 @@ object SqlIndexInitializationTrigger {
     /** Create this index if it does not exist. */
     final case class Create(
         indexName: String,
-        createAction: DBIOAction[?, NoStream, Effect.Write & Effect.Transactional],
+        createAction: DBIOAction[Int, NoStream, Effect.Write & Effect.Transactional],
     ) extends IndexAction
   }
 

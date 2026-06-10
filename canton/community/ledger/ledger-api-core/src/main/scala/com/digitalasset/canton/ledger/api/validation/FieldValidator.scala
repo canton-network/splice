@@ -24,7 +24,9 @@ import com.digitalasset.canton.topology.{
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.data.Ref.{Party, TypeConRef}
 import com.digitalasset.daml.lf.value.Value.ContractId
+import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
+import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 
 import scala.util.{Failure, Success, Try}
 
@@ -298,6 +300,18 @@ object FieldValidator {
       case Right(_) => Right(annotations)
     }
 
+  def validatePageSize(limit: Int, defaultPageSize: Int, value: Option[Int])(implicit
+      errorLogger: ErrorLoggingContext
+  ): Either[StatusRuntimeException, Int] =
+    value match {
+      case Some(pageSize) if pageSize > 0 && pageSize <= limit => Right(pageSize)
+      case Some(pageSize) if pageSize <= 0 =>
+        Left(invalidArgument(s"Requested page size must be positive, but got $pageSize"))
+      case Some(pageSize) =>
+        Left(invalidArgument(s"Requested page size must not exceed $limit, but got $pageSize"))
+      case None => Right(defaultPageSize)
+    }
+
   def validateOptional[T, U](t: Option[T])(
       validation: T => Either[StatusRuntimeException, U]
   ): Either[StatusRuntimeException, Option[U]] =
@@ -309,5 +323,18 @@ object FieldValidator {
       errorLogger: ErrorLoggingContext
   ): Either[StatusRuntimeException, U] =
     t.map(validation).getOrElse(Left(missingField(fieldName)))
+
+  def validateProtobufEncodedField[T <: GeneratedMessage](
+      byteString: ByteString,
+      companion: GeneratedMessageCompanion[T],
+      fieldName: String,
+      errorMessage: String,
+  )(implicit errorLoggingContext: ErrorLoggingContext): Either[StatusRuntimeException, T] =
+    Try(companion.parseFrom(byteString.toByteArray)).toEither.left.map(_ =>
+      ValidationErrors.invalidField(
+        fieldName = fieldName,
+        message = errorMessage,
+      )
+    )
 
 }

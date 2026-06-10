@@ -22,7 +22,7 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round as roundCodegen
-import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, SharedSpliceAppParameters}
 import org.lfdecentralizedtrust.splice.environment.{
   BaseLedgerConnection,
   DarResources,
@@ -58,7 +58,7 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   ScanVerdictAutomationService,
 }
 import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.SingleScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.{
   ScanAppBackendConfig,
   ScanAppClientConfig,
@@ -285,7 +285,13 @@ class ScanApp(
           )
         } else None
       appRewardsStoreO = appActivityRecordStoreO.map(appActivityRecordStore =>
-        new DbScanAppRewardsStore(storage, updateHistory, appActivityRecordStore, loggerFactory)
+        new DbScanAppRewardsStore(
+          storage,
+          updateHistory,
+          appActivityRecordStore,
+          config.rewardMintingAllowanceTolerance,
+          loggerFactory,
+        )
       )
       synchronizerId <-
         retryProvider.getValueWithRetries(
@@ -349,22 +355,6 @@ class ScanApp(
         dsoParty,
         config.spliceInstanceNames.nameServiceNameAcronym.toLowerCase(),
       )
-      _ <- config.domainMigrationId match {
-        case Some(configuredMigrationId) =>
-          appInitStep("Verifying configured domain migration id is in sync with other scans") {
-            verifyConfiguredMigrationIdWithPeers(
-              configuredMigrationId,
-              store,
-              svName,
-              ledgerClient,
-            )(
-              tc,
-              Materializer(ac),
-            )
-          }
-        case None =>
-          Future.unit
-      }
       rewardsReferenceStoreO =
         if (config.enableAppActivityRecordAndTrafficIngestion) {
           val rewardsStore = ScanRewardsReferenceStore(
@@ -559,81 +549,52 @@ class ScanApp(
   }
 
   private def resolveDomainMigrationId()(implicit tc: TraceContext): Future[Long] =
-    DbAppStore.getHighestKnownMigrationId(storage).map {
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
       case Some(migrationId) =>
         logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
-        migrationId
+        Future.successful(migrationId)
+      case None if config.isFirstSv =>
+        logger.info("Resolved domain migration id 0 for the founding scan")
+        Future.successful(0L)
       case None =>
-        config.domainMigrationId match {
-          case Some(migrationId) =>
-            logger.info(s"Resolved domain migration id $migrationId from the config")
-            migrationId
-          case None =>
-            throw Status.FAILED_PRECONDITION
-              .withDescription(
-                "No migration id found in the DB and none configured. " +
-                  "Set `domain-migration-id` in the scan config to bootstrap this node."
+        config.sponsorScanUrl match {
+          case Some(sponsorScanUrl) =>
+            migrationIdFromSponsorScan(sponsorScanUrl).map { migrationId =>
+              logger.info(
+                s"Resolved domain migration id $migrationId from the sponsor scan $sponsorScanUrl"
               )
-              .asRuntimeException()
+              migrationId
+            }
+          case None =>
+            Future.failed(
+              Status.FAILED_PRECONDITION
+                .withDescription(
+                  "No migration id found in the DB and no sponsor scan configured. " +
+                    "Set `sponsor-scan-url` in the scan config to bootstrap this node."
+                )
+                .asRuntimeException()
+            )
         }
     }
 
-  private def verifyConfiguredMigrationIdWithPeers(
-      configuredMigrationId: Long,
-      store: ScanStore,
-      svName: String,
-      ledgerClient: SpliceLedgerClient,
-  )(implicit tc: TraceContext, mat: Materializer): Future[Unit] =
-    if (config.isFirstSv) {
-      logger.info(
-        s"This is the founder scan; skipping verification of configured domain migration id $configuredMigrationId"
+  private def migrationIdFromSponsorScan(
+      sponsorScanUrl: NetworkAppClientConfig
+  )(implicit tc: TraceContext): Future[Long] =
+    SingleScanConnection.withSingleScanConnection(
+      ScanAppClientConfig(adminApi = sponsorScanUrl),
+      amuletAppParameters.upgradesConfig,
+      clock,
+      retryProvider,
+      loggerFactory,
+    ) { connection =>
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "get_migration_id",
+        "Getting migration id from sponsor scan",
+        connection.getMigrationId(),
+        logger,
       )
-      Future.unit
-    } else {
-      logger.info(
-        s"Verifying configured domain migration id $configuredMigrationId against the peer scans"
-      )
-      BftScanConnection
-        .peerScanConnection(
-          () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
-          ledgerClient,
-          scansRefreshInterval = config.automation.pollingInterval,
-          amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
-          amuletAppParameters.upgradesConfig,
-          clock,
-          retryProvider,
-          loggerFactory,
-        )
-        .flatMap { peerScanConnection =>
-          retryProvider
-            .getValueWithRetries(
-              RetryFor.WaitingOnInitDependency,
-              "migration_id_from_peers",
-              "domain migration id from peer scans",
-              peerScanConnection
-                .getMigrationId(),
-              logger,
-            )
-            .transform { result =>
-              peerScanConnection.close()
-              result
-            }
-        }
-        .map { peerMigrationId =>
-          if (peerMigrationId != configuredMigrationId) {
-            throw Status.FAILED_PRECONDITION
-              .withDescription(
-                s"Configured domain migration id $configuredMigrationId is out of sync with the " +
-                  s"other scans, which agree on migration id $peerMigrationId. " +
-                  "Fix `domain-migration-id` in the scan config to match the network."
-              )
-              .asRuntimeException()
-          }
-          logger.info(
-            s"Configured domain migration id $configuredMigrationId is in sync with the peer scans"
-          )
-        }
-    }
+    }(ec, tc, Materializer(ac), httpClient, templateDecoder)
 
   override lazy val ports = Map("admin" -> config.adminApi.port)
 

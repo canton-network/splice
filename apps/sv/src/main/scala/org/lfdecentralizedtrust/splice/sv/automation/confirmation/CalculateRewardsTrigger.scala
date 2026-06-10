@@ -41,8 +41,8 @@ abstract class CalculateRewardsTriggerBase(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -155,7 +155,7 @@ abstract class CalculateRewardsTriggerBase(
 
     def bftReadRootHash: Future[Hash] = {
       for {
-        bftScan <- bftScanConnectionF
+        bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)
       } yield response match {
         case RewardAccountingRootHashOk(ok) =>
@@ -166,7 +166,7 @@ abstract class CalculateRewardsTriggerBase(
     }
 
     for {
-      ownScan <- scanConnectionF
+      ownScan <- getOwnScanConnection()
       response <- ownScan.getRewardAccountingRootHash(round)
       rootHash <- response match {
         case RewardAccountingRootHashOk(ok) => Future.successful(new Hash(ok.rootHash))
@@ -196,8 +196,8 @@ class CalculateRewardsTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -206,8 +206,8 @@ class CalculateRewardsTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = false,
     )
 
@@ -215,8 +215,8 @@ class CalculateRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -225,8 +225,8 @@ class CalculateRewardsDryRunTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = true,
     )
 

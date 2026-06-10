@@ -475,7 +475,6 @@ object BuildCommon {
         libraryDependencies ++= Seq(
           auth0_java,
           auth0_jwks,
-          daml_test_evidence_generator_scalatest % Test,
           scalatest % Test,
           scalaz_core,
           slf4j_api,
@@ -681,7 +680,7 @@ object BuildCommon {
           scalaVersion,
           sbtVersion,
           BuildInfoKey("damlLibrariesVersion" -> CantonDependencies.daml_libraries_version),
-          BuildInfoKey("stableProtocolVersions" -> List("34")),
+          BuildInfoKey("stableProtocolVersions" -> List("34", "35")),
           BuildInfoKey("betaProtocolVersions" -> List()),
         ),
         buildInfoPackage := "com.digitalasset.canton.buildinfo",
@@ -731,6 +730,7 @@ object BuildCommon {
           scalatestScalacheck,
           testcontainers,
           testcontainers_postgresql,
+          daml_testing_utils,
         ),
 
         // This library contains a lot of testing helpers that previously existing in testing scope
@@ -844,10 +844,6 @@ object BuildCommon {
           magnolify_scalacheck % Test,
           magnolify_shared % Test,
           daml_lf_transaction % Test,
-          daml_lf_transaction_test_lib % Test,
-          daml_test_evidence_tag % Test,
-          daml_test_evidence_scalatest % Test,
-          daml_test_evidence_generator_scalatest % Test,
           better_files,
           cats,
           cats_law % Test,

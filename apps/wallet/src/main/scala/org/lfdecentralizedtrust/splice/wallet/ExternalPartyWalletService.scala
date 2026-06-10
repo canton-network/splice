@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
@@ -35,6 +36,7 @@ class ExternalPartyWalletService(
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -68,6 +70,7 @@ class ExternalPartyWalletService(
     scanConnection,
     loggerFactory,
     packageVersionSupport,
+    rewardSharingConfig,
   )
 
   override def onClosed(): Unit = {

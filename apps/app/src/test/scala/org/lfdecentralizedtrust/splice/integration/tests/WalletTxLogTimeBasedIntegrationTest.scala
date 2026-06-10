@@ -30,7 +30,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
-import org.lfdecentralizedtrust.splice.http.v0.definitions.Transfer.TransferKind
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem
@@ -530,17 +529,6 @@ class WalletTxLogTimeBasedIntegrationTest
               }
             ),
           )
-
-          inside(sv1ScanBackend.listActivity(None, 10).flatMap(_.transfer)) { case transfers =>
-            forExactly(1, transfers) { transfer =>
-              transfer.transferKind shouldBe Some(TransferKind.CreateTransferInstruction)
-              transfer.transferInstructionReceiver shouldBe Some(bobParty.toProtoPrimitive)
-              transfer.sender.party shouldBe aliceParty.toProtoPrimitive
-              BigDecimal(transfer.sender.senderChangeAmount) should be <= BigDecimal(
-                tapAmount - transferAmount
-              )
-            }
-          }
         }
     }
   }

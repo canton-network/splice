@@ -27,8 +27,8 @@ class DsoDelegateBasedAutomationService(
     domainTimeSync: DomainTimeSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
@@ -177,16 +177,16 @@ class DsoDelegateBasedAutomationService(
       new ProcessRewardsTrigger(
         triggerContext,
         svTaskContext,
-        scanConnectionF,
-        bftScanConnectionF,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
       )
     )
     registerTrigger(
       new ProcessRewardsDryRunTrigger(
         triggerContext,
         svTaskContext,
-        scanConnectionF,
-        bftScanConnectionF,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
       )
     )
   }

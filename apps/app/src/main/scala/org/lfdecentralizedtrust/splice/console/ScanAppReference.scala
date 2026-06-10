@@ -381,16 +381,6 @@ abstract class ScanAppReference(
       )
     }
 
-  def listActivity(
-      pageEndEventId: Option[String],
-      pageSize: Int,
-  ): Seq[TransactionHistoryResponseItem] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListTransactions(pageEndEventId, SortOrder.Desc, pageSize)
-      )
-    }
-
   def getAcsSnapshot(party: PartyId, recordTime: Option[Instant]): ByteString =
     consoleEnvironment.run {
       httpCommand(

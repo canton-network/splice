@@ -15,7 +15,6 @@ import com.digitalasset.canton.config.{
   ApiLoggingConfig,
   CantonConfig,
   CantonFeatures,
-  ClockConfig,
   DefaultPorts,
   LoggingConfig,
   MonitoringConfig,
@@ -27,26 +26,23 @@ import com.digitalasset.canton.console.{
   InstanceReference,
   TestConsoleOutput,
 }
-import com.digitalasset.canton.environment.{
-  CantonEnvironment,
-  CantonNode,
-  CommunityEnvironmentFactory,
-}
+import com.digitalasset.canton.environment.CantonNode
 import com.digitalasset.canton.integration.bootstrap.{
-  InitializedSynchronizer,
   NetworkBootstrapper,
   NetworkTopologyDescription,
 }
+import com.digitalasset.canton.integration.util.TrafficControlUtils
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.config.ParticipantNodeConfig
 import com.digitalasset.canton.synchronizer.mediator.MediatorNodeConfig
 import com.digitalasset.canton.synchronizer.sequencer.config.SequencerNodeConfig
 import com.digitalasset.canton.tracing.TracingConfig
 import com.digitalasset.canton.tracing.TracingConfig.Propagation
-import com.digitalasset.canton.{BaseTest, SynchronizerAlias, config}
+import com.digitalasset.canton.{BaseTest, SynchronizerAlias}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import monocle.macros.syntax.lens.*
+import com.digitalasset.canton.environment.{CantonEnvironment, CommunityEnvironmentFactory}
 
 /** Definition of how a environment should be configured and setup.
   * @param baseConfig
@@ -64,7 +60,7 @@ import monocle.macros.syntax.lens.*
 final case class EnvironmentDefinition(
     override val baseConfig: CantonConfig,
     override val testingConfig: TestingConfigInternal =
-      TestingConfigInternal(warnOnAcsCommitmentDegradation = false),
+      TestingConfigInternal(warnOnAcsCommitmentDegradation = false, warnOnJwtScopeUsage = false),
     override val setups: List[TestConsoleEnvironment[CantonConfig, CantonEnvironment] => Unit] =
       Nil,
     override val teardown: Unit => Unit = _ => (),
@@ -104,90 +100,13 @@ final case class EnvironmentDefinition(
       disableCommitments: Boolean = false,
   ): EnvironmentDefinition =
     withSetup { implicit env =>
-      import env.*
-
-      val isSimClock = env.actualConfig.parameters.clock match {
-        case ClockConfig.SimClock => true
-        case _ => false
-      }
-
-      // We first do all updates async
-      runOnEachInitializedSynchronizer { sync =>
-        // If we're not in simclock, wait for synchronizer owners to catch up with a recent wall clock time
-        if (!isSimClock) {
-          sync.synchronizerOwners
-            .collect { case owner: InstanceReference with BaseInspection[CantonNode] =>
-              owner
-            }
-            .foreach(syncSynchronizerOwnersTime)
-        }
-
-        sync.synchronizerOwners.foreach {
-          _.topology.synchronizer_parameters.propose_update(
-            synchronizerId = sync.synchronizerId,
-            original =>
-              original.update(
-                trafficControl = Some(trafficControlParameters),
-                reconciliationInterval =
-                  if (disableCommitments) config.PositiveDurationSeconds.ofDays(365)
-                  else original.reconciliationInterval,
-              ),
-            // Don't synchronize here to run the updates in parallel to speed it up
-            synchronize = None,
-          )
-        }
-      }
-
-      // And then check on all synchronizers that traffic is enabled, to speed things up
-      utils.retry_until_true {
-        runOnEachInitializedSynchronizer { sync =>
-          sync.allSequencerOwners.forall(
-            _.topology.synchronizer_parameters
-              .latest(sync.physicalSynchronizerId)
-              .trafficControl
-              .isDefined
-          )
-        }.forall(_ == true)
-      }
-
-      // Top up members if requested, in the same way (first send all top up requests async,
-      // then wait for all of them to be effective)
-      if (topUpAllMembers) {
-        runOnEachInitializedSynchronizer { sync =>
-          val allPayingMembers =
-            sync.allActiveMediators.map(_.member) ++ sync.allParticipants.map(_.member)
-
-          allPayingMembers.foreach { member =>
-            sync.allSequencerOwners.foreach {
-              _.traffic_control.set_traffic_balance(
-                member,
-                PositiveInt.one,
-                NonNegativeLong.maxValue,
-              )
-            }
-          }
-        }
-
-        utils.retry_until_true {
-          runOnEachInitializedSynchronizer { sync =>
-            val allPayingMembers =
-              sync.allActiveMediators.map(_.member) ++ sync.allParticipants.map(_.member)
-
-            val traffic = sync.allSequencerOwners.head.traffic_control
-              .traffic_state_of_members_approximate(allPayingMembers)
-              .trafficStates
-            traffic.sizeIs == allPayingMembers.size && traffic.values.forall(
-              _.extraTrafficPurchased == NonNegativeLong.maxValue
-            )
-          }.forall(_ == true)
-        }
-      }
+      TrafficControlUtils.applyTrafficControl(
+        syncSynchronizerOwnersTime,
+        trafficControlParameters,
+        topUpAllMembers,
+        disableCommitments,
+      )
     }
-
-  private def runOnEachInitializedSynchronizer[T](f: InitializedSynchronizer => T)(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
-  ): List[T] =
-    env.initializedSynchronizers.values.toList.map(f)
 
   def withSetup(
       setup: TestConsoleEnvironment[CantonConfig, CantonEnvironment] => Unit
@@ -712,6 +631,13 @@ object EnvironmentDefinition extends LazyLogging {
     buildBaseEnvironmentDefinition(
       numParticipants = 1,
       numSequencers = 2,
+      numMediators = 2,
+    )
+
+  lazy val P3S4M2_Config: EnvironmentDefinition =
+    buildBaseEnvironmentDefinition(
+      numParticipants = 3,
+      numSequencers = 4,
       numMediators = 2,
     )
 

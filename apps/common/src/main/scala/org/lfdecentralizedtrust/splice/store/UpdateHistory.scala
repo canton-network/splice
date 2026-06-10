@@ -889,6 +889,12 @@ class UpdateHistory(
         .update(
           deleteAction.transactionally,
           "deleteUpdatesForTable",
+        )(
+          implicitly,
+          implicitly,
+          { case (n1, n2, n3, n4, n5) =>
+            Seq(n1, n2, n3, n4, n5).exists(_ > 0)
+          },
         )
     } yield (
       logger.info(
@@ -2319,7 +2325,7 @@ class UpdateHistory(
         .queryAndUpdate(
           action.transactionally,
           "destinationHistory.insert",
-        )
+        )(implicitly, implicitly, _ => false)
         .map { nonEmpty =>
           nonEmpty
         }

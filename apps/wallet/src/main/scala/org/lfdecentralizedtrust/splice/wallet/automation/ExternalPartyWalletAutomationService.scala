@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
@@ -33,6 +34,7 @@ class ExternalPartyWalletAutomationService(
     scanConnection: BftScanConnection,
     override protected val loggerFactory: NamedLoggerFactory,
     packageVersionSupport: PackageVersionSupport,
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -64,6 +66,7 @@ class ExternalPartyWalletAutomationService(
       store,
       scanConnection,
       connection(SpliceLedgerConnectionPriority.Low),
+      rewardSharingConfig,
     )
   )
 }
