@@ -161,36 +161,30 @@ class MintingDelegationCollectRewardsTrigger(
     val amuletsToMerge = selectAmuletsToMerge(amulets, mintInputs.delegation)
     val shouldMergeAmulets = amuletsToMerge.nonEmpty
 
-    if (rewardSharingConfig.beneficiaries.isEmpty) {
-      // No beneficiaries — mint everything including unassigned V2
-      if (filteredCouponsData.hasRewards || shouldMergeAmulets) {
-        performMint(buildMintSubmissionData(mintInputs, filteredCouponsData, amuletsToMerge))
-      } else {
-        Future.successful(false)
-      }
+    // Without sharing config, all V2 coupons are mintable directly.
+    // With sharing config, only assigned-to-us V2 coupons are mintable;
+    // unassigned ones need sharing first.
+    val hasBeneficiaries = rewardSharingConfig.beneficiaries.nonEmpty
+    val (unassignedV2, mintableV2) =
+      if (hasBeneficiaries)
+        filteredCouponsData.rewardCouponsV2.partition(_.payload.beneficiary.isEmpty)
+      else
+        (Seq.empty, filteredCouponsData.rewardCouponsV2)
+    val couponsToMint = filteredCouponsData.copy(rewardCouponsV2 = mintableV2)
 
+    // Share when the TTL threshold is reached, or batch sharing with
+    // amulet merging to reduce traffic costs by combining both in one transaction.
+    val shouldAssign = unassignedV2.nonEmpty &&
+      (shouldShareNow(unassignedV2, rewardSharingConfig) || shouldMergeAmulets)
+
+    val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
+    if (shouldAssign) {
+      performAssignAndMint(submission, unassignedV2, rewardSharingConfig)
+    } else if (couponsToMint.hasRewards || shouldMergeAmulets) {
+      performMint(submission)
     } else {
-      // Has beneficiaries — partition V2 coupons: unassigned vs assigned-to-us
-      val (unassignedV2, assignedV2) = filteredCouponsData.rewardCouponsV2.partition(
-        _.payload.beneficiary.isEmpty
-      )
-      val mintCouponsData = filteredCouponsData.copy(rewardCouponsV2 = assignedV2)
-      // Assign beneficiaries to unassigned V2 coupons when either:
-      // - the TTL threshold is reached (coupon is close to expiry), or
-      // - amulets need merging, in which case we include the assignment
-      //   in the same transaction to save traffic cost rather than
-      //   waiting for the TTL threshold and submitting separately.
-      val shouldAssign = unassignedV2.nonEmpty &&
-        (shouldMergeAmulets || shouldShareNow(unassignedV2, rewardSharingConfig))
-
-      val submission = buildMintSubmissionData(mintInputs, mintCouponsData, amuletsToMerge)
-      if (shouldAssign) {
-        performAssignAndMint(submission, unassignedV2, rewardSharingConfig)
-      } else if (mintCouponsData.hasRewards || shouldMergeAmulets) {
-        performMint(submission)
-      } else {
-        Future.successful(false)
-      }
+      // Nothing to do: no rewards to mint, coupons to assign, or amulets to merge
+      Future.successful(false)
     }
   }
 
