@@ -18,8 +18,6 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 }
 
 import java.time.Duration
-import java.util.Optional
-import scala.jdk.CollectionConverters.*
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class RewardSharingTimeBasedIntegrationTest
@@ -85,18 +83,9 @@ class RewardSharingTimeBasedIntegrationTest
         .futureValue
 
     clue("Create unassigned RewardCouponV2 for alice's validator") {
-      val openRound = sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now)
-      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
-        actAs = Seq(dsoParty),
-        commands = new RewardCouponV2(
-          dsoParty.toProtoPrimitive,
-          aliceValidatorParty.toProtoPrimitive,
-          openRound.payload.round,
-          BigDecimal(10.0).bigDecimal,
-          env.environment.clock.now.plus(Duration.ofHours(36)).toInstant,
-          true,
-          Optional.empty(),
-        ).create.commands.asScala.toSeq,
+      createRewardCouponsV2(
+        Seq((aliceValidatorParty, BigDecimal(10.0), None)),
+        ttl = Duration.ofHours(36),
       )
     }
 
