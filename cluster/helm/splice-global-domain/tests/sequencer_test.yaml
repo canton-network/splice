@@ -270,7 +270,7 @@ tests:
             secretName: custom-pg-secret
             databaseName: custom_bft_db
             user: custom-user
-            initImage: "postgres:14"
+            initImageName: "postgres:14"
     documentSelector:
       path: kind
       value: Deployment
