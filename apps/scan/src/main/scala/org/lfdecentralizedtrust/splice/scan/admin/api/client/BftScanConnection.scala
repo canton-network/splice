@@ -683,8 +683,8 @@ class BftScanConnection(
   )
 
   def getTransferInstructionRejectContextV2Raw(
-    instructionCid: String,
-    body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
   )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
     _.getTransferInstructionRejectContextV2Raw(instructionCid, body),
     "getTransferInstructionRejectContextV2Raw",
@@ -699,8 +699,8 @@ class BftScanConnection(
   )
 
   def getTransferInstructionWithdrawContextV2Raw(
-    instructionCid: String,
-    body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
   )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
     _.getTransferInstructionWithdrawContextV2Raw(instructionCid, body),
     "getTransferInstructionWithdrawContextV2Raw",
@@ -758,7 +758,8 @@ class BftScanConnection(
 
   def getSettlementFactoryRaw(
       body: allocation.v2.definitions.GetFactoryRequest
-  )(implicit ec: ExecutionContext, tc: TraceContext) = bftCall(_.getSettlementFactoryRaw(body), "getSettlementFactoryRaw")
+  )(implicit ec: ExecutionContext, tc: TraceContext) =
+    bftCall(_.getSettlementFactoryRaw(body), "getSettlementFactoryRaw")
 
   def getAllocationV2CancelContextRaw(
       allocationId: String,
@@ -859,20 +860,22 @@ class BftScanConnection(
     bftCall(_.getAllocationFactoryRaw(arg), "getAllocationFactoryRaw")
 
   def getAllocationInstructionAcceptContextRaw(
-    allocationInstructionCid: String,
-    body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
-  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] = bftCall(
-    _.getAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
-    "getAllocationInstructionAcceptContextRaw",
-  )
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
+      "getAllocationInstructionAcceptContextRaw",
+    )
 
   def getAllocationInstructionWithdrawContext(
-    allocationInstructionCid: String,
-    body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
-  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] = bftCall(
-    _.getAllocationInstructionWithdrawContext(allocationInstructionCid, body),
-    "getAllocationInstructionWithdrawContext",
-  )
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationInstructionWithdrawContext(allocationInstructionCid, body),
+      "getAllocationInstructionWithdrawContext",
+    )
 
   private def bftCall[T](
       call: SingleScanConnection => Future[T],
