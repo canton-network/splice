@@ -253,8 +253,22 @@ class ScanVerdictIngestionService(
           case None => Future.successful(Seq.empty)
         }
 
+        lastArchivedRoundO <- appActivityComputationO match {
+          case Some(appActivityComputation) =>
+            items.map(_._1.recordTime).maxOption match {
+              case Some(maxRecordTime) =>
+                appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
+              case None => Future.successful(None)
+            }
+          case None => Future.successful(None)
+        }
+
         _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
-        _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
+        _ <- store.insertVerdictsWithAppActivityRecords(
+          items,
+          appActivityRecords,
+          lastArchivedRoundO,
+        )
       } yield {
         val lastRecordTime = verdicts.lastOption
           .flatMap(v => CantonTimestamp.fromProtoTimestamp(v.getRecordTime).toOption)
