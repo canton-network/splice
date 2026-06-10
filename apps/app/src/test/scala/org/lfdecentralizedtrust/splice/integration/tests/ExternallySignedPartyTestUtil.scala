@@ -328,6 +328,14 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     * runtime, but some test configs (e.g. `rewardSharingConfigByParty`) require
     * the party ID at config transform time — before participants start.
     *
+    * The key generation, DER encoding, and fingerprint computation replicate
+    * Canton's `JcePrivateCrypto` logic using BouncyCastle directly, since
+    * Canton's key generation APIs are `private[crypto]`. Specifically:
+    * - Fingerprint: `Fingerprint.create` = SHA-256 of raw public key bytes
+    *   (see `CryptoKeys.scala` and `Signing.scala:getDataForFingerprint`)
+    * - Private key: PKCS#8 DER (see `JcePrivateCrypto.encodeEd25519PrivateKey`)
+    * - Key pair proto: `v30.SigningKeyPair` (see `SigningKeyPair.fromProtoV30`)
+    *
     * Use the returned [[PreGeneratedParty]] in config transforms to reference
     * the party ID, then call [[onboardExternalParty]] with it at test time.
     */
