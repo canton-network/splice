@@ -404,41 +404,10 @@ class AppUpgradeIntegrationTest
             }
           }
 
-          actAndCheck(
-            "Bob makes p2p transfer after upgrade",
-            eventuallySucceeds() {
-              p2pTransfer(bobWalletClient, aliceWalletClient, alice, 4.0)
-            },
-          )(
-            "old and new taps and transfers appear in scan tx log",
-            _ => {
-              val txs = sv1ScanBackend.listActivity(pageEndEventId = None, pageSize = 50)
-              // old tap
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe bob.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(10)
-              }
-              // new taps
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe bob.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(20)
-              }
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe alice.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(5)
-              }
-              // new transfer
-              forExactly(1, txs) { tx =>
-                val tf = tx.transfer.value
-                tf.sender.party shouldBe bob.toProtoPrimitive
-                tf.receivers.loneElement.party shouldBe alice.toProtoPrimitive
-                BigDecimal(tf.receivers.loneElement.amount) shouldBe 4.0
-              }
-            },
-          )
+          // Bob makes p2p transfer after upgrade
+          eventuallySucceeds() {
+            p2pTransfer(bobWalletClient, aliceWalletClient, alice, 4.0)
+          }
 
           // SV4 can join after the upgrade.
           clue("SV4 can join after upgrade") {

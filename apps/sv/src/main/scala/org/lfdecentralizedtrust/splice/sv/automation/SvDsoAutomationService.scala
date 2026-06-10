@@ -7,9 +7,12 @@ import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.ClientConfig
+import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.Mutex
 import io.opentelemetry.api.trace.Tracer
 import monocle.Monocle.toAppliedFocusOps
 import org.apache.pekko.stream.Materializer
@@ -19,20 +22,24 @@ import org.lfdecentralizedtrust.splice.automation.{
   SpliceAppAutomationService,
 }
 import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
-  aTrigger,
   TriggerClass,
+  aTrigger,
 }
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
+  NetworkAppClientConfig,
   SpliceInstanceNamesConfig,
   UpgradesConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BftScanConnection,
+  ScanConnection,
+  SingleScanConnection,
 }
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.{BftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
@@ -59,12 +66,11 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class SvDsoAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svStore: SvSvStore,
     dsoStore: SvDsoStore,
@@ -87,20 +93,149 @@ class SvDsoAutomationService(
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
     esf: ExecutionSequencerFactory,
+    tc: TraceContext,
 ) extends SpliceAppAutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       dsoStore,
       ledgerClient,
       retryProvider,
       config.parameters,
+      packageVersionSupport,
     ) {
 
   override def companion
       : org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.type =
     SvDsoAutomationService
+
+  private val mutex = Mutex()
+
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
+  @volatile
+  private var ownScanConnectionF: Option[Future[SingleScanConnection]] = None
+
+  /** Returns a [[SingleScanConnection]] to the scan app of our own SV node.
+    *
+    * Note: a [[SingleScanConnection]] does not hold any significant resources, however,
+    * building it involves running a version compatibility check on the scan API,
+    * which can fail if scan is not ready and adds unnecessary overhead.
+    * We therefore create it lazily and cache the result once it succeeds.
+    *
+    * Do not store the result of this method in a long-lived variable,
+    * instead call it every time you need a connection to the local scan app.
+    */
+  private def getOrCreateOwnScanConnection()(implicit
+      tc: TraceContext
+  ): Future[SingleScanConnection] =
+    scala.concurrent.blocking {
+      mutex.exclusive {
+        ownScanConnectionF match {
+          case Some(future) if future.isCompleted && future.value.exists(_.isFailure) =>
+            logger.info(
+              s"Previous attempt to establish scan connection to own scan app failed, retrying..."
+            )
+            ownScanConnectionF = None
+          case _ => // do nothing
+        }
+        ownScanConnectionF match {
+          case Some(future) =>
+            future
+          case None =>
+            val future = ScanConnection
+              .singleUncached(
+                ScanAppClientConfig(NetworkAppClientConfig(config.scan.internalUrl)),
+                upgradesConfig,
+                clock,
+                retryProvider,
+                loggerFactory,
+                retryConnectionOnInitialFailure = false,
+              )
+            ownScanConnectionF = Some(future)
+            future
+        }
+      }
+    }
+
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
+  @volatile
+  private var peerScanConnectionF: Option[Future[BftScanConnection]] = None
+
+  /** Returns a [[BftScanConnection]] to the all peer scan apps, i.e.,
+    * to all scan apps except the scan app of our own SV node.
+    *
+    * Note: similar to [[getOrCreateOwnScanConnection]],
+    * we create the [[BftScanConnection]] lazily and cache the result once it succeeds,
+    * as building it involves running initialization code that can fail during startup.
+    *
+    * Do not store the result of this method in a long-lived variable,
+    * instead call it every time you need a BFT connection to peer scan apps.
+    */
+  private def getOrCreatePeerScanConnection()(implicit
+      tc: TraceContext
+  ): Future[BftScanConnection] =
+    scala.concurrent.blocking {
+      mutex.exclusive {
+        peerScanConnectionF match {
+          case Some(future) if future.isCompleted && future.value.exists(_.isFailure) =>
+            logger.info(
+              s"Previous attempt to establish bft scan connection to peer scan apps failed, retrying..."
+            )
+            peerScanConnectionF = None
+          case _ => // do nothing
+        }
+        peerScanConnectionF match {
+          case Some(future) =>
+            future
+          case None =>
+            val future = BftScanConnection
+              .peerScanConnection(
+                () =>
+                  BftScanConnection.Bft.getPeerScansFromDsoRules(
+                    dsoStore,
+                    dsoStore.key.svParty,
+                  )(tc, ec),
+                ledgerClient,
+                ScanAppClientConfig.DefaultScansRefreshInterval,
+                ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
+                upgradesConfig,
+                clock,
+                retryProvider,
+                loggerFactory,
+              )(ec, tc, mat, httpClient, templateJsonDecoder)
+            peerScanConnectionF = Some(future)
+            future
+        }
+      }
+    }
+
+  override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    super.closeAsync() ++
+      // super.closeAsync() waits for all triggers to close, so we do not need to worry
+      // about synchronization when closing the scan connections here.
+      ownScanConnectionF
+        .map(connectionF =>
+          AsyncCloseable(
+            "scan-connection",
+            connectionF.transform {
+              case scala.util.Success(c) => scala.util.Try(c.close())
+              case scala.util.Failure(_) => scala.util.Success(())
+            },
+            timeouts.shutdownNetwork,
+          )
+        )
+        .toList ++ peerScanConnectionF
+        .map(connectionF =>
+          AsyncCloseable(
+            "bft-scan-connection",
+            connectionF.transform {
+              case scala.util.Success(c) => scala.util.Try(c.close())
+              case scala.util.Failure(_) => scala.util.Success(())
+            },
+            timeouts.shutdownNetwork,
+          )
+        )
+        .toList
 
   private val packageVettingService = new PackageVettingLookupService(
     config.packageVettingCache,
@@ -120,7 +255,6 @@ class SvDsoAutomationService(
     new RestartDsoDelegateBasedAutomationTrigger(
       triggerContext,
       domainTimeSync,
-      domainUnpausedSync,
       dsoStore,
       connection,
       clock,
@@ -128,6 +262,8 @@ class SvDsoAutomationService(
       retryProvider,
       packageVersionSupport,
       packageVettingService,
+      () => getOrCreateOwnScanConnection(),
+      () => getOrCreatePeerScanConnection(),
     )
 
   // required for triggers that must run in sim time as well
@@ -364,6 +500,26 @@ class SvDsoAutomationService(
         )
       )
 
+    registerTrigger(
+      new CalculateRewardsTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
+      )
+    )
+
+    registerTrigger(
+      new CalculateRewardsDryRunTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
+      )
+    )
+
     registerTrigger(restartDsoDelegateBasedAutomationTrigger)
 
     registerTrigger(
@@ -488,7 +644,7 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
-        config.domainMigrationId,
+        dsoStore.domainMigrationId,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,
@@ -516,7 +672,7 @@ class SvDsoAutomationService(
           pruningConfig.retentionPeriod,
           pruningConfig.pruningSafetyCheckPercentage,
           participantAdminConnection,
-          config.domainMigrationId,
+          dsoStore.domainMigrationId,
           grpcClientMetrics,
         )
       )
@@ -554,6 +710,8 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[SvOnboardingRequestTrigger],
       aTrigger[ReceiveSvRewardCouponTrigger],
       aTrigger[ArchiveClosedMiningRoundsTrigger],
+      aTrigger[CalculateRewardsTrigger],
+      aTrigger[CalculateRewardsDryRunTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],

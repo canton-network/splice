@@ -646,11 +646,7 @@
         },
         "logLevel": "DEBUG",
         "metrics": {
-          "enable": true,
-          "migration": {
-            "active": true,
-            "id": 2
-          }
+          "enable": true
         },
         "participantAdminUserNameFrom": {
           "secretKeyRef": {
@@ -1077,10 +1073,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2,
-            "migrating": false
           },
           "nodeIdentifier": "validator1",
           "onboardingSecretFrom": {

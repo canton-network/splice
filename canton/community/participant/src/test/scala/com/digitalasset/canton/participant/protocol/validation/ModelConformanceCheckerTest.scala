@@ -8,8 +8,8 @@ import cats.implicits.toTraverseOps
 import com.daml.ledger.javaapi.data.Command
 import com.daml.ledger.javaapi.data.codegen.{Created, Update}
 import com.daml.nonempty.NonEmptyUtil
-import com.digitalasset.canton.BaseTest.getResourcePath
-import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.BaseTest.{getResourcePath, testedProtocolVersion}
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.{LoggingConfig, ProcessingTimeout}
 import com.digitalasset.canton.crypto.TestSalt
 import com.digitalasset.canton.crypto.provider.symbolic.SymbolicCrypto
@@ -42,7 +42,7 @@ import com.digitalasset.canton.participant.protocol.validation.ModelConformanceC
   Result,
   ViewReconstructionError,
 }
-import com.digitalasset.canton.participant.store.ContractAndKeyLookup
+import com.digitalasset.canton.participant.store.{ContractLookup, ReplayContractLookup}
 import com.digitalasset.canton.participant.util.DAMLe
 import com.digitalasset.canton.participant.util.DAMLe.HasReinterpret
 import com.digitalasset.canton.protocol.*
@@ -59,7 +59,7 @@ import com.digitalasset.canton.{
   FailOnShutdown,
   HasExecutionContext,
   LfCommand,
-  LfKeyResolver,
+  LfGlobalKeyMapping,
   LfPackageId,
   LfPartyId,
   LfVersioned,
@@ -92,7 +92,7 @@ class ModelConformanceCheckerTest
 
   import ModelConformanceCheckerTest.*
 
-  private val keyResolver: LfKeyResolver = Map.empty
+  private val keyResolver: LfGlobalKeyMapping = Map.empty
   private val getEngineAbortStatus: GetEngineAbortStatus = () => EngineAbortStatus.notAborted
   private val symbolicCrypto =
     SymbolicCrypto.create(testedReleaseProtocolVersion, ProcessingTimeout(), loggerFactory)
@@ -124,6 +124,7 @@ class ModelConformanceCheckerTest
       contractHasher,
       seedGenerator,
       LoggingConfig(),
+      useLegacyContractIdVersionV11 = false,
       loggerFactory,
     ).transactionTreeFactory
 
@@ -145,7 +146,7 @@ class ModelConformanceCheckerTest
 
   private def buildTopologySnapshotFor(example: Example): TopologySnapshot = {
 
-    val vettedPackages = example.metadata.usedPackages.map(p => VettedPackage(p, None, None)).toSeq
+    val vettedPackages = example.requiredVettedPackages.map(p => VettedPackage(p, None, None)).toSeq
     val informees = example.tx.informees
     val participants = informees.map(partyParticipants)
 
@@ -190,7 +191,7 @@ class ModelConformanceCheckerTest
     val reinterpreter = if (flattenTx) {
       new HasReinterpret {
         override def reinterpret(
-            contracts: ContractAndKeyLookup,
+            contracts: ReplayContractLookup,
             contractAuthenticator: ContractAuthenticatorFn,
             submitters: Set[LfPartyId],
             command: LfCommand,
@@ -227,12 +228,15 @@ class ModelConformanceCheckerTest
       }
     } else damlE
 
-    ModelConformanceChecker(
+    new ModelConformanceChecker(
       participantId = participantId,
       reinterpreter = reinterpreter,
       transactionTreeFactory = transactionTreeFactory,
       contractValidator = contractValidator,
       packageResolver = testEngine.packageResolver,
+      contractLookup = mock[ContractLookup],
+      parallelism = PositiveInt.tryCreate(100),
+      validateLegacyContractsV11 = true,
       hashOps = symbolicCrypto.pureCrypto,
       loggerFactory = loggerFactory,
     )
@@ -371,7 +375,7 @@ class ModelConformanceCheckerTest
       inside(checkExample(underTest, example, topologySnapshot, Seq(_))) {
         case ModelConformanceRejection(err) =>
           inside(err.errors.head) { case ModelConformanceChecker.UnvettedPackages(actual) =>
-            actual shouldBe Map(participantId -> example.metadata.usedPackages)
+            actual shouldBe Map(participantId -> example.requiredVettedPackages)
           }
       }
     }
@@ -835,7 +839,7 @@ class ModelConformanceCheckerTest
           transactionUuid = seedGenerator.generateUuid(),
           topologySnapshot = topologySnapshot,
           contractOfId = contractOfId,
-          keyResolver = keyResolver,
+          legacyKeyResolver = keyResolver,
           maxSequencingTime = CantonTimestamp.MaxValue,
           validatePackageVettings = false,
         )
@@ -922,6 +926,7 @@ class ModelConformanceCheckerTest
           commonData = commonData,
           reInterpretedTopLevelViews = reInterpretedTopLevelViews,
           getEngineAbortStatus = getEngineAbortStatus,
+          protocolVersion = testedProtocolVersion,
         )
         .map {
           case valid if valid.updateId == commonData.updateId => valid
@@ -965,6 +970,11 @@ object ModelConformanceCheckerTest extends OptionValues {
       contracts: Map[LfContractId, GenContractInstance],
   ) {
     def flattened: Example = copy(tx = SubmittedTransaction(flattenRollback(tx)))
+    lazy val requiredVettedPackages: Set[LfPackageId] =
+      if (testedProtocolVersion >= ProtocolVersion.v35) {
+        // Vetting checks in PV 35 only apply yo packages of action nodes
+        tx.nodes.values.collect { case action: LfActionNode => action.packageIds }.flatten.toSet
+      } else metadata.usedPackages
   }
 
   class ExampleFactory(testEngine: TestEngine) extends EitherValues with AsJavaExtensions {

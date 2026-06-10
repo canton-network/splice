@@ -1559,7 +1559,7 @@ class CommitmentsAdministrationGroup(
       synchronizerIds: Seq[SynchronizerId],
       counterParticipants: Seq[ParticipantId],
       partyIds: Seq[PartyId],
-      timeout: NonNegativeDuration,
+      timeout: config.NonNegativeDuration,
   ): Seq[CommitmentReinitializationInfo] = consoleEnvironment.run(
     runner.adminCommand(
       ReinitializeCommitments(
@@ -1600,10 +1600,7 @@ class ParticipantReplicationAdministrationGroup(
 /** Administration commands supported by a participant.
   */
 trait ParticipantAdministration extends FeatureFlagFilter {
-  this: AdminCommandRunner
-    with LedgerApiCommandRunner
-    with LedgerApiAdministration
-    with NamedLogging =>
+  this: AdminCommandRunner & LedgerApiCommandRunner & LedgerApiAdministration & NamedLogging =>
 
   import ConsoleEnvironment.Implicits.*
   implicit protected val consoleEnvironment: ConsoleEnvironment
@@ -1953,10 +1950,18 @@ trait ParticipantAdministration extends FeatureFlagFilter {
   object synchronizers extends Helpful {
 
     @Help.Summary("Returns the id of the given synchronizer alias")
+    @Help.Description(
+      """Fails if there is no active connection for the alias,
+        |or the active connection does not have a known synchronizer id."""
+    )
     def id_of(synchronizerAlias: SynchronizerAlias): SynchronizerId =
       physical_id_of(synchronizerAlias).logical
 
     @Help.Summary("Returns the physical id of the given synchronizer alias")
+    @Help.Description(
+      """Fails if there is no active connection for the alias,
+        |or the active connection does not have a known physical synchronizer id."""
+    )
     def physical_id_of(synchronizerAlias: SynchronizerAlias): PhysicalSynchronizerId =
       consoleEnvironment.run {
         adminCommand(
@@ -2560,7 +2565,7 @@ trait ParticipantAdministration extends FeatureFlagFilter {
       adminCommand(ParticipantAdminCommands.SynchronizerConnectivity.ListConnectedSynchronizers())
     }
 
-    @Help.Summary("List the configured synchronizer of this participant")
+    @Help.Summary("List the configured active synchronizers of this participant")
     @Help.Description(
       """For each returned synchronizer, the boolean indicates whether the participant is
         |currently connected to the synchronizer."""
@@ -2601,14 +2606,18 @@ trait ParticipantAdministration extends FeatureFlagFilter {
         case (config, id, _) if id.toOption.contains(physicalSynchronizerId) => config
       }
 
-    @Help.Summary("Modify existing synchronizer connection")
+    @Help.Summary("Modify an existing active synchronizer connection")
     @Help.Description(
-      """Parameters:
+      """If a logical synchronizer upgrade has been announced, the config for the successor
+        |synchronizer gets updated automatically on the basis of the provided config for the
+        |active synchronizer.
+        |Parameters:
         |- synchronizerAlias: Alias of the synchronizer
         |- modifier: The change to be applied to the config.
         |- validation: The validations which need to be done to the connection.
-        |- physicalSynchronizerId: Physical id of the synchronizer. If empty, the active one will
-        |  be updated (if none is active, an error is returned).
+        |- physicalSynchronizerId: Physical id of the synchronizer. If empty, the currently
+        |  active connection will be updated (if none is active, an error is returned).
+        |  If not empty, the active synchronizer must match the provided physical synchronizer id.
         """
     )
     def modify(
@@ -2624,10 +2633,17 @@ trait ParticipantAdministration extends FeatureFlagFilter {
           ).toEither
           cfg <- registeredSynchronizers
             .collectFirst {
-              case (config, _, _) if config.synchronizerAlias == synchronizerAlias =>
+              case (config, knownPsid, _)
+                  if config.synchronizerAlias == synchronizerAlias &&
+                    physicalSynchronizerId
+                      .forall(requestedPsid => knownPsid.toOption.contains(requestedPsid)) =>
                 SynchronizerConnectionConfig.fromInternal(config)
             }
-            .toRight(s"No such synchronizer $synchronizerAlias configured")
+            .toRight(
+              s"No active synchronizer $synchronizerAlias configured" + physicalSynchronizerId
+                .map(psid => s" with physical synchronizer id $psid")
+                .getOrElse("")
+            )
           newConfig <- Try(modifier(cfg)).toEither.leftMap(_.toString)
           _ <- Either.cond(
             newConfig.synchronizerAlias == cfg.synchronizerAlias,
@@ -2873,7 +2889,10 @@ class ParticipantHealthAdministration(
       |
       |This command is in particular useful to re-assure oneself that there are currently no
       |in-flight submissions or transactions present for the selected synchronizer. Such
-      |re-assurance is then helpful to proceed with repair operations, for example."""
+      |re-assurance is then helpful to proceed with repair operations, for example.
+      |
+      |The command fails if there is no active connection for the alias,
+      |or the active connection does not have a known physical synchronizer id."""
   )
   def count_in_flight(synchronizerAlias: SynchronizerAlias): InFlightCount = {
     val synchronizerId = consoleEnvironment.run {

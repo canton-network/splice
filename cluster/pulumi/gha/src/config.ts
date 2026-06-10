@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { SingleResourceSchema } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { SingleResourceSchema } from '@canton-network/splice-pulumi-common';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import util from 'node:util';
 import { z } from 'zod';
 
@@ -28,6 +28,15 @@ const GhaConfigSchema = z.object({
         })
       )
       .default([]),
+    mainnetHistoryDumpsUser: z
+      .object({
+        bucket: z.string().min(1),
+        wifProjectNumber: z.string().min(1),
+        wifPoolId: z.string().min(1),
+        // GitHub repos (full "org/name") allowed to impersonate the SA via WIF.
+        githubRepositories: z.array(z.string().min(1)).min(1),
+      })
+      .optional(),
   }),
 });
 

@@ -3,6 +3,7 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.config
 
+import com.digitalasset.canton.config
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{PositiveDouble, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -45,6 +46,18 @@ final case class AsyncWriterConfig(
   * @param lsuRepair
   *   Config values that are used in disaster recovery scenarios after LSU. Those values SHOULD be
   *   set only in very specific cases and MUST be synchronized across sequencers.
+  * @param delayRequestsBeforeLsuTrafficInit
+  *   Configures behavior of sendAsync requests until the traffic is initialized during LSU: If
+  *   true, the sequencer will delay processing of the requests. If false, the sequencer will
+  *   synchronously reject the requests with an error.
+  * @param disableSubmissionChecksForTesting
+  *   If true, disable checks on the write path of the sequencer in order to allow testing the same
+  *   checks on the post-processing path (malicious sequencer node tests). Only to be used for
+  *   testing purposes.
+  * @param disableReleaseVersionHandshakeCheck
+  *   If true, then we won't check whether the client binaries are really supported during
+  *   handshake. This is normally only useful for unstable protocol versions to avoid accidental
+  *   ledger forks.
   */
 final case class SequencerNodeParameterConfig(
     override val alphaVersionSupport: Boolean = false,
@@ -60,6 +73,10 @@ final case class SequencerNodeParameterConfig(
     // TODO(#30769) remove this flag once the feature is complete
     producePostOrderingTopologyTicks: Boolean = true,
     lsuRepair: LsuRepair = LsuRepair(),
+    lsu: SequencerLsuConfig = SequencerLsuConfig(),
+    delayRequestsBeforeLsuTrafficInit: Boolean = false,
+    disableSubmissionChecksForTesting: Boolean = false,
+    disableReleaseVersionHandshakeCheck: Boolean = false,
 ) extends ProtocolConfig
     with LocalNodeParametersConfig
 
@@ -67,7 +84,7 @@ final case class SequencerNodeParameterConfig(
   *   Override the LSU sequencing bounds computed from the topology store. Should be used ONLY in a
   *   disaster recovery scenario (roll forward) and the value MUST be identical across sequencer
   *   nodes.
-  * @param globalMaxSequencingTimeInclusive
+  * @param globalMaxSequencingTimeExclusive
   *   Allows to specify an upper bound on the sequencing times: any message with sequencing time
   *   strictly greater to this value will not be delivered. Important notes:
   *   - SHOULD be set only in disaster recovery scenarios.
@@ -75,7 +92,20 @@ final case class SequencerNodeParameterConfig(
   */
 final case class LsuRepair(
     lsuSequencingBoundsOverride: Option[LsuSequencingBoundsOverride] = None,
-    globalMaxSequencingTimeInclusive: Option[CantonTimestamp] = None,
+    globalMaxSequencingTimeExclusive: Option[CantonTimestamp] = None,
+)
+
+/** Config for LSU.
+  *
+  * @param contactSuccessorRetry
+  *   Config for the retries of the contact of the successor
+  */
+final case class SequencerLsuConfig(
+    contactSuccessorRetry: ExponentialBackoffConfig = ExponentialBackoffConfig(
+      initialDelay = config.NonNegativeFiniteDuration.ofSeconds(15),
+      maxDelay = config.NonNegativeDuration.ofMinutes(1),
+      maxRetries = Int.MaxValue,
+    )
 )
 
 /** Used to override values usually derived from the LSU announcement. MUST be used only for roll
@@ -87,8 +117,8 @@ final case class LsuRepair(
   *   The value should be chosen as follows:
   *   - At least lowerBoundSequencingTimeExclusive
   *   - At least the latest sequencing time on the broken synchronizer
-  *   - At least the latest effective time of the latest fully authorized topology transaction on
-  *     the broken synchronizer
+  *   - At least the latest effective time of the latest non-rejected topology transaction on the
+  *     broken synchronizer.
   *   - Not too far in the future, as it acts as a strict lower bound on the new synchronizer.
   */
 final case class LsuSequencingBoundsOverride(

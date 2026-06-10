@@ -39,7 +39,7 @@ class TxLogBackfillingTrigger[TXE](
     "party" -> party.toProtoPrimitive
   )
 
-  private val currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId
+  private val currentMigrationId = updateHistory.domainMigrationId
 
   private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext.Empty

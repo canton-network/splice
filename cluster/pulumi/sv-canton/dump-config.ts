@@ -5,9 +5,9 @@
 import {
   DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { allSvsToDeploy } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { StaticSvConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/config';
+} from '@canton-network/splice-pulumi-common';
+import { allSvsToDeploy } from '@canton-network/splice-pulumi-common-sv';
+import { StaticSvConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
 import {
   cantonNetworkAuth0Config,

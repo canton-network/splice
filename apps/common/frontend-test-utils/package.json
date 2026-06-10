@@ -1,5 +1,5 @@
 {
-  "name": "@lfdecentralizedtrust/splice-common-test-utils",
+  "name": "@canton-network/splice-common-test-utils",
   "version": "0.1.0",
   "private": true,
   "types": ".lib/index.d.ts",

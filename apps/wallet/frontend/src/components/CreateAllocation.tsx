@@ -7,9 +7,9 @@ import {
   AllocateAmuletRequest,
   AllocateAmuletRequestSettlementSettlementRef,
   AllocateAmuletRequestTransferLeg,
-} from '@lfdecentralizedtrust/wallet-openapi';
+} from '@canton-network/wallet-openapi';
 import { Alert, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
-import { DisableConditionally } from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally } from '@canton-network/splice-common-frontend';
 import BftAnsField from './BftAnsField';
 import AmountInput from './AmountInput';
 import { Add, Remove } from '@mui/icons-material';

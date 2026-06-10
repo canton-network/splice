@@ -22,6 +22,7 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.LocalRejectError.ConsistencyRejections.InactiveContracts
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.{Namespace, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
@@ -157,10 +158,18 @@ class BaseLedgerConnection(
       filter: IngestionFilter,
       offset: Long,
       restartSettings: RestartSettings,
+      clock: Clock,
+      packageVersionSupport: PackageVersionSupport,
   )(implicit
       tc: TraceContext
   ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] =
-    activeContracts(filter.toEventFormat, offset, restartSettings)
+    Source
+      .futureSource {
+        filter
+          .toAcsEventFormat(packageVersionSupport, clock)
+          .map(activeContracts(_, offset, restartSettings))
+      }
+      .mapMaterializedValue(_ => NotUsed)
 
   def getContract(
       contractId: ContractId[?],
@@ -1257,17 +1266,25 @@ object BaseLedgerConnection {
     }.mkString
   }
 
-  sealed trait ActiveContractsItem
+  sealed trait ActiveContractsItem {
+    def contractId: String
+  }
   object ActiveContractsItem {
     case class ActiveContract(
         contract: org.lfdecentralizedtrust.splice.environment.ledger.api.ActiveContract
-    ) extends ActiveContractsItem
+    ) extends ActiveContractsItem {
+      override def contractId: String = contract.createdEvent.getContractId
+    }
 
     case class IncompleteUnassign(unassign: IncompleteReassignmentEvent.Unassign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = unassign.createdEvent.getContractId
+    }
 
     case class IncompleteAssign(assign: IncompleteReassignmentEvent.Assign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = assign.reassignmentEvent.createdEvent.getContractId
+    }
   }
 }
 

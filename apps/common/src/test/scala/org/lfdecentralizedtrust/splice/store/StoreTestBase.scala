@@ -34,6 +34,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  rewardaccountingv2 as rewardAccountingCodegen
+}
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ActiveContract,
@@ -331,6 +334,25 @@ abstract class StoreTestBase
     )
   }
 
+  protected def calculateRewardsV2(
+      dso: PartyId,
+      round: Long,
+      dryRun: Boolean = true,
+  ) = {
+    val template = new rewardAccountingCodegen.CalculateRewardsV2(
+      dso.toProtoPrimitive,
+      new Round(round),
+      Instant.now().truncatedTo(ChronoUnit.MICROS),
+      new RelTime(600_000_000L),
+      dryRun,
+    )
+    contract(
+      rewardAccountingCodegen.CalculateRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new rewardAccountingCodegen.CalculateRewardsV2.ContractId(nextCid()),
+      template,
+    )
+  }
+
   protected def amulet(
       owner: PartyId,
       amount: BigDecimal,
@@ -493,6 +515,27 @@ abstract class StoreTestBase
         amount,
         new Round(round),
         Optional.empty(),
+      ),
+    )
+
+  protected def rewardCouponV2(
+      round: Int,
+      provider: PartyId,
+      amount: Numeric.Numeric = numeric(1.0),
+      beneficiary: Option[PartyId] = None,
+      contractId: String = nextCid(),
+  ): Contract[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2] =
+    contract(
+      identifier = amuletCodegen.RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new amuletCodegen.RewardCouponV2.ContractId(contractId),
+      payload = new amuletCodegen.RewardCouponV2(
+        dsoParty.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new Round(round),
+        amount,
+        java.time.Instant.now().plusSeconds(3600),
+        true,
+        beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
       ),
     )
 

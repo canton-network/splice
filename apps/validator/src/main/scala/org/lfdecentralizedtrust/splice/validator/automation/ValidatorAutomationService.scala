@@ -28,10 +28,7 @@ import org.lfdecentralizedtrust.splice.config.{
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
 import org.lfdecentralizedtrust.splice.validator.lsu.RollForwardLsuTrigger
@@ -58,7 +55,6 @@ class ValidatorAutomationService(
     isSvValidator: Boolean,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     walletManagerOpt: Option[UserWalletManager], // None when config.enableWallet=false
     store: ValidatorStore,
     storage: DbStorage,
@@ -81,6 +77,7 @@ class ValidatorAutomationService(
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
     globalSynchronizerAlias: SynchronizerAlias,
     override protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -89,11 +86,11 @@ class ValidatorAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =

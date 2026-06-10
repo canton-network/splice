@@ -333,6 +333,7 @@ class MediatorNodeBootstrap(
               SynchronizerStore(psid),
               storage,
               indexedStringStore,
+              predecessor = None,
               staticSynchronizerParameters.protocolVersion,
               timeouts,
               parameters.batchingConfig,
@@ -566,6 +567,7 @@ class MediatorNodeBootstrap(
               .createProcessorAndClientForSynchronizer(
                 synchronizerTopologyStore,
                 upgradeTimeFromPredecessor = None,
+                sequencerSnapshotTimestamp = None,
                 crypto.pureCrypto,
                 arguments.parameterConfig,
                 arguments.config.topology,
@@ -574,7 +576,7 @@ class MediatorNodeBootstrap(
                 arguments.metrics.topologyCache,
                 arguments.futureSupervisor,
                 synchronizerLoggerFactory,
-              )()
+              )
           )
       (topologyProcessor, topologyClient) = topologyProcessorAndClient
       _ = ips.add(topologyClient)
@@ -588,7 +590,6 @@ class MediatorNodeBootstrap(
         crypto,
         cryptoConfig,
         Some(arguments.metrics.kmsMetrics),
-        parameters.batchingConfig.parallelism,
         parameters.cachingConfigs.publicKeyConversionCache,
         timeouts,
         futureSupervisor,
@@ -689,7 +690,8 @@ class MediatorNodeBootstrap(
         store = synchronizerTopologyStore,
         outboxQueue = outboxQueue,
         disableOptionalTopologyChecks = config.topology.disableOptionalTopologyChecks,
-        dispatchQueueBackpressureLimit = parameters.general.dispatchQueueBackpressureLimit,
+        dispatchQueueBackpressureLimit =
+          parameters.general.topologyConfig.dispatchQueueBackpressureLimit,
         exitOnFatalFailures = parameters.exitOnFatalFailures,
         timeouts = timeouts,
         futureSupervisor = futureSupervisor,
@@ -709,6 +711,7 @@ class MediatorNodeBootstrap(
               topologyConfig,
               Some(staticSynchronizerParameters),
               timeouts,
+              futureSupervisor = futureSupervisor,
               synchronizerLoggerFactory,
             ),
             topologyClient,

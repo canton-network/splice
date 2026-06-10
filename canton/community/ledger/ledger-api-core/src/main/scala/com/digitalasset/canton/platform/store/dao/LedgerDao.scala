@@ -10,8 +10,8 @@ import com.daml.ledger.api.v2.update_service.{GetUpdateResponse, GetUpdatesRespo
 import com.digitalasset.canton.config.CantonRequireTypes.String185
 import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.health.ReportsHealth
-import com.digitalasset.canton.ledger.api.AcsContinuationToken.Checksum
-import com.digitalasset.canton.ledger.api.{AcsContinuationToken, ParticipantId}
+import com.digitalasset.canton.ledger.api.ParticipantId
+import com.digitalasset.canton.ledger.api.messages.state.AcsRangeInfo
 import com.digitalasset.canton.ledger.participant.state.index.IndexerPartyDetails
 import com.digitalasset.canton.logging.LoggingContextWithTrace
 import com.digitalasset.canton.platform.*
@@ -29,6 +29,7 @@ private[platform] trait LedgerDaoUpdateReader {
       endInclusive: Offset,
       internalUpdateFormat: InternalUpdateFormat,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean = false,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[(Offset, GetUpdatesResponse), NotUsed]
@@ -42,8 +43,7 @@ private[platform] trait LedgerDaoUpdateReader {
       activeAt: Option[Offset],
       filter: TemplatePartiesFilter,
       eventProjectionProperties: EventProjectionProperties,
-      continuationToken: Option[AcsContinuationToken],
-      checksum: Checksum,
+      rangeInfo: AcsRangeInfo,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[GetActiveContractsResponse, NotUsed]
@@ -128,10 +128,5 @@ private[platform] trait LedgerReadDao extends ReportsHealth {
       loggingContext: LoggingContextWithTrace
   ): Future[Option[Offset]]
 
-  /** Return the latest pruned offset inclusive (participant_pruned_up_to_inclusive) from the
-    * parameters table (if defined)
-    */
-  def pruningOffset(implicit
-      loggingContext: LoggingContextWithTrace
-  ): Future[Option[Offset]]
+  def isPruningInProgress: Boolean
 }

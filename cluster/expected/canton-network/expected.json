@@ -287,9 +287,10 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
-          "enableLogicalSynchronizerDeploymentMode": false,
+          "cometbft": {
+            "volumeSize": "42Gi"
+          },
           "id": 9,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -310,9 +311,7 @@
         },
         "additionalLegacy": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 7,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.20",
@@ -334,9 +333,7 @@
         ],
         "archived": [
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 5,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "981227e62011e386cca3cdb5f00b472cf05a12c4",
@@ -354,9 +351,7 @@
             }
           },
           {
-            "enableLogicalSynchronizerDeploymentMode": false,
             "id": 6,
-            "migrateParticipantsFromSvCantonToSv": false,
             "releaseReference": {
               "deploymentDir": "cluster/deployment",
               "gitReference": "refs/heads/release-line-0.3.19",
@@ -376,9 +371,7 @@
         ],
         "frozenMigrationId": 2,
         "legacy": {
-          "enableLogicalSynchronizerDeploymentMode": false,
           "id": 8,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.20",
@@ -397,11 +390,8 @@
             "version": "0.3.20"
           }
         },
-        "lsuEnabled": true,
         "upgrade": {
-          "enableLogicalSynchronizerDeploymentMode": true,
           "id": 10,
-          "migrateParticipantsFromSvCantonToSv": false,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
             "gitReference": "refs/heads/release-line-0.3.21",
@@ -1617,10 +1607,6 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
-          "type": "unlimited"
-        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
@@ -1632,10 +1618,6 @@
         "/api/scan/v0/admin/validator": {
           "name": "validator-licenses",
           "type": "unlimited"
-        },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
         },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
@@ -1721,25 +1703,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -1868,10 +1834,6 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
-          "type": "unlimited"
-        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
@@ -1883,10 +1845,6 @@
         "/api/scan/v0/admin/validator": {
           "name": "validator-licenses",
           "type": "unlimited"
-        },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
         },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
@@ -1972,25 +1930,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -2383,19 +2325,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -2406,8 +2351,8 @@
           "host": "info.sv-2.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-1:5012"
+          "scanUrl": "http://scan-app.sv-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -2857,10 +2802,7 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_1",
           "port": 5432,
@@ -3073,16 +3015,12 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2,
-            "migrating": false
-          },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
           "onboardingName": "Digital-Asset-2",
           "onboardingRoundZeroDuration": "2 h",
           "onboardingType": "found-dso",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "periodicTopologySnapshotConfig": {
             "backupInterval": "12h",
             "location": {
@@ -3288,11 +3226,8 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-2",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -3643,19 +3578,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -3666,8 +3604,8 @@
           "host": "info.sv-1.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-da-1:5012"
+          "scanUrl": "http://scan-app.sv-da-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -3977,10 +3915,7 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
           "port": 5432,
@@ -4007,6 +3942,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",
@@ -4171,14 +4107,10 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2,
-            "migrating": false
-          },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
           "onboardingType": "join-with-key",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "permissionedSynchronizer": false,
           "persistence": {
             "databaseName": "sv_sv_da_1",
@@ -4365,11 +4297,8 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-1",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

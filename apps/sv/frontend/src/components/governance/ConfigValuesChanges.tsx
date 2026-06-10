@@ -3,7 +3,7 @@
 
 import { Box, Typography } from '@mui/material';
 import { ConfigChange } from '../../utils/types';
-import { PartyId } from '@lfdecentralizedtrust/splice-common-frontend';
+import { PartyId } from '@canton-network/splice-common-frontend';
 
 interface ConfigValuesChangesProps {
   changes: ConfigChange[];

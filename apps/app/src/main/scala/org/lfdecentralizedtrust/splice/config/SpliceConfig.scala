@@ -35,7 +35,9 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
 import org.lfdecentralizedtrust.splice.wallet.config.{
+  AppRewardBeneficiaryConfig,
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TransferPreapprovalConfig,
   TreasuryConfig,
   WalletAppClientConfig,
@@ -536,6 +538,8 @@ object SpliceConfig {
       deriveReader[InitialAnsConfig]
     implicit val domainFeesConfigReader: ConfigReader[SynchronizerFeesConfig] =
       deriveReader[SynchronizerFeesConfig]
+    implicit val initialRewardConfigReader: ConfigReader[InitialRewardConfig] =
+      deriveReader[InitialRewardConfig]
     implicit val svOnboardingFoundDsoReader: ConfigReader[SvOnboardingConfig.FoundDso] =
       deriveReader[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyReader: ConfigReader[SvOnboardingConfig.JoinWithKey] =
@@ -670,13 +674,6 @@ object SpliceConfig {
               "initialPackageConfig is not valid due to inconsistent dependencies"
             ),
           )
-          _ <- Either.cond(
-            conf.legacyMigrationId.forall(_ == conf.domainMigrationId - 1L),
-            (),
-            ConfigValidationFailed(
-              "legacyMigrationId must equal to domainMigrationId - 1 unless legacyMigrationId is empty"
-            ),
-          )
         } yield conf
       }
 
@@ -690,6 +687,10 @@ object SpliceConfig {
       deriveReader[WalletSweepConfig]
     implicit val autoAcceptTransfersConfigReader: ConfigReader[AutoAcceptTransfersConfig] =
       deriveReader[AutoAcceptTransfersConfig]
+    implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
+      deriveReader[AppRewardBeneficiaryConfig]
+    implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
+      deriveReader[RewardSharingConfig]
     implicit val validatorDecentralizedSynchronizerConfigReader
         : ConfigReader[ValidatorDecentralizedSynchronizerConfig] =
       deriveReader[ValidatorDecentralizedSynchronizerConfig].emap(config => {
@@ -814,6 +815,30 @@ object SpliceConfig {
               s"domains.global.url must not be set for an SV unless disableSvValidatorBftSequencerConnection is also set"
             ),
           )
+          _ <- conf.rewardSharingConfigByParty.foldLeft(
+            Right(()): Either[ConfigValidationFailed, Unit]
+          ) {
+            case (Left(err), _) => Left(err)
+            case (Right(()), (party, sharingConfig)) =>
+              for {
+                _ <- Either.cond(
+                  sharingConfig.beneficiaries.forall(b =>
+                    b.percentage > 0 && b.percentage <= BigDecimal(1.0)
+                  ),
+                  (),
+                  ConfigValidationFailed(
+                    s"Reward sharing percentages for $party must be in (0.0, 1.0]"
+                  ),
+                )
+                _ <- Either.cond(
+                  sharingConfig.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
+                  (),
+                  ConfigValidationFailed(
+                    s"Reward sharing percentages for $party must sum to at most 1.0"
+                  ),
+                )
+              } yield ()
+          }
         } yield conf
       }
     implicit val validatorClientConfigReader: ConfigReader[ValidatorAppClientConfig] =
@@ -995,6 +1020,8 @@ object SpliceConfig {
       deriveWriter[InitialAnsConfig]
     implicit val domainFeesConfigWriter: ConfigWriter[SynchronizerFeesConfig] =
       deriveWriter[SynchronizerFeesConfig]
+    implicit val initialRewardConfigWriter: ConfigWriter[InitialRewardConfig] =
+      deriveWriter[InitialRewardConfig]
     implicit val svOnboardingFoundDsoWriter: ConfigWriter[SvOnboardingConfig.FoundDso] =
       deriveWriter[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyWriter: ConfigWriter[SvOnboardingConfig.JoinWithKey] =
@@ -1088,6 +1115,10 @@ object SpliceConfig {
       deriveWriter[WalletSweepConfig]
     implicit val autoAcceptTransfersConfigWriter: ConfigWriter[AutoAcceptTransfersConfig] =
       deriveWriter[AutoAcceptTransfersConfig]
+    implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
+      deriveWriter[AppRewardBeneficiaryConfig]
+    implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
+      deriveWriter[RewardSharingConfig]
     implicit val validatorDecentralizedSynchronizerConfigWriter
         : ConfigWriter[ValidatorDecentralizedSynchronizerConfig] =
       deriveWriter[ValidatorDecentralizedSynchronizerConfig]

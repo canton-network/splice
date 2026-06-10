@@ -7,8 +7,8 @@ import {
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { useVotesHooks } from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { useVotesHooks } from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 
 const QUERY_LIMIT = 500;
 

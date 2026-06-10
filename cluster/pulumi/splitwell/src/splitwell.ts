@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as postgres from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as pulumi from '@pulumi/pulumi';
 import {
   activeVersion,
@@ -19,13 +19,13 @@ import {
   installLedgerApiSecret,
   installSpliceHelmChart,
   ValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
   installParticipant,
   splitwellDarPaths,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { installValidatorApp } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validator';
+} from '@canton-network/splice-pulumi-common-validator';
+import { installValidatorApp } from '@canton-network/splice-pulumi-common-validator/src/validator';
 
 import { spliceConfig } from '../../common/src/config/config';
 import { splitwellConfig } from '../../common/src/config/splitwellConfig';
@@ -139,7 +139,6 @@ export async function installSplitwell(
     xns,
     extraDependsOn,
     dependencies: [],
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     additionalUsers: [
       auth0UserNameEnvVar('splitwell'),
       { name: 'CN_APP_SPLITWELL_PROVIDER_WALLET_USER_NAME', value: providerWalletUser },

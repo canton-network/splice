@@ -9,7 +9,6 @@ import cats.syntax.functorFilter.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.metrics.api.MetricsContext
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.checked
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
@@ -46,6 +45,7 @@ import com.digitalasset.canton.util.{
   SingleUseCell,
 }
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.{SequencerAlias, checked}
 import com.google.common.annotations.VisibleForTesting
 import org.apache.pekko.stream.Materializer
 
@@ -717,17 +717,21 @@ class SequencerConnectionPoolImpl private[sequencing] (
   override def getConnections(
       requester: String,
       requestedNumber: PositiveInt,
-      exclusions: Set[SequencerId],
+      excluded: Set[SequencerId],
+      acceptableO: Option[Set[SequencerId]],
   )(implicit traceContext: TraceContext): Set[SequencerConnection] =
     // Always return connections randomly for now
     lock.exclusive {
+      val allowedMsg =
+        acceptableO.fold("")(acceptable => s" allowing only ${acceptable.map(_.uid.identifier)}")
       logger.debug(
-        s"[$requester] requesting $requestedNumber connection(s) excluding ${exclusions.map(_.uid.identifier)}"
+        s"[$requester] requesting $requestedNumber connection(s) excluding ${excluded
+            .map(_.uid.identifier)}$allowedMsg"
       )
 
-      // Pick up to `requestedNumber` non-excluded sequencer IDs from the pool
+      // Pick up to `requestedNumber` allowed and non-excluded sequencer IDs from the pool
       val randomSeqIds = SeqUtil.randomSubsetShuffle(
-        pool.keySet.diff(exclusions).toIndexedSeq,
+        acceptableO.fold(pool.keySet)(_.intersect(pool.keySet)).diff(excluded).toIndexedSeq,
         requestedNumber.unwrap,
         random,
       )
@@ -750,19 +754,44 @@ class SequencerConnectionPoolImpl private[sequencing] (
       pickedConnections
     }
 
-  override def getOneConnectionPerSequencer(requester: String)(implicit
+  override def getOneConnectionPerSequencer(
+      requester: String,
+      acceptableO: Option[Set[SequencerId]],
+  )(implicit
       traceContext: TraceContext
   ): Map[SequencerId, SequencerConnection] = {
     logger.debug(s"[$requester] requesting one connection per sequencer")
     // Upper bound on number of connections. Note: `checked` because `connections` is `NonEmpty`.
     val nb = checked(PositiveInt.tryCreate(config.connections.size))
-    getConnections(requester, nb, exclusions = Set.empty)
+    getConnections(requester, nb, excluded = Set.empty, acceptableO = acceptableO)
       .map(c => c.attributes.sequencerId -> c)
       .toMap
   }
 
-  override def getAllConnections()(implicit traceContext: TraceContext): Seq[SequencerConnection] =
-    (lock.exclusive(pool.values.flatten.toSeq))
+  override def getAllConnections: Seq[SequencerConnection] =
+    lock.exclusive(pool.values.flatten.toSeq)
+
+  override def getAllSequencerIds(implicit
+      traceContext: TraceContext
+  ): Map[SequencerAlias, SequencerId] =
+    getAllConnections.mapFilter { connection =>
+      val name = connection.config.name
+
+      // TODO(i31759): The only reason the connection name is not the alias was to support multiple endpoints
+      //  per connection (see `SequencerConnectionPoolConfig.fromSequencerConnections`).
+      //  Remove this when we only have one endpoint per connection.
+      val alias = name.substring(0, name.lastIndexOf('-'))
+
+      SequencerAlias
+        .create(alias)
+        .map { sequencerAlias =>
+          val sequencerId = connection.attributes.sequencerId
+          sequencerAlias -> sequencerId
+        }
+        .leftMap(error => logger.warn(s"Cannot convert connection name to sequencer alias: $error"))
+        .toOption
+    }.toMap
+
 }
 
 object SequencerConnectionPoolImpl {
@@ -806,6 +835,7 @@ class GrpcSequencerConnectionPoolFactory(
     val loggerWithPoolName = loggerFactory.append("pool", name)
 
     val connectionFactory = new GrpcInternalSequencerConnectionFactory(
+      member,
       clientProtocolVersions,
       minimumProtocolVersion,
       params,

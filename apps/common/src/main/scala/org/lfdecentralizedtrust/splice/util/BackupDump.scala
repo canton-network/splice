@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.util
 import better.files.File
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.tracing.TraceContext
+import com.google.cloud.storage.Blob
 import io.circe.Decoder
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.BackupDumpConfig
@@ -84,11 +85,11 @@ object BackupDump {
     File(path).exists
   }
 
-  def bucketExists(
+  def getBlobs(
       config: BackupDumpConfig,
       offset: String,
       loggerFactory: NamedLoggerFactory,
-  ): Boolean = {
+  ): Seq[Blob] = {
     config match {
       case BackupDumpConfig.Gcp(bucketConfig, prefix) =>
         val gcpBucket = new GcpBucket(bucketConfig, loggerFactory)
@@ -96,8 +97,7 @@ object BackupDump {
           case Some(p) => s"$p/"
           case None => ""
         }
-        val blobs = gcpBucket.listBlobsByPrefix(prefix = s"$pref$offset")
-        blobs.nonEmpty
+        gcpBucket.listBlobsByPrefix(prefix = s"$pref$offset")
       case _ =>
         throw Status.UNIMPLEMENTED
           .withDescription("Topology snapshot works only with GCP buckets")

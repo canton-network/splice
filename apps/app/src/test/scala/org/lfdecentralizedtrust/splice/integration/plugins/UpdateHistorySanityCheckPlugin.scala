@@ -223,7 +223,7 @@ class UpdateHistorySanityCheckPlugin(
       acc: List[AcsResponseV1],
   ): List[AcsResponseV1] = {
     val acsSnapshotPeriodHours = scanStorageConfigV1.dbAcsSnapshotPeriodHours
-    val migrationId = scan.config.domainMigrationId
+    val migrationId = scan.getMigrationId()
     scan.getDateOfMostRecentSnapshotBefore(before, migrationId) match {
       case Some(snapshotDate) =>
         val snapshot = scan

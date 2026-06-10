@@ -47,6 +47,18 @@ class StoreMetrics(metricsFactory: LabeledMetricsFactory)(metricsContext: Metric
       )
     )
 
+  val ingestionTimePerACSBatch: Timer =
+    metricsFactory.timer(
+      MetricInfo(
+        prefix :+ "batch-acs-ingestion-latency",
+        "How long it takes to ingest a batch of ActiveContractsItem.",
+        Latency,
+        "Measures the amount of time it takes to ingest a batch of ActiveContractsItem. " +
+          "Note that it is somewhat affected by the size of the batch, so you should correlate with batchSize. " +
+          "Also, there will only be data during Store initialization. Afterwards you want to check `batch-ingestion-latency`",
+      )
+    )
+
   val acsSize: Gauge[Long] =
     metricsFactory.gauge(
       MetricInfo(

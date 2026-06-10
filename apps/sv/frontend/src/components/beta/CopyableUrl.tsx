@@ -3,7 +3,7 @@
 
 import { ContentCopy } from '@mui/icons-material';
 import { Box, IconButton, Link } from '@mui/material';
-import { sanitizeUrl } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { sanitizeUrl } from '@canton-network/splice-common-frontend-utils';
 
 import type { CopyableIdentifierSize } from './CopyableIdentifier';
 

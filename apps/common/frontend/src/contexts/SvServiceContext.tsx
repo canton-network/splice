@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as openapi from '@lfdecentralizedtrust/sv-openapi';
+import * as openapi from '@canton-network/sv-openapi';
 import React, { useContext, useMemo } from 'react';
-import { GetDsoInfoResponse, ServerConfiguration } from '@lfdecentralizedtrust/sv-openapi';
+import { GetDsoInfoResponse, ServerConfiguration } from '@canton-network/sv-openapi';
 
 const SvContext = React.createContext<SvClient | undefined>(undefined);
 

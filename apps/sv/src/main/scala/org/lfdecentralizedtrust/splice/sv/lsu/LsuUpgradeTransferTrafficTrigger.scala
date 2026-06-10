@@ -90,7 +90,7 @@ class LsuTransferTrafficTrigger(
       case NodeStatus.Failure(msg) =>
         logger.warn(s"Failed to get successor sequencer status: $msg")
         false
-      case NodeStatus.NotInitialized(_, _) => false
+      case NodeStatus.NotInitialized(_, _, _) => false
       case NodeStatus.Success(_) => true
     }
   }

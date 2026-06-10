@@ -1,7 +1,3 @@
-# Replace MIGRATION_ID with the migration ID of the global synchronizer.
-migration:
-  id: "MIGRATION_ID"
-
 participantAddress: "participant"
 
 # Replace YOUR_SV_NAME with the name you provided for your SV identity

@@ -221,7 +221,7 @@ object SqlIndexInitializationTrigger {
     /** Create this index if it does not exist. */
     final case class Create(
         indexName: String,
-        createAction: DBIOAction[?, NoStream, Effect.Write & Effect.Transactional],
+        createAction: DBIOAction[Int, NoStream, Effect.Write & Effect.Transactional],
     ) extends IndexAction
   }
 
@@ -235,14 +235,6 @@ object SqlIndexInitializationTrigger {
           create index concurrently if not exists updt_hist_crea_hi_mi_ci_import_updates
           on update_history_creates (history_id, migration_id, contract_id)
           where record_time = #${CantonTimestamp.MinValue.toMicros}
-        """,
-      ),
-    IndexAction
-      .Create(
-        indexName = "round_party_totals_sid_pid_cr",
-        createAction = sqlu"""
-          create index concurrently if not exists round_party_totals_sid_pid_cr
-          on round_party_totals (store_id, party, closed_round desc)
         """,
       ),
     IndexAction

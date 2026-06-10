@@ -1,19 +1,18 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import cats.syntax.either.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice.{splitwell as splitwellCodegen}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell as splitwellCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.SplitwellAppClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import SpliceTests.BracketSynchronous.*
+import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
 import org.lfdecentralizedtrust.splice.util.{MultiDomainTestUtil, SplitwellTestUtil, WalletTestUtil}
-import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.{SynchronizerId, PartyId}
-
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import org.scalatest.Ignore
-import org.slf4j.event.Level
+
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
@@ -63,17 +62,21 @@ class SplitwellUpgradeIntegrationTest
       splitwell <- splitwells
     } eventually() {
       loggerFactory
-        .assertLogsSeqWithResult[Try[Unit]](SuppressionRule.LevelAndAbove(Level.WARN))(
+        .assertLogsUnorderedOptionalFromResult[Try[Unit]](
           Try(splitwell.createInstallRequests()),
-          { case (r, logs) =>
+          { r =>
             if (r.isFailure) {
-              forExactly(1, logs)(
-                _.errorMessage should include(
-                  "Not all informee are on the specified domainID: splitwellUpgrade"
+              Seq(
+                (
+                  LogEntryOptionality.Required,
+                  log =>
+                    log.errorMessage should include(
+                      "Not all informee are on the specified domainID: splitwellUpgrade"
+                    ),
                 )
               )
             } else {
-              logs shouldBe empty withClue "log warnings"
+              Seq.empty
             }
           },
         )

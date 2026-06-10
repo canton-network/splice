@@ -452,15 +452,16 @@ class MainIndexDBMetrics(
   val loadParties: DatabaseMetrics = createDbMetrics("load_parties")
   val loadAllParties: DatabaseMetrics = createDbMetrics("load_all_parties")
   val pruneDbMetrics: DatabaseMetrics = createDbMetrics("prune")
+  val cleanPruningCandidateContractsDbMetrics: DatabaseMetrics = createDbMetrics(
+    "prune_clean_contract_candidates"
+  )
+  val pruneContractsDbMetrics: DatabaseMetrics = createDbMetrics("prune_contracts")
   val fetchPruningOffsetsMetrics: DatabaseMetrics = createDbMetrics("fetch_pruning_offsets")
   val lookupActiveContractsDbMetrics: DatabaseMetrics = createDbMetrics(
     "lookup_active_contracts"
   )
   val lookupContractByKeyDbMetrics: DatabaseMetrics = createDbMetrics(
     "lookup_contract_by_key"
-  )
-  val lookupNonUniqueContractByKeyDbMetrics: DatabaseMetrics = createDbMetrics(
-    "lookup_non_unique_contract_by_key"
   )
   val lookupLastActivationsDbMetrics: DatabaseMetrics = createDbMetrics(
     "lookup_last_activations"
@@ -521,8 +522,6 @@ class MainIndexDBMetrics(
   val lastRecordTimeBeforeOrAtSynchronizerOffset: DatabaseMetrics = createDbMetrics(
     "last_record_time_before_or_at_synchronizer_offset"
   )
-
-  val prunableContracts: DatabaseMetrics = createDbMetrics("pruneable_contracts")
 
   object translation {
     val getLfPackage: Timer = openTelemetryMetricsFactory.timer(inventory.getLfPackage.info)

@@ -27,12 +27,9 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.Topol
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
@@ -56,15 +53,32 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected val retryProvider: RetryProvider
   protected val clock: Clock
   protected val domainTimeSync: DomainTimeSynchronization
-  protected val domainUnpausedSync: DomainUnpausedSynchronization
   protected val participantAdminConnection: ParticipantAdminConnection
   protected val ledgerClient: SpliceLedgerClient
   protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig
   protected val grpcClientMetrics: GrpcClientMetrics
 
+  protected def resolveDomainMigrationId(
+      scanFallback: => Future[Long]
+  )(implicit
+      ec: ExecutionContext,
+      closeContext: CloseContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
+      case Some(migrationId) =>
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
+        Future.successful(migrationId)
+      case None =>
+        scanFallback.map { migrationId =>
+          logger.info(s"Resolved domain migration id $migrationId from the fallback (scan)")
+          migrationId
+        }
+    }
+
   protected def newSvStore(
       key: SvStore.Key,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -76,7 +90,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     storage,
     loggerFactory,
     retryProvider,
-    domainMigrationInfo,
+    migrationId,
     participantId,
     config.automation.ingestion,
     config.parameters.defaultLimit,
@@ -89,6 +103,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       ledgerClient: SpliceLedgerClient,
       participantAdminConnection: ParticipantAdminConnection,
       synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
+      packageVersionSupport: PackageVersionSupport,
   )(implicit
       ec: ExecutionContextExecutor,
       mat: Materializer,
@@ -99,7 +114,6 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     new SvSvAutomationService(
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       config,
       svStore,
       dsoStore,
@@ -109,12 +123,13 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       synchronizerNodeService,
       retryProvider,
       config.topologySnapshotConfig,
+      packageVersionSupport,
       loggerFactory,
     )
 
   protected def newDsoStore(
       key: SvStore.Key,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -127,7 +142,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,
@@ -151,11 +166,11 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       httpClient: HttpClient,
       templateJsonDecoder: TemplateJsonDecoder,
       esf: ExecutionSequencerFactory,
+      tc: TraceContext,
   ) =
     new SvDsoAutomationService(
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       config,
       svStore,
       dsoStore,

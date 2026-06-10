@@ -7,25 +7,22 @@ import {
   CLUSTER_BASENAME,
   CnChartVersion,
   config,
-  DecentralizedSynchronizerUpgradeConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
+import { configForSv } from '@canton-network/splice-pulumi-common-sv';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/dsoConfig';
+} from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
   deployedValidators,
   validatorRunbookStackName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { deploymentConf } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/config';
+} from '@canton-network/splice-pulumi-common-validator';
+import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
 import {
   GitFluxRef,
   StackFromRef,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/stack';
+} from '@canton-network/splice-pulumi-common/src/operator/flux-source';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 function isVersionAtLeastOrSnapshot(version: CnChartVersion, minVersion: string): boolean {
   if (version.type === 'local') {
@@ -67,11 +64,7 @@ export function* getSpliceStacksFromMainReference(): Generator<StackFromRef> {
   if (deploymentConf.projectsToDeploy.has('canton-network')) {
     yield { project: 'canton-network', stack: `canton-network.${CLUSTER_BASENAME}` };
   }
-  if (
-    deploymentConf.projectsToDeploy.has('sv') &&
-    (DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-      DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv)
-  ) {
+  if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
       yield { project: 'sv', stack: `sv.${sv}.${CLUSTER_BASENAME}` };
     }
@@ -151,17 +144,16 @@ function installSvStacks(
   namespace: string,
   gcpSecret: k8s.core.v1.Secret
 ): void {
-  if (
-    deploymentConf.projectsToDeploy.has('sv') &&
-    (DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-      DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv)
-  ) {
+  if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
+      const isRunbookReset =
+        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
+      const isCatchupTestSv = configForSv(sv)?.testing?.catchup?.enabled ?? false;
       createStackCR(
         `sv.${sv}`,
         'sv',
         namespace,
-        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET'),
+        isRunbookReset || isCatchupTestSv,
         reference,
         envRefs,
         gcpSecret,

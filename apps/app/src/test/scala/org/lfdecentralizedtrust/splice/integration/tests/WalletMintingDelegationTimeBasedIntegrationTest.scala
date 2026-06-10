@@ -439,6 +439,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val unclaimedActivityAmount = BigDecimal(200.0)
       val validatorRewardAmount = BigDecimal(500.0)
       val developmentFundAmount = BigDecimal(300.0)
+      val rewardCouponV2Amount = BigDecimal(1000.0)
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
@@ -540,6 +541,12 @@ class WalletMintingDelegationTimeBasedIntegrationTest
                 "test development fund coupon",
               ).create,
             )
+
+          // Create RewardCouponV2 (assigned to beneficiary)
+          createRewardCouponsV2(
+            Seq((beneficiaryParty.party, rewardCouponV2Amount, Some(beneficiaryParty.party))),
+            round = Some(issuingRound.round),
+          )
         }
 
         // Advance time to collect all rewards
@@ -566,6 +573,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             externalPartyWallet.store
               .listDevelopmentFundCoupons()
               .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
+            externalPartyWallet.store
+              .listSortedMintableRewardCouponV2s(includeUnassigned = true)
+              .futureValue shouldBe empty withClue "RewardCouponV2"
           }
         }
       }
@@ -581,7 +591,8 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           )) +
           (validatorRewardAmount * BigDecimal(issuingRound.issuancePerValidatorRewardCoupon)) +
           unclaimedActivityAmount +
-          developmentFundAmount
+          developmentFundAmount +
+          rewardCouponV2Amount
 
       actualIncrease shouldBe expectedTotalReward
 

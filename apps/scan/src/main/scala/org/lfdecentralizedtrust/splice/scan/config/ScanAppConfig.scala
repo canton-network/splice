@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
 }
+
 import org.lfdecentralizedtrust.splice.store.Limit
 
 import java.time.Instant
@@ -58,10 +59,17 @@ case class ScanAppBackendConfig(
     enableAppActivityRecordAndTrafficIngestion: Boolean = true,
     serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
+    // Max rounding error tolerated wrt actual total of minting allowances
+    // and the per-round minting allowance from the CC whitepaper.
+    rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
+    // The migration id is normally read from the DB (the highest known migration id in the
+    // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
+    // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
+    // migration id is fetched from the sponsor scan configured via `sponsorScanUrl`, the same way
+    // a joining SV fetches it from its sponsoring SV.
+    sponsorScanUrl: Option[NetworkAppClientConfig] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     spliceInstanceNames: SpliceInstanceNamesConfig,
     updateHistoryBackfillEnabled: Boolean = true,
@@ -159,14 +167,6 @@ final case class ScanCacheConfig(
     cachedByParty: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 2000,
-    ),
-    aggregatedRounds: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofSeconds(30),
-      maxSize = 1,
-    ),
-    roundTotals: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofMinutes(1),
-      maxSize = 1000,
     ),
     voteRequests: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),

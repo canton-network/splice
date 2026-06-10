@@ -8,7 +8,6 @@ kind: ServiceMonitor
 metadata:
   labels:
     release: {{ .Values.metrics.release }}
-    migration: {{ .Values.migration.id | quote }}
   name: {{ "validator" }}
   namespace: {{ .Release.Namespace }}
 spec:
@@ -24,8 +23,5 @@ spec:
   namespaceSelector:
     matchNames:
     - {{ .Release.Namespace }}
-
-  targetLabels:
-    - migration
 
 {{- end }}

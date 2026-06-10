@@ -54,6 +54,10 @@ class CantonConfigTest extends AnyWordSpec with BaseTest {
   private lazy val simpleConf: File = examplesDir / "01-simple-topology" / "simple-topology.conf"
   private lazy val simpleConfPath: String = simpleConf.pathAsString
 
+  private lazy val observabilityDir: File = examplesDir / "13-observability" / "canton"
+  private lazy val observabilityNetworkConf: File = observabilityDir / "network.conf"
+  private lazy val observabilitySequencer4Conf: File = observabilityDir / "sequencer4.conf"
+
   private lazy val duplicateStorageWithoutReplicationConfig: File =
     baseDir / "duplicate-storage-without-replication.conf"
 
@@ -71,38 +75,6 @@ class CantonConfigTest extends AnyWordSpec with BaseTest {
   ): Either[CantonConfigError, CantonConfig] = {
     val files = resourcePaths.map(r => (baseDir.toString / r).toJava)
     CantonConfig.parseAndLoad(files, Some(DefaultPorts.create()))
-  }
-
-  "the example simple topology configuration" should {
-    lazy val config =
-      loadFile(simpleConfPath).valueOrFail("failed to load simple-topology.conf")
-
-    "contain a couple of participants" in {
-      config.participants should have size 2
-    }
-
-    "contain a single sequencer" in {
-      config.sequencers should have size 1
-    }
-
-    "contain a single mediator" in {
-      config.mediators should have size 1
-    }
-
-    "produce a port definition message" in {
-      config.portDescription.split(";") should contain theSameElementsAs List(
-        "participant1:admin-api=5012,ledger-api=5011",
-        "participant2:admin-api=5022,ledger-api=5021",
-        "sequencer1:admin-api=5002,public-api=5001",
-        "mediator1:admin-api=5202",
-      )
-    }
-    "check startup memory checker config" in {
-      config.parameters.startupMemoryCheckConfig shouldBe StartupMemoryCheckConfig(
-        ReportingLevel.Warn
-      )
-    }
-
   }
 
   "the invalid node names configuration" should {
@@ -298,6 +270,111 @@ class CantonConfigTest extends AnyWordSpec with BaseTest {
             and not include "password=" and not include "supersafe"),
         )
         result.left.value shouldBe a[ConfigErrors.ValidationError.Error]
+      }
+    }
+  }
+
+  // Parse validation and content assertions for example configs that do not start a live Canton
+  // environment (e.g. Docker-Compose-only examples). Integration tests that actually boot Canton
+  // live in ExampleIntegrationTest subclasses co-located with those tests.
+  "example config content" should {
+
+    def loadExampleFiles(files: File*): CantonConfig =
+      CantonConfig
+        .parseAndLoad(files.map(_.toJava), defaultPorts = None)
+        .valueOrFail(s"failed to load example config: ${files.map(_.name).mkString(", ")}")
+
+    "01-simple-topology" should {
+      lazy val config =
+        loadExampleFiles(examplesDir / "01-simple-topology" / "simple-topology.conf")
+
+      "contain at least 2 participants, 1 sequencer and 1 mediator" in {
+        config.participants.size should be >= 2
+        config.sequencers.size should be >= 1
+        config.mediators.size should be >= 1
+      }
+
+      "produce the expected port description" in {
+        config.portDescription.split(";") should contain theSameElementsAs List(
+          "participant1:admin-api=5012,ledger-api=5011",
+          "participant2:admin-api=5022,ledger-api=5021",
+          "sequencer1:admin-api=5002,public-api=5001",
+          "mediator1:admin-api=5202",
+        )
+      }
+
+      "use warn-level startup memory check" in {
+        config.parameters.startupMemoryCheckConfig shouldBe StartupMemoryCheckConfig(
+          ReportingLevel.Warn
+        )
+      }
+    }
+
+    "13-observability" should {
+      // memory.conf overrides _shared.storage so no Postgres instance is required at parse time
+      lazy val config =
+        CantonConfig
+          .parseAndLoad(
+            Seq(
+              confDir / "storage" / "memory.conf",
+              observabilityNetworkConf,
+            ).map(_.toJava),
+            Some(DefaultPorts.create()),
+          )
+          .valueOrFail("failed to load 13-observability/canton/network.conf")
+
+      "contain at least 2 participants, 3 sequencers and 2 mediators" in {
+        config.participants.size should be >= 2
+        config.sequencers.size should be >= 3
+        config.mediators.size should be >= 2
+      }
+
+      "expose participant1 on the expected ports" in {
+        val p1 = config.participantsByString("participant1")
+        p1.ledgerApi.port.unwrap shouldBe 10011
+        p1.adminApi.port.unwrap shouldBe 10012
+        p1.httpLedgerApi.port.unwrap shouldBe 10013
+      }
+
+      "expose participant2 on the expected ports" in {
+        val p2 = config.participantsByString("participant2")
+        p2.ledgerApi.port.unwrap shouldBe 10021
+        p2.adminApi.port.unwrap shouldBe 10022
+        p2.httpLedgerApi.port.unwrap shouldBe 10023
+      }
+
+      "expose sequencers on the expected admin ports" in {
+        config.sequencersByString("sequencer1").adminApi.port.unwrap shouldBe 4402
+        config.sequencersByString("sequencer2").adminApi.port.unwrap shouldBe 4412
+        config.sequencersByString("sequencer3").adminApi.port.unwrap shouldBe 4422
+      }
+
+      "expose mediators on the expected admin ports" in {
+        config.mediatorsByString("mediator1").adminApi.port.unwrap shouldBe 4602
+        config.mediatorsByString("mediator2").adminApi.port.unwrap shouldBe 4612
+      }
+    }
+
+    "13-observability sequencer4" should {
+      lazy val config =
+        CantonConfig
+          .parseAndLoad(
+            Seq(
+              confDir / "storage" / "memory.conf",
+              observabilitySequencer4Conf,
+            ).map(_.toJava),
+            Some(DefaultPorts.create()),
+          )
+          .valueOrFail("failed to load 13-observability/canton/sequencer4.conf")
+
+      "contain exactly 1 sequencer" in {
+        config.sequencers.size should be >= 1
+      }
+
+      "expose sequencer4 on the expected ports" in {
+        val s4 = config.sequencersByString("sequencer4")
+        s4.publicApi.port.unwrap shouldBe 4431
+        s4.adminApi.port.unwrap shouldBe 4432
       }
     }
   }

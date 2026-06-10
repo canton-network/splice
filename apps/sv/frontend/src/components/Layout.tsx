@@ -6,7 +6,7 @@ import {
   Loading,
   useUserState,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 
 import { Logout } from '@mui/icons-material';
 import { Box, Button, Divider, Stack, Typography } from '@mui/material';

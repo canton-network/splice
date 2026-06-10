@@ -182,7 +182,7 @@ sealed trait SynchronizerConnectivityIntegrationTest
         )
         // wait for all ping contracts to be archived
         eventually() {
-          participant1.ledger_api.state.acs.of_all() shouldBe empty
+          participant1.ledger_api.state.acs.count() shouldEqual 0
         }
         participant1.synchronizers.disconnect_local(daName)
         mediator1.stop()
@@ -337,7 +337,7 @@ sealed trait SynchronizerConnectivityIntegrationTest
           entry => {
             entry.shouldBeCommandFailure(InitialOnboardingError)
             entry.commandFailureMessage should include(
-              s"${participant1.id} is either active on the synchronizer or has previously been offboarded"
+              s"Unable to register onboarding topology transactions"
             )
           },
         )

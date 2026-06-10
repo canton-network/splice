@@ -6,12 +6,9 @@ import {
   ErrorDisplay,
   getAmuletConfigurationAsOfNow,
   Loading,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { microsecondsToMinutes } from '@lfdecentralizedtrust/splice-common-frontend-utils';
-import {
-  useGetAmuletRules,
-  useOpenRounds,
-} from '@lfdecentralizedtrust/splice-common-frontend/scan-api';
+} from '@canton-network/splice-common-frontend';
+import { microsecondsToMinutes } from '@canton-network/splice-common-frontend-utils';
+import { useGetAmuletRules, useOpenRounds } from '@canton-network/splice-common-frontend/scan-api';
 import BigNumber from 'bignumber.js';
 import { formatDistanceToNow } from 'date-fns';
 import dayjs from 'dayjs';

@@ -10,7 +10,7 @@ import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { MemoryRouter } from 'react-router';
 import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 
 const requests: ActionRequiredData[] = [
   {

@@ -19,18 +19,6 @@ auth:
   #   connectionTimeout: "10 seconds"
   #   readTimeout: "10 seconds"
 
-# MIGRATION_START
-# Replace MIGRATION_ID with the migration ID of the global synchronizer.
-migration:
-  id: "MIGRATION_ID"
-  # Uncomment these when redeploying as part of a migration,
-  # i.e., MIGRATION_ID was incremented and a migration dump was exported to the attached pvc.
-  # migrating: true
-  # This declares that your sequencer with that migration id is still up. You should remove it
-  # once you take down the sequencer for the prior migration id
-  # legacyId: "MIGRATION_ID_BEFORE_INCREMENTED"
-#MIGRATION_END
-
 participantAddress: "participant"
 
 # Please make the ``global-domain-sequencer`` service accessible for other validators to subscribe to, and set the URL below to your sequencer service.

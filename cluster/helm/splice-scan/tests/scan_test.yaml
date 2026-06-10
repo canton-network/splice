@@ -323,3 +323,49 @@ tests:
             canton.scan-apps.scan-app.roll-forward-lsu {
               upgrade-time = "2026-04-30T00:02:00Z"
             }
+  - it: "sets the sponsor scan url"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      synchronizers:
+        current:
+          sequencer: "current-sequencer-address"
+          mediator: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      maxDarVersion: 1.0.0
+      sponsorScanUrl: "http://scan-app.sv-1:5012"
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_SPONSOR_SCAN_URL')].value
+          pattern: 'canton\.scan-apps\.scan-app\.sponsor-scan-url\.url = "http://scan-app\.sv-1:5012"'
+  - it: "omits the sponsor scan url when not set"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      synchronizers:
+        current:
+          sequencer: "current-sequencer-address"
+          mediator: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      maxDarVersion: 1.0.0
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_SPONSOR_SCAN_URL')]

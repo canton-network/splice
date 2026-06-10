@@ -229,9 +229,10 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 2
+              "migrationId": 2,
+              "synchronizerSerialId": 9
             }
           }
         },
@@ -241,8 +242,7 @@
           "host": "info.sv.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 2,
-          "scanUrl": "http://scan-app.sv:5012"
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -651,11 +651,7 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2,
-          "migrating": false
-        },
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "persistence": {
           "postgresName": "apps-pg",
           "secretName": "apps-pg-secret"
@@ -677,6 +673,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",
@@ -861,10 +858,6 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
-          "type": "unlimited"
-        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
@@ -876,10 +869,6 @@
         "/api/scan/v0/admin/validator": {
           "name": "validator-licenses",
           "type": "unlimited"
-        },
-        "/api/scan/v0/aggregated-rounds": {
-          "name": "aggregated-rounds",
-          "type": "banned"
         },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
@@ -965,25 +954,9 @@
           "name": "open-and-issuing-mining-rounds",
           "type": "unlimited"
         },
-        "/api/scan/v0/rewards-collected": {
-          "name": "rewards-collected",
-          "type": "banned"
-        },
         "/api/scan/v0/roll-forward-lsu": {
           "name": "rollForwardLsu",
           "type": "unlimited"
-        },
-        "/api/scan/v0/round-of-latest-data": {
-          "name": "round-of-latest-data",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-party-totals": {
-          "name": "round-party-totals",
-          "type": "banned"
-        },
-        "/api/scan/v0/round-totals": {
-          "name": "round-totals",
-          "type": "banned"
         },
         "/api/scan/v0/scans": {
           "name": "scans",
@@ -1321,13 +1294,9 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2,
-          "migrating": false
-        },
         "nodeIdentifier": "DA-Helm-Test-Node",
         "onboardingName": "DA-Helm-Test-Node",
-        "participantAddress": "participant-2",
+        "participantAddress": "participant",
         "permissionedSynchronizer": false,
         "persistence": {
           "postgresName": "apps-pg",
@@ -1729,11 +1698,8 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": "2"
-          },
           "nodeIdentifier": "DA-Helm-Test-Node",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

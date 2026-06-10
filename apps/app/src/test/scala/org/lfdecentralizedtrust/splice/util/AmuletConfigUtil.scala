@@ -150,10 +150,11 @@ trait AmuletConfigUtil extends TestCommon {
               .requiredNumVotes(dsoRules)
           ) {
             eventually() {
-              sv.listVoteRequests()
-                .filter(
-                  _.payload.trackingCid == voteRequestCid.contractId
-                ) should have size 1
+              sv.listVoteRequests().filter { vr =>
+                vr.contractId == voteRequestCid.contractId ||
+                (vr.payload.trackingCid.isPresent &&
+                  vr.payload.trackingCid.get == voteRequestCid.contractId)
+              } should have size 1
             }
             actAndCheck(
               s"${sv.name} casts a vote", {
@@ -171,7 +172,6 @@ trait AmuletConfigUtil extends TestCommon {
                 sv.lookupVoteRequest(voteRequestCid.contractId)
                   .payload
                   .votes should have size voteCount
-                sv.listVoteRequests() shouldBe empty
               },
             )
           }

@@ -16,7 +16,7 @@ import { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import dayjs from 'dayjs';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useMemo, useState } from 'react';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';
 import {
@@ -38,7 +38,7 @@ import {
   getAmuletConfigToCompareWith,
   PrettyJsonDiff,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { JsonDiffAccordion } from '../governance/JsonDiffAccordion';
 
 export type SetAmuletConfigCompleteFormData = {

@@ -29,14 +29,17 @@ export const MigrationInfoSchema = z
     id: z.number().gte(0),
     version: CnChartVersionSchema,
     releaseReference: GitReferenceSchema.optional(),
-    enableLogicalSynchronizerDeploymentMode: z.boolean().default(false),
-    migrateParticipantsFromSvCantonToSv: z.boolean().default(false),
     sequencer: z
       .object({
         enableBftSequencer: z.boolean().default(false),
       })
       .strict()
       .prefault({}),
+    cometbft: z
+      .object({
+        volumeSize: z.string().optional(),
+      })
+      .optional(),
   })
   .strict();
 
@@ -54,7 +57,6 @@ export const SynchronizerMigrationSchema = z
     archived: z.array(MigrationInfoSchema).optional(),
     activeDatabaseId: z.number().optional(),
     attachPvc: z.boolean().default(true),
-    lsuEnabled: z.boolean().default(false),
-    frozenMigrationId: z.number().optional(),
+    frozenMigrationId: z.number(),
   })
   .strict();

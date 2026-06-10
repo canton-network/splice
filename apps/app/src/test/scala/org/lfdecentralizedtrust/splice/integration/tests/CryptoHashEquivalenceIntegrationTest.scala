@@ -28,7 +28,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
@@ -133,7 +132,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         ParticipantId.tryFromProtoPrimitive("PAR::batch-hash-test::dummy")
       val updateHistory = new UpdateHistory(
         storage,
-        new DomainMigrationInfo(0L, None),
+        0L,
         "batch_hash_equiv_test",
         participantId,
         svParty,
@@ -154,6 +153,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         storage,
         updateHistory,
         appActivityRecordStore,
+        BigDecimal(0.001),
         loggerFactory,
       )
       rewardsHistoryId = updateHistory.historyId

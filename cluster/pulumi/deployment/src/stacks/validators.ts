@@ -4,13 +4,10 @@ import * as k8s from '@pulumi/kubernetes';
 import {
   deployedValidators,
   validatorRunbookStackName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { deploymentConf } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/config';
-import { GitFluxRef } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/stack';
+} from '@canton-network/splice-pulumi-common-validator';
+import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
+import { GitFluxRef } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
 import { config } from '../../../common';
 

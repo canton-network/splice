@@ -1,13 +1,13 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as external from '@lfdecentralizedtrust/wallet-external-openapi';
-import { useUserState } from '@lfdecentralizedtrust/splice-common-frontend';
+import * as external from '@canton-network/wallet-external-openapi';
+import { useUserState } from '@canton-network/splice-common-frontend';
 import {
   BaseApiMiddleware,
   Contract,
   ContractWithState,
   OpenAPILoggingMiddleware,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import BigNumber from 'bignumber.js';
 import React, { useContext, useMemo } from 'react';
 import {
@@ -21,7 +21,7 @@ import {
   ServerConfiguration,
   WalletApi,
   WalletFeatureSupportResponse,
-} from '@lfdecentralizedtrust/wallet-openapi';
+} from '@canton-network/wallet-openapi';
 
 import * as payment from '@daml.js/splice-wallet-payments/lib/Splice/Wallet/Payment';
 import { AmuletTransferInstruction } from '@daml.js/splice-amulet/lib/Splice/AmuletTransferInstruction';

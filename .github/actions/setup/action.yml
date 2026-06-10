@@ -1,0 +1,17 @@
+name: "Prepare action repo"
+description: "Prepares everything needed to run actions from this repo"
+inputs:
+  ref:
+    description: "Revision of the cloned repo"
+    default: "main"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check out repository code
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        repository: canton-network/splice-shared-gha
+        ref: ${{ inputs.ref }}
+        path: splice-shared-gha
