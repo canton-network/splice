@@ -21,7 +21,7 @@ function _info(){
 }
 
 function usage() {
-  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> -m <migration_id> [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E]"
+  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E]"
   echo "  -s <sponsor_sv_address>: The full URL of the sponsor SV"
   echo "  -o <onboarding_secret>: The onboarding secret to use. May be empty (\"\") if you are already onboarded."
   echo "  -p <party_hint>: The party hint to use for the validator operator, by default also your participant identifier."
@@ -30,7 +30,7 @@ function usage() {
   echo "  -c <scan_address>: The full URL of a Scan app. If not provided, it will be derived from the sponsor SV address."
   echo "  -C <host_scan_address>: An optional alternative URL of a Scan app, when accessed from the host as opposed to a container."
   echo "  -n <network_name>: The name of an existing docker network to use. If not provided, the default network will be created used."
-  echo "  -m <migration_id>: The migration ID to use. Must be a non-negative integer."
+  echo "  -m <migration_id>: Optional. The migration ID is no longer required, as the validator resolves it automatically at start-up. It is now only used for naming the participant database for backwards compatibility: if provided, the database 'participant-<migration_id>' is used (set this to the migration id you previously deployed with); if omitted, the database 'participant' is used (recommended for new deployments). Must be a non-negative integer when provided."
   echo "  -i <identities_dump>: restore identities from a dump file. Requires a new participant identifier to be provided."
   echo "  -w: Wait for the validator to be fully up and running before returning."
   echo "  -l: Connect participant and validator also to docker network compose-sv_splice-sv-public, to use an SV deployed locally on docker compose"
@@ -206,16 +206,18 @@ if [ $trust_single -eq 1 ] && [ -z "${SEQUENCER_ADDRESS}" ]; then
 fi
 
 if [ -z "${migration_id}" ]; then
-  _error_msg "Please provide a migration id, you can find the current migration id at https://sync.global/sv-network/ (make sure you select the right network)"
-  usage
-  exit 1
+  PARTICIPANT_DB_NAME="participant"
+  _info "No migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
+else
+  if [[ ! "${migration_id}" =~ ^[0-9]+$ ]]; then
+    _error_msg "Migration ID must be a non-negative integer"
+    usage
+    exit 1
+  fi
+  PARTICIPANT_DB_NAME="participant-${migration_id}"
+  _info "Migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
 fi
-
-if [[ ! "${migration_id}" =~ ^[0-9]+$ ]]; then
-  _error_msg "Migration ID must be a non-negative integer"
-  usage
-  exit 1
-fi
+export PARTICIPANT_DB_NAME
 
 if [ -n "${restore_identities_dump}" ] && [ -z "${participant_id}" ]; then
   _error_msg "Please provide a new participant identifier when restoring identities from a dump file"
