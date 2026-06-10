@@ -28,7 +28,11 @@ seq_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds
 part_delay_ok=$(echo "$config"| yq ".svs.${namespace}.testing.catchup.thresholds.participantDelaySeconds // 30")
 med_delay_ok=$(echo "$config" | yq ".svs.${namespace}.testing.catchup.thresholds.mediatorDelaySeconds // 30")
 
-PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
+if [[ "$GCP_CLUSTER_BASENAME" == *scratch* ]]; then
+  PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.network.canton.global"
+else
+  PROM="https://prometheus.${GCP_CLUSTER_BASENAME}.global.canton.network.digitalasset.com"
+fi
 
 outcome="timed_out"
 poll_interval=60
