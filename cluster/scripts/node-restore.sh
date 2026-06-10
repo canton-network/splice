@@ -398,7 +398,10 @@ function get_component_run_id() {
 }
 
 function usage() {
-  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <component1:backup_id1,component2:backup_id2,...|run_id> <component>..."
+  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <component1:backup_id1,component2:backup_id2,...|run_id> <component1> <component2>..."
+  echo " Examples: "
+  echo "  $0 sv-2 0 1780988400000 cometbft sequencer participant mediator cn-apps"
+  echo "  $0 sv-2 0 \"cn-apps:42,sequencer:51,participant:63,mediator:71\" sequencer participant mediator cn-apps"
 }
 
 function main() {
@@ -439,6 +442,17 @@ function main() {
   config=$(get_resolved_config)
   local hyperdisk_enabled
   hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
+
+  if [[ "$run_id" == *","* ]]; then
+    _info " ** Validate backup ids ** "
+    local map_keys
+    map_keys=$(echo "$run_id" | tr ',' '\n' | cut -d: -f1 | sort)
+    local req_components
+    req_components=$(printf '%s\n' "${@:4}" | sort)
+    if [ "$map_keys" != "$req_components" ]; then
+      _error "Backup map keys ($map_keys) do not match requested components (${*:4})"
+    fi
+  fi
 
   for component in "${@:4}"; do
     component_to_deployments "$component" "$migration_id" "$namespace"
