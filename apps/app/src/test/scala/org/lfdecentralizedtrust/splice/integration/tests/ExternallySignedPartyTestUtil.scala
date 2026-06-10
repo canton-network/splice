@@ -4,10 +4,16 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{CachingConfigs, CryptoProvider, CryptoSchemeConfig}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
+import com.digitalasset.canton.crypto.v30 as cryptoProto
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
+import com.google.protobuf.ByteString
+import org.bouncycastle.asn1.edec.EdECObjectIdentifiers
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
+import org.bouncycastle.asn1.x509.{AlgorithmIdentifier, SubjectPublicKeyInfo}
+import org.bouncycastle.asn1.DEROctetString
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   ExternalPartySetupProposal,
   TransferPreapproval,
@@ -299,5 +305,131 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     provider.scanProxy.lookupTransferPreapprovalByParty(
       externalParty
     ) should not be empty withClue s"TransferPreapproval for $externalParty via scan-proxy"
+  }
+
+  /** Pre-generate an Ed25519 key pair and compute the external party's ID
+    * without a running participant. This is needed because external party IDs
+    * depend on cryptographic key fingerprints that are normally only known at
+    * runtime, but some test configs (e.g. `rewardSharingConfigByParty`) require
+    * the party ID at config transform time — before participants start.
+    *
+    * Use the returned [[PreGeneratedParty]] in config transforms to reference
+    * the party ID, then call [[onboardExternalParty]] with it at test time.
+    */
+  def preGenerateExternalParty(partyHint: String): PreGeneratedParty = {
+    val edPriv = new Ed25519PrivateKeyParameters(new java.security.SecureRandom())
+    val edPub = edPriv.generatePublicKey()
+    val ed25519Algo = new AlgorithmIdentifier(EdECObjectIdentifiers.id_Ed25519)
+
+    // For Ed25519 + DER SPKI, Canton computes the fingerprint from the raw public
+    // key bytes (not the full SPKI DER), for backward compatibility.
+    val rawPublicKeyBytes = ByteString.copyFrom(edPub.getEncoded)
+    val hash =
+      Hash.digest(HashPurpose.PublicKeyFingerprint, rawPublicKeyBytes, HashAlgorithm.Sha256)
+    val fingerprint = Fingerprint.tryFromString(hash.toLengthLimitedHexString.unwrap)
+
+    // Encode private key as PKCS#8 DER
+    val rawPrivateKeyBytes = edPriv.getEncoded
+    val pkcs8Der = ByteString.copyFrom(
+      new PrivateKeyInfo(ed25519Algo, new DEROctetString(rawPrivateKeyBytes)).getEncoded
+    )
+
+    // Build a serialized CryptoKeyPair protobuf that can be uploaded to a participant
+    val keyPairBytes = {
+      val signingPrivateKeyProto = cryptoProto.SigningPrivateKey(
+        id = fingerprint.unwrap,
+        format = cryptoProto.CryptoKeyFormat.CRYPTO_KEY_FORMAT_DER_PKCS8_PRIVATE_KEY_INFO,
+        privateKey = pkcs8Der,
+        scheme = cryptoProto.SigningKeyScheme.SIGNING_KEY_SCHEME_UNSPECIFIED,
+        usage = Seq(
+          cryptoProto.SigningKeyUsage.SIGNING_KEY_USAGE_NAMESPACE,
+          cryptoProto.SigningKeyUsage.SIGNING_KEY_USAGE_SEQUENCER_AUTHENTICATION,
+          cryptoProto.SigningKeyUsage.SIGNING_KEY_USAGE_PROTOCOL,
+          cryptoProto.SigningKeyUsage.SIGNING_KEY_USAGE_PROOF_OF_OWNERSHIP,
+        ),
+        keySpec = cryptoProto.SigningKeySpec.SIGNING_KEY_SPEC_EC_CURVE25519,
+      )
+      val signingKeyPairProto = cryptoProto.SigningKeyPair(
+        privateKey = Some(signingPrivateKeyProto)
+      )
+      val cryptoKeyPairProto = cryptoProto.CryptoKeyPair(
+        pair = cryptoProto.CryptoKeyPair.Pair.SigningKeyPair(signingKeyPairProto)
+      )
+      // Wrap in versioned envelope
+      CryptoKeyPair
+        .fromProtoCryptoKeyPairV30(cryptoKeyPairProto)
+        .value
+        .toByteString(ProtocolVersion.dev)
+    }
+
+    PreGeneratedParty(
+      partyId = PartyId.tryCreate(partyHint, fingerprint),
+      keyPairBytes = keyPairBytes,
+    )
+  }
+
+  case class PreGeneratedParty(
+      partyId: PartyId,
+      keyPairBytes: ByteString,
+  )
+
+  /** Onboard an external party using a pre-generated key from [[preGenerateExternalParty]].
+    * Imports the key pair into the participant, then follows the standard onboarding flow.
+    */
+  def onboardExternalParty(
+      validatorBackend: ValidatorAppBackendReference,
+      preGenerated: PreGeneratedParty,
+  )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult = {
+    val truePartyHint = preGenerated.partyId.uid.identifier.unwrap
+
+    // Import the pre-generated key pair into the participant
+    validatorBackend.participantClient.keys.secret
+      .upload(preGenerated.keyPairBytes, Some(truePartyHint))
+
+    val fingerprint = preGenerated.partyId.fingerprint
+    val signingKeyPairByteString = validatorBackend.participantClient.keys.secret
+      .download(fingerprint, ProtocolVersion.dev)
+
+    // Delete from participant — same as standard onboarding
+    validatorBackend.participantClient.keys.secret.delete(fingerprint, true)
+
+    val keyPair = CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+    val privateKey = keyPair.privateKey
+    val subjectPublicKeyInfo = extractSubjectPublicKeyInfoFrom(keyPair)
+
+    val listOfTransactionsAndHashes = validatorBackend
+      .generateExternalPartyTopology(
+        truePartyHint,
+        publicKeyAsHexString(subjectPublicKeyInfo),
+      )
+      .topologyTxs
+
+    val signedTopologyTxs = listOfTransactionsAndHashes.map { tx =>
+      SignedTopologyTx(
+        tx.topologyTx,
+        HexString.toHexString(
+          crypto(env.executionContext)
+            .sign(
+              hash = Hash.fromHexString(tx.hash).value,
+              signingKey = privateKey.asInstanceOf[SigningPrivateKey],
+              usage = SigningKeyUsage.ProtocolOnly,
+            )
+            .value
+            .toProtoV30
+            .signature
+        ),
+      )
+    }
+
+    validatorBackend.submitExternalPartyTopology(
+      signedTopologyTxs,
+      publicKeyAsHexString(subjectPublicKeyInfo),
+    )
+
+    OnboardingResult(
+      preGenerated.partyId,
+      keyPair.publicKey.asInstanceOf[SigningPublicKey],
+      privateKey,
+    )
   }
 }
