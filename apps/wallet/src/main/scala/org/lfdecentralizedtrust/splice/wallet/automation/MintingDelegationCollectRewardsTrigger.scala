@@ -204,9 +204,7 @@ class MintingDelegationCollectRewardsTrigger(
       .yieldUnit()
       .map { _ =>
         logger.debug(
-          show"Minted ${submission.couponsData}" +
-            show" and merged ${submission.amuletsToMerge.size} amulets" +
-            show" for delegation ${PrettyContractId(submission.delegation)}"
+          show"Minted ${submission.couponsData} and merged ${submission.amuletsToMerge.size} amulets for delegation ${PrettyContractId(submission.delegation)}"
         )
         true
       }
@@ -254,10 +252,7 @@ class MintingDelegationCollectRewardsTrigger(
           .yieldUnit()
           .map { _ =>
             logger.debug(
-              show"Assigned ${unassignedV2.size} V2 coupons to ${newBeneficiaries.size} beneficiaries," +
-                show" minted ${submission.couponsData}" +
-                show" and merged ${submission.amuletsToMerge.size} amulets" +
-                show" for delegation ${PrettyContractId(submission.delegation)}"
+              show"Assigned ${unassignedV2.size} V2 coupons to ${newBeneficiaries.size} beneficiaries, minted ${submission.couponsData} and merged ${submission.amuletsToMerge.size} amulets for delegation ${PrettyContractId(submission.delegation)}"
             )
             true
           }
