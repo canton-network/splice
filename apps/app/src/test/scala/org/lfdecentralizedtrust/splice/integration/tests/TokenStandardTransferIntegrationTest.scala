@@ -306,7 +306,7 @@ class TokenStandardTransferIntegrationTest
         ),
       )
 
-    sv1ScanBackend
+      sv1ScanBackend
         .getTotalAmuletBalance() shouldBe (bobExpectedLocked + bobExpectedUnlocked + aliceExpectedLocked + aliceExpectedUnlocked)
 
     }
