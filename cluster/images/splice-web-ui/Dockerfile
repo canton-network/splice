@@ -5,7 +5,7 @@ FROM nginxinc/nginx-unprivileged:1.30.0-alpine-slim
 
 USER root
 
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini bash
 
 USER nginx
 
