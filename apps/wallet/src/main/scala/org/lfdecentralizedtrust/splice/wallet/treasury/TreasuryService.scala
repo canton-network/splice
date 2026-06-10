@@ -812,10 +812,7 @@ class TreasuryService(
         issuingRoundsMap,
       )
       (rewardCouponV2TotalAmuletQuantity, rewardCouponV2Inputs) <-
-        getRewardCouponV2AndQuantity(
-          maxNumInputs,
-          issuingRoundsMap,
-        )
+        getRewardCouponV2AndQuantity(maxNumInputs)
       (svRewardsTotalAmuletQuantity, svRewardInputs) <- getSvRewardCouponsAndQuantity(
         maxNumInputs,
         issuingRoundsMap,
@@ -1086,14 +1083,12 @@ class TreasuryService(
     } yield (appRewardsAmuletQuantity, appRewardInputs)
 
   private def getRewardCouponV2AndQuantity(
-      maxNumInputs: Int,
-      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      maxNumInputs: Int
   )(implicit
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
     for {
       rewardCouponV2Inputs <- userStore.listSortedMintableRewardCouponV2s(
-        issuingRoundsMap,
         includeUnassigned = mintUnassignedRewardCouponsV2,
         PageLimit.tryCreate(maxNumInputs),
       )
