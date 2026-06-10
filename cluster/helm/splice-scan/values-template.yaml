@@ -3,7 +3,8 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "scan-app"
-scanUiImageName: "scan-web-ui"
+ui:
+  imageName: "scan-web-ui"
 
 # -- Annotations and labels for the participant pod
 pod:

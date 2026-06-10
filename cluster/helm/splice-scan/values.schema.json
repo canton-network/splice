@@ -31,9 +31,6 @@
         "imageName": {
           "type": "string"
         },
-        "scanUiImageName": {
-          "type": "string"
-        },
         "imageDigests": {
           "type": "object"
         },

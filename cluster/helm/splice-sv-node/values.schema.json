@@ -5,9 +5,6 @@
     "imageName": {
       "type": "string"
     },
-    "svUiImageName": {
-      "type": "string"
-    },
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"

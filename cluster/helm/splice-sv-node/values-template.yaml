@@ -3,7 +3,7 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "sv-app"
-svUiImageName: "sv-web-ui"
+ui.imageName: "sv-web-ui"
 
 # Custom annotations and labels for deployed resources
 pod:

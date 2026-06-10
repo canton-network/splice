@@ -374,7 +374,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       imageName: "custom-scan-app"
-      scanUiImageName: "custom-scan-ui"
+      ui.imageName: "custom-scan-ui"
       persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
       participantAddress: "dummy"
       sequencerAddress: "dummy"
