@@ -7,10 +7,9 @@ import com.daml.ledger.javaapi.data.codegen.ContractId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.RewardCouponV2
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFromAcsTableResult}
 import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TransferInputStore}
-import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.resource.DbStorage
@@ -86,23 +85,4 @@ trait DbTransferInputQueries extends AcsQueries with AcsTables with LimitHelpers
         }
     }
   }
-
-  override def listUnassignedRewardCouponsV2(
-      limit: Limit = defaultLimit
-  )(implicit tc: TraceContext): Future[Seq[
-    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
-  ]] =
-    for {
-      result <- dbStorage.query(
-        selectFromAcsTableWithState(
-          acsTableName,
-          acsStoreId,
-          domainMigrationId,
-          RewardCouponV2.COMPANION,
-          additionalWhere = sql"and acs.create_arguments->>'beneficiary' is null",
-          orderLimit = sql"order by acs.contract_expires_at asc limit ${sqlLimit(limit)}",
-        ),
-        "listUnassignedRewardCouponsV2",
-      )
-    } yield result.map(contractWithStateFromRow(RewardCouponV2.COMPANION)(_))
 }

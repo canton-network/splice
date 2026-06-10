@@ -30,7 +30,12 @@ import org.lfdecentralizedtrust.splice.store.{
   ResultsPage,
   TxLogStore,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, QualifiedName, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  ContractWithState,
+  QualifiedName,
+  TemplateJsonDecoder,
+}
 import org.lfdecentralizedtrust.splice.wallet.store
 import org.lfdecentralizedtrust.splice.wallet.store.{
   BuyTrafficRequestTxLogEntry,
@@ -202,6 +207,27 @@ class DbUserWalletStore(
       limit,
       ccValue = sql"rti.issuance * acs.reward_coupon_weight",
     )
+
+  override def listUnassignedRewardCouponsV2(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
+  ]] =
+    waitUntilAcsIngested {
+      for {
+        result <- storage.query(
+          selectFromAcsTableWithState(
+            WalletTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            amuletCodegen.RewardCouponV2.COMPANION,
+            additionalWhere = sql"and acs.create_arguments->>'beneficiary' is null",
+            orderLimit = sql"order by acs.contract_expires_at asc limit ${sqlLimit(limit)}",
+          ),
+          "listUnassignedRewardCouponsV2",
+        )
+      } yield result.map(contractWithStateFromRow(amuletCodegen.RewardCouponV2.COMPANION)(_))
+    }
 
   override def listTransactions(
       beginAfterEventIdO: Option[String],
