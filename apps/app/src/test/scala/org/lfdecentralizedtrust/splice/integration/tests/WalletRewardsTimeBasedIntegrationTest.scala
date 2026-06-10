@@ -112,6 +112,19 @@ class WalletRewardsTimeBasedIntegrationTest
         validatorRewards = Seq((bob, 0.33)),
       )
 
+      // Create unassigned V2 coupons for both validators.
+      // Bob (no sharing config) → treasury mints unassigned coupons.
+      // Alice (has sharing config) → treasury does NOT mint unassigned coupons.
+      val rewardCouponV2Amount = BigDecimal(1000.0)
+      clue("Create unassigned RewardCouponV2 for both validators") {
+        createRewardCouponsV2(
+          Seq(
+            (bobValidatorParty, rewardCouponV2Amount, None),
+            (aliceValidatorParty, rewardCouponV2Amount, None),
+          )
+        )
+      }
+
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
         val openRounds = sv1ScanBackend

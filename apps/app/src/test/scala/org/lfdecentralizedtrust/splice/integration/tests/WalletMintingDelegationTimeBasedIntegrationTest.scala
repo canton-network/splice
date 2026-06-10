@@ -3,10 +3,12 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
   DevelopmentFundCoupon,
+  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -24,8 +26,13 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllValidatorConfigs
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit}
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.wallet.config.{
+  AppRewardBeneficiaryConfig,
+  RewardSharingConfig,
+}
 import com.digitalasset.canton.topology.PartyId
 
 import java.time.Duration
@@ -41,6 +48,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
     with ExternallySignedPartyTestUtil {
 
   private val DefaultAmuletMergeLimit = 10
+  // Pre-generate key pairs so external party IDs are known at config time
+  private val sharingBeneficiary = preGenerateExternalParty("sharing_beneficiary")
+  private val sharingRecipient = preGenerateExternalParty("sharing_recipient")
 
   // We create many coupons directly, so avoid running sanity checks
   override protected def runUpdateHistorySanityCheck: Boolean = false
@@ -50,6 +60,24 @@ class WalletMintingDelegationTimeBasedIntegrationTest
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withTrafficTopupsDisabled
+      .addConfigTransforms((_, config) =>
+        // Configure sharing for the "sharing_beneficiary" external party:
+        // 40% to "sharing_recipient", remainder stays with provider.
+        updateAllValidatorConfigs { case (name, c) =>
+          if (name == "aliceValidator") {
+            c.copy(
+              rewardSharingConfigByParty = Map(
+                sharingBeneficiary.partyId.toProtoPrimitive -> RewardSharingConfig(
+                  minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(25),
+                  beneficiaries = Seq(
+                    AppRewardBeneficiaryConfig(sharingRecipient.partyId, BigDecimal(0.4))
+                  ),
+                )
+              )
+            )
+          } else c
+        }(config)
+      )
 
   "Wallet MintingDelegation APIs" should {
     "allow validator to list, accept, and reject minting delegation proposals and delegations" in {
@@ -624,6 +652,109 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             val count = getAmuletCount()
             count shouldBe mergeLimit
           }
+        }
+      }
+    }
+
+    "assign and mint unassigned V2 coupons when sharing is configured" in { implicit env =>
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      aliceWalletClient.tap(100.0)
+      aliceValidatorWalletClient.tap(100.0)
+
+      val beneficiaryParty = onboardExternalParty(aliceValidatorBackend, sharingBeneficiary)
+      createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, beneficiaryParty)
+
+      val recipientParty = onboardExternalParty(aliceValidatorBackend, sharingRecipient)
+      createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, recipientParty)
+
+      val expiresAt = env.environment.clock.now.plus(Duration.ofDays(30)).toInstant
+      val (_, proposalContractId) = actAndCheck(
+        "Create minting delegation proposal",
+        createMintingDelegationProposal(beneficiaryParty, aliceParty, expiresAt),
+      )(
+        "Proposal is visible",
+        _ => {
+          val proposals = aliceWalletClient.listMintingDelegationProposals()
+          proposals.proposals should have size 1 withClue "proposals"
+          proposals.proposals.head.contract.contractId
+        },
+      )
+
+      actAndCheck(
+        "Alice accepts the proposal",
+        aliceWalletClient.acceptMintingDelegationProposal(proposalContractId),
+      )(
+        "Delegation is created",
+        _ => {
+          val delegations = aliceWalletClient.listMintingDelegations()
+          delegations.delegations should have size 1 withClue "delegations"
+        },
+      )
+
+      advanceRoundsToNextRoundOpening
+      advanceRoundsToNextRoundOpening
+
+      val issuingRound = eventually() {
+        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        issuingRounds.toList.headOption.value.payload
+      }
+
+      val unassignedAmount1 = BigDecimal(1000.0)
+      val unassignedAmount2 = BigDecimal(500.0)
+      val assignedAmount = BigDecimal(250.0)
+
+      val externalPartyMintingDelegationTrigger = mintingDelegationCollectRewardsTrigger(
+        aliceValidatorBackend,
+        beneficiaryParty.party,
+      )
+
+      // Pause the trigger, create two unassigned and one already-assigned
+      // V2 coupon, then resume — the trigger should batch-assign
+      // beneficiaries to both unassigned coupons and mint all in one transaction.
+      setTriggersWithin(triggersToPauseAtStart = Seq(externalPartyMintingDelegationTrigger)) {
+        createRewardCouponsV2(
+          Seq(
+            (beneficiaryParty.party, unassignedAmount1, None),
+            (beneficiaryParty.party, unassignedAmount2, None),
+            (beneficiaryParty.party, assignedAmount, Some(beneficiaryParty.party)),
+          ),
+          round = Some(issuingRound.round),
+        )
+      }
+
+      advanceRoundsToNextRoundOpening
+      advanceTimeForRewardAutomationToRunForCurrentRound
+
+      clue("Unassigned V2 coupon should be consumed by assign-and-mint") {
+        val externalPartyWallet = aliceValidatorBackend.appState.walletManager
+          .valueOrFail("WalletManager is expected to be defined")
+          .externalPartyWalletManager
+          .lookupExternalPartyWallet(beneficiaryParty.party)
+          .valueOrFail(
+            s"Expected ${beneficiaryParty.party} to have an external party wallet"
+          )
+        eventually() {
+          val v2Coupons = externalPartyWallet.store.multiDomainAcsStore
+            .listContracts(RewardCouponV2.COMPANION)
+            .futureValue
+          v2Coupons.filter(_.payload.beneficiary.isEmpty) shouldBe
+            empty withClue "No unassigned coupons should remain"
+        }
+      }
+
+      // Beneficiary balance = provider's 60% of each unassigned coupon + full assigned coupon
+      clue("Beneficiary's balance reflects shared and directly minted coupons") {
+        eventually() {
+          val beneficiaryBalance = BigDecimal(
+            aliceValidatorBackend
+              .getExternalPartyBalance(beneficiaryParty.party)
+              .totalUnlockedCoin
+          )
+          val providerShare = BigDecimal(0.6)
+          val expectedBalance =
+            (unassignedAmount1 + unassignedAmount2) * providerShare + assignedAmount
+          beneficiaryBalance shouldBe expectedBalance withClue
+            "Balance should include provider's 60% of each unassigned coupon + directly minted assigned coupon"
         }
       }
     }
