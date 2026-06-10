@@ -398,7 +398,7 @@ function get_component_run_id() {
 }
 
 function usage() {
-  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <run_id> <component>..."
+  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <component1:backup_id1,component2:backup_id2,...|run_id> <component>..."
 }
 
 function main() {

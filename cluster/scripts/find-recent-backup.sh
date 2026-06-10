@@ -89,10 +89,6 @@ function latest_full_backup_run_id_gcloud() {
     backup_id_dict[$component]="$backup_id"
   done
 
-  if [ "$is_sv" == "true" ]; then
-    backup_id_dict["cometbft"]=""
-  fi
-
   local result=""
   for component in "${!backup_id_dict[@]}"; do
     result="${result:+$result,}$component:${backup_id_dict[$component]}"
