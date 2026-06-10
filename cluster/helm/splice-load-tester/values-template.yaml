@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-loadTesterImageName: "load-tester"
+imageName: "load-tester"
 config: "{}"
 prometheusRw: ""
 

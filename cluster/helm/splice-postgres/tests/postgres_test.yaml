@@ -344,7 +344,7 @@ tests:
 
   - it: "allows overriding postgres image"
     set:
-      postgresImage: "secure-registry.example.com/postgres:14-custom"
+      imageName: "secure-registry.example.com/postgres:14-custom"
     documentIndex: 1
     documentSelector:
       path: kind

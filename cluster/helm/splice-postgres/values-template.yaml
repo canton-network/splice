@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-postgresImage: "postgres:14"
+imageName: "postgres:14"
 
 resources:
   limits:

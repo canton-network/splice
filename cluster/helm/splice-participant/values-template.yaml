@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-participantImageName: "canton-participant"
+imageName: "canton-participant"
 enableHealthProbes: true
 
 # Custom annotations and labels for deployed resources
@@ -33,7 +33,7 @@ persistence:
   secretName: "postgres-secrets"
   port: 5432
   enablePgInitContainer: true
-  initImage: "postgres:14"
+  initImageName: "postgres:14"
 # k8s affinity for all deployed pods (optional)
 # affinity:
 

@@ -34,7 +34,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: participant
-        image: {{ .Values.imageRepo }}/{{ .Values.participantImageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_participant) }}
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_participant) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -147,7 +147,7 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: pg-init
-          image: {{ .Values.persistence.initImage}}
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:
