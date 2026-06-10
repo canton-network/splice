@@ -2166,6 +2166,30 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetAllocationInstructionAcceptContextRaw(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardAllocationInstructionV2BaseCommand[
+        allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse,
+        allocationinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: IV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse] = {
+      client.getAllocationInstructionAcceptContext(allocationInstructionCid, body, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = {
+      case allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse.OK(response) =>
+        Right(response)
+    }
+  }
+
   case class GetAllocationFactory(choiceArgs: allocationinstructionv1.AllocationFactory_Allocate)
       extends TokenStandardAllocationInstructionBaseCommand[
         allocationinstruction.v1.GetAllocationFactoryResponse,

@@ -278,7 +278,17 @@ class HttpTokenStandardScanProxyHandler(
       body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
   )(
       extracted: AuthenticatedRequest
-  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse] = ???
+  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationInstructionAcceptContext") { implicit tc => _ =>
+      scanConnection
+        .getAllocationInstructionAcceptContextRaw(
+          allocationInstructionId,
+          body,
+        )
+        .map(allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse.OK(_))
+    }
+  }
 
   override def getAllocationInstructionWithdrawContext(
       respond: allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse.type

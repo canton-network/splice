@@ -828,6 +828,14 @@ class BftScanConnection(
   ): Future[allocationinstruction.v1.definitions.FactoryWithChoiceContext] =
     bftCall(_.getAllocationFactoryRaw(arg), "getAllocationFactoryRaw")
 
+  def getAllocationInstructionAcceptContextRaw(
+    allocationInstructionCid: String,
+    body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] = bftCall(
+    _.getAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
+    "getAllocationInstructionAcceptContextRaw",
+  )
+
   private def bftCall[T](
       call: SingleScanConnection => Future[T],
       endpoint: String,
