@@ -233,7 +233,7 @@ function restore_cloudsql_postgres() {
   until [ $retry_count -gt $MAX_RETRIES ]; do
     # disabling exit on error to allow for retries
     set +e
-    output=$(gcloud sql backups restore "$backup_id" --restore-instance="$cloudsql_restore_instance_id" --backup-instance="$cloudsql_backup_instance_id" --quiet 2>&1)
+    output=$(gcloud sql backups restore "$backup_id" --restore-instance="$cloudsql_restore_instance_id" --backup-instance="$cloudsql_backup_instance_id" --quiet --async 2>&1)
     restore_exit_code=$?
     set -e
 
@@ -246,10 +246,9 @@ function restore_cloudsql_postgres() {
       retry_count=$((retry_count+1))
       sleep 10
     else
-      echo "Restore succeeded"
+      _info "Restore initiated for $cloudsql_restore_instance_id (async)"
       return 0
     fi
-
 
     if [ $retry_count -gt $MAX_RETRIES ]; then
       _error "Restore of DB instance $cloudsql_restore_instance_id from backup $backup_id ($cloudsql_backup_instance_id) exceeded max retries"
