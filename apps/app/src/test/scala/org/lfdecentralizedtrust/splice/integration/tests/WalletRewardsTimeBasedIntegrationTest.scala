@@ -174,7 +174,8 @@ class WalletRewardsTimeBasedIntegrationTest
         // since bob's trigger is paused and won't mint during advancement.
         prevBobBalance = bobValidatorWalletClient.balance().unlockedQty
 
-        // it takes 3 ticks for the IssuingMiningRound 1 to be created and open.
+        // Round advancement is needed for the treasury's transfer context
+        // (non-V2 reward collection), not for V2 coupons specifically.
         advanceRoundsToNextRoundOpening
         advanceRoundsToNextRoundOpening
         advanceRoundsToNextRoundOpening
