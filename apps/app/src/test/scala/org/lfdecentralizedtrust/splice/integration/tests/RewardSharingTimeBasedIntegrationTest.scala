@@ -11,7 +11,16 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllValidatorConfigs
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
-import org.lfdecentralizedtrust.splice.util.{SpliceUtil, TimeTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  SpliceUtil,
+  TimeTestUtil,
+  TriggerTestUtil,
+  WalletTestUtil,
+}
+import org.lfdecentralizedtrust.splice.wallet.automation.{
+  CollectRewardsAndMergeAmuletsTrigger,
+  RewardSharingTrigger,
+}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   RewardSharingConfig,
@@ -19,11 +28,20 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 
 import java.time.Duration
 
+/** Tests the RewardSharingTrigger in isolation: verifies that unassigned
+  * RewardCouponV2 contracts are correctly assigned to beneficiaries with
+  * the right amounts when the TTL threshold is reached. Minting triggers
+  * are paused to focus on assignment correctness and batching.
+  *
+  * See also [[WalletRewardsTimeBasedIntegrationTest]] which tests the
+  * interaction between sharing and minting triggers end-to-end.
+  */
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class RewardSharingTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
-    with TimeTestUtil {
+    with TimeTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -72,6 +90,12 @@ class RewardSharingTimeBasedIntegrationTest
     onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     onboardWalletUser(bobWalletClient, bobValidatorBackend)
 
+    val aliceWalletAutomation = aliceValidatorBackend
+      .userWalletAutomation(aliceValidatorWalletClient.config.ledgerApiUser)
+      .futureValue
+    val aliceSharingTrigger = aliceWalletAutomation.trigger[RewardSharingTrigger]
+    val aliceMintingTrigger = aliceWalletAutomation.trigger[CollectRewardsAndMergeAmuletsTrigger]
+
     def listV2Coupons() =
       aliceValidatorBackend.appState.walletManager
         .valueOrFail("WalletManager is expected to be defined")
@@ -82,45 +106,54 @@ class RewardSharingTimeBasedIntegrationTest
         .listContracts(RewardCouponV2.COMPANION)
         .futureValue
 
-    clue("Create unassigned RewardCouponV2 for alice's validator") {
-      createRewardCouponsV2(
-        Seq((aliceValidatorParty, BigDecimal(10.0), None)),
-        ttl = Duration.ofHours(36),
-      )
-    }
+    // Pause the minting trigger throughout so assigned coupons are not
+    // consumed before we can assert on them.
+    setTriggersWithin(triggersToPauseAtStart = Seq(aliceMintingTrigger)) {
+      // Pause the sharing trigger while creating coupons and advancing
+      // time, so both coupons cross the TTL before the trigger polls.
+      setTriggersWithin(triggersToPauseAtStart = Seq(aliceSharingTrigger)) {
+        clue("Create unassigned RewardCouponV2 for alice's validator") {
+          createRewardCouponsV2(
+            Seq(
+              (aliceValidatorParty, BigDecimal(10.0), None),
+              (aliceValidatorParty, BigDecimal(5.0), None),
+            ),
+            ttl = Duration.ofHours(36),
+          )
+        }
 
-    clue("Unassigned coupon exists before TTL threshold") {
-      eventually() {
-        listV2Coupons().filter(_.payload.beneficiary.isEmpty) should have size 1
+        clue("Unassigned coupons exist before TTL threshold") {
+          eventually() {
+            listV2Coupons().filter(_.payload.beneficiary.isEmpty) should have size 2
+          }
+        }
+
+        // Advance past the sharing threshold (36h - 30h = 6h)
+        advanceTime(Duration.ofHours(7))
       }
-    }
 
-    // Advance past the sharing threshold (36h - 30h = 6h)
-    advanceTime(Duration.ofHours(7))
+      // Sharing trigger resumes — both coupons are past TTL, so the
+      // trigger batches them in a single AssignBeneficiaries call.
+      clue("Unassigned coupons are consumed and assigned coupons created") {
+        eventually() {
+          val allCoupons = listV2Coupons()
 
-    clue("Unassigned coupon is consumed and assigned coupons created") {
-      eventually() {
-        val allCoupons = listV2Coupons()
+          allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe
+            empty withClue "unassigned coupons should be consumed"
 
-        allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe
-          empty withClue "unassigned coupons should be consumed"
+          // Each input coupon produces one assigned coupon per beneficiary
+          val assigned = allCoupons
+            .filter(_.payload.beneficiary.isPresent)
+            .map(c => (c.payload.beneficiary.get(), BigDecimal(c.payload.amount)))
+            .sorted
 
-        val assigned = allCoupons.filter(_.payload.beneficiary.isPresent)
-        assigned should have size 2 withClue "one coupon per beneficiary"
-
-        val byBeneficiary = assigned
-          .map(c => c.payload.beneficiary.get() -> BigDecimal(c.payload.amount))
-          .toMap
-
-        byBeneficiary should contain key bobValidatorParty.toProtoPrimitive withClue "bob should receive a coupon"
-        byBeneficiary should contain key aliceValidatorParty.toProtoPrimitive withClue "alice should receive remainder"
-
-        byBeneficiary(bobValidatorParty.toProtoPrimitive) shouldBe BigDecimal(
-          4.0
-        ) withClue "bob gets 40%"
-        byBeneficiary(aliceValidatorParty.toProtoPrimitive) shouldBe BigDecimal(
-          6.0
-        ) withClue "alice gets 60%"
+          assigned should contain theSameElementsAs Seq(
+            (aliceValidatorParty.toProtoPrimitive, BigDecimal(6.0)), // 60% of 10.0
+            (aliceValidatorParty.toProtoPrimitive, BigDecimal(3.0)), // 60% of 5.0
+            (bobValidatorParty.toProtoPrimitive, BigDecimal(4.0)), // 40% of 10.0
+            (bobValidatorParty.toProtoPrimitive, BigDecimal(2.0)), // 40% of 5.0
+          ) withClue "one assigned coupon per input coupon per beneficiary"
+        }
       }
     }
   }
