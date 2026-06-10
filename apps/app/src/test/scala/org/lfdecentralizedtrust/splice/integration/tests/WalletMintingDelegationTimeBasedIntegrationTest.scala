@@ -691,14 +691,6 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         },
       )
 
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-
-      val issuingRound = eventually() {
-        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
-        issuingRounds.toList.headOption.value.payload
-      }
-
       val unassignedAmount1 = BigDecimal(1000.0)
       val unassignedAmount2 = BigDecimal(500.0)
       val assignedAmount = BigDecimal(250.0)
@@ -718,11 +710,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             (beneficiaryParty.party, unassignedAmount2, None),
             (beneficiaryParty.party, assignedAmount, Some(beneficiaryParty.party)),
           ),
-          round = Some(issuingRound.round),
         )
       }
 
-      advanceRoundsToNextRoundOpening
       advanceTimeForRewardAutomationToRunForCurrentRound
 
       clue("Unassigned V2 coupon should be consumed by assign-and-mint") {
