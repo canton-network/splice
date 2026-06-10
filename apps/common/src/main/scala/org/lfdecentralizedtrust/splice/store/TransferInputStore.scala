@@ -158,6 +158,8 @@ object RewardCouponV2SortOrder {
   }
   case object ByRoundAscAmountDesc extends RewardCouponV2SortOrder {
     def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]] =
-      Ordering[(Long, BigDecimal)].on(rw => (rw.payload.round.number, -BigDecimal(rw.payload.amount)))
+      Ordering[(Long, BigDecimal)].on(rw =>
+        (rw.payload.round.number, -BigDecimal(rw.payload.amount))
+      )
   }
 }

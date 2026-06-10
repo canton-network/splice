@@ -16,7 +16,12 @@ import org.lfdecentralizedtrust.splice.store.db.{
   DbAppStore,
   DbTransferInputQueries,
 }
-import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, RewardCouponV2Filter, RewardCouponV2SortOrder}
+import org.lfdecentralizedtrust.splice.store.{
+  Limit,
+  LimitHelpers,
+  RewardCouponV2Filter,
+  RewardCouponV2SortOrder,
+}
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.lifecycle.CloseContext

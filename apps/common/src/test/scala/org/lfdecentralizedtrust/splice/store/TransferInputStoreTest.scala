@@ -140,7 +140,10 @@ abstract class TransferInputStoreTest extends StoreTestBase {
       } yield {
         // AssignedOnly: unassigned coupon excluded
         store
-          .listRewardCouponsV2(RewardCouponV2Filter.AssignedOnly, RewardCouponV2SortOrder.ByRoundAscAmountDesc)
+          .listRewardCouponsV2(
+            RewardCouponV2Filter.AssignedOnly,
+            RewardCouponV2SortOrder.ByRoundAscAmountDesc,
+          )
           .futureValue
           .map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
           2.0, 1.0, // round 1
@@ -150,7 +153,10 @@ abstract class TransferInputStoreTest extends StoreTestBase {
         )
         // All: unassigned coupon included
         store
-          .listRewardCouponsV2(RewardCouponV2Filter.All, RewardCouponV2SortOrder.ByRoundAscAmountDesc)
+          .listRewardCouponsV2(
+            RewardCouponV2Filter.All,
+            RewardCouponV2SortOrder.ByRoundAscAmountDesc,
+          )
           .futureValue
           .map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
           2.0, 1.0, // round 1
@@ -160,10 +166,13 @@ abstract class TransferInputStoreTest extends StoreTestBase {
         )
         // UnassignedOnly: only the unassigned coupon
         store
-          .listRewardCouponsV2(RewardCouponV2Filter.UnassignedOnly, RewardCouponV2SortOrder.ByRoundAscAmountDesc)
+          .listRewardCouponsV2(
+            RewardCouponV2Filter.UnassignedOnly,
+            RewardCouponV2SortOrder.ByRoundAscAmountDesc,
+          )
           .futureValue
           .map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
-          20.0,
+          20.0
         )
       }
     }
@@ -207,7 +216,10 @@ abstract class TransferInputStoreTest extends StoreTestBase {
         )(store.multiDomainAcsStore)
       } yield {
         val results = store
-          .listRewardCouponsV2(RewardCouponV2Filter.UnassignedOnly, RewardCouponV2SortOrder.ByExpiresAtAsc)
+          .listRewardCouponsV2(
+            RewardCouponV2Filter.UnassignedOnly,
+            RewardCouponV2SortOrder.ByExpiresAtAsc,
+          )
           .futureValue
         results should have size 2
         // ordered by expiresAt ascending: 200s before 300s

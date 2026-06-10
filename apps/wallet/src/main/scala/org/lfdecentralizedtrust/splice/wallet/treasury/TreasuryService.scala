@@ -50,7 +50,11 @@ import com.daml.ledger.api.v2.CommandsOuterClass
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupConfig
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{PageLimit, RewardCouponV2Filter, RewardCouponV2SortOrder}
+import org.lfdecentralizedtrust.splice.store.{
+  PageLimit,
+  RewardCouponV2Filter,
+  RewardCouponV2SortOrder,
+}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
@@ -1095,7 +1099,9 @@ class TreasuryService(
         sortOrder = RewardCouponV2SortOrder.ByRoundAscAmountDesc,
         limit = PageLimit.tryCreate(maxNumInputs),
       )
-      rewardCouponV2AmuletQuantity = rewardCouponV2Results.map(rw => BigDecimal(rw.payload.amount)).sum
+      rewardCouponV2AmuletQuantity = rewardCouponV2Results
+        .map(rw => BigDecimal(rw.payload.amount))
+        .sum
       inputs = rewardCouponV2Results.map(rw =>
         (
           rw.payload.round,
