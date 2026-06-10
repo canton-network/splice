@@ -5,6 +5,7 @@ package com.digitalasset.canton.integration.tests.sequencer
 
 import better.files.*
 import com.digitalasset.canton.integration.EnvironmentDefinition
+import com.digitalasset.canton.integration.plugins.{UseBftSequencer, UsePostgres}
 import com.digitalasset.canton.integration.tests.SynchronizerBootstrapWithSeparateConsolesIntegrationTest
 
 import scala.concurrent.duration.DurationInt
@@ -78,17 +79,15 @@ trait SynchronizerBootstrapWithMultipleConsolesAndSequencersIntegrationTest
             serial = newSerial,
           )
           // wait for the topology change to be observed by the sequencer
-          utils.retry_until_true(commandTimeouts.bounded) {
-            sequencer1.topology.sequencers
-              .list(sequencer1.synchronizer_id)
-              .headOption
-              .map(_.item.allSequencers.forgetNE)
-              .getOrElse(Seq.empty)
+          utils.retry_until_true(env.commandTimeouts.bounded) {
+            sequencer1.bft
+              .get_ordering_topology()
+              .sequencerIds
               .contains(sequencer3.id)
           }
 
           // fetch the onboarding state and write it to a file
-          val onboardingState = sequencer1.setup.onboarding_state_for_sequencer(sequencer3.id)
+          val onboardingState = sequencer1.setup.onboarding_state_for_sequencerV2(sequencer3.id)
           utils.write_to_file(onboardingState, onboardingStateFile)
         }
 
@@ -97,7 +96,7 @@ trait SynchronizerBootstrapWithMultipleConsolesAndSequencersIntegrationTest
         // * initialize the third sequencer with the onboarding state
         {
           val onboardingState = utils.read_byte_string_from_file(onboardingStateFile)
-          sequencer3.setup.assign_from_onboarding_state(onboardingState)
+          sequencer3.setup.assign_from_onboarding_stateV2(onboardingState)
 
           sequencer3.health.initialized() shouldBe true
         }
@@ -110,4 +109,10 @@ trait SynchronizerBootstrapWithMultipleConsolesAndSequencersIntegrationTest
       participant1.health.ping(participant3, timeout = 30.seconds)
     }
   }
+}
+
+class BftOrdererSynchronizerBootstrapWithSeparateConsolesIntegrationTest
+    extends SynchronizerBootstrapWithMultipleConsolesAndSequencersIntegrationTest {
+  registerPlugin(new UsePostgres(loggerFactory))
+  registerPlugin(new UseBftSequencer(loggerFactory))
 }

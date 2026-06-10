@@ -1394,32 +1394,6 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/activities:
-    post:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "listActivity"
-      description: |
-        **Deprecated**. Lists activities in descending order, paged, optionally starting after a provided event id.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/ListActivityRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListActivityResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
   /v0/transactions:
     post:
       deprecated: true
@@ -3200,86 +3174,6 @@ components:
             `total_unlocked_coin` + `total_locked_coin`.
           type: string
 
-    ListActivityRequest:
-      type: object
-      required:
-        - page_size
-      properties:
-        begin_after_id:
-          type: string
-          description: |
-            Minimal event_id for returned activities.
-            Note that all activities carry some monotonically-increasing event_id. begin_after_id sets the minimum value for event_id's for the query.
-        page_size:
-          description: |
-            The maximum number of activity items returned for this request.
-          type: integer
-          format: int64
-    ListActivityResponse:
-      type: object
-      required:
-        - activities
-      properties:
-        activities:
-          type: array
-          items:
-            $ref: "#/components/schemas/ListActivityResponseItem"
-    ListActivityResponseItem:
-      type: object
-      required:
-        - activity_type
-        - event_id
-        - date
-        - domain_id
-      properties:
-        activity_type:
-          description: |
-            Describes the type of activity that occurred.
-            Determines if the data for the activity should be read
-            from the `transfer`, `mint`, or `tap` property.
-          type: string
-          enum:
-            - "transfer"
-            - "mint"
-            - "devnet_tap"
-            - "abort_transfer_instruction"
-        event_id:
-          description: |
-            The event id.
-          type: string
-        offset:
-          description: |
-            The ledger offset of the event.
-            Note that this field may not be the same across nodes, and therefore should not be compared between SVs.
-          type: string
-        date:
-          description: |
-            The effective date of the event.
-          type: string
-          format: date-time
-        domain_id:
-          description: |
-            The id of the domain through which this transaction was sequenced.
-          type: string
-        round:
-          description: |
-            The round for which this transaction was registered.
-          type: integer
-          format: int64
-        transfer:
-          description: |
-            A (batch) transfer from sender to receivers.
-          $ref: "#/components/schemas/Transfer"
-        mint:
-          description: |
-            The DSO mints amulet for the cases where the DSO rules allow for that.
-          $ref: "#/components/schemas/AmuletAmount"
-        tap:
-          description: |
-            A tap creates a Amulet, only used for development purposes, and enabled only on DevNet.
-          $ref: "#/components/schemas/AmuletAmount"
-        abort_transfer_instruction:
-          $ref: "#/components/schemas/AbortTransferInstruction"
     Transfer:
       description: |
         A transfer between one sender and possibly many receivers

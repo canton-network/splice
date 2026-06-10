@@ -79,8 +79,10 @@ import com.digitalasset.canton.participant.protocol.submission.routing.{
 import com.digitalasset.canton.participant.pruning.PruningProcessor
 import com.digitalasset.canton.participant.replica.ParticipantReplicaManager
 import com.digitalasset.canton.participant.store.*
+import com.digitalasset.canton.participant.store.SynchronizerConnectionConfigStore.Active
 import com.digitalasset.canton.participant.store.memory.PackageMetadataView
 import com.digitalasset.canton.participant.sync.ConnectedSynchronizer.SubmissionReady
+import com.digitalasset.canton.participant.sync.LogicalSynchronizerUpgrade.FinishAutomaticLsuRequest
 import com.digitalasset.canton.participant.sync.SyncServiceError.{
   PartyAllocationCannotDetermineSynchronizer,
   PartyAllocationNoSynchronizerError,
@@ -91,7 +93,6 @@ import com.digitalasset.canton.participant.sync.SynchronizerConnectionsManager.{
   ConnectionListener,
 }
 import com.digitalasset.canton.participant.synchronizer.*
-import com.digitalasset.canton.participant.synchronizer.PendingHandshakeWithLsuSuccessor.PendingHandshakesWithSuccessorsStore
 import com.digitalasset.canton.participant.topology.*
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
 import com.digitalasset.canton.platform.apiserver.services.command.interactive.CostEstimationHints
@@ -125,6 +126,7 @@ import com.google.protobuf.ByteString
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.slf4j.event.Level
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Right, Success}
@@ -183,12 +185,12 @@ class CantonSyncService(
     with HasCloseContext
     with InternalIndexServiceProviderImpl {
 
-  private val pendingHandshakesWithSuccessorsStore: PendingHandshakesWithSuccessorsStore =
+  private val pendingLsuOperationsStore: PendingLsuOperation.Store =
     PendingOperationStore(
       syncPersistentStateManager.storage,
       timeouts,
       loggerFactory,
-      PendingHandshakeWithLsuSuccessor,
+      PendingLsuOperation,
       PhysicalSynchronizerId.fromString,
     )
 
@@ -210,7 +212,7 @@ class CantonSyncService(
     resourceManagementService,
     parameters,
     connectedSynchronizerFactory,
-    pendingHandshakesWithSuccessorsStore,
+    pendingLsuOperationsStore,
     metrics,
     sequencerInfoLoader,
     isActive,
@@ -459,7 +461,7 @@ class CantonSyncService(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
       _estimatedInterpretationCost: Long,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       processedDisclosedContracts: ImmArray[LfFatContractInst],
   )(implicit
       traceContext: TraceContext
@@ -500,20 +502,16 @@ class CantonSyncService(
 
   override def prune(
       pruneUpToInclusive: Offset,
-      submissionId: LedgerSubmissionId,
       safeToPruneCommitmentState: Option[SafeToPruneCommitmentState],
-  ): Future[PruningResult] =
-    withNewTrace("CantonSyncService.prune") { implicit traceContext => span =>
-      span.setAttribute("submission_id", submissionId)
-      pruneInternally(pruneUpToInclusive, safeToPruneCommitmentState)
-        .fold(
-          err => PruningResult.NotPruned(err.asGrpcStatus),
-          _ => PruningResult.ParticipantPruned,
-        )
-        .onShutdown(
-          PruningResult.NotPruned(GrpcErrors.AbortedDueToShutdown.Error().asGrpcStatus)
-        )
-    }
+  )(implicit traceContext: TraceContext): Future[PruningResult] =
+    pruneInternally(pruneUpToInclusive, safeToPruneCommitmentState)
+      .fold(
+        err => PruningResult.NotPruned(err.asGrpcStatus),
+        _ => PruningResult.ParticipantPruned,
+      )
+      .onShutdown(
+        PruningResult.NotPruned(GrpcErrors.AbortedDueToShutdown.Error().asGrpcStatus)
+      )
 
   def pruneInternally(
       pruneUpToInclusive: Offset,
@@ -564,7 +562,7 @@ class CantonSyncService(
       transaction: LfSubmittedTransaction,
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       explicitlyDisclosedContracts: ImmArray[LfFatContractInst],
   )(implicit
       traceContext: TraceContext
@@ -692,8 +690,7 @@ class CantonSyncService(
       synchronizerId: SynchronizerId
   ): Option[PhysicalSynchronizerId] =
     connectedSynchronizersLookup
-      .get(synchronizerId)
-      .map(_.synchronizerHandle.psid)
+      .psidFor(synchronizerId)
 
   override def allocateParty(
       partyId: PartyId,
@@ -725,8 +722,7 @@ class CantonSyncService(
     val specifiedSynchronizer =
       synchronizerIdO.map(lsid =>
         connectedSynchronizersLookup
-          .get(lsid)
-          .map(_.psid)
+          .psidFor(lsid)
           .toRight(
             SubmissionResult.SynchronousError(
               SyncServiceInjectionError.NotConnectedToSynchronizer
@@ -994,7 +990,7 @@ class CantonSyncService(
         }
     } yield ()
 
-  /** Modifies the settings of the synchronizer connection
+  /** Modifies the settings of an active synchronizer connection
     *
     * @param psidO
     *   If empty, the request will update the single active connection for the alias in `config`
@@ -1009,7 +1005,22 @@ class CantonSyncService(
       _ <- connectionsManager.validateSequencerConnection(config, sequencerConnectionValidation)
 
       connectionIdToUpdateE = psidO match {
-        case Some(psid) => KnownPhysicalSynchronizerId(psid).asRight[SyncServiceError]
+        case Some(psid) =>
+          for {
+            configForPsid <- synchronizerConnectionConfigStore
+              .get(psid)
+              .leftMap(_ =>
+                SyncServiceError.SyncServiceUnknownSynchronizer.UnknownPhysicalSynchronizerId(psid)
+              )
+            _ <- Either.cond(
+              configForPsid.status != Active,
+              (),
+              SyncServiceError.SyncServiceSynchronizerIsNotActive.Error(
+                configForPsid.config.synchronizerAlias,
+                Seq(configForPsid.configuredPsid -> configForPsid.status),
+              ),
+            )
+          } yield KnownPhysicalSynchronizerId(psid)
         case None =>
           synchronizerConnectionConfigStore
             .getActive(config.synchronizerAlias)
@@ -1028,22 +1039,11 @@ class CantonSyncService(
             .Error(config.synchronizerAlias): SyncServiceError
         )
 
-      // Try to retrieve and store missing sequencer ids
-      _ <- connectionIdToUpdate.toOption
-        .traverse_(connectionsManager.retrieveAndStoreMissingSequencerIds)
-        .leftMap(err =>
-          SyncServiceError.SyncServiceInternalError
-            .Failure(
-              config.synchronizerAlias.toString,
-              new RuntimeException(s"Unable to retrieve and store missing sequencer ids: $err"),
-            )
-        )
-
       // If successor exists, will ensure that connections are updated (e.g., if sequencers are added or removed)
       _ <- EitherT.liftF(
         connectionIdToUpdate.toOption
           .flatMap(connectedSynchronizersLookup.get)
-          .traverse_(_.sequencerConnectionListener.init())
+          .traverse_(_.sequencerConnectionListener.checkAndCreateSynchronizerConfig())
       )
     } yield ()
 
@@ -1134,12 +1134,16 @@ class CantonSyncService(
     *   - Connection to psid2 is marked as LsuTarget
     *
     * Such unfinished LSUs need to be finished "manually" because the normal flow is triggered by a
-    * connection to the synchronizer. However, `LsuSource` state is marks the connection as
-    * inactive, thus preventing further connections.
+    * connection to the synchronizer. However, `LsuSource` state marks the connection as inactive,
+    * thus preventing further connections.
+    *
+    * Other interrupted states (e.g., missing targets or active sources) are not covered here, as
+    * they are resolved automatically during node startup or via manual admin retries.
     */
   def finishLSUs()(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, String, Unit] = {
+    // psid -> successor for all successors that are a LsuTarget
     val psidToSuccessor: Map[PhysicalSynchronizerId, SynchronizerSuccessor] =
       synchronizerConnectionConfigStore
         .getAll()
@@ -1158,40 +1162,125 @@ class CantonSyncService(
         connectionConfig.configuredPsid.toOption.flatMap { currentPsid =>
           psidToSuccessor
             .get(currentPsid)
-            .map((currentPsid, connectionConfig.config.synchronizerAlias, _))
+            .map(successor =>
+              FinishAutomaticLsuRequest(
+                connectionConfig.config.synchronizerAlias,
+                currentPsid = currentPsid,
+                successorPsid = successor.psid,
+              )
+            )
         }
       } else None
     }
 
     logger.info(s"Found unfinished LSUs: $unfinishedLsus")
 
-    MonadUtil.sequentialTraverse_(unfinishedLsus) { case (currentPsid, alias, successor) =>
-      connectionsManager.automaticLogicalSynchronizerUpgrade.finishUpgradeWithoutChecks(
-        alias = alias,
-        currentPsid = currentPsid,
-        synchronizerSuccessor = successor,
-      )
+    MonadUtil.sequentialTraverse_(unfinishedLsus) { finishLsuRequest =>
+      val upgrader = new FinishAutomaticLogicalSynchronizerUpgrade(
+        synchronizerConnectionConfigStore,
+        ledgerApiIndexer,
+        connectionsManager.connectQueue,
+        connectionsManager.connectedSynchronizers,
+        connectSynchronizer = tc =>
+          connectionsManager.connectSynchronizer(
+            finishLsuRequest.alias,
+            keepRetrying = true,
+            connectSynchronizer = ConnectSynchronizer.Connect,
+            /*
+            After LSU, the likelihood of a failure of the first connection attempt is higher than
+            with normal connects. Sequencers might not be ready yet and/or be hammered with requests.
+            Hence, we decrease the level from WARN to INFO.
+             */
+            logLevelFailureInitialAttempt = Level.INFO,
+          )(tc),
+        disconnectSynchronizer = disconnectSynchronizer(finishLsuRequest.alias)(_),
+        metrics,
+        pendingLsuOperationsStore,
+        parameters.lsuConfig,
+        loggerFactory.append("lsu", finishLsuRequest.successorPsid.suffix),
+      )(finishLsuRequest)
+
+      upgrader.finishUpgradeWithoutChecks()
     }
   }
 
-  /** All pending handshakes with LSU successors are attempted. They are done in parallel and we
-    * don't wait on the result.
+  /** All pending LSU operations (handshake and/or topology copy) are resumed. They are done in
+    * parallel, and we don't wait on the result.
     */
-  def attemptPendingHandshakesSuccessors()(implicit traceContext: TraceContext): Unit = {
-    val resF: FutureUnlessShutdown[Unit] = pendingHandshakesWithSuccessorsStore
-      .getAll(PendingHandshakeWithLsuSuccessor.operationName)
-      .map(_.foreach { pendingHandshake =>
+  def attemptPendingLsuOperations()(implicit traceContext: TraceContext): Unit = {
+    val resF: FutureUnlessShutdown[Unit] = pendingLsuOperationsStore
+      .getAll(PendingLsuOperation.operationName)
+      .map(_.foreach { pendingOperation =>
         EitherTUtil.doNotAwaitUS(
-          performPureHandshake(pendingHandshake.operation.successorPsid),
+          connectionsManager.resumePendingLsuOperation(pendingOperation),
           message =
-            s"Failed to perform the synchronizer handshake with ${pendingHandshake.operation.successorPsid}",
+            s"Failed to perform pending LSU operation for ${pendingOperation.operation.successorPsid}",
         )
       })
 
     FutureUnlessShutdownUtil.doNotAwaitUnlessShutdown(
       future = resF,
-      failureMessage = "Failed to perform handshakes",
+      failureMessage = "Failed to get the list of pending LSU operations",
     )
+  }
+
+  /** Set the values for the LSU status metrics after a restart.
+    */
+  def setLsuStatusMetrics()(implicit traceContext: TraceContext): Unit = {
+    import ParticipantMetrics.LsuStatus.*
+
+    val topologyLookup = new TopologyLookup(
+      clock = clock,
+      topologyConfig = parameters.topologyConfig,
+      timeouts = timeouts,
+      futureSupervisor = futureSupervisor,
+      topologyManagerO = lookupTopologyManager _,
+      psidLookup = activePsidForLsid _,
+      topologyClientO = lookupTopologyClient,
+      syncPersistentStateO = syncPersistentStateManager.get,
+      loggerFactory = loggerFactory,
+    )
+
+    def getLsuAnnounced(
+        state: SyncPersistentState
+    ): EitherT[FutureUnlessShutdown, String, Option[SynchronizerSuccessor]] = for {
+      snapshot <- topologyLookup
+        .maybeOfflineApproximateSnapshot(state.psid)
+        .leftMap(err => s"Unable to get topology snapshot for ${state.psid}: $err")
+
+      announcedLsu <- EitherT.liftF(snapshot.announcedLsu())
+    } yield announcedLsu.map { case (successor, _) => successor }
+
+    def getSequencerSuccessorsKnown(successor: SynchronizerSuccessor): Option[NonNegativeInt] =
+      synchronizerConnectionConfigStore
+        .get(successor.psid)
+        .fold(_ => None, _ => Some(SequencerSuccessorsKnown))
+
+    def getHandshakeDone(successor: SynchronizerSuccessor): Option[NonNegativeInt] =
+      syncPersistentStateManager.get(successor.psid).map(_ => HandshakeDone)
+
+    def isLsuDone(successor: SynchronizerSuccessor): Option[NonNegativeInt] =
+      synchronizerConnectionConfigStore
+        .get(successor.psid)
+        .fold(_ => None, config => Option.when(config.status.isActive)(LsuDone))
+
+    syncPersistentStateManager.getAll.values.foreach { persistentState =>
+      val resET = getLsuAnnounced(persistentState).map {
+        case Some(successor) =>
+          val lsuStatus = Seq(
+            getSequencerSuccessorsKnown(successor),
+            getHandshakeDone(successor),
+            isLsuDone(successor),
+          ).maxOption.flatten.getOrElse(LsuAnnounced)
+
+          metrics.setLsuStatus(lsuStatus, successor.psid)
+
+        case None => () // nothing to do
+      }
+
+      EitherTUtil.doNotAwaitUS(resET, s"Set LSU metrics for ${persistentState.psid}")
+    }
+
   }
 
   /* Verify that specified synchronizer has inactive status and prune synchronizer stores.
@@ -1278,13 +1367,16 @@ class CantonSyncService(
     *
     * @param psid
     *   the physical synchronizer id of the synchronizer.
+    * @param isLsu
+    *   True if the handshake is part of LSU
     */
   def performPureHandshake(
-      psid: PhysicalSynchronizerId
+      psid: PhysicalSynchronizerId,
+      isLsu: Boolean,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] =
-    connectionsManager.performPureHandshake(psid)
+    connectionsManager.performPureHandshake(psid, isLsu = isLsu).map(_ => ())
 
   /** Disconnect the given synchronizer from the sync service. */
   def disconnectSynchronizer(
@@ -1390,6 +1482,9 @@ class CantonSyncService(
       _ <- resourceManagementService.refreshCache()
     } yield ()
 
+  def clearCaches()(implicit traceContext: TraceContext): Unit =
+    synchronizerConnectionConfigStore.clearCache()
+
   override def onClosed(): Unit = {
     val instances = Seq(
       migrationService,
@@ -1457,12 +1552,15 @@ class CantonSyncService(
               )
           )
           _ <- reassign(connectedSynchronizer, topologySnapshot)
-            .leftMap(error =>
-              RequestValidationErrors.InvalidArgument
-                .Reject(
-                  error.message
-                ): RpcError // TODO(i13240): Improve reassignment-submission Ledger API errors
-            )
+            .leftMap {
+              case rpcError: RpcError =>
+                // Pass Canton errors (like PartyCurrentlyOnboarding) straight through
+                rpcError
+              case error =>
+                // Fallback for older ReassignmentProcessorErrors, to be addressed by:
+                // TODO(#13240): Improve reassignment-submission Ledger API errors
+                RequestValidationErrors.InvalidArgument.Reject(error.message): RpcError
+            }
             .mapK(FutureUnlessShutdown.outcomeK)
             .semiflatMap(Predef.identity)
             .onShutdown(Left(GrpcErrors.AbortedDueToShutdown.Error()))
@@ -1722,7 +1820,7 @@ class CantonSyncService(
       transaction: LfVersionedTransaction,
       transactionMeta: TransactionMeta,
       submitterInfo: SubmitterInfo,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       disclosedContracts: Map[LfContractId, LfFatContractInst],
       costHints: CostEstimationHints,
   )(implicit

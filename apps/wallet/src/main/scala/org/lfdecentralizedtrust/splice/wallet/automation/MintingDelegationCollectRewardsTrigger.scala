@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferi
   InputAmulet,
   InputAppRewardCoupon,
   InputDevelopmentFundCoupon,
+  InputRewardCouponV2,
   InputUnclaimedActivityRecord,
   InputValidatorLivenessActivityRecord,
   InputValidatorRewardCoupon,
@@ -21,6 +22,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   Amulet,
   DevelopmentFundCoupon,
+  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -41,6 +43,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   SpliceUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -58,6 +61,7 @@ class MintingDelegationCollectRewardsTrigger(
     store: ExternalPartyWalletStore,
     scanConnection: BftScanConnection,
     spliceLedgerConnection: SpliceLedgerConnection,
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -156,6 +160,7 @@ class MintingDelegationCollectRewardsTrigger(
     val hasRewardsToCollect = couponsData.livenessActivityRecords.nonEmpty ||
       validatorRewardCouponsToCollect.nonEmpty ||
       couponsData.appRewardCoupons.nonEmpty ||
+      couponsData.rewardCouponsV2.nonEmpty ||
       couponsData.unclaimedActivityRecords.nonEmpty ||
       couponsData.developmentFundCoupons.nonEmpty
     // Merge amulets only if we're above 2x the merge limit to reduce potential waste of traffic
@@ -204,6 +209,7 @@ class MintingDelegationCollectRewardsTrigger(
             s"Collected ${filteredCouponsData.livenessActivityRecords.size} liveness activity records, " +
               s"${filteredCouponsData.validatorRewardCoupons.size} validator reward coupons, " +
               s"${filteredCouponsData.appRewardCoupons.size} app reward coupons, " +
+              s"${filteredCouponsData.rewardCouponsV2.size} reward coupons V2, " +
               s"${filteredCouponsData.unclaimedActivityRecords.size} unclaimed activity records, " +
               s"${filteredCouponsData.developmentFundCoupons.size} development fund coupons, " +
               s"and merged ${amuletsToMerge.size} amulets for delegation ${delegation.contractId}"
@@ -260,6 +266,10 @@ class MintingDelegationCollectRewardsTrigger(
         DevelopmentFundCoupon.ContractId,
         DevelopmentFundCoupon,
       ]],
+      rewardCouponsV2: Seq[Contract[
+        RewardCouponV2.ContractId,
+        RewardCouponV2,
+      ]],
   )
 
   private def fetchCouponsData(
@@ -276,6 +286,9 @@ class MintingDelegationCollectRewardsTrigger(
         Some(issuingRoundsMap.keySet.map(_.number))
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
+      rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
+        includeUnassigned = rewardSharingConfig.beneficiaries.isEmpty
+      )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
     } yield CouponsData(
@@ -284,6 +297,7 @@ class MintingDelegationCollectRewardsTrigger(
       appRewardCouponsWithQuantity.map(_._1),
       unclaimedActivityRecords,
       developmentFundCoupons,
+      rewardCouponsV2WithQuantity.map(_._1),
     )
   }
 
@@ -322,8 +336,12 @@ class MintingDelegationCollectRewardsTrigger(
       new InputAmulet(amulet.contractId): TransferInput
     }
 
+    val rewardCouponV2Inputs: Seq[TransferInput] = couponsData.rewardCouponsV2.map { coupon =>
+      new InputRewardCouponV2(coupon.contractId): TransferInput
+    }
+
     val allInputs = livenessInputs ++ validatorCouponInputs ++ appCouponInputs ++
-      unclaimedActivityRecordInputs ++ developmentFundCouponInputs ++ amuletInputs
+      rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++ developmentFundCouponInputs ++ amuletInputs
     allInputs.take(maxNumInputs)
   }
 
@@ -346,7 +364,8 @@ class MintingDelegationCollectRewardsTrigger(
         .filter(r =>
           couponsData.livenessActivityRecords.exists(_.payload.round == r.payload.round) ||
             couponsData.validatorRewardCoupons.exists(_.payload.round == r.payload.round) ||
-            couponsData.appRewardCoupons.exists(_.payload.round == r.payload.round)
+            couponsData.appRewardCoupons.exists(_.payload.round == r.payload.round) ||
+            couponsData.rewardCouponsV2.exists(_.payload.round == r.payload.round)
         )
         .map(r => (r.payload.round, r.contractId))
         .toMap[

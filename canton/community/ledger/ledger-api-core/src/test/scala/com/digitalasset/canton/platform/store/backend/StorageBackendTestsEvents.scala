@@ -1379,173 +1379,6 @@ private[backend] trait StorageBackendTestsEvents
     ).value.offset shouldBe offset(5)
   }
 
-  it should "work properly for prunableContract" in {
-    val dbDtos = Vector(
-      dtosConsumingExercise(
-        event_offset = 5,
-        event_sequential_id = 14,
-        internal_contract_id = Some(1),
-      ),
-      dtosConsumingExercise(
-        event_offset = 5,
-        event_sequential_id = 18,
-        internal_contract_id = Some(2),
-      ),
-      Vector(
-        dtoTransactionMeta(
-          offset = offset(5),
-          synchronizerId = someSynchronizerId2,
-          event_sequential_id_first = 10,
-          event_sequential_id_last = 20,
-        )
-      ),
-      dtosConsumingExercise(
-        event_offset = 15,
-        event_sequential_id = 118,
-        internal_contract_id = Some(3),
-      ),
-      dtosConsumingExercise(
-        event_offset = 15,
-        event_sequential_id = 119,
-        internal_contract_id = Some(4),
-      ),
-      Vector(
-        dtoTransactionMeta(
-          offset = offset(15),
-          synchronizerId = someSynchronizerId2,
-          event_sequential_id_first = 110,
-          event_sequential_id_last = 120,
-        )
-      ),
-      dtosConsumingExercise(
-        event_offset = 25,
-        event_sequential_id = 211,
-        internal_contract_id = Some(5),
-      ),
-      dtosUnassign(
-        event_offset = 25,
-        event_sequential_id = 212,
-        internal_contract_id = Some(55),
-      ),
-      dtosConsumingExercise(
-        event_offset = 25,
-        event_sequential_id = 214,
-        internal_contract_id = Some(6),
-      ),
-      dtosCreate(
-        event_offset = 25,
-        event_sequential_id = 215,
-        internal_contract_id = 61,
-      )(),
-      dtosAssign(
-        event_offset = 25,
-        event_sequential_id = 216,
-        internal_contract_id = 62,
-      )(),
-      dtosWitnessedCreate(
-        event_offset = 25,
-        event_sequential_id = 217,
-        internal_contract_id = 63,
-      )(),
-      dtosWitnessedExercised(
-        event_offset = 25,
-        event_sequential_id = 218,
-        internal_contract_id = Some(64),
-      ),
-      dtosWitnessedExercised(
-        event_offset = 25,
-        consuming = false,
-        event_sequential_id = 219,
-        internal_contract_id = Some(65),
-      ),
-      Vector(
-        dtoTransactionMeta(
-          offset = offset(25),
-          synchronizerId = someSynchronizerId2,
-          event_sequential_id_first = 210,
-          event_sequential_id_last = 220,
-        )
-      ),
-      dtosConsumingExercise(
-        event_offset = 35,
-        event_sequential_id = 315,
-        internal_contract_id = Some(7),
-      ),
-      Vector(
-        dtoTransactionMeta(
-          offset = offset(35),
-          synchronizerId = someSynchronizerId2,
-          event_sequential_id_first = 310,
-          event_sequential_id_last = 320,
-        )
-      ),
-    ).flatten
-
-    executeSql(backend.parameter.initializeParameters(someIdentityParams, loggerFactory))
-    executeSql(ingest(dbDtos, _))
-    executeSql(
-      updateLedgerEnd(offset(25), 220L)
-    )
-
-    Vector(
-      None -> offset(4) -> Set(),
-      None -> offset(5) -> Set(
-        1,
-        2,
-      ),
-      None -> offset(10) -> Set(
-        1,
-        2,
-      ),
-      None -> offset(15) -> Set(
-        1,
-        2,
-        3,
-        4,
-      ),
-      None -> offset(25) -> Set(
-        1, 2, 3, 4, 5, 6, 63,
-      ),
-      None -> offset(1000) -> Set(
-        1, 2, 3, 4, 5, 6, 63,
-      ),
-      Some(offset(4)) -> offset(1000) -> Set(
-        1, 2, 3, 4, 5, 6, 63,
-      ),
-      Some(offset(5)) -> offset(1000) -> Set(
-        3, 4, 5, 6, 63,
-      ),
-      Some(offset(6)) -> offset(1000) -> Set(
-        3, 4, 5, 6, 63,
-      ),
-      Some(offset(15)) -> offset(1000) -> Set(
-        5,
-        6,
-        63,
-      ),
-      Some(offset(15)) -> offset(15) -> Set(
-      ),
-      Some(offset(6)) -> offset(25) -> Set(
-        3, 4, 5, 6, 63,
-      ),
-      Some(offset(6)) -> offset(24) -> Set(
-        3,
-        4,
-      ),
-    ).zipWithIndex.foreach { case (((fromExclusive, toInclusive), expectation), index) =>
-      withClue(
-        s"test $index archivals($fromExclusive,$toInclusive)"
-      ) {
-        executeSql(
-          backend.event.prunableContracts(
-            fromExclusive = fromExclusive,
-            toInclusive = toInclusive,
-          )
-        ) shouldBe expectation
-      }
-    }
-  }
-
   it should "fetch correctly AcsDelta and LedgerEffects Raw events" in {
     implicit val eq: Equality[RawThinAcsDeltaEvent] = caseClassArrayEq
     implicit val eq2: Equality[RawThinLedgerEffectsEvent] = caseClassArrayEq
@@ -3074,7 +2907,7 @@ private[backend] trait StorageBackendTestsEvents
     ) shouldBe Vector(4L, 11L)
   }
 
-  behavior of "addActivationsToACHS"
+  behavior of "addActivationsToAchs"
   private val signatory = Ref.Party.assertFromString("signatory")
 
   it should "add activations to ACHS respecting the limits" in {
@@ -3097,7 +2930,7 @@ private[backend] trait StorageBackendTestsEvents
 
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 1L, endInclusive = 3L, activeAt = 1000L)
         )
     )
@@ -3157,7 +2990,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(ingest(dtos, _))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 2L, activeAt = 2L)
         )
     )
@@ -3190,7 +3023,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(ingest(dtos, _))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 3L, activeAt = 3L)
         )
     )
@@ -3219,7 +3052,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(ingest(dtos, _))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 3L, activeAt = 4L)
         )
     )
@@ -3275,7 +3108,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(ingest(dtos, _))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 4L, activeAt = 4L)
         )
     )
@@ -3302,7 +3135,7 @@ private[backend] trait StorageBackendTestsEvents
 
     executeSql(
       backend.event
-        .removeDeactivatedFromACHS(
+        .removeDeactivatedFromAchs(
           AchsRemoveDeactivatedParams(startExclusive = 4L, endInclusive = 8L)
         )
     )
@@ -3332,7 +3165,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(ingest(dtos, _))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 2L, activeAt = 2L)
         )
     )
@@ -3385,7 +3218,7 @@ private[backend] trait StorageBackendTestsEvents
     executeSql(updateLedgerEnd(offset(5), 5L))
     executeSql(
       backend.event
-        .addActivationsToACHS(
+        .addActivationsToAchs(
           AchsAddActivationsParams(startExclusive = 0L, endInclusive = 5L, activeAt = 1000L)
         )
     )

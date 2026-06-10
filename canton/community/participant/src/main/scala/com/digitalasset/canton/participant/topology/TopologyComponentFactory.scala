@@ -23,11 +23,12 @@ import com.digitalasset.canton.participant.admin.party.OnboardingClearanceSchedu
 import com.digitalasset.canton.participant.config.AlphaOnlinePartyReplicationConfig
 import com.digitalasset.canton.participant.event.RecordOrderPublisher
 import com.digitalasset.canton.participant.ledger.api.LedgerApiStore
+import com.digitalasset.canton.participant.metrics.ParticipantMetrics
 import com.digitalasset.canton.participant.protocol.ParticipantTopologyTerminateProcessing
 import com.digitalasset.canton.participant.protocol.party.OnboardingClearanceOperation.PendingOnboardingClearanceStore
 import com.digitalasset.canton.participant.store.SyncPersistentState
 import com.digitalasset.canton.participant.store.memory.PackageMetadataView
-import com.digitalasset.canton.participant.synchronizer.PendingHandshakeWithLsuSuccessor.PendingHandshakesWithSuccessorsStore
+import com.digitalasset.canton.participant.synchronizer.PendingLsuOperation
 import com.digitalasset.canton.participant.topology.client.MissingKeysAlerter
 import com.digitalasset.canton.store.SequencedEventStore
 import com.digitalasset.canton.store.packagemeta.PackageMetadata
@@ -96,16 +97,12 @@ class TopologyComponentFactory(
       onboardingClearanceScheduler: OnboardingClearanceScheduler,
       topologyClient: SynchronizerTopologyClientWithInit,
       recordOrderPublisher: RecordOrderPublisher,
-      pendingHandshakesWithSuccessorsStore: PendingHandshakesWithSuccessorsStore,
+      pendingLsuOperationsStore: PendingLsuOperation.Store,
       pendingOnboardingClearanceStore: PendingOnboardingClearanceStore,
-      retrieveAndStoreMissingSequencerIds: TraceContext => EitherT[
-        FutureUnlessShutdown,
-        String,
-        Unit,
-      ],
       sequencedEventStore: SequencedEventStore,
       synchronizerPredecessor: Option[SynchronizerPredecessor],
       ledgerApiStore: LedgerApiStore,
+      metrics: ParticipantMetrics,
   ): TopologyTransactionProcessor.Factory = new TopologyTransactionProcessor.Factory {
     override def create(
         acsCommitmentScheduleEffectiveTime: Traced[EffectiveTime] => Unit
@@ -123,10 +120,10 @@ class TopologyComponentFactory(
           _.pauseSynchronizerIndexingDuringPartyReplication
         ),
         synchronizerPredecessor = synchronizerPredecessor,
-        pendingHandshakesWithSuccessorsStore = pendingHandshakesWithSuccessorsStore,
+        pendingLsuOperationsStore = pendingLsuOperationsStore,
         pendingOnboardingClearanceStore = pendingOnboardingClearanceStore,
         onboardingClearanceScheduler = onboardingClearanceScheduler,
-        retrieveAndStoreMissingSequencerIds = retrieveAndStoreMissingSequencerIds,
+        metrics = metrics,
         loggerFactory,
       )
       val terminateTopologyProcessingFUS =
@@ -273,6 +270,7 @@ class TopologyComponentFactory(
       topology,
       Some(crypto.staticSynchronizerParameters),
       timeouts,
+      futureSupervisor = futureSupervisor,
       loggerFactory,
     )
 
@@ -289,6 +287,7 @@ class TopologyComponentFactory(
       topologyStore,
       topologyStateCache,
       synchronizerUpgradeTime = synchronizerPredecessor.map(_.upgradeTime),
+      sequencerSnapshotTimestamp = None,
       packageDependencyResolver,
       caching,
       enableConsistencyChecks,
@@ -296,7 +295,7 @@ class TopologyComponentFactory(
       timeouts,
       futureSupervisor,
       loggerFactory,
-    )()
+    )
   def createTopologySnapshot(
       asOf: CantonTimestamp,
       packageDependencyResolver: PackageDependencyResolver,

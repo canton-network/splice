@@ -84,6 +84,7 @@ class ProtocolConvertersTest extends AnyWordSpec with BaseTest with HasExecution
     JsMapping(converters.AssignedEvent),
     JsMapping(converters.ContractEntry),
     JsMapping(converters.GetActiveContractsResponse),
+    JsMapping(converters.GetActiveContractsPageResponse),
     JsMapping(converters.ReassignmentEvent),
     JsMapping(converters.Reassignment),
     JsMapping(converters.GetUpdatesResponse),
@@ -114,6 +115,10 @@ object Arbitraries {
   )
   val defaultLapiValue: com.daml.ledger.api.v2.value.Value =
     Value(sum = Value.Sum.Record(value = defaultLapiRecord))
+
+  val defaultKeyJsValue: ujson.Value = ujson.Obj("key" -> ujson.Str("contract-key-marker"))
+  val defaultKeyLapiValue: com.daml.ledger.api.v2.value.Value =
+    Value(sum = Value.Sum.Text("contract-key-marker"))
 
   def smallSeqArbitrary[T](implicit arbT: Arbitrary[T]): Arbitrary[Seq[T]] =
     Arbitrary(Gen.choose(0, 5).flatMap(n => Gen.listOfN(n, arbT.arbitrary)))
@@ -153,6 +158,13 @@ object Arbitraries {
       arb.arbitrary.retryUntil(_.isDefined)
     }
 
+  implicit val arbExerciseByKeyCommand: Arbitrary[lapi.commands.ExerciseByKeyCommand] = {
+    val arb = ArbitraryDerivation[lapi.commands.ExerciseByKeyCommand]
+    Arbitrary {
+      arb.arbitrary.map(_.copy(contractKey = Some(defaultKeyLapiValue)))
+    }
+  }
+
   implicit val arbCommand: Arbitrary[com.daml.ledger.api.v2.commands.Command.Command] =
     nonEmptyScalaPbOneOf[com.daml.ledger.api.v2.commands.Command.Command](
       ArbitraryDerivation[com.daml.ledger.api.v2.commands.Command.Command]
@@ -180,7 +192,9 @@ object Arbitraries {
   implicit val arbPrefetchContractKey: Arbitrary[lapi.commands.PrefetchContractKey] = {
     val arb = ArbitraryDerivation[lapi.commands.PrefetchContractKey]
     Arbitrary {
-      arb.arbitrary.retryUntil(pk => pk.contractKey.zip(pk.templateId).isDefined)
+      arb.arbitrary
+        .retryUntil(pk => pk.contractKey.zip(pk.templateId).isDefined)
+        .map(_.copy(contractKey = Some(defaultKeyLapiValue)))
     }
   }
 
@@ -290,7 +304,9 @@ object Arbitraries {
   implicit val arbCreatedEvent: Arbitrary[lapi.event.CreatedEvent] = {
     val arb = ArbitraryDerivation[lapi.event.CreatedEvent]
     Arbitrary {
-      arb.arbitrary.retryUntil(v => v.createdAt.isDefined)
+      arb.arbitrary
+        .retryUntil(v => v.createdAt.isDefined)
+        .map(_.copy(contractKey = Some(defaultKeyLapiValue)))
     }
   }
 
@@ -323,6 +339,10 @@ object Arbitraries {
       : Arbitrary[lapi.state_service.GetActiveContractsResponse] =
     ArbitraryDerivation[lapi.state_service.GetActiveContractsResponse]
 
+  implicit val arbGetActiveContractsPageResponse
+      : Arbitrary[lapi.state_service.GetActiveContractsPageResponse] =
+    ArbitraryDerivation[lapi.state_service.GetActiveContractsPageResponse]
+
   implicit class OptM[T](val v: Option[T]) {
     def getValue()(implicit ct: ClassTag[T]): T =
       v.getOrElse(
@@ -338,6 +358,9 @@ class MockSchemaProcessor()(implicit val executionContext: ExecutionContext)
   val simpleJsValue = Future.successful(Arbitraries.defaultJsValue)
   val simpleLapiValue =
     Future.successful(Arbitraries.defaultLapiValue)
+
+  val contractKeyJsValue: Future[ujson.Value] = Future.successful(Arbitraries.defaultKeyJsValue)
+  val contractKeyLapiValue: Future[Value] = Future.successful(Arbitraries.defaultKeyLapiValue)
 
   override def contractArgFromJsonToProto(template: Identifier, jsonArgsValue: ujson.Value)(implicit
       traceContext: TraceContext
@@ -361,11 +384,11 @@ class MockSchemaProcessor()(implicit val executionContext: ExecutionContext)
 
   override def keyArgFromProtoToJson(template: Identifier, protoArgs: Value)(implicit
       traceContext: TraceContext
-  ): Future[ujson.Value] = simpleJsValue
+  ): Future[ujson.Value] = contractKeyJsValue
 
   override def keyArgFromJsonToProto(template: Identifier, protoArgs: ujson.Value)(implicit
       traceContext: TraceContext
-  ): Future[Value] = simpleLapiValue
+  ): Future[Value] = contractKeyLapiValue
 
   override def exerciseResultFromProtoToJson(
       template: Identifier,

@@ -12,10 +12,14 @@ import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.ledger.api.TransactionShape.{AcsDelta, LedgerEffects}
 import com.digitalasset.canton.ledger.api.{TraceIdentifiers, TransactionShape}
 import com.digitalasset.canton.logging.LoggingContextWithTrace.implicitExtractTraceContext
-import com.digitalasset.canton.logging.{LoggingContextWithTrace, NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.logging.{
+  ErrorLoggingContext,
+  LoggingContextWithTrace,
+  NamedLoggerFactory,
+  NamedLogging,
+}
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
 import com.digitalasset.canton.platform.config.UpdatesStreamsConfig
-import com.digitalasset.canton.platform.store.LedgerApiContractStore
 import com.digitalasset.canton.platform.store.ScalaPbStreamingOptimizations.ScalaPbMessageWithPrecomputedSerializedSize
 import com.digitalasset.canton.platform.store.backend.EventStorageBackend.SequentialIdBatch.Ids
 import com.digitalasset.canton.platform.store.backend.EventStorageBackend.{RawEvent, RawThinEvent}
@@ -36,7 +40,9 @@ import com.digitalasset.canton.platform.store.utils.{
   QueueBasedConcurrencyLimiter,
   Telemetry,
 }
+import com.digitalasset.canton.platform.store.{LedgerApiContractStore, PruningOffsetService}
 import com.digitalasset.canton.platform.{
+  FatContract,
   InternalEventFormat,
   InternalTransactionFormat,
   InternalUpdateFormat,
@@ -48,7 +54,7 @@ import org.apache.pekko.stream.Attributes
 import org.apache.pekko.stream.scaladsl.Source
 
 import java.sql.Connection
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.chaining.*
 
 class UpdatesStreamReader(
@@ -63,6 +69,7 @@ class UpdatesStreamReader(
     metrics: LedgerApiServerMetrics,
     tracer: Tracer,
     topologyTransactionsStreamReader: TopologyTransactionsStreamReader,
+    pruningOffsetService: PruningOffsetService,
     val loggerFactory: NamedLoggerFactory,
 )(implicit executionContext: ExecutionContext)
     extends NamedLogging {
@@ -77,6 +84,7 @@ class UpdatesStreamReader(
       queryRange: EventsRange,
       internalUpdateFormat: InternalUpdateFormat,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[(Offset, GetUpdatesResponse), NotUsed] = {
@@ -91,7 +99,12 @@ class UpdatesStreamReader(
     logger.debug(
       s"streamUpdates(${queryRange.startInclusiveOffset}, ${queryRange.endInclusiveOffset}, descending: $descendingOrder, $internalUpdateFormat)"
     )
-    doStreamUpdates(queryRange, internalUpdateFormat, descendingOrder)
+    doStreamUpdates(
+      queryRange = queryRange,
+      internalUpdateFormat = internalUpdateFormat,
+      descendingOrder = descendingOrder,
+      skipPruningChecks = skipPruningChecks,
+    )
       .wireTap(_ match {
         case (_, getUpdatesResponse) =>
           getUpdatesResponse.update match {
@@ -116,6 +129,7 @@ class UpdatesStreamReader(
       queryRange: EventsRange,
       internalUpdateFormat: InternalUpdateFormat,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[(Offset, GetUpdatesResponse), NotUsed] = {
@@ -194,6 +208,7 @@ class UpdatesStreamReader(
           payloadQueriesLimiter = payloadQueriesLimiter,
           idPageSizing = idPageSizing,
           descendingOrder = descendingOrder,
+          skipPruningChecks = skipPruningChecks,
         )
       case Some(InternalTransactionFormat(internalEventFormat, LedgerEffects)) =>
         doStreamLedgerEffects(
@@ -206,6 +221,7 @@ class UpdatesStreamReader(
           payloadQueriesLimiter = payloadQueriesLimiter,
           idPageSizing = idPageSizing,
           descendingOrder = descendingOrder,
+          skipPruningChecks = skipPruningChecks,
         )
       case None if internalUpdateFormat.includeReassignments.isDefined =>
         doStreamAcsDelta(
@@ -218,6 +234,7 @@ class UpdatesStreamReader(
           payloadQueriesLimiter = payloadQueriesLimiter,
           idPageSizing = idPageSizing,
           descendingOrder = descendingOrder,
+          skipPruningChecks = skipPruningChecks,
         )
 
       case None => Source.empty
@@ -294,6 +311,7 @@ class UpdatesStreamReader(
       payloadQueriesLimiter: QueueBasedConcurrencyLimiter,
       idPageSizing: IdPageSizing,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[RawEvent, NotUsed] = {
@@ -462,6 +480,7 @@ class UpdatesStreamReader(
         dbMetric = dbMetrics.updatesAcsDeltaStream.fetchEventActivatePayloads,
         payloadQueriesLimiter = payloadQueriesLimiter,
         contractStore = contractStore,
+        skipPruningChecks = skipPruningChecks,
       )
     val payloadsDeactivate =
       fetchPayloads(
@@ -483,6 +502,7 @@ class UpdatesStreamReader(
         dbMetric = dbMetrics.updatesAcsDeltaStream.fetchEventDeactivatePayloads,
         payloadQueriesLimiter = payloadQueriesLimiter,
         contractStore = contractStore,
+        skipPruningChecks = skipPruningChecks,
       )
 
     payloadsActivate
@@ -499,6 +519,7 @@ class UpdatesStreamReader(
       payloadQueriesLimiter: QueueBasedConcurrencyLimiter,
       idPageSizing: IdPageSizing,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[RawEvent, NotUsed] = {
@@ -776,6 +797,7 @@ class UpdatesStreamReader(
         dbMetric = dbMetrics.updatesLedgerEffectsStream.fetchEventActivatePayloads,
         payloadQueriesLimiter = payloadQueriesLimiter,
         contractStore = contractStore,
+        skipPruningChecks = skipPruningChecks,
       )
     val payloadsDeactivate =
       fetchPayloads(
@@ -797,6 +819,7 @@ class UpdatesStreamReader(
         dbMetric = dbMetrics.updatesLedgerEffectsStream.fetchEventDeactivatePayloads,
         payloadQueriesLimiter = payloadQueriesLimiter,
         contractStore = contractStore,
+        skipPruningChecks = skipPruningChecks,
       )
     val payloadsVariousWitnessed =
       fetchPayloads(
@@ -818,6 +841,7 @@ class UpdatesStreamReader(
         dbMetric = dbMetrics.updatesLedgerEffectsStream.fetchEventVariousWitnessedPayloads,
         payloadQueriesLimiter = payloadQueriesLimiter,
         contractStore = contractStore,
+        skipPruningChecks = skipPruningChecks,
       )
 
     payloadsActivate
@@ -907,6 +931,7 @@ class UpdatesStreamReader(
       dbMetric: DatabaseMetrics,
       payloadQueriesLimiter: ConcurrencyLimiter,
       contractStore: LedgerApiContractStore,
+      skipPruningChecks: Boolean,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[RawEvent, NotUsed] = {
@@ -917,21 +942,17 @@ class UpdatesStreamReader(
       .mapAsync(maxParallelPayloadQueries)(ids =>
         payloadQueriesLimiter.execute {
           globalPayloadQueriesLimiter.execute {
-            queryValidRange
-              .withRangeNotPruned(
-                minOffsetInclusive = queryRange.startInclusiveOffset,
-                maxOffsetInclusive = queryRange.endInclusiveOffset,
-                errorPruning = (prunedOffset: Offset) =>
-                  s"Updates request from ${queryRange.startInclusiveOffset.unwrap} to ${queryRange.endInclusiveOffset.unwrap} precedes pruned offset ${prunedOffset.unwrap}",
-                errorLedgerEnd = (ledgerEndOffset: Option[Offset]) =>
-                  s"Updates request from ${queryRange.startInclusiveOffset.unwrap} to ${queryRange.endInclusiveOffset.unwrap} is beyond ledger end offset ${ledgerEndOffset
-                      .fold(0L)(_.unwrap)}",
-              ) {
-                dbDispatcher
-                  .executeSql(dbMetric)(fetchEvents(ids, _))
-                  .flatMap(UpdateReader.withFatContractIfNeeded(contractStore))
-              }
-              .map(UpdateReader.tryToResolveFatInstance)
+            UpdatesStreamReader.fetchContractPayloadsInternal(
+              queryRange = queryRange,
+              dbMetric = dbMetric,
+              contractStore = contractStore,
+              skipPruningChecks = skipPruningChecks,
+              ids = ids,
+              fetchEvents = fetchEvents,
+              pruningOffsetService = pruningOffsetService,
+              queryValidRange = queryValidRange,
+              dbDispatcher = dbDispatcher,
+            )
           }
         }
       )
@@ -949,5 +970,48 @@ object UpdatesStreamReader {
   final implicit class VectorOps[T](vec: Vector[T]) {
     def reverseIfDescendingOrder(descendingOrder: Boolean): Vector[T] =
       if (descendingOrder) vec.reverse else vec
+  }
+
+  def fetchContractPayloadsInternal(
+      queryRange: EventsRange,
+      dbMetric: DatabaseMetrics,
+      contractStore: LedgerApiContractStore,
+      skipPruningChecks: Boolean,
+      ids: Iterable[Long],
+      fetchEvents: (Iterable[Long], Connection) => Vector[RawThinEvent],
+      pruningOffsetService: PruningOffsetService,
+      queryValidRange: QueryValidRange,
+      dbDispatcher: DbDispatcher,
+  )(implicit
+      loggingContext: LoggingContextWithTrace,
+      executionContext: ExecutionContext,
+      errorLoggingContext: ErrorLoggingContext,
+  ): Future[Vector[RawEvent]] = {
+    val pruningCheck: Future[Vector[(RawThinEvent, Option[FatContract])]] => Future[
+      Vector[(RawThinEvent, Option[FatContract])]
+    ] = if (skipPruningChecks) {
+      _.flatMap(events =>
+        pruningOffsetService.pruningOffset.map(prunedTo =>
+          events.filter(_._1.offset > prunedTo.fold(0L)(_.unwrap))
+        )
+      ) // Remove all elements after a pruning offset not to break tryToResolveFatInstance
+    } else {
+      queryValidRange
+        .withRangeNotPruned(
+          minOffsetInclusive = queryRange.startInclusiveOffset,
+          maxOffsetInclusive = queryRange.endInclusiveOffset,
+          errorPruning = (prunedOffset: Offset) =>
+            s"Updates request from ${queryRange.startInclusiveOffset.unwrap} to ${queryRange.endInclusiveOffset.unwrap} precedes pruned offset ${prunedOffset.unwrap}",
+          errorLedgerEnd = (ledgerEndOffset: Option[Offset]) =>
+            s"Updates request from ${queryRange.startInclusiveOffset.unwrap} to ${queryRange.endInclusiveOffset.unwrap} is beyond ledger end offset ${ledgerEndOffset
+                .fold(0L)(_.unwrap)}",
+        )(_)
+    }
+    pruningCheck {
+      dbDispatcher
+        .executeSql(dbMetric)(fetchEvents(ids, _))
+        .flatMap(UpdateReader.withFatContractIfNeeded(contractStore))
+    }
+      .map(UpdateReader.tryToResolveFatInstance)
   }
 }

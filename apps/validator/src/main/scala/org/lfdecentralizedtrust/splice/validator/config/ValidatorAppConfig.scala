@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TransferPreapprovalConfig,
   TreasuryConfig,
   WalletSweepConfig,
@@ -184,6 +185,10 @@ case class ValidatorAppBackendConfig(
     /** The configuration for auto-accepting transfers from other parties
       */
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig] = Map.empty,
+
+    /** The configuration for sharing app reward coupons from traffic-based app rewards with beneficiaries
+      */
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig] = Map.empty,
     // We don't make this optional to encourage users to think about it at least. They
     // can always set it to an empty string.
     contactPoint: String,

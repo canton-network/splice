@@ -1441,6 +1441,28 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
     )
   }
 
+  def createRewardCouponsV2(
+      coupons: Seq[(PartyId, BigDecimal, Option[PartyId])],
+      round: Option[splice.types.Round] = None,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val now = env.environment.clock.now
+    val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
+    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
+      actAs = Seq(dsoParty),
+      commands = coupons.flatMap { case (provider, amount, beneficiaryO) =>
+        new splice.amulet.RewardCouponV2(
+          dsoParty.toProtoPrimitive,
+          provider.toProtoPrimitive,
+          couponRound,
+          amount.bigDecimal,
+          now.plus(java.time.Duration.ofDays(1)).toInstant,
+          true,
+          beneficiaryO.map(_.toProtoPrimitive).toJava,
+        ).create.commands.asScala
+      },
+    )
+  }
+
   /** Directly exercises the AmuletRules_Transfer choice.
     * Note that all parties participating in the transfer need to be hosted on the same participant
     */

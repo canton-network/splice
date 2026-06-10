@@ -111,13 +111,13 @@ template TokenRules with
         assertDeadlineExceeded "offeredAt" offeredAt
         let mintConfig = AccountConfig with
               admin
-              account = mintAccount admin
+              account = mintAccount
               ownerConfig = PartyConfig True True
               providerConfig = PartyConfig False False
         let adminApproved = Map.singleton V2.TIA_Accept [admin]
         let accountMap = Map.fromList [(receiverConfig.account, (receiverConfig, None)), (mintConfig.account, (mintConfig, None))]
         let transfer = V2.Transfer with
-              sender = mintAccount admin
+              sender = mintAccount
               receiver
               amount
               instrumentId
@@ -132,7 +132,7 @@ template TokenRules with
           availableActions = mkAvailableActions admin spec adminApproved accountMap
           mintAmount = amount
           transfer = V2.Transfer with
-            sender = mintAccount admin
+            sender = mintAccount
             receiver
             amount
             instrumentId

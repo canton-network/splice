@@ -114,7 +114,7 @@ template AmuletAllocationV2
               pure (lockedAmulet.amulet.amount.initialAmount, [toInterfaceContractId lockedAmuletCid])
 
         -- compute total funds to move
-        let netTransferAmount = netAmuletCreditAmount allocation.admin (basicAccount authorizer) actualTransferLegSides
+        let netTransferAmount = netAmuletCreditAmount (basicAccount authorizer) actualTransferLegSides
         let inputAmount = inputFundingAmount + netTransferAmount
         let payoutAmount = inputAmount - outputFundingAmount
         require' ("inputAmount", inputAmount) isGreaterOrEqualR ("minimal outputAmount", outputFundingAmount)
@@ -187,11 +187,11 @@ unlockAmuletAllocationV2 amuletAllocation extraArgs = do
       holdingCids <- abortTwoStepTransfer lockExpiresAt la extraArgs
       pure $ TextMap.fromList [ (amuletInstrumentIdName, map upcast holdingCids) ]
 
-netAmuletCreditAmount : Party -> V2.Account -> [V2.TransferLegSide] -> Decimal
-netAmuletCreditAmount dso authorizer transferLegs =
+netAmuletCreditAmount : V2.Account -> [V2.TransferLegSide] -> Decimal
+netAmuletCreditAmount authorizer transferLegs =
     fromOptional 0.0 $ TextMap.lookup amuletInstrumentIdName creditAmounts
   where
-    creditAmounts = netAllocationCreditAmounts dso authorizer transferLegs
+    creditAmounts = netAllocationCreditAmounts authorizer transferLegs
 
 validateAmuletNextIterationFunding : Optional (TextMap.TextMap Decimal) -> Update Decimal
 validateAmuletNextIterationFunding None = pure 0.0

@@ -47,7 +47,7 @@ class ReferenceInterpreterTest
           |      CreateWithKey 1 key=(0, {1}) sigs={1} obs={}
           |      Exercise NonConsuming 0 ctl={1} cobs={}
           |        FetchByKey 1
-          |        LookupByKey Success 1
+          |        QueryByKey [1] exhaustive=true
           |        ExerciseByKey NonConsuming 1 ctl={1} cobs={}
           |""".stripMargin)
 
@@ -69,7 +69,7 @@ class ReferenceInterpreterTest
           |      Create 0 sigs={1} obs={}
           |    Commands participant=1 actAs={1} disclosures=[]
           |      Exercise NonConsuming 0 ctl={1} cobs={}
-          |        LookupByKey Failure key=(0, {1})
+          |        QueryByKey [] key=(0, {1}) exhaustive=true
           |""".stripMargin)
 
       ReferenceInterpreter(loggerFactory).runAndProject(scenario) match {
@@ -80,7 +80,7 @@ class ReferenceInterpreterTest
       }
     }
 
-    "sammy test" in {
+    "run a scenario involving query by key" in {
       val scenario = Parser.assertParseScenario("""
           |Scenario
           |  Topology
@@ -91,6 +91,26 @@ class ReferenceInterpreterTest
           |      ExerciseByKey Consuming 0 ctl={2} cobs={}
           |        CreateWithKey 1 key=(1, {1,2}) sigs={1,2} obs={}
           |        QueryByKey [1] exhaustive=true
+          |""".stripMargin)
+      ReferenceInterpreter(loggerFactory).runAndProject(scenario) match {
+        case Left(error) =>
+          fail(error)
+        case Right(projections) =>
+          projections should not be empty
+      }
+    }
+
+    "run a scenario in which some contracts looked up by key are not visible" in {
+      val scenario = Parser.assertParseScenario("""
+          |Scenario
+          |  Topology
+          |    Participant 1 pkgs={0} parties={1,2}
+          |  Ledger
+          |    Commands participant=1 actAs={2} disclosures=[]
+          |      CreateWithKey 0 key=(1, {2}) sigs={2} obs={}
+          |      CreateWithKey 1 key=(1, {2}) sigs={2} obs={}
+          |    Commands participant=1 actAs={1} disclosures=[0]
+          |      ExerciseByKey Consuming 0 ctl={1} cobs={}
           |""".stripMargin)
       ReferenceInterpreter(loggerFactory).runAndProject(scenario) match {
         case Left(error) =>

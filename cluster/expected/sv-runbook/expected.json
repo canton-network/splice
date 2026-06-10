@@ -651,9 +651,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": "2"
-        },
         "participantAddress": "participant",
         "persistence": {
           "postgresName": "apps-pg",
@@ -676,6 +673,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",
@@ -858,10 +856,6 @@
         },
         "/api/scan/v0/active-synchronizer-serial": {
           "name": "activeSynchronizerSerial",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/activities": {
-          "name": "activities",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {

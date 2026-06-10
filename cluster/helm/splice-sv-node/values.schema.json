@@ -342,14 +342,7 @@
         },
         "migration": {
           "type": "object",
-          "required": ["id"],
           "properties": {
-            "id": {
-              "description": "The migration id of the synchronizer"
-            },
-            "migrating": {
-              "type": "boolean"
-            },
             "attachPvc": {
               "type": "boolean"
             }

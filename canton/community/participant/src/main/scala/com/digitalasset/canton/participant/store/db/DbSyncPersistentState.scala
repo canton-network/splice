@@ -6,6 +6,7 @@ package com.digitalasset.canton.participant.store.db
 import cats.Eval
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.crypto.{CryptoPureApi, SynchronizerCrypto}
+import com.digitalasset.canton.data.SynchronizerPredecessor
 import com.digitalasset.canton.lifecycle.LifeCycle
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.ParticipantNodeParameters
@@ -77,6 +78,7 @@ class DbLogicalSyncPersistentState(
     timeouts,
     loggerFactory,
     ledgerApiStore.map(_.stringInterningView),
+    parameters.batchingConfig,
   )
 
   override val acsInspection: AcsInspection =
@@ -128,6 +130,7 @@ class DbPhysicalSyncPersistentState(
     storage: DbStorage,
     crypto: SynchronizerCrypto,
     parameters: ParticipantNodeParameters,
+    predecessor: Option[SynchronizerPredecessor],
     val loggerFactory: NamedLoggerFactory,
     val futureSupervisor: FutureSupervisor,
 )(implicit ec: ExecutionContext)
@@ -155,8 +158,8 @@ class DbPhysicalSyncPersistentState(
     loggerFactory,
   )
 
-  val parameterStore: DbSynchronizerParameterStore =
-    new DbSynchronizerParameterStore(
+  val connectivityStatusStore: DbSynchronizerConnectivityStatusStore =
+    new DbSynchronizerConnectivityStatusStore(
       psid,
       storage,
       timeouts,
@@ -179,6 +182,7 @@ class DbPhysicalSyncPersistentState(
       storage,
       SynchronizerStore(psid),
       indexedTopologyStoreId,
+      predecessor = predecessor,
       staticSynchronizerParameters.protocolVersion,
       timeouts,
       parameters.batchingConfig,
@@ -190,7 +194,7 @@ class DbPhysicalSyncPersistentState(
       topologyStore,
       sequencedEventStore,
       requestJournalStore,
-      parameterStore,
+      connectivityStatusStore,
       sendTrackerStore,
       submissionTrackerStore,
     )(logger)

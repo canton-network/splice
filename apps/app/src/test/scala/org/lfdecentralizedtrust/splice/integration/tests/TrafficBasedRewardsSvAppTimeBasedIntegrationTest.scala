@@ -70,6 +70,9 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
           )
         )(config)
       )
+      // Prevent wallets from minting RewardCouponV2 before the test
+      // can observe them on the DSO store.
+      .withoutAutomaticRewardsCollectionAndAmuletMerging
 
   "Enable, disable of dryRunVersion/mintingVersion take effect at round closure" in {
     implicit env =>
