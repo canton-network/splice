@@ -52,12 +52,27 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
 
     val keyPair =
       CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+
+    submitTopologyAndOnboard(
+      validatorBackend,
+      truePartyHint,
+      keyPair,
+      PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+    )
+  }
+
+  private def submitTopologyAndOnboard(
+      validatorBackend: ValidatorAppBackendReference,
+      partyHint: String,
+      keyPair: CryptoKeyPair[PublicKey, PrivateKey],
+      partyId: PartyId,
+  )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult = {
     val privateKey = keyPair.privateKey
     val subjectPublicKeyInfo = extractSubjectPublicKeyInfoFrom(keyPair)
 
     val listOfTransactionsAndHashes = validatorBackend
       .generateExternalPartyTopology(
-        truePartyHint,
+        partyHint,
         publicKeyAsHexString(subjectPublicKeyInfo),
       )
       .topologyTxs
@@ -85,8 +100,8 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     )
 
     OnboardingResult(
-      PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
-      generatedKey,
+      partyId,
+      keyPair.publicKey.asInstanceOf[SigningPublicKey],
       privateKey,
     )
   }
@@ -394,42 +409,7 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     validatorBackend.participantClient.keys.secret.delete(fingerprint, true)
 
     val keyPair = CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
-    val privateKey = keyPair.privateKey
-    val subjectPublicKeyInfo = extractSubjectPublicKeyInfoFrom(keyPair)
 
-    val listOfTransactionsAndHashes = validatorBackend
-      .generateExternalPartyTopology(
-        truePartyHint,
-        publicKeyAsHexString(subjectPublicKeyInfo),
-      )
-      .topologyTxs
-
-    val signedTopologyTxs = listOfTransactionsAndHashes.map { tx =>
-      SignedTopologyTx(
-        tx.topologyTx,
-        HexString.toHexString(
-          crypto(env.executionContext)
-            .sign(
-              hash = Hash.fromHexString(tx.hash).value,
-              signingKey = privateKey.asInstanceOf[SigningPrivateKey],
-              usage = SigningKeyUsage.ProtocolOnly,
-            )
-            .value
-            .toProtoV30
-            .signature
-        ),
-      )
-    }
-
-    validatorBackend.submitExternalPartyTopology(
-      signedTopologyTxs,
-      publicKeyAsHexString(subjectPublicKeyInfo),
-    )
-
-    OnboardingResult(
-      preGenerated.partyId,
-      keyPair.publicKey.asInstanceOf[SigningPublicKey],
-      privateKey,
-    )
+    submitTopologyAndOnboard(validatorBackend, truePartyHint, keyPair, preGenerated.partyId)
   }
 }
