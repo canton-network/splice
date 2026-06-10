@@ -40,8 +40,6 @@ class UpdateHistoryBulkStorageStaging(
       updateHistory,
       kvProvider,
       currentMigrationId,
-      s3Connection,
-      historyMetrics,
       loggerFactory,
     ) {
   override val description = "Update History Bulk Storage (Staging)"

@@ -20,9 +20,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStora
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
   PageLimit,
-  S3BucketConnection,
   TimestampWithMigrationId,
   UpdateHistory,
 }
@@ -36,8 +34,6 @@ abstract class UpdateHistoryBulkStorage(
     val updateHistory: UpdateHistory,
     val kvProvider: ScanKeyValueProvider,
     val currentMigrationId: Long,
-    val s3Connection: S3BucketConnection,
-    val historyMetrics: HistoryMetrics,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
