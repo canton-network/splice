@@ -1,12 +1,14 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": ["imageName"],
   "properties": {
     "imageName": {
       "type": "string"
     },
     "ui": {
       "type": "object",
+      "required": ["imageName"],
       "properties": {
         "imageName": {
           "type": "string"
@@ -457,7 +459,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {

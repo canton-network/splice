@@ -4,6 +4,7 @@
   "properties": {
     "ansWebUi": {
       "type": "object",
+      "required": ["imageName"],
       "properties": {
         "imageName": {
           "type": "string"
@@ -101,6 +102,7 @@
     },
     "wallet": {
       "type": "object",
+      "required": ["imageName"],
       "properties": {
         "imageName": {
           "type": "string"
@@ -219,7 +221,8 @@
         "migration",
         "nodeIdentifier",
         "persistence",
-        "spliceInstanceNames"
+        "spliceInstanceNames",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
@@ -287,7 +290,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
