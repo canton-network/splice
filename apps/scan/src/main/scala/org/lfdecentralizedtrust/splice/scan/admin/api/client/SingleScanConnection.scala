@@ -801,6 +801,11 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAllocationCancelContextRaw(allocationCid, body),
     )
 
+  def getSettlementFactoryRaw(
+      body: allocation.v2.definitions.GetFactoryRequest
+  )(implicit ec: ExecutionContext, tc: TraceContext) =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetSettlementFactoryV2Raw(body))
+
   def getAllocationV2CancelContextRaw(
       allocationCid: String,
       body: allocation.v2.definitions.GetChoiceContextRequest,

@@ -2398,6 +2398,34 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetSettlementFactoryV2Raw(body: allocation.v2.definitions.GetFactoryRequest)
+      extends TokenStandardAllocationV2BaseCommand[
+        allocation.v2.GetSettlementFactoryResponse,
+        allocation.v2.definitions.FactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: AV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocation.v2.GetSettlementFactoryResponse] = {
+      client.getSettlementFactory(
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      allocation.v2.GetSettlementFactoryResponse,
+      Either[String, allocation.v2.definitions.FactoryWithChoiceContext],
+    ] = { case allocation.v2.GetSettlementFactoryResponse.OK(factory) =>
+      Right(factory)
+    }
+  }
+
   case class GetAllocationCancelContextRaw(
       allocationId: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,

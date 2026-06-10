@@ -25,10 +25,11 @@ class HttpTokenStandardScanProxyHandler(
     tracer: Tracer,
 ) extends allocation.v1.Handler[AuthenticatedRequest]
     with allocation.v2.Handler[AuthenticatedRequest]
-    // TODO (#5326): implement remaining v2 endpoints
     with allocationinstruction.v1.Handler[AuthenticatedRequest]
+    with allocationinstruction.v2.Handler[AuthenticatedRequest]
     with metadata.v1.Handler[AuthenticatedRequest]
     with transferinstruction.v1.Handler[AuthenticatedRequest]
+    with transferinstruction.v2.Handler[AuthenticatedRequest]
     with Spanning
     with NamedLogging {
 
@@ -113,8 +114,16 @@ class HttpTokenStandardScanProxyHandler(
       respond: allocation.v2.Resource.GetSettlementFactoryResponse.type
   )(
       body: allocation.v2.definitions.GetFactoryRequest
-  )(extracted: AuthenticatedRequest): Future[allocation.v2.Resource.GetSettlementFactoryResponse] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5326").asRuntimeException())
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocation.v2.Resource.GetSettlementFactoryResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationCancelContext") { implicit tc => _ =>
+      scanConnection
+        .getSettlementFactoryRaw(body)
+        .map(allocation.v2.Resource.GetSettlementFactoryResponse.OK(_))
+    }
+  }
 
   override def getAllocationWithdrawContext(
       respond: allocation.v2.Resource.GetAllocationWithdrawContextResponse.type
@@ -242,4 +251,63 @@ class HttpTokenStandardScanProxyHandler(
         .map(transferinstruction.v1.Resource.GetTransferInstructionWithdrawContextResponse.OK(_))
     }
   }
+
+  override def getAllocationFactory(
+      respond: allocationinstruction.v2.Resource.GetAllocationFactoryResponse.type
+  )(body: allocationinstruction.v2.definitions.GetFactoryRequest)(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationFactoryResponse] = ???
+
+  override def getAllocationInstructionAcceptContext(
+      respond: allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse] = ???
+
+  override def getAllocationInstructionWithdrawContext(
+      respond: allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse] = ???
+
+  override def getTransferFactory(
+      respond: transferinstruction.v2.Resource.GetTransferFactoryResponse.type
+  )(
+      body: transferinstruction.v2.definitions.GetFactoryRequest
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferFactoryResponse] = ???
+
+  override def getTransferInstructionAcceptContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionAcceptContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionAcceptContextResponse] = ???
+
+  override def getTransferInstructionRejectContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse] = ???
+
+  override def getTransferInstructionWithdrawContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse] = ???
 }

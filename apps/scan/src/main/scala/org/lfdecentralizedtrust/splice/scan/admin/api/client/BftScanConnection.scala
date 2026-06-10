@@ -726,6 +726,10 @@ class BftScanConnection(
   ): Future[allocation.v1.definitions.ChoiceContext] =
     bftCall(_.getAllocationCancelContextRaw(allocationId, body), "getAllocationCancelContextRaw")
 
+  def getSettlementFactoryRaw(
+      body: allocation.v2.definitions.GetFactoryRequest
+  )(implicit ec: ExecutionContext, tc: TraceContext) = bftCall(_.getSettlementFactoryRaw(body), "getSettlementFactoryRaw")
+
   def getAllocationV2CancelContextRaw(
       allocationId: String,
       body: allocation.v2.definitions.GetChoiceContextRequest,
