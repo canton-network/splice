@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegation.MintingDelegation
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.store.HardLimit
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
   ChoiceContextWithDisclosures,
@@ -342,6 +343,7 @@ class MintingDelegationCollectRewardsTrigger(
       rewardCouponsV2 <- store.listRewardCouponsV2(
         includeUnassigned = true,
         includeAssigned = true,
+        limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
