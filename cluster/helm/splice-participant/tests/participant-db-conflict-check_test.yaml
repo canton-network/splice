@@ -24,7 +24,7 @@ tests:
           value: pg-init
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "datname='participant' OR datname LIKE 'participant%'"
+          pattern: "datname LIKE 'participant%'"
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: "Refusing to create participant database '\\$\\{DB_TO_CREATE\\}'"

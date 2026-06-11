@@ -22,7 +22,7 @@ check_participant_db_conflict() {
     return 0
   fi
   local existing
-  existing=$(execute -tAc "SELECT datname FROM pg_database WHERE datname = 'participant' OR datname LIKE 'participant%'" | paste -sd ', ' -)
+  existing=$(execute -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'participant%'" | paste -sd ', ' -)
   if [ -n "$existing" ]; then
     echo "ERROR: Refusing to create participant database '${db_name}' because the following participant database(s) already exist: ${existing}." >&2
     echo "       A participant database should only be created during a fresh deployment. Please double-check that this is intended and not a misconfiguration." >&2
