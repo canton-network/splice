@@ -33,6 +33,10 @@ persistence:
   secretName: "postgres-secrets"
   port: 5432
   enablePgInitContainer: true
+  # When true, the pg-init container refuses to create the participant database if another
+  # database named 'participant' or starting with 'participant' already exists. This guards
+  # against misconfiguration on a non-fresh deployment.
+  enableParticipantDbConflictCheck: true
 # k8s affinity for all deployed pods (optional)
 # affinity:
 

@@ -39,6 +39,7 @@ function usage() {
   echo "  -u <comma_separated_urls>: Comma-separated list of Scan URLs for bft-custom mode (no spaces)."
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
+  echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
 
   echo ""
   echo "Testing flags:"
@@ -70,8 +71,9 @@ bft_custom=0
 bft_custom_urls=""
 bft_custom_svs=""
 bft_custom_threshold=""
+enable_participant_db_conflict_check=1
 
-while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:' arg; do
+while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:k' arg; do
   case ${arg} in
     h)
       usage
@@ -133,6 +135,9 @@ while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:' arg; do
       ;;
     T)
       bft_custom_threshold="${OPTARG}"
+      ;;
+    k)
+      enable_participant_db_conflict_check=0
       ;;
     ?)
       usage
@@ -207,7 +212,9 @@ fi
 
 if [ -z "${migration_id}" ]; then
   PARTICIPANT_DB_NAME="participant"
-  _info "No migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
+  if [ $wait -ne 1 ]; then
+    _info "No migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
+  fi
 else
   if [[ ! "${migration_id}" =~ ^[0-9]+$ ]]; then
     _error_msg "Migration ID must be a non-negative integer"
@@ -215,9 +222,20 @@ else
     exit 1
   fi
   PARTICIPANT_DB_NAME="participant-${migration_id}"
-  _info "Migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
+  if [ $wait -ne 1 ]; then
+    _info "Migration id provided. Using participant database name '${PARTICIPANT_DB_NAME}'."
+  fi
 fi
 export PARTICIPANT_DB_NAME
+
+if [ "${enable_participant_db_conflict_check}" -eq 1 ]; then
+  export ENABLE_PARTICIPANT_DB_CONFLICT_CHECK="true"
+else
+  export ENABLE_PARTICIPANT_DB_CONFLICT_CHECK="false"
+  if [ $wait -ne 1 ]; then
+    _info "Participant database conflict check is disabled (-k)."
+  fi
+fi
 
 if [ -n "${restore_identities_dump}" ] && [ -z "${participant_id}" ]; then
   _error_msg "Please provide a new participant identifier when restoring identities from a dump file"

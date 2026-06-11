@@ -63,6 +63,12 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "enablePgInitContainer": {
+          "type": "boolean"
+        },
+        "enableParticipantDbConflictCheck": {
+          "type": "boolean"
         }
       }
     },
