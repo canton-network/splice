@@ -27,13 +27,10 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 
 import scala.concurrent.duration.DurationInt
 
-/** Tests end-to-end reward collection including the interaction between
-  * sharing and minting triggers: verifies that shared coupons are minted
-  * correctly, that the minting trigger does not re-assign unshared
-  * coupons, and that balances reflect the minted rewards.
-  *
-  * See also [[RewardSharingTimeBasedIntegrationTest]] which tests
-  * assignment correctness and batching in isolation.
+/** Tests end-to-end reward collection including reward sharing: verifies
+  * that the sharing trigger correctly assigns beneficiaries with the right
+  * amounts (batching multiple coupons), that the minting trigger does not
+  * re-assign unshared coupons, and that balances reflect the minted rewards.
   */
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletRewardsTimeBasedIntegrationTest
@@ -112,7 +109,8 @@ class WalletRewardsTimeBasedIntegrationTest
         validatorRewards = Seq((bob, 0.33)),
       )
 
-      val rewardCouponV2Amount = BigDecimal(1000.0)
+      val bobV2Amount = BigDecimal(1000.0)
+      val aliceV2Amounts = Seq(BigDecimal(10.0), BigDecimal(5.0))
 
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
@@ -160,13 +158,13 @@ class WalletRewardsTimeBasedIntegrationTest
       setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
         // Create unassigned V2 coupons for both validators.
         // Bob (no sharing config) → his coupon stays unminted (trigger paused).
-        // Alice (has sharing config) → her coupon is shared then minted.
+        // Alice (has sharing config, 2 coupons) → shared then minted,
+        // exercising batching via additionalCoupons in AssignBeneficiaries.
         clue("Create unassigned RewardCouponV2 for both validators") {
           createRewardCouponsV2(
             Seq(
-              (bobValidatorParty, rewardCouponV2Amount, None),
-              (aliceValidatorParty, rewardCouponV2Amount, None),
-            )
+              (bobValidatorParty, bobV2Amount, None)
+            ) ++ aliceV2Amounts.map((aliceValidatorParty, _, None))
           )
         }
 
@@ -181,7 +179,7 @@ class WalletRewardsTimeBasedIntegrationTest
         advanceRoundsToNextRoundOpening
         advanceTimeForRewardAutomationToRunForCurrentRound
 
-        clue("Alice's V2 coupon is shared — no unassigned coupons remain") {
+        clue("Alice's V2 coupons are shared with correct amounts per beneficiary") {
           val aliceWallet = aliceValidatorBackend.appState.walletManager
             .valueOrFail("WalletManager is expected to be defined")
             .lookupEndUserPartyWallet(aliceValidatorParty)
@@ -193,7 +191,19 @@ class WalletRewardsTimeBasedIntegrationTest
               .filter(_.payload.provider == aliceValidatorParty.toProtoPrimitive)
 
             allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe
-              empty withClue "Unassigned coupon should be consumed by sharing trigger"
+              empty withClue "Unassigned coupons should be consumed by sharing trigger"
+
+            // Each input coupon produces one assigned coupon per beneficiary
+            val assigned = allCoupons
+              .filter(_.payload.beneficiary.isPresent)
+              .map(c => (c.payload.beneficiary.get(), BigDecimal(c.payload.amount)))
+
+            assigned should contain theSameElementsAs Seq(
+              (aliceValidatorParty.toProtoPrimitive, BigDecimal(6.0)), // 60% of 10.0
+              (aliceValidatorParty.toProtoPrimitive, BigDecimal(3.0)), // 60% of 5.0
+              (bobValidatorParty.toProtoPrimitive, BigDecimal(4.0)), // 40% of 10.0
+              (bobValidatorParty.toProtoPrimitive, BigDecimal(2.0)), // 40% of 5.0
+            ) withClue "one assigned coupon per input coupon per beneficiary"
           }
         }
 
@@ -220,8 +230,8 @@ class WalletRewardsTimeBasedIntegrationTest
       // Verify minting with no-sharing-config: bob's own V2 coupon is
       // minted directly, and alice's shared 40% is also minted into
       // bob's balance.
-      val aliceShareToBob = rewardCouponV2Amount * BigDecimal(0.4)
-      val expectedV2Delta = rewardCouponV2Amount + aliceShareToBob
+      val aliceShareToBob = aliceV2Amounts.sum * BigDecimal(0.4)
+      val expectedV2Delta = bobV2Amount + aliceShareToBob
       clue("Bob's balance reflects his own V2 coupon + alice's shared 40%") {
         eventually() {
           val newBobBalance = bobValidatorWalletClient.balance().unlockedQty
