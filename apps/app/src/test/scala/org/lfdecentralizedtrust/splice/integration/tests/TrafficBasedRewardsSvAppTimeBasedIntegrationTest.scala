@@ -4,6 +4,7 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
+import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
@@ -19,6 +20,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.GetRewardAccountingBatchResponse
 import definitions.GetRewardAccountingRootHashResponse
@@ -326,6 +328,23 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             .listProcessRewardsV2()
             .futureValue
             .map(_.payload.round.number) should not contain round
+        }
+      }
+
+      clue(
+        "sv2's BFT-read counters incremented, as it obtained both root-hash and batch via BFT read"
+      ) {
+        // metrics.get can throw before the meter is first marked, so retry.
+        eventually(retryOnTestFailuresOnly = false) {
+          def bftReads(name: String): Long =
+            sv2Backend.metrics
+              .get(s"$MetricsPrefix.$name", Map("dryRun" -> "false"))
+              .select[MetricValue.LongPoint]
+              .value
+              .value
+
+          bftReads("calculate_rewards_v2.root_hash_bft_reads") should be >= 1L
+          bftReads("process_rewards_v2.batch_bft_reads") should be >= 1L
         }
       }
     } finally {
