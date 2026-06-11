@@ -216,5 +216,41 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(expectedError)
       }
     }
+
+    "accept custom batchSize" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |    batch-size = 50
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(validConfig) shouldBe a[Right[?, ?]]
+    }
+
+    "reject batchSize = 0" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |    batch-size = 0
+          |  }
+          |}
+          """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig
+        .loadAndValidate(buggyConfig)
+        .left
+        .value
+        .toString should include("batchSize")
+    }
   }
 }

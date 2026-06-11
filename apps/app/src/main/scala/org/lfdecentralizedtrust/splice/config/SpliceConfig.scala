@@ -837,6 +837,13 @@ object SpliceConfig {
                     s"Reward sharing percentages for $party must sum to at most 1.0"
                   ),
                 )
+                _ <- Either.cond(
+                  sharingConfig.batchSize > 0,
+                  (),
+                  ConfigValidationFailed(
+                    s"Reward sharing batchSize for $party must be positive"
+                  ),
+                )
               } yield ()
           }
         } yield conf

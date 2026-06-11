@@ -28,6 +28,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   ValidatorRight,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
+  RewardBeneficiary,
+  RewardCoupon,
+  RewardCoupon_AssignBeneficiaries,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   IssuingMiningRound,
   OpenMiningRound,
@@ -37,16 +42,23 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegation.MintingDelegation
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.store.HardLimit
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
+  ChoiceContextWithDisclosures,
   Contract,
   ContractWithState,
+  DisclosedContracts,
   SpliceUtil,
 }
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.util.ShowUtil.*
+import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 
 import org.apache.pekko.stream.Materializer
@@ -121,15 +133,15 @@ class MintingDelegationCollectRewardsTrigger(
             couponsData <- fetchCouponsData(issuingRoundsMap)
             amulets <- store.listAmulets()
             validatorRightOpt <- store.lookupValidatorRight()
-            result <- performMintIfNeeded(
-              delegation,
-              openRound,
-              openIssuingRounds,
-              amuletRules,
-              couponsData,
-              amulets,
-              validatorRightOpt,
+            mintInputs = MintInputs(
+              delegation = delegation,
+              openRound = openRound,
+              openIssuingRounds = openIssuingRounds,
+              amuletRules = amuletRules,
+              maxNumInputs = openRound.payload.transferConfigUsd.maxNumInputs.intValue(),
+              validatorRightOpt = validatorRightOpt,
             )
+            result <- performMintIfNeeded(mintInputs, couponsData, amulets)
           } yield result
         }
       case _ =>
@@ -138,86 +150,111 @@ class MintingDelegationCollectRewardsTrigger(
   }
 
   private def performMintIfNeeded(
-      delegation: Contract[
-        MintingDelegation.ContractId,
-        MintingDelegation,
-      ],
-      openRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound],
-      openIssuingRounds: Seq[ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]],
-      amuletRules: ContractWithState[AmuletRules.ContractId, AmuletRules],
+      mintInputs: MintInputs,
       couponsData: CouponsData,
-      amulets: Seq[Contract[
-        Amulet.ContractId,
-        Amulet,
-      ]],
-      validatorRightOpt: Option[Contract[ValidatorRight.ContractId, ValidatorRight]],
+      amulets: Seq[Contract[Amulet.ContractId, Amulet]],
   )(implicit tc: TraceContext): Future[Boolean] = {
-    val mergeLimit = delegation.payload.amuletMergeLimit.longValue()
-    val maxNumInputs = openRound.payload.transferConfigUsd.maxNumInputs.intValue()
-    // Ignore ValidatorRewardCoupons if we don't have the ValidatorRight to collect them as beneficiary
-    val validatorRewardCouponsToCollect =
-      if (validatorRightOpt.isDefined) couponsData.validatorRewardCoupons else Seq.empty
-    val hasRewardsToCollect = couponsData.livenessActivityRecords.nonEmpty ||
-      validatorRewardCouponsToCollect.nonEmpty ||
-      couponsData.appRewardCoupons.nonEmpty ||
-      couponsData.rewardCouponsV2.nonEmpty ||
-      couponsData.unclaimedActivityRecords.nonEmpty ||
-      couponsData.developmentFundCoupons.nonEmpty
-    // Merge amulets only if we're above 2x the merge limit to reduce potential waste of traffic
-    val shouldMergeAmulets = amulets.size >= 2 * mergeLimit
+    // ValidatorRewardCoupons can only be collected if we have the
+    // ValidatorRight contract for the beneficiary; drop them otherwise.
+    val filteredCouponsData =
+      if (mintInputs.validatorRightOpt.isDefined) couponsData
+      else couponsData.copy(validatorRewardCoupons = Seq.empty)
+    val amuletsToMerge = selectAmuletsToMerge(amulets, mintInputs.delegation)
+    val shouldMergeAmulets = amuletsToMerge.nonEmpty
 
-    if (hasRewardsToCollect || shouldMergeAmulets) {
-      val amuletsToMerge = if (shouldMergeAmulets) {
-        // Merge the smallest amounts first
-        // we do +1 here to maintain exactly 'mergeLimit' amulets after the mint
-        amulets
-          .sortBy(a => BigDecimal(a.payload.amount.initialAmount))
-          .take(amulets.size - mergeLimit.toInt + 1)
-      } else Seq.empty
+    // Without sharing config, all V2 coupons are mintable directly.
+    // With sharing config, only assigned-to-us V2 coupons are mintable;
+    // unassigned ones need sharing first.
+    val hasBeneficiaries = rewardSharingConfig.beneficiaries.nonEmpty
+    val (unassignedV2, mintableV2) =
+      if (hasBeneficiaries)
+        filteredCouponsData.rewardCouponsV2.partition(_.payload.beneficiary.isEmpty)
+      else
+        (Seq.empty, filteredCouponsData.rewardCouponsV2)
+    val couponsToMint = filteredCouponsData.copy(rewardCouponsV2 = mintableV2)
 
-      // Use filtered couponsData with only collectable ValidatorRewardCoupons
-      val filteredCouponsData = couponsData.copy(
-        validatorRewardCoupons = validatorRewardCouponsToCollect
-      )
+    // Share when the TTL threshold is reached, or batch sharing with
+    // amulet merging to reduce traffic costs by combining both in one transaction.
+    val shouldAssign = unassignedV2.nonEmpty &&
+      (shouldShareNow(unassignedV2, rewardSharingConfig) || shouldMergeAmulets)
 
-      val inputs = buildTransferInputs(filteredCouponsData, amuletsToMerge, maxNumInputs)
-      val transferContext =
-        buildTransferContext(openRound, openIssuingRounds, filteredCouponsData, validatorRightOpt)
-      val paymentContext = new PaymentTransferContext(
-        amuletRules.contractId,
-        transferContext,
-      )
-
-      val contractsToDisclose = spliceLedgerConnection.disclosedContracts(
-        amuletRules,
-        openRound,
-      ) addAll openIssuingRounds
-
-      val delegateParty = PartyId.tryFromProtoPrimitive(delegation.payload.delegate)
-
-      spliceLedgerConnection
-        .submit(
-          actAs = Seq(delegateParty),
-          readAs = Seq(delegateParty, externalParty),
-          delegation.contractId.exerciseMintingDelegation_Mint(inputs.asJava, paymentContext),
-        )
-        .withDisclosedContracts(contractsToDisclose)
-        .noDedup
-        .yieldUnit()
-        .map { _ =>
-          logger.debug(
-            s"Collected ${filteredCouponsData.livenessActivityRecords.size} liveness activity records, " +
-              s"${filteredCouponsData.validatorRewardCoupons.size} validator reward coupons, " +
-              s"${filteredCouponsData.appRewardCoupons.size} app reward coupons, " +
-              s"${filteredCouponsData.rewardCouponsV2.size} reward coupons V2, " +
-              s"${filteredCouponsData.unclaimedActivityRecords.size} unclaimed activity records, " +
-              s"${filteredCouponsData.developmentFundCoupons.size} development fund coupons, " +
-              s"and merged ${amuletsToMerge.size} amulets for delegation ${delegation.contractId}"
-          )
-          true
-        }
+    val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
+    if (shouldAssign) {
+      performAssignAndMint(submission, unassignedV2.toList, rewardSharingConfig)
+    } else if (couponsToMint.hasRewards || shouldMergeAmulets) {
+      performMint(submission)
     } else {
+      // Nothing to do: no rewards to mint, coupons to assign, or amulets to merge
       Future.successful(false)
+    }
+  }
+
+  private def performMint(
+      submission: MintSubmissionData
+  )(implicit tc: TraceContext): Future[Boolean] = {
+    spliceLedgerConnection
+      .submit(
+        actAs = Seq(submission.delegateParty),
+        readAs = Seq(submission.delegateParty, externalParty),
+        submission.delegation.contractId
+          .exerciseMintingDelegation_Mint(submission.inputs, submission.paymentContext),
+      )
+      .withDisclosedContracts(submission.contractsToDisclose)
+      .noDedup
+      .yieldUnit()
+      .map { _ =>
+        logger.debug(
+          show"Minted ${submission.couponsData} and merged ${submission.amuletsToMerge.size} amulets for delegation ${PrettyContractId(submission.delegation)}"
+        )
+        true
+      }
+  }
+
+  private def performAssignAndMint(
+      submission: MintSubmissionData,
+      unassignedV2: List[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
+      config: RewardSharingConfig,
+  )(implicit tc: TraceContext): Future[Boolean] = {
+    unassignedV2 match {
+      case Nil =>
+        Future.failed(
+          Status.INTERNAL
+            .withDescription(s"No unassigned RewardCouponV2 contracts to assign for $externalParty")
+            .asRuntimeException()
+        )
+      case primaryCoupon :: additionalCoupons =>
+        val newBeneficiaries = config.allDamlBeneficiaries(externalParty).map { case (party, pct) =>
+          new RewardBeneficiary(party.toProtoPrimitive, pct)
+        }
+        val assignArgs = new RewardCoupon_AssignBeneficiaries(
+          additionalCoupons
+            .map(_.contractId.toInterface(RewardCoupon.INTERFACE))
+            .asJava,
+          newBeneficiaries.asJava,
+          ChoiceContextWithDisclosures.emptyExtraArgs,
+        )
+        val couponCid = primaryCoupon.contractId.toInterface(RewardCoupon.INTERFACE)
+
+        spliceLedgerConnection
+          .submit(
+            actAs = Seq(submission.delegateParty),
+            readAs = Seq(submission.delegateParty, externalParty),
+            submission.delegation.contractId.exerciseMintingDelegation_AssignAndMint(
+              couponCid,
+              assignArgs,
+              submission.inputs,
+              submission.paymentContext,
+            ),
+          )
+          .withDisclosedContracts(submission.contractsToDisclose)
+          .noDedup
+          .yieldUnit()
+          .map { _ =>
+            logger.debug(
+              show"Assigned ${unassignedV2.size} V2 coupons to ${newBeneficiaries.size} beneficiaries, minted ${submission.couponsData} and merged ${submission.amuletsToMerge.size} amulets for delegation ${PrettyContractId(submission.delegation)}"
+            )
+            true
+          }
     }
   }
 
@@ -270,7 +307,24 @@ class MintingDelegationCollectRewardsTrigger(
         RewardCouponV2.ContractId,
         RewardCouponV2,
       ]],
-  )
+  ) extends PrettyPrinting {
+    def hasRewards: Boolean =
+      livenessActivityRecords.nonEmpty ||
+        validatorRewardCoupons.nonEmpty ||
+        appRewardCoupons.nonEmpty ||
+        rewardCouponsV2.nonEmpty ||
+        unclaimedActivityRecords.nonEmpty ||
+        developmentFundCoupons.nonEmpty
+
+    override def pretty: Pretty[this.type] = prettyOfClass(
+      param("livenessActivityRecords", _.livenessActivityRecords.size),
+      param("validatorRewardCoupons", _.validatorRewardCoupons.size),
+      param("appRewardCoupons", _.appRewardCoupons.size),
+      param("rewardCouponsV2", _.rewardCouponsV2.size),
+      param("unclaimedActivityRecords", _.unclaimedActivityRecords.size),
+      param("developmentFundCoupons", _.developmentFundCoupons.size),
+    )
+  }
 
   private def fetchCouponsData(
       issuingRoundsMap: Map[
@@ -286,8 +340,10 @@ class MintingDelegationCollectRewardsTrigger(
         Some(issuingRoundsMap.keySet.map(_.number))
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
-      rewardCouponsV2WithQuantity <- store.listSortedMintableRewardCouponV2s(
-        includeUnassigned = rewardSharingConfig.beneficiaries.isEmpty
+      rewardCouponsV2 <- store.listRewardCouponsV2(
+        includeUnassigned = true,
+        includeAssigned = true,
+        limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()
@@ -297,7 +353,7 @@ class MintingDelegationCollectRewardsTrigger(
       appRewardCouponsWithQuantity.map(_._1),
       unclaimedActivityRecords,
       developmentFundCoupons,
-      rewardCouponsV2WithQuantity.map(_._1),
+      rewardCouponsV2.map(_.contract),
     )
   }
 
@@ -375,6 +431,80 @@ class MintingDelegationCollectRewardsTrigger(
         .asJava,
       validatorRightsMap.asJava,
       None.toJava,
+    )
+  }
+
+  private def shouldShareNow(
+      coupons: Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
+      config: RewardSharingConfig,
+  ): Boolean = {
+    val now = context.clock.now.toInstant
+    val minTtl = config.minTtlAfterSharing.asJava
+    coupons.exists { c =>
+      !c.payload.expiresAt.isAfter(now.plus(minTtl))
+    }
+  }
+
+  // Merge amulets only if we're above 2x the merge limit to reduce potential waste of traffic
+  private def selectAmuletsToMerge(
+      amulets: Seq[Contract[Amulet.ContractId, Amulet]],
+      delegation: Contract[MintingDelegation.ContractId, MintingDelegation],
+  ): Seq[Contract[Amulet.ContractId, Amulet]] = {
+    val mergeLimit = delegation.payload.amuletMergeLimit.longValue()
+    if (amulets.size >= 2 * mergeLimit) {
+      // Merge the smallest amounts first
+      // we do +1 here to maintain exactly 'mergeLimit' amulets after the mint
+      amulets
+        .sortBy(a => BigDecimal(a.payload.amount.initialAmount))
+        .take(amulets.size - mergeLimit.toInt + 1)
+    } else Seq.empty
+  }
+
+  private case class MintInputs(
+      delegation: Contract[MintingDelegation.ContractId, MintingDelegation],
+      openRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound],
+      openIssuingRounds: Seq[ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]],
+      amuletRules: ContractWithState[AmuletRules.ContractId, AmuletRules],
+      maxNumInputs: Int,
+      validatorRightOpt: Option[Contract[ValidatorRight.ContractId, ValidatorRight]],
+  )
+
+  private case class MintSubmissionData(
+      delegation: Contract[MintingDelegation.ContractId, MintingDelegation],
+      couponsData: CouponsData,
+      amuletsToMerge: Seq[Contract[Amulet.ContractId, Amulet]],
+      inputs: java.util.List[TransferInput],
+      paymentContext: PaymentTransferContext,
+      contractsToDisclose: DisclosedContracts.NE,
+      delegateParty: PartyId,
+  )
+
+  private def buildMintSubmissionData(
+      mintInputs: MintInputs,
+      couponsData: CouponsData,
+      amuletsToMerge: Seq[Contract[Amulet.ContractId, Amulet]],
+  ): MintSubmissionData = {
+    val inputs = buildTransferInputs(couponsData, amuletsToMerge, mintInputs.maxNumInputs)
+    val transferContext =
+      buildTransferContext(
+        mintInputs.openRound,
+        mintInputs.openIssuingRounds,
+        couponsData,
+        mintInputs.validatorRightOpt,
+      )
+    MintSubmissionData(
+      delegation = mintInputs.delegation,
+      couponsData = couponsData,
+      amuletsToMerge = amuletsToMerge,
+      inputs = inputs.asJava,
+      paymentContext =
+        new PaymentTransferContext(mintInputs.amuletRules.contractId, transferContext),
+      contractsToDisclose = spliceLedgerConnection
+        .disclosedContracts(
+          mintInputs.amuletRules,
+          mintInputs.openRound,
+        ) addAll mintInputs.openIssuingRounds,
+      delegateParty = PartyId.tryFromProtoPrimitive(mintInputs.delegation.payload.delegate),
     )
   }
 }

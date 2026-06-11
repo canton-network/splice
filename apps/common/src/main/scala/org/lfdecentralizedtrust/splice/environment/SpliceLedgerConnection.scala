@@ -1266,17 +1266,25 @@ object BaseLedgerConnection {
     }.mkString
   }
 
-  sealed trait ActiveContractsItem
+  sealed trait ActiveContractsItem {
+    def contractId: String
+  }
   object ActiveContractsItem {
     case class ActiveContract(
         contract: org.lfdecentralizedtrust.splice.environment.ledger.api.ActiveContract
-    ) extends ActiveContractsItem
+    ) extends ActiveContractsItem {
+      override def contractId: String = contract.createdEvent.getContractId
+    }
 
     case class IncompleteUnassign(unassign: IncompleteReassignmentEvent.Unassign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = unassign.createdEvent.getContractId
+    }
 
     case class IncompleteAssign(assign: IncompleteReassignmentEvent.Assign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = assign.reassignmentEvent.createdEvent.getContractId
+    }
   }
 }
 

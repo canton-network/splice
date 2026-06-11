@@ -60,10 +60,12 @@ final case class AppRewardBeneficiaryConfig(
   *   e.g., 30h means share when 30h of coupon lifetime remains (6h after creation for 36h coupons)
   * @param beneficiaries parties to share rewards with and their percentages;
   *   the provider keeps the remainder (1.0 - sum of percentages)
+  * @param batchSize maximum number of coupons to share or assign per trigger run
   */
 final case class RewardSharingConfig(
     minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
     beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
+    batchSize: Int = 100,
 ) {
   def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
 

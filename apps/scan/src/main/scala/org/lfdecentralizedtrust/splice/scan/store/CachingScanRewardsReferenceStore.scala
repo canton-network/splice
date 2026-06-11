@@ -72,6 +72,11 @@ class CachingScanRewardsReferenceStore private[splice] (
   ): Future[Option[Contract[OpenMiningRound.ContractId, OpenMiningRound]]] =
     store.lookupOpenMiningRoundByNumber(roundNumber)
 
+  override def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    store.lookupLatestArchivedOpenMiningRound(asOf)
+
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
