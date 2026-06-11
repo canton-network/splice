@@ -221,10 +221,10 @@ trait TokenStandardV2TestUtil extends TestCommon {
     })
   }
 
-  def mkSettlementV2(executor: PartyId) =
+  def mkSettlementV2(executor: PartyId, settlementRef: String = "some_reference") =
     new allocationv2.SettlementInfo(
       java.util.List.of(executor.toProtoPrimitive),
-      "some_reference",
+      settlementRef,
       Optional.empty,
       new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
     )

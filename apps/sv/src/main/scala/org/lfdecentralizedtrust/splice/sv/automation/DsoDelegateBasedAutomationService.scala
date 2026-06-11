@@ -98,6 +98,15 @@ class DsoDelegateBasedAutomationService(
         expiredAmuletIgnoredPartiesStore,
       )
     )
+    registerTrigger(
+      new ExpiredAmuletAllocationV2Trigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
     registerTrigger(new CloseVoteRequestTrigger(triggerContext, svTaskContext))
     registerTrigger(new ExpiredSvOnboardingConfirmedTrigger(triggerContext, svTaskContext))

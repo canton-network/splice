@@ -37,6 +37,7 @@ import org.apache.pekko.http.scaladsl.client.RequestBuilding.Post
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2.AmuletAllocationV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   holdingv1,
   holdingv2,
@@ -80,6 +81,7 @@ import java.time.Duration
 import java.util.UUID
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 // Not checking Daml compatibility as the test data can be specific to the most recent
 // version of the Daml code, and thus the test would falsely fail when running with older
@@ -1010,11 +1012,11 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-2"))
 
         aliceWalletClient.allocateAmulet(
-          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId()),
+          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId(), "v2-1"),
           mkAllocationSpecV2(dsoParty, aliceParty, bobParty, "legv2-1", settleBefore),
         )
         aliceWalletClient.allocateAmulet(
-          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId()),
+          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId(), "v2-2"),
           mkAllocationSpecV2(dsoParty, aliceParty, bobParty, "legv2-2", settleBefore),
         )
       },
@@ -1023,11 +1025,15 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
       _ => aliceWalletClient.list().lockedAmulets should have length 4,
     )
 
-    val allocations =
+    val allocationsV1 =
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(AmuletAllocation.COMPANION)(aliceParty)
+    allocationsV1 should have length 2
 
-    allocations should have length 4
+    val allocationsV2 =
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .filterJava(AmuletAllocationV2.COMPANION)(aliceParty)
+    allocationsV2 should have length 2
 
     val amuletsBeforeExpiry = aliceWalletClient.list().amulets.length
 
@@ -1038,7 +1044,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
         .submitJava(
           Seq(aliceParty),
-          allocations.head.data.lockedAmulet
+          allocationsV1.head.data.lockedAmulet
             .exerciseLockedAmulet_OwnerExpireLockV2()
             .commands()
             .asScala
@@ -1050,11 +1056,12 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     )
 
     actAndCheck(
-      "Alice manually expires the lock for AllocationV2 2",
+      "Alice manually expires the lock for AllocationV2 1",
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
         .submitJava(
           Seq(aliceParty),
-          allocations.last.data.lockedAmulet
+          allocationsV2.last.data.lockedAmulet.toScala
+            .valueOrFail("Expected lockedAmulet to be defined")
             .exerciseLockedAmulet_OwnerExpireLockV2()
             .commands()
             .asScala
