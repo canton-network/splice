@@ -45,7 +45,7 @@ if __name__ == "__main__":
     },
   )
   if r.status_code != 200:
-    print(f"Error sending notifications: {r.text}")
+    print(f"Error sending notifications: HTTP {r.status_code} {r.reason}: {r.text}")
     sys.exit(1)
   else:
     print(f"Sent notification: {r.text}")
