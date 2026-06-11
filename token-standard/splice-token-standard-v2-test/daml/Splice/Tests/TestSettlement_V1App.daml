@@ -32,7 +32,7 @@ import Splice.Amulet.TokenApiUtils (burnedMetaKey)
 
 import Splice.Testing.Apps.TradingApp hiding (require)
 import Splice.Testing.Utils
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry

@@ -25,7 +25,7 @@ import Splice.TokenStandard.Utils qualified as TSU
 import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
 
 import Splice.Testing.Utils
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries

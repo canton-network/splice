@@ -220,7 +220,8 @@ isValidAllocationSpecificationV2 validInstrumentId AllocationV2.AllocationSpecif
     (not (null transferLegSides) || isSome nextIterationFunding) && -- empty transfer legs are only allowed for iterated settlement
     unique (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides) &&
     all isValidLeg transferLegSides &&
-    all (\(iid, amount) -> validInstrumentId iid && amount >= 0.0) (optional [] TextMap.toList nextIterationFunding)
+    all (\(iid, amount) -> validInstrumentId iid && amount >= 0.0) (optional [] TextMap.toList nextIterationFunding) &&
+    validateNoAccountMeta "authorizer" meta
   where
     isValidLeg leg =
       leg.amount > 0.0 &&
@@ -1039,7 +1040,7 @@ allocationFactoryV1_allocateDefaultImplUsingV2 admin v2Impl self arg = do
   result <- v2Impl allocateBefore (coerceContractId self)
     AllocationInstructionV2.AllocationFactory_Allocate with
       actors = [arg.allocation.transferLeg.sender]
-      requestedAt = allocation.settlement.requestedAt
+      requestedAt = arg.requestedAt
       inputHoldingCids = map coerceContractId arg.inputHoldingCids
       settlement = upcast allocation.settlement
       allocation = upcast allocation

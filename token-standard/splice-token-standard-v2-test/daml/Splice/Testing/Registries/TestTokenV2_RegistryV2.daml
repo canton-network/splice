@@ -37,9 +37,7 @@ import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 import Splice.TokenStandard.Utils
 
 import Splice.Testing.Tokens.TestTokenV2 as TestTokenV2
-import Splice.Testing.Tokens.TestTokenV2.Holding (Token(..))
 import Splice.Testing.Tokens.TestTokenV2.Util (tokenRulesContextKey)
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig as AccountConfig
 import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApiV1
 import Splice.Testing.TokenStandard.RegistryApiV2 qualified as RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
@@ -150,10 +148,10 @@ makeAccountIfMissing config = do
       [(_, config')] -> assertMsg ("Account already exists with different config: " <> show config) (config' == config)
       [] -> do
         accountProposalCid <- submit provider do
-          createCmd AccountConfig.AccountProposal with
+          createCmd TestTokenV2.AccountProposal with
             config
         submit owner do
-          exerciseCmd accountProposalCid AccountConfig.AccountProposal_Accept
+          exerciseCmd accountProposalCid TestTokenV2.AccountProposal_Accept
         pure ()
       accountConfigs -> abort $ T.unlines $
         ("Multiple accounts found for config: " <> show config) :: map show accountConfigs
@@ -355,19 +353,19 @@ getAccountMapAndTokenRulesC registry accounts = do
           ]
   pure (tokenRulesCid, choiceContext, tokenRulesD <> foldMap snd accountConfigs)
 
-getAccountConfig : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, Disclosures'))
+getAccountConfig : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId TestTokenV2.AccountConfig, Disclosures'))
 getAccountConfig registry account = do
   result <- getAccountConfig' registry account
   case result of
     Some (cid, _config, disclosures) -> return (Some (cid, disclosures))
     None -> return None
 
-getAccountConfig' : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId AccountConfig.AccountConfig, AccountConfig.AccountConfig, Disclosures'))
+getAccountConfig' : TestTokenV2Registry -> V2.Account -> Script (Optional (ContractId TestTokenV2.AccountConfig, TestTokenV2.AccountConfig, Disclosures'))
 getAccountConfig' registry account = do
-  cids <- queryFilter @AccountConfig.AccountConfig registry.admin (\config -> config.account == account)
+  cids <- queryFilter @TestTokenV2.AccountConfig registry.admin (\config -> config.account == account)
   case cids of
     [(cid, config)] -> do
-      disclosure <- queryDisclosure' @AccountConfig.AccountConfig registry.admin cid
+      disclosure <- queryDisclosure' @TestTokenV2.AccountConfig registry.admin cid
       return (Some (cid, config, disclosure))
     [] -> return None
     _ -> abort ("More than one account config found for " <> (show account))

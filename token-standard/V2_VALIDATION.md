@@ -253,3 +253,8 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   it more convenient to implement dual version allocation request templates.
 - Change `OTCTrade_RequestAllocations` to not create requests for the trading venue itself, as the venue's allocations
   are created as part of the settlement transaction itself.
+- Change `TestTokenV2` to allow using expired locked holdings as inputs; and fix a bug that allowed locked tokens to
+  be used as inputs for allocations and transfers.
+- Fix bug in `TestTokenV2` that allowed setting `requestedAt` in the future for both transfer and allocation instruction
+- Fix bug in `allocationFactoryV1_allocateDefaultImplUsingV2` that copied the `settlement.requestedAt` instead of the
+  `arg.requestedAt` into the V2 allocation factory argument

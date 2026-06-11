@@ -927,6 +927,19 @@ lazy val `splice-amulet-daml` =
           (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
     )
 
+lazy val `splice-test-token-v2-test-daml` =
+  project
+    .in(file("token-standard/examples/splice-test-token-v2-test"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-test-token-v2-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-v1-test-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-v2-test-daml` / Compile / damlBuild).value,
+      Compile / damlEnableJavaCodegen := false,
+    )
+
 lazy val `splice-amulet-test-daml` =
   project
     .in(file("daml/splice-amulet-test"))
