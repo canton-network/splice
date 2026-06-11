@@ -78,12 +78,12 @@ test_allocateV1_settleBefore = test_allocateV1_generic $ \TestEnv {..} -> do
         expectedAdmin = instrId.admin
         allocation = allocationV1 with
           settlement = allocationV1.settlement with
-            allocateBefore = now `addRelTime` microseconds (1)
+            allocateBefore = now `addRelTime` microseconds (2) -- cannot be later than settleBefore
             settleBefore = now `addRelTime` microseconds (1)
         inputHoldingCids = map TSU.downcast inputHoldingCids
         requestedAt = now
         extraArgs = emptyExtraArgs
-  pure (choiceArg, expectMessageContains "'allocation.settlement.allocateBefore' is not less than 'allocation.settlement.settleBefore'") --
+  pure (choiceArg, expectMessageContains "'allocation.settlement.allocateBefore' is greater than 'allocation.settlement.settleBefore'") --
 
 test_allocateV1_authorizer_nonBasicAccount : Script ()
 test_allocateV1_authorizer_nonBasicAccount = test_allocateV1_generic $ \TestEnv {..} -> do

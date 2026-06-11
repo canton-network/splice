@@ -567,9 +567,12 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   requireExpectedAdminMatch arg.expectedAdmin dso
 
   -- validate allocateBefore
+  -- Note: we allow `allocateBefore == settleBefore` as this simplifies defaulting when downcasting
+  -- from V2, and is not less practical than requiring allocateBefore < settleBefore, which in the worst case
+  -- only gives an extra microsecond for the settlement to complete.
   let settlement = arg.allocation.settlement
   assertWithinDeadline "allocation.settlement.allocateBefore" settlement.allocateBefore
-  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessR
+  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessOrEqualR
     ("allocation.settlement.settleBefore", settlement.settleBefore)
 
   -- call V2 body with explicitly computed funding amount, which matters

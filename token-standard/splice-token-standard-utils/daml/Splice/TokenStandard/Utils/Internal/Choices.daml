@@ -40,7 +40,6 @@ module Splice.TokenStandard.Utils.Internal.Choices (
   textMapValues,
   textMapKeys,
   textMapZip,
-  textMapZipWithDefault,
   textMapTraverseWithKey,
 ) where
 
@@ -218,14 +217,6 @@ textMapZip =
     (\_ v1 -> Some (Some v1, None))
     (\_ v2 -> Some (None, Some v2))
     (\_ v1 v2 -> Some (Some v1, Some v2))
-
--- | Zip two text maps together, keeping all keys from both maps. For missing values, use the provided default value.
-textMapZipWithDefault : a -> TextMap.TextMap a -> TextMap.TextMap a -> TextMap.TextMap (a, a)
-textMapZipWithDefault defaultValue =
-  TextMap.merge
-    (\_ v1 -> Some (v1, defaultValue))
-    (\_ v2 -> Some (defaultValue, v2))
-    (\_ v1 v2 -> Some (v1, v2))
 
 -- | Like `Traversable.traverse` but with access to the key of each element as well.
 textMapTraverseWithKey : Applicative f => TextMap.TextMap a -> (Text -> a -> f b) -> f (TextMap.TextMap b)
