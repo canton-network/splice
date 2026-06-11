@@ -95,8 +95,8 @@ function _start_validator {
   if [ -n "$network_name" ]; then
     extra_flags+=("-n" "$network_name")
   fi
-  if [ "$migrating" -eq 1 ]; then
-    extra_flags+=("-M")
+  if [ "$skip_participant_db_conflict_check" -eq 1 ]; then
+    extra_flags+=("-k")
   fi
   if [ -n "$restore_identities_dump" ]; then
     extra_flags+=("-i" "$restore_identities_dump")
@@ -178,7 +178,7 @@ function subcmd_start {
   network_name=""
   wait=0
   migration_id=0
-  migrating=0
+  skip_participant_db_conflict_check=0
   IMAGE_TAG=$("${SPLICE_ROOT}/build-tools/get-snapshot-version")
   restore_identities_dump=""
   party_hint="$(whoami)-composeValidator-1"
@@ -186,7 +186,7 @@ function subcmd_start {
   trust_single=0
   external_access=0
 
-  while getopts 'haldn:m:Mwt:i:p:P:bE' arg; do
+  while getopts 'haldn:m:wt:i:p:P:bEk' arg; do
     case ${arg} in
       h)
         subcmd_help
@@ -206,9 +206,6 @@ function subcmd_start {
         ;;
       m)
         migration_id="${OPTARG}"
-        ;;
-      M)
-        migrating=1
         ;;
       w)
         wait=1
@@ -231,6 +228,9 @@ function subcmd_start {
         ;;
       E)
         external_access=1
+        ;;
+      k)
+        skip_participant_db_conflict_check=1
         ;;
       ?)
         subcmd_help
@@ -265,13 +265,12 @@ function subcmd_start {
   fi
 }
 function usage_start {
-  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-M] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E]"
+  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k]"
   _info "      -a: Enable authentication"
   _info "      -l: Start the validator against a local SV (for integration tests). Default is against a cluster determined by GCP_CLUSTER_HOSTNAME"
   _info "      -d: Use images from the DA-internal repository (default: use locally built images)"
   _info "      -n: Use a specific docker network"
   _info "      -m: Currently active Migration ID on the network"
-  _info "      -M: Use this flag when bumping the migration ID as part of a migration"
   _info "      -w: Wait for the validator to be ready"
   _info "      -t: Use a specific image tag (default: current snapshot). Implies -d"
   _info "      -i <identities_dump>: restore identities from a dump file"
@@ -279,6 +278,7 @@ function usage_start {
   _info "      -P <participant_id>: participant identifier (by default, identical to the party hint)"
   _info "      -b: Disable BFT reads&writes and trust a single SV."
   _info "      -E: Bind to 0.0.0.0 for external access."
+  _info "      -k: Disable the validator participant db conflict check (forwarded to the validator start.sh as -k)."
 }
 
 subcommand_whitelist[stop]='stop a validator'
@@ -659,6 +659,7 @@ function subcmd_restore_node {
   MIGRATION_ID=$3
 
   export MIGRATION_ID
+  export PARTICIPANT_DB_NAME="participant-${MIGRATION_ID}"
   export IMAGE_TAG=
   export ONBOARDING_SECRET=
   export SCAN_ADDRESS=

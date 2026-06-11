@@ -49,7 +49,7 @@
             another database whose name starts with ``participant`` already exists, guarding against accidentally
             creating a new participant database on a non-fresh deployment (e.g. due to a misconfigured ``-m <migration_id>``).
             A participant database should only be created during a fresh deployment. This safety check can be disabled
-            by passing the new ``-d`` flag to the validator ``start.sh`` script.
+            by passing the new ``-k`` flag to the validator ``start.sh`` script.
 
       .. Important::
 

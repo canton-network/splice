@@ -26,7 +26,7 @@ check_participant_db_conflict() {
   if [ -n "$existing" ]; then
     echo "ERROR: Refusing to create participant database '${db_name}' because the following participant database(s) already exist: ${existing}." >&2
     echo "       A participant database should only be created during a fresh deployment. Please double-check that this is intended and not a misconfiguration." >&2
-    echo "       If this is expected, disable this check by passing '-d' to start.sh." >&2
+    echo "       If this is expected, disable this check by passing '-k' to start.sh." >&2
     exit 1
   fi
 }
