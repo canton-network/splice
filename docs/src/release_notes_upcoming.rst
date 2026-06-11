@@ -22,6 +22,8 @@
             scan of the SV sponsoring the onboarding, configured via the new optional ``sponsorScanUrl`` value in the
             scan helm chart.
 
+          - Increase ``sv-app`` default memory requests from 3Gi to 6Gi to ensure the max heap size fits in the requests and to avoid OOM evictions.
+
       - Validator
 
           - The ``migration.id`` value was removed from the validator (validator app) helm chart and is no longer
