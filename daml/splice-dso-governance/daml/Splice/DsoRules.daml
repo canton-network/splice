@@ -170,6 +170,7 @@ data DsoSummary = DsoSummary with
 data HostedSvMigrationData = HostedSvMigrationData with
     hostedSv : Party -- ^ The hosted SV party.
     hostedSvRewardWeight : Int -- ^ Weight of the hosted SV in the SV reward distribution.
+    hostedSvName : Text -- ^ Human-readable name of the hosted SV.
     beneficaries : [(Party, Decimal)] -- ^ Beneficiary parties and their reward percentages for the hosted SV.
   deriving (Eq, Show)
 
@@ -616,6 +617,8 @@ template HostedSv
       -- 'hostedSv'.
     rewardWeight : Int
       -- ^ The hosted SV reward weight. Must be strictly greater than 0.
+    hostedSvName : Text
+      -- ^ Human-readable name of the hosted SV.
   where
     ensure rewardWeight > 0
 
@@ -755,6 +758,7 @@ template DsoRules with
     nonconsuming choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
       with
         newHostedSv : Party
+        newHostedSvName : Text
         newHostedSvRewardWeight : Int
         joinedAsOfRound : Round
         svOperator : Party
@@ -778,6 +782,7 @@ template DsoRules with
           hostedSv = newHostedSv
           svOperator
           rewardWeight = newHostedSvRewardWeight
+          hostedSvName = newHostedSvName
 
         -- create a default HostedSvRewardBeneficiaries contract with no beneficiaries
         hostedSvRewardBeneficiariesCid <-
@@ -1476,6 +1481,7 @@ template DsoRules with
                   DsoRules_AddHostedSvResult { hostedSvCid; hostedSvRewardBeneficiariesCid } <-
                     exercise newDsoRules DsoRules_AddHostedSv with
                       newHostedSv = svMigrationData.hostedSv
+                      newHostedSvName = svMigrationData.hostedSvName
                       newHostedSvRewardWeight = svMigrationData.hostedSvRewardWeight
                       joinedAsOfRound = openRound.round
                       svOperator

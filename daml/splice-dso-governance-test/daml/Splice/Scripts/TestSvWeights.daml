@@ -37,7 +37,8 @@ test_SvWeightsFullyOnledger = do
 
   sv5 <- allocateParty sv5Alias
   -- hsv1 is hosted by SV operator sv5
-  hsv1 <- allocateParty "Hosted-SV-1"
+  let hsv1Name = "Hosted-SV-1"
+  hsv1 <- allocateParty hsv1Name
   -- hsv1's extrabeneficary
   hsv1_b <- allocateParty "Hosted SV 1 extra beneficiary"
 
@@ -72,6 +73,7 @@ test_SvWeightsFullyOnledger = do
     ARC_DsoRules with
       dsoAction = SRARC_AddHostedSv DsoRules_AddHostedSv with
         newHostedSv = hsv1
+        newHostedSvName = hsv1Name
         newHostedSvRewardWeight = hsv1Weight
         joinedAsOfRound = hsv1JoinedAsOfRound.round
         svOperator = sv5
@@ -262,9 +264,11 @@ test_SvWeightsMigration = do
   ---------
   (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
   -- ghostSv is hosted by SV operator sv1
-  ghostSv <- allocateParty "Ghost-SV"
+  let ghostSvName = "Ghost-SV"
+  ghostSv <- allocateParty ghostSvName
   -- hsv1 is hosted by SV operator sv1
-  hsv1 <- allocateParty "Hosted-SV-1"
+  let hsv1Name = "Hosted-SV-1"
+  hsv1 <- allocateParty hsv1Name
 
   -- sv1's extrabeneficary
   sv1_b <- allocateParty "SV_1 extra beneficiary"
@@ -319,9 +323,9 @@ test_SvWeightsMigration = do
       ghostSvWeight = totalWeight ghostSvBeneficiaries
 
       svsMigrationData =
-        [ mkSvMigrationData sv1 sv1Weight [(sv1_b, 0.5)] -- sv1 itself is migrated as hosted SV
-        , mkSvMigrationData hsv1 hsv1Weight [(hsv1_b, 0.3)]
-        , mkSvMigrationData ghostSv ghostSvWeight []
+        [ mkSvMigrationData sv1 sv1SvInfo.name sv1Weight [(sv1_b, 0.5)] -- sv1 itself is migrated as hosted SV
+        , mkSvMigrationData hsv1 hsv1Name hsv1Weight [(hsv1_b, 0.3)]
+        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight []
         ]
 
   -- Migrate sv1, hsv1 and ghostSv
@@ -544,8 +548,8 @@ mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
 mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvMigrationData : Party  -> Int -> [(Party, Decimal)] -> HostedSvMigrationData
-mkSvMigrationData hostedSv hostedSvRewardWeight beneficaries = HostedSvMigrationData with ..
+mkSvMigrationData : Party -> Text -> Int -> [(Party, Decimal)] -> HostedSvMigrationData
+mkSvMigrationData hostedSv hostedSvName hostedSvRewardWeight beneficaries = HostedSvMigrationData with ..
 
 unsafeLookup : (Ord k, Show k) => k -> Map.Map k v -> v
 unsafeLookup key' m =
