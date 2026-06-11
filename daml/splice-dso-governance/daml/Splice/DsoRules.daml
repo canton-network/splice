@@ -11,6 +11,7 @@ import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
 import DA.List as List hiding (all)
 import DA.Optional (isNone, fromSome, fromOptional, isSome)
+import DA.Map (Map)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
@@ -170,7 +171,7 @@ data HostedSvMigrationData = HostedSvMigrationData with
     hostedSv : Party -- ^ The hosted SV party.
     hostedSvRewardWeight : Int -- ^ Weight of the hosted SV in the SV reward distribution.
     hostedSvName : Text -- ^ Human-readable name of the hosted SV.
-    beneficiaries : [(Party, Decimal)] -- ^ Beneficiary parties and their reward percentages for the hosted SV.
+    beneficiaries : Map Party Decimal -- ^ Beneficiary parties and their reward percentages for the hosted SV.
   deriving (Eq, Show)
 
 
@@ -592,16 +593,15 @@ template HostedSv
       -- ^ The hosted SV reward weight. Must be strictly greater than 0.
     hostedSvName : Text
       -- ^ Human-readable name of the hosted SV.
-    beneficiaries : [(Party, Decimal)]
+    beneficiaries : Map Party Decimal
       -- ^ Beneficiary parties, excluding 'hostedSv', and their corresponding positive
-      -- reward weight percentages. Each beneficiary party must be unique.
+      -- reward weight percentages.
   where
     ensure
       rewardWeight > 0
-        && unique (map fst beneficiaries)
-        && all (> 0.0) (map snd beneficiaries)
-        && sum (map snd beneficiaries) <= 1.0
-        && notElem hostedSv (map fst beneficiaries)
+        && all (> 0.0) (Map.values beneficiaries)
+        && sum (Map.values beneficiaries) <= 1.0
+        && not (Map.member hostedSv beneficiaries)
 
     signatory dso
     observer hostedSv
@@ -616,7 +616,7 @@ template HostedSv
 
     choice HostedSv_UpdateBeneficiaries : HostedSv_UpdateBeneficiariesResult
       with
-        newBeneficiaries : [(Party, Decimal)]
+        newBeneficiaries : Map Party Decimal
       controller hostedSv
       do
         hostedSvCid <- create this with beneficiaries = newBeneficiaries
@@ -721,7 +721,7 @@ template DsoRules with
         newHostedSvRewardWeight : Int
         joinedAsOfRound : Round
         svOperator : Party
-        beneficiaries : [(Party, Decimal)]
+        beneficiaries : Map Party Decimal
       controller dso
       do
         -- Sanity checks
@@ -1320,7 +1320,7 @@ template DsoRules with
       with
         hostedSvCid : ContractId HostedSv
           -- ^ The hosted SV contract whose beneficiary distribution is being updated.
-        newBeneficiaries : [(Party, Decimal)]
+        newBeneficiaries : Map Party Decimal
           -- ^ The full beneficiary distribution to set.
         svOperator : Party
           -- ^ The SV node operator hosting the hosted SV whose beneficiary distribution is being managed.
@@ -1874,7 +1874,7 @@ template DsoRules with
                   (state.lastRoundCollected < openRound.round)
 
                 let hostedSvRewardWeight = hostedSvCo.rewardWeight
-                couponRecipients <- case hostedSvCo.beneficiaries of
+                couponRecipients <- case (Map.toList hostedSvCo.beneficiaries) of
                   [] -> pure [(hostedSv, hostedSvRewardWeight)]
                   beneficiaries -> do
                     let beneficiaryWeights =

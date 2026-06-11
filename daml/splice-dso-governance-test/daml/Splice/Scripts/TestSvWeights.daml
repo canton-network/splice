@@ -7,6 +7,7 @@ import DA.Assert
 import DA.Action (void)
 import DA.Foldable (forA_)
 import DA.List (sort)
+import DA.Map (Map)
 import DA.Map qualified as Map
 
 import Daml.Script
@@ -76,13 +77,13 @@ test_SvWeightsFullyOnledger = do
         newHostedSvRewardWeight = hsv1Weight
         joinedAsOfRound = hsv1JoinedAsOfRound.round
         svOperator = sv5
-        beneficiaries = []
+        beneficiaries = Map.empty
 
-  assertHostedSv app hsv1 sv5 hsv1Weight []
+  assertHostedSv app hsv1 sv5 hsv1Weight Map.empty
 
 
   -- Replace beneficiaries
-  let hsv1ExtraBeneficiaries = [(hsv1_b, unsafeLookup hsv1_b hsv1BeneficiariesMap)]
+  let hsv1ExtraBeneficiaries = Map.fromList [(hsv1_b, unsafeLookup hsv1_b hsv1BeneficiariesMap)]
   [(rulesCid, _)] <- query @DsoRules app.dso
   hsv1HostedSvCid <- getHostedSvCid app hsv1
   void $ submit (actAs sv5 <> readAs dso) $
@@ -195,7 +196,7 @@ test_SvWeightsFullyOnledger = do
   void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
       hostedSvCid = hsv1HostedSvCid
-      newBeneficiaries = []
+      newBeneficiaries = Map.empty
       svOperator = sv1
 
   -- Create SV coupons
@@ -295,9 +296,9 @@ test_SvWeightsMigration = do
       ghostSvWeight = totalWeight ghostSvBeneficiaries
 
       hostedSvsMigrationData =
-        [ mkSvMigrationData sv1 sv1SvInfo.name sv1Weight [(sv1_b, 0.5)] -- sv1 itself is migrated as hosted SV
-        , mkSvMigrationData hsv1 hsv1Name hsv1Weight [(hsv1_b, 0.3)]
-        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight []
+        [ mkSvMigrationData sv1 sv1SvInfo.name sv1Weight (Map.fromList [(sv1_b, 0.5)]) -- sv1 itself is migrated as hosted SV
+        , mkSvMigrationData hsv1 hsv1Name hsv1Weight (Map.fromList [(hsv1_b, 0.3)])
+        , mkSvMigrationData ghostSv ghostSvName ghostSvWeight Map.empty
         ]
 
   -- Migrate sv1, hsv1 and ghostSv
@@ -314,9 +315,9 @@ test_SvWeightsMigration = do
   -- Check SvRewardState has been archived
   [] <- queryFilter @SvRewardState dso (\s -> s.svName == sv1SvInfo.name)
   -- Check hosted SVs
-  assertHostedSv app sv1 sv1 sv1Weight [(sv1_b, 0.5)]
-  assertHostedSv app hsv1 sv1 hsv1Weight [(hsv1_b, 0.3)]
-  assertHostedSv app ghostSv sv1 ghostSvWeight []
+  assertHostedSv app sv1 sv1 sv1Weight (Map.fromList [(sv1_b, 0.5)])
+  assertHostedSv app hsv1 sv1 hsv1Weight (Map.fromList [(hsv1_b, 0.3)])
+  assertHostedSv app ghostSv sv1 ghostSvWeight Map.empty
   -- Check HostedSvRewardState contracts
   assertSingleHostedSvRewardStateExists app sv1
   assertSingleHostedSvRewardStateExists app hsv1
@@ -510,7 +511,7 @@ mkSvInfo : Text -> OpenMiningRound -> Int -> Text -> SvInfo
 mkSvInfo name joinedAsOfRound svRewardWeight participantId =
   SvInfo with joinedAsOfRound = joinedAsOfRound.round; ..
 
-mkSvMigrationData : Party -> Text -> Int -> [(Party, Decimal)] -> HostedSvMigrationData
+mkSvMigrationData : Party -> Text -> Int -> Map Party Decimal -> HostedSvMigrationData
 mkSvMigrationData hostedSv hostedSvName hostedSvRewardWeight beneficiaries = HostedSvMigrationData with ..
 
 unsafeLookup : (Ord k, Show k) => k -> Map.Map k v -> v
@@ -553,7 +554,7 @@ getHostedSvCid app hostedSv = do
     queryFilter @HostedSv app.dso (\co -> co.hostedSv == hostedSv)
   pure hostedSvCid
 
-assertHostedSv : AmuletApp -> Party -> Party -> Int -> [(Party, Decimal)] -> Script ()
+assertHostedSv : AmuletApp -> Party -> Party -> Int -> Map Party Decimal -> Script ()
 assertHostedSv app hostedSv svOperator rewardWeight beneficiaries = do
   [(_, hostedSvCo)] <-
     queryFilter @HostedSv app.dso (\co -> co.hostedSv == hostedSv && co.svOperator == svOperator)
