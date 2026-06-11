@@ -40,7 +40,7 @@ data RewardState = RewardState with
     numCouponsIssued : Int -- ^ Number of SV reward coupons issued by them for their beneficiaries.
   deriving (Eq, Show)
 
--- Note: Deprecate in phase 2.
+-- FIXME: Deprecate once all hosted SVs have been migrated
 -- | State of reward collection for a sv identified by their sv name.
 template SvRewardState with
     dso : Party
@@ -49,7 +49,6 @@ template SvRewardState with
   where
     signatory dso
 
--- Implement in phase 1
 -- | State of reward collection for a hosted SV.
 template HostedSvRewardState with
     dso : Party

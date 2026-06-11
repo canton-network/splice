@@ -95,10 +95,13 @@ data AmuletRules_ActionRequiringConfirmation
 data DsoRules_ActionRequiringConfirmation
   = SRARC_AddSv DsoRules_AddSv
     -- ^ Voted action to directly add an SV
+    -- FIXME: Deprecate
   | SRARC_OffboardSv DsoRules_OffboardSv
     -- ^ Voted action to remove an SV
+    -- FIXME: Deprecate
   | SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding
     -- ^ Automated action to confirm that a party can become an SV.
+    -- FIXME: Deprecate
   | SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight
     -- ^ Voted action to grant a featured app right. Not idempotent.
   | SRARC_RevokeFeaturedAppRight DsoRules_RevokeFeaturedAppRight
@@ -107,6 +110,7 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to change the `DsoRulesConfig`. Not idempotent.
   | SRARC_UpdateSvRewardWeight DsoRules_UpdateSvRewardWeight
     -- ^ Voted action to update the reward weight of an SV.
+    -- FIXME: Deprecate
   | SRARC_CreateExternalPartyAmuletRules DsoRules_CreateExternalPartyAmuletRules
     -- ^ Create ExternalPartyAmuletRules contract if it has not been created as part of network bootstrapping.
   | SRARC_CreateTransferCommandCounter DsoRules_CreateTransferCommandCounter
@@ -182,6 +186,9 @@ data HostedSvMigrationData = HostedSvMigrationData with
 data Confirmation_ExpireResult = Confirmation_ExpireResult
 
 data HostedSv_UpdateRewardWeightResult = HostedSv_UpdateRewardWeightResult with
+    hostedSvCid : ContractId HostedSv
+
+data HostedSv_UpdateBeneficiariesResult = HostedSv_UpdateBeneficiariesResult with
     hostedSvCid : ContractId HostedSv
 
 data DsoRules_AddSvResult = DsoRules_AddSvResult with
@@ -617,6 +624,14 @@ template HostedSv
         hostedSvCid <- create this with rewardWeight = newRewardWeight
         pure HostedSv_UpdateRewardWeightResult with hostedSvCid
 
+    choice HostedSv_UpdateBeneficiaries : HostedSv_UpdateBeneficiariesResult
+      with
+        newBeneficiaries : [(Party, Decimal)]
+      controller hostedSv
+      do
+        hostedSvCid <- create this with beneficiaries = newBeneficiaries
+        pure HostedSv_UpdateBeneficiariesResult with hostedSvCid
+
 
 -- This template distinguishes between three kinds of parties:
 --
@@ -655,7 +670,7 @@ template DsoRules with
     -- Sv management
     ------------------------
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     choice DsoRules_AddSv : DsoRules_AddSvResult
       with
         newSvParty : Party
@@ -667,7 +682,6 @@ template DsoRules with
       do newDsoRules <- dsoRules_addSv this arg
          return DsoRules_AddSvResult with ..
 
-    -- Note: Implement in phase 2
     choice DsoRules_AddSvNode : DsoRules_AddSvOperatorResult
       with
         newSvOperatorParty : Party
@@ -677,7 +691,7 @@ template DsoRules with
       do newDsoRules <- dsoRules_AddSvNode this arg
          return DsoRules_AddSvOperatorResult with ..
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
       with
         sv : Party
@@ -711,7 +725,6 @@ template DsoRules with
 
             return DsoRules_OffboardSvResult with ..
 
-    -- Note: Implement in phase 2
     choice DsoRules_OffboardSvNode : DsoRules_OffboardSvNodeResult
       with
         svOperator : Party
@@ -745,7 +758,6 @@ template DsoRules with
 
             return DsoRules_OffboardSvNodeResult with ..
 
-    -- Note: Implement in phase 1
     nonconsuming choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
       with
         newHostedSv : Party
@@ -801,7 +813,7 @@ template DsoRules with
               status = Some status
         return DsoRules_SubmitStatusReportResult with ..
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
@@ -838,7 +850,6 @@ template DsoRules with
         return DsoRules_AddConfirmedSvResult with
           newDsoRules = addSvResult.newDsoRules
 
-    -- Note: Implement in phase 2
     -- Called by SV node candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
@@ -1212,7 +1223,7 @@ template DsoRules with
     -- SV weight management
     -----------------------
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     choice DsoRules_UpdateSvRewardWeight : DsoRules_UpdateSvRewardWeightResult
       with
         svParty : Party
@@ -1228,7 +1239,6 @@ template DsoRules with
             newDsoRules <- create this with svs = newSvs
             return DsoRules_UpdateSvRewardWeightResult with ..
 
-    -- Note: Implement in phase 1
     -- | Updates the reward weight of a hosted SV.
     --
     -- Updates the reward weight stored in the corresponding 'HostedSv' contract.
@@ -1244,7 +1254,6 @@ template DsoRules with
         result <- exercise hostedSvCid HostedSv_UpdateRewardWeight with newRewardWeight
         pure DsoRules_UpdateHostedSvWeightResult with result
 
-    -- Note: Implement in phase 1
     -- | Creates an instruction to offboard a hosted SV.
     --
     -- This is the first step of the hosted-SV offboarding flow. The DSO records
@@ -1259,7 +1268,6 @@ template DsoRules with
         instructionCid <- create OffboardHostedSvInstruction with hostedSv; dso
         pure DsoRules_InstructOffboardHostedSvResult with instructionCid
 
-    -- Note: Implement in phase 1
     -- | Completes the offboarding of a hosted SV.
     --
     -- This is the second step of the hosted-SV offboarding flow. It consumes the
@@ -1295,7 +1303,6 @@ template DsoRules with
 
         pure DsoRules_OffboardHostedSvResult
 
-    -- Note: Implement in phase 1
     -- | Creates an instruction to update the SV operator of a hosted SV.
     --
     -- This is the first step of the hosted-SV operator update flow. The DSO records
@@ -1316,7 +1323,6 @@ template DsoRules with
           dso
         pure DsoRules_InstructUpdateSvOperatorForHostedSvResult with instructionCid
 
-    -- Note: Implement in phase 1
     -- | Completes the update of the SV operator for a hosted SV.
     --
     -- This is the second step of the hosted-SV operator update flow. It consumes the
@@ -1346,7 +1352,6 @@ template DsoRules with
 
         pure DsoRules_UpdateSvOperatorForHostedSvResult with hostedSvCid
 
-    -- Note: Implement in phase 1
     -- | Replaces the reward beneficiary distribution for a hosted SV.
     --
     -- The beneficiary distribution is stored directly on the 'HostedSv' contract.
@@ -1382,8 +1387,7 @@ template DsoRules with
 
         pure DsoRules_SetSvRewardBeneficiariesResult with hostedSvCid
 
-    -- Note: Implement in phase 1
-    -- Note: Deprecate in phase 2.
+    -- FIXME: Deprecate once all hosted SVs have been migrated.
     --
     -- Trust assumption:
     -- The SV operator is trusted to exercise this choice with the correct migration data.
@@ -1524,7 +1528,7 @@ template DsoRules with
     -- SV node onboarding
     ---------------------
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     nonconsuming choice DsoRules_StartSvOnboarding : DsoRules_StartSvOnboardingResult
       with
         candidateName : Text
@@ -1540,7 +1544,6 @@ template DsoRules with
         onboardingRequest <- create SvOnboardingRequest with ..
         return DsoRules_StartSvOnboardingResult with ..
 
-    -- Note: Implement in phase 2
     nonconsuming choice DsoRules_StartSvNodeOnboarding : DsoRules_StartSvNodeOnboardingResult
       with
         candidateName : Text
@@ -1556,7 +1559,7 @@ template DsoRules with
         onboardingRequest <- create SvNodeOnboardingRequest with ..
         return DsoRules_StartSvNodeOnboardingResult with ..
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
       with
         cid: ContractId SvOnboardingRequest
@@ -1567,7 +1570,6 @@ template DsoRules with
         exercise cid SvOnboardingRequest_Expire
         return DsoRules_ExpireSvOnboardingRequestResult
 
-    -- Note: Implement in phase 2
     nonconsuming choice DsoRules_ExpireSvNodeOnboardingRequest : DsoRules_ExpireSvNodeOnboardingRequestResult
       with
         cid: ContractId SvNodeOnboardingRequest
@@ -1578,7 +1580,7 @@ template DsoRules with
         exercise cid SvNodeOnboardingRequest_Expire
         return DsoRules_ExpireSvNodeOnboardingRequestResult
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ArchiveSvOnboardingRequest : DsoRules_ArchiveSvOnboardingRequestResult
       with
         svOnboardingRequestCid: ContractId SvOnboardingRequest
@@ -1593,7 +1595,6 @@ template DsoRules with
         require "SV name matches" ((fromSome sv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
 
-    -- Note: Implement in phase 2
     nonconsuming choice DsoRules_ArchiveSvNodeOnboardingRequest : DsoRules_ArchiveSvNodeOnboardingRequestResult
       with
         svNodeOnboardingRequestCid: ContractId SvNodeOnboardingRequest
@@ -1608,7 +1609,7 @@ template DsoRules with
         require "SV name matches" ((fromSome maybeSvOperator).name == svNodeOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvNodeOnboardingRequestResult
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
       with
         newSvParty : Party
@@ -1635,7 +1636,6 @@ template DsoRules with
           expiresAt
         return DsoRules_ConfirmSvOnboardingResult with ..
 
-    -- Note: Implement in phase 2
     nonconsuming choice DsoRules_ConfirmSvNodeOnboarding : DsoRules_ConfirmSvNodeOnboardingResult
       with
         newSvOperatorParty : Party
@@ -1660,7 +1660,7 @@ template DsoRules with
           expiresAt
         return DsoRules_ConfirmSvNodeOnboardingResult with ..
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
       with
         cid: ContractId SvOnboardingConfirmed
@@ -1679,7 +1679,6 @@ template DsoRules with
           offboardedSvs = Map.insert sv offboardingInfo offboardedSvs
         return DsoRules_ExpireSvOnboardingConfirmedResult with ..
 
-    -- Note: Implement in phase 2
     choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvNodeOnboardingConfirmedResult
       with
         cid: ContractId SvNodeOnboardingConfirmed
@@ -1865,7 +1864,7 @@ template DsoRules with
     -- Reward management driven directly by the DSO delegates
     ---------------------------------------------------------
 
-    -- Note: Deprecate in phase 2
+    -- FIXME: Deprecate once all hosted SVs have been migrated
     nonconsuming choice DsoRules_ReceiveSvRewardCoupon : DsoRules_ReceiveSvRewardCouponResult
       with
         sv : Party
