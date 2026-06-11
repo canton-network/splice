@@ -217,9 +217,6 @@ class WalletRewardsTimeBasedIntegrationTest
         }
       }
 
-      // Give bob's trigger time to mint alice's shared coupon
-      advanceTimeForRewardAutomationToRunForCurrentRound
-
       // Verify minting with no-sharing-config: bob's own V2 coupon is
       // minted directly, and alice's shared 40% is also minted into
       // bob's balance.
