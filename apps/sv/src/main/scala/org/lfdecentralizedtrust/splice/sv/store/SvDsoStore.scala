@@ -1079,7 +1079,7 @@ trait SvDsoStore
   /** Whether there are more than the given number of featured app activity markers. */
   def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Boolean]
@@ -1088,7 +1088,7 @@ trait SvDsoStore
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,

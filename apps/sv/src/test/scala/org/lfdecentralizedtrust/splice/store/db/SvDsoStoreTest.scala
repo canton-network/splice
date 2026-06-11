@@ -2127,24 +2127,30 @@ class DbSvDsoStoreTest
         )
         results <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set.empty)
+            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold)
             .map(result => (threshold, result))
         )
         resultsNoProvider1 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set(providerParty(1)))
+            .featuredAppActivityMarkerCountAboveOrEqualTo(
+              threshold,
+              Some(new IgnoredPartiesStore(Set(providerParty(1)))),
+            )
             .map(result => (threshold, result))
         )
         resultsNoProvider2 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set(providerParty(2)))
+            .featuredAppActivityMarkerCountAboveOrEqualTo(
+              threshold,
+              Some(new IgnoredPartiesStore(Set(providerParty(2)))),
+            )
             .map(result => (threshold, result))
         )
         resultsNoProvider1And2 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
             .featuredAppActivityMarkerCountAboveOrEqualTo(
               threshold,
-              Set(providerParty(1), providerParty(2)),
+              Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
             )
             .map(result => (threshold, result))
         )
@@ -2191,7 +2197,6 @@ class DbSvDsoStoreTest
             Int.MinValue,
             0,
             20,
-            Set.empty,
           )
           .map(_.map(_.contractId))
         results2 <- store
@@ -2199,7 +2204,6 @@ class DbSvDsoStoreTest
             1,
             Int.MaxValue,
             20,
-            Set.empty,
           )
           .map(_.map(_.contractId))
       } yield {
@@ -2222,7 +2226,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(1)),
+            Some(new IgnoredPartiesStore(Set(providerParty(1)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider2 <- store
@@ -2230,7 +2234,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(2)),
+            Some(new IgnoredPartiesStore(Set(providerParty(2)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider1And2 <- store
@@ -2238,7 +2242,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(1), providerParty(2)),
+            Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
           )
           .map(_.map(_.contractId))
       } yield {
@@ -2269,7 +2273,6 @@ class DbSvDsoStoreTest
           Int.MinValue,
           Int.MaxValue,
           2,
-          Set.empty,
         )
       } yield {
         limitedResults should have(size(2))

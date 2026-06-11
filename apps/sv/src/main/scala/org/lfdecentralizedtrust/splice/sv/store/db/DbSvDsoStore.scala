@@ -1897,10 +1897,11 @@ class DbSvDsoStore(
 
   override def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
   )(implicit
       tc: TraceContext
   ): Future[Boolean] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause: SQLActionBuilder = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
         sql" and " ++ notInClause(
@@ -1940,11 +1941,12 @@ class DbSvDsoStore(
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,
   ]]] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
         sql" and " ++ notInClause(
