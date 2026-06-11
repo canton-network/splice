@@ -216,26 +216,7 @@ class DbUserWalletStore(
     ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
   ]] =
     waitUntilAcsIngested {
-      val whereClause = (includeUnassigned, includeAssigned) match {
-        case (true, true) => sql""
-        case (true, false) => sql"and acs.create_arguments->>'beneficiary' is null"
-        case (false, true) => sql"and acs.create_arguments->>'beneficiary' is not null"
-        case (false, false) => sql"and false"
-      }
-      for {
-        result <- storage.query(
-          selectFromAcsTableWithState(
-            WalletTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            amuletCodegen.RewardCouponV2.COMPANION,
-            additionalWhere = whereClause,
-            orderLimit = sql"order by acs.contract_expires_at asc limit ${sqlLimit(limit)}",
-          ),
-          "listRewardCouponsV2",
-        )
-      } yield result
-        .map(contractWithStateFromRow(amuletCodegen.RewardCouponV2.COMPANION)(_))
+      queryRewardCouponsV2(includeUnassigned, includeAssigned, limit)
     }
 
   override def listTransactions(
