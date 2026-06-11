@@ -2,11 +2,12 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Shared test environment setup for amulet allocation tests.
-module Splice.Scripts.TestAmuletTokenStandardTestEnv
+module Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
   (
     TestEnv(..),
     setupTest,
     checkEq,
+    createLockedHoldings,
   ) where
 
 import DA.Action (unless)
@@ -21,6 +22,8 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
+
+import Splice.Expiry (TimeLock(..))
 
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -68,7 +71,12 @@ setupTest = do
 
   -- setup alice
   WalletClientV2.createBatchingUtility alice
-  AmuletRegistryV2.tapFaucet env.amuletV2 alice 1000.0
+  AmuletRegistryV2.tapFaucet env.amuletV2 alice 800.0
+  now <- getTime
+  AmuletRegistryV2.createLockedAmulet env.amuletV2 alice 200.0 TimeLock with
+    expiresAt = now `addRelTime` seconds (-1)
+    holders = [env.amuletV2.dso]
+    optContext = None
 
   -- setup bob
   WalletClientV2.createBatchingUtility bob
@@ -144,6 +152,17 @@ setupTest = do
       actors = [alice]
       extraArgs = emptyExtraArgs
 
+-- | Create locked holdings for the given owner and amount that expire at the given time.
+--
+-- May spread the holdings over different kinds of locked hodlings to test that
+-- they all work as expected.
+createLockedHoldings : TestEnv -> Party -> Decimal -> Time -> Script [ContractId V2.Holding]
+createLockedHoldings TestEnv{..} owner amount expiresAt = do
+  lockedCid <- AmuletRegistryV2.createLockedAmulet registriesEnv.amuletV2 owner amount TimeLock with
+    expiresAt
+    holders = [registriesEnv.amuletV2.dso]
+    optContext = None
+  pure [toInterfaceContractId lockedCid]
 
 checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
 checkEq prefix expected actual =

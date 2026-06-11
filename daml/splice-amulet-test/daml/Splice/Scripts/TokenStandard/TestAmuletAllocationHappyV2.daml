@@ -7,9 +7,8 @@
 -- implementation of the V1 API.
 --
 -- Note that batch settlement scenarios are tested as part of the token standard DvP tests.
-module Splice.Scripts.TestAmuletAllocationHappyV2 where
+module Splice.Scripts.TokenStandard.TestAmuletAllocationHappyV2 where
 
-import DA.Action (when)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (sort)
@@ -23,9 +22,6 @@ import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 
-import Splice.Expiry
-import Splice.Fees
-import Splice.Types
 import Splice.Amulet
 import Splice.AmuletAllocation
 import Splice.AmuletAllocationV2
@@ -38,10 +34,11 @@ import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 
-import Splice.Scripts.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
 
 
--- TODO(#4514): also run these test cases for TestTokenV2
+-- TODO(#5914): also run these test cases for TestTokenV1
+-- TODO(#5913): also run these test cases for TestTokenV2
 
 
 -- V2 API: allocate, withdraw and cancel
@@ -106,49 +103,6 @@ test_allocation_CancelV2 = test_withdrawCancel_generic $ \TestEnv {..} allocCid 
         meta = emptyMetadata
   pure ()
 
-
--- Test allocation can be funded with locked holdings after the lock expires
-----------------------------------------------------------------------------
-
--- | We probably already test that somewhere else. Also testing it here to be one the safe side.
-test_allocateV2_fundWithLockedHoldings : Script ()
-test_allocateV2_fundWithLockedHoldings = do
-  TestEnv {..} <- setupTest
-
-  let dso = instrId.admin
-  submit (actAs alice <> actAs dso) $ createCmd
-    LockedAmulet with
-      amulet = Amulet with
-        dso
-        owner = alice
-        amount = ExpiringAmount with
-          initialAmount = 11.0
-          createdAt = Round 0
-          ratePerRound = RatePerRound with rate = 0.1
-      lock = TimeLock with
-        holders = [dso]
-        expiresAt = now `addRelTime` seconds (-1)
-        optContext = None
-
-  [(lockedCid, _)] <- WalletClientV2.listLockedHoldings alice instrId
-
-  registryV2 <- MultiRegistry.getRegistryApiV2 registries dso
-  enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
-    settlement = settlementV2
-    allocation = allocationV2
-    inputHoldingCids = [toInterfaceContractId lockedCid]
-    requestedAt = now
-    actors = [alice]
-    extraArgs = emptyExtraArgs
-  submit (actAs alice <> discloseMany' enrichedChoice.disclosures) $
-      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-
-  [(lockedCid', _)] <- WalletClientV2.listLockedHoldings alice instrId
-
-  when (lockedCid' == lockedCid) $
-    fail "expected the locked holding to be consumed and not reused for the allocation"
-
-  pure ()
 
 
 -- Expiry via V2.Allocation_Cancel of V1 and V2 amulet allocations
@@ -399,3 +353,33 @@ test_withdrawCancel_generic mkTest = do
   [(allocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
   mkTest testEnv allocCid
   checkReset
+
+
+-- Testing PublicFetch methods
+------------------------------
+
+test_AllocationFactoryV2_and_SettlementFactoryV2_PublicFetch : Script ()
+test_AllocationFactoryV2_and_SettlementFactoryV2_PublicFetch = do
+  -- we use the factory context to get access to the factory
+  (TestEnv {..}) <- setupTest
+  registryV2 <- MultiRegistry.getRegistryApiV2 registries instrId.admin
+  enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
+    settlement = settlementV2
+    allocation = allocationV2
+    inputHoldingCids = []
+    requestedAt = now
+    actors = [alice]
+    extraArgs = emptyExtraArgs
+
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid V2.AllocationFactory_PublicFetch with
+      actors = [alice]
+  view === V2.AllocationFactoryView instrId.admin emptyMetadata
+
+  -- we exploit that the same contract implements the settlement factory
+  let settlementFactoryCid = coerceContractId @_ @V2.SettlementFactory enrichedChoice.factoryCid
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd settlementFactoryCid V2.SettlementFactory_PublicFetch with
+      actors = [alice]
+  view === V2.SettlementFactoryView instrId.admin emptyMetadata
+

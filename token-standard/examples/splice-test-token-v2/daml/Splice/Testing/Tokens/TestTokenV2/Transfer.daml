@@ -145,6 +145,7 @@ transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Auth
 
 transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized = do
     let admin = this.transfer.instrumentId.admin
+    -- TODO(#5913): test not being able to input non-expired locks for both transfers and allocation creation; test that expired locks can be used
     senderChangeCids <- debitHoldings this
     inputHoldingCids <- createLockedInputs this.transfer
     -- log the tx history v2 event

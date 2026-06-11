@@ -7,6 +7,9 @@
 module Splice.Testing.TokenStandard.WalletClientV2
   (
     -- * Reading/checking holdings
+    isLocked,
+    isUnlocked,
+
     listHoldings,
     listVisibleHoldings,
     listHoldingCids,
@@ -166,17 +169,29 @@ listVisibleHoldings p = do
   pure $ instrumentHoldingsV1 ++ Map.toList instrumentHoldingsV2
 
 listLockedHoldings : Party -> V2.InstrumentId -> Script [(ContractId V2.Holding, V2.HoldingView)]
-listLockedHoldings p instrumentId =
-  filter (\(_, holding) -> isSome (holding.lock)) <$> listHoldings p instrumentId
+listLockedHoldings p instrumentId = do
+  now <- getTime
+  filter (\(_, holding) -> isLocked now holding.lock) <$> listHoldings p instrumentId
 
 -- | List the cids of an instrument's holdings owned by a party.
 listHoldingCids : Party -> V2.InstrumentId -> Script [ContractId V2.Holding]
 listHoldingCids p instrumentId = (map fst) <$> listHoldings p instrumentId
 
+isLocked : Time -> Optional V2.Lock -> Bool
+isLocked now = not . isUnlocked now
+
+isUnlocked : Time -> Optional V2.Lock -> Bool
+isUnlocked now lock =
+  case lock of
+    None -> True
+    Some l -> optional False (<= now) l.expiresAt
+    -- TODO(tech-debt): support `expiresAfter` constraints once Daml provides access to the LET of a contract
+
 listUnlockedHoldingCidsFor : V2.Account -> Party -> V2.InstrumentId -> Script [ContractId V2.Holding]
 listUnlockedHoldingCidsFor account actor instrumentId = do
   holdings <- listVisibleHoldings actor
-  pure [cid | (cid, holding) <- holdings, holding.instrumentId == instrumentId, holding.account == account, isNone holding.lock]
+  now <- getTime
+  pure $ [cid | (cid, holding) <- holdings, holding.instrumentId == instrumentId, holding.account == account , isUnlocked now holding.lock ]
 
 -- | Check that a holding with a specific amount exists for the given owner.
 checkHoldingWithAmountExists : Party -> V2.InstrumentId -> Decimal -> Script ()
@@ -244,8 +259,9 @@ getAccountBalance actor account instrumentId = do
 
 checkUnlockedBalance : Party -> V2.InstrumentId -> Decimal -> Script ()
 checkUnlockedBalance p instrumentId balance = do
+  now <- getTime
   holdings <- listHoldings p instrumentId
-  let unlockedHoldings = filter (\(_, holding) -> isNone holding.lock) holdings
+  let unlockedHoldings = filter (\(_, holding) -> isUnlocked now holding.lock) holdings
   let total = sum $ map (._2.amount) unlockedHoldings
   unless (total == balance) $ fail $ T.unlines [
     "Wallet " <> show p <> ": unlocked balance of " <> show total <> " for " <> show instrumentId <>
@@ -498,11 +514,12 @@ executeSingletonTSABatch registries actor batch = do
 -- | Get a map of unlocked holding cids for the given accounts and instruments.
 getHoldingMap : Party -> [(V2.Account, V2.InstrumentId)] -> Script BatchingUtilityV2.HoldingMap
 getHoldingMap actor accountAndInstruments0 = do
+  now <- getTime
   taggedHoldings <- forA (dedupSort accountAndInstruments0) $ \(account, instrumentId) -> do
     holdings <- listVisibleHoldings actor
     let scopedAccount = BatchingUtilityV2.ScopedAccount instrumentId.admin account
     pure [ (scopedAccount, TextMap.fromList [(instrumentId.id, [holdingCid])])
-         | (holdingCid, holding) <- holdings, holding.account == account, holding.instrumentId == instrumentId, isNone holding.lock ]
+         | (holdingCid, holding) <- holdings, holding.account == account, holding.instrumentId == instrumentId, isUnlocked now holding.lock ]
   pure $ BatchingUtilityV2.holdingMapFromList (concat taggedHoldings)
 
 
