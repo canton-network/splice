@@ -22,17 +22,24 @@
             scan of the SV sponsoring the onboarding, configured via the new optional ``sponsorScanUrl`` value in the
             scan helm chart.
 
+          - Increase ``sv-app`` default memory requests from 3Gi to 6Gi to ensure the max heap size fits in the requests and to avoid OOM evictions.
+
       - Validator
 
-          - The ``migration.id`` value was removed from the validator (validator app) helm chart and is no longer
-            supported for docker-compose deployments. The validator now resolves the synchronizer migration id
-            automatically at start-up from its database. The value must be removed from both the helm chart and
-            the docker-compose configuration.
+          - The ``migration.id`` value was removed from the validator (validator app) helm chart. For docker-compose
+            deployments the ``-m <migration_id>`` flag of the validator ``start.sh`` script is now optional (if you deployed your validator before this change you **must** keep this flag set to the existing value). The validator
+            resolves the synchronizer migration id automatically at start-up from its database. The migration id is now only
+            used to name the participant database for backwards compatibility: if provided, the database
+            ``participant-<migration_id>`` is used (set this to the migration id you previously deployed with); if omitted,
+            the database ``participant`` is used, which is recommended for new deployments.
 
       .. Important::
 
-          The migration id must still be kept for participant database naming for backwards compatibility (``persistance.databaseName`` helm value,
+          The migration id must still be kept for participant database naming for backwards compatibility (``persistence.databaseName`` helm value,
           ``CANTON_PARTICIPANT_POSTGRES_DB`` docker compose env variable) to ensure the participant uses the currently configured database.
+
+          For docker-compose validator deployments, pass the same ``-m <migration_id>`` you previously deployed with to keep
+          using the existing ``participant-<migration_id>`` database, or omit it on new deployments to use the ``participant`` database.
 
   - Scan
 
