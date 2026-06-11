@@ -255,9 +255,6 @@ test_happy_path_direct = script do
 -- Testing two-step transfers
 -----------------------------
 
-
--- TODO(#4540): test that transfer instructions get archived
-
 test_two_step_success : Script ()
 test_two_step_success = do
   (TestSetup {..}, aliceInstrCid) <- setupTwoStepTransfer
@@ -286,6 +283,8 @@ test_two_step_success = do
       meta = emptyMetadata
     actors = [bob]
 
+  -- transfer offer is gone and the new holdings are reported
+  [] <- WalletClientV2.listTransferInstructionsV1V2 bob registry.instrumentId
   TransferInstructionResult_Completed receiverHoldingCids <- pure result.output
   result.senderChangeCids === []
 
@@ -318,7 +317,7 @@ test_two_step_withdraw = do
       context = context.choiceContext
       meta = emptyMetadata
     actors = [alice]
-
+  [] <- WalletClientV2.listTransferInstructionsV1V2 alice registry.instrumentId
 
   case result.senderChangeCids of
     [holdingCid] ->
@@ -399,6 +398,7 @@ test_two_step_reject = do
       context = context.choiceContext
       meta = emptyMetadata
     actors = [bob]
+  [] <- WalletClientV2.listTransferInstructionsV1V2 bob registry.instrumentId
 
   case result.senderChangeCids of
     [holdingCid] ->

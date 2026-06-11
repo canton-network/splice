@@ -25,6 +25,7 @@ import Splice.TokenStandard.Utils qualified as TSU
 import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
 
 import Splice.Testing.Utils
+import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
@@ -167,8 +168,6 @@ checkHoldingMap' actualMap expectedMap = do
 -- Composite batching tests
 ---------------------------
 
--- TODO(#4540): test with multiple accounts, and acting as an account provider
-
 data TestSetup = TestSetup with
   registries : MultiRegistry.MultiRegistry
   mint : Party -> Decimal -> V2.InstrumentId -> Script ()
@@ -257,29 +256,46 @@ genericTestBatchedTransfer TestSetup {..} = do
   bob <- mkParty "bob"
   charlie <- mkParty "charlie"
   dora <- mkParty "dora"
+  accountProvider1 <- mkParty "accountProvider1"
   let allParties = [alice, bob, charlie, dora]
+  let aliceAccount = TSU.basicAccount alice
+  let charlieAccount = TSU.basicAccount charlie
+  let doraAccount = TSU.basicAccount dora
+  let bobAccount = V2.Account with
+        owner = Some bob; provider = Some accountProvider1; id = "bob-account"
+  let bobAccountConfig = TestTokenV2.AccountConfig with
+        admin = instrX.admin
+        account = bobAccount
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+        providerConfig  = TestTokenV2.PartyConfig with
+          canInitiate = False
+          mustApprove = False
+
+  TestTokenRegistryV2.makeAccountIfMissing bobAccountConfig
 
   mint alice 1000.0 instrX
   mint alice 1000.0 instrY
 
   -- test creating three outgoing transfers in on batch
   at1 <- mkTransfer SimpleTransfer with
-        sender = TSU.basicAccount alice
-        receiver = TSU.basicAccount bob
+        sender = aliceAccount
+        receiver = bobAccount
         amount = 10.0
         instrumentId = instrX
         offerTime = days 1
         reason = "alice -> bob - test transfer 1"
   at2 <- mkTransfer SimpleTransfer with
-        sender = TSU.basicAccount alice
-        receiver = TSU.basicAccount charlie
+        sender = aliceAccount
+        receiver = charlieAccount
         amount = 25.0
         instrumentId = instrY
         offerTime = days 1
         reason = "alice -> charlie - test transfer 2"
   at3 <- mkTransfer SimpleTransfer with
-        sender = TSU.basicAccount alice
-        receiver = TSU.basicAccount dora
+        sender = aliceAccount
+        receiver = doraAccount
         amount = 10.0
         instrumentId = instrX
         offerTime = days 1
@@ -289,8 +305,8 @@ genericTestBatchedTransfer TestSetup {..} = do
   -- test accepting and forwarding a transfer using the holdings just received
   baccept <- acceptTransferInstructionV2s registries bob instrX
   bt1 <- mkTransfer SimpleTransfer with
-        sender = TSU.basicAccount bob
-        receiver = TSU.basicAccount dora
+        sender = bobAccount
+        receiver = doraAccount
         amount = 5.0
         instrumentId = instrX
         offerTime = days 1
@@ -298,28 +314,45 @@ genericTestBatchedTransfer TestSetup {..} = do
 
   WalletClientV2.executeTSABatch registries bob (baccept <> bt1)
 
-  -- dora accepts all transfers in one go, and merges them
+  -- dora accepts all transfers in one go, and merges them, and then transfers to another account of theirs, from which it transfers out
   daccept <- acceptTransferInstructionV2s registries dora instrX
   doraMerge <- mkTransfer SimpleTransfer with
-        sender = TSU.basicAccount dora
-        receiver = TSU.basicAccount dora
+        sender = doraAccount
+        receiver = doraAccount
         amount = 15.0
         instrumentId = instrX
         offerTime = days 1
         reason = "dora -> dora - test self-merge"
-  -- test that self-merge extracts the args correctly by executing it twice
-  WalletClientV2.executeTSABatch registries dora (daccept <> doraMerge <> doraMerge)
+  let doraExtraAccount = V2.Account with
+        owner = Some dora; provider = None; id = "dora-extra-account"
+  doraToExtra <- mkTransfer SimpleTransfer with
+        sender = doraAccount
+        receiver = doraExtraAccount
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> dora - test separate account transfer"
+  doraExtraToCharlie <- mkTransfer SimpleTransfer with
+        sender = doraExtraAccount
+        receiver = charlieAccount
+        amount = 3.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> charlie - test separate account transfer"
+  -- we do a self-merge twice just to test that this works as well
+  WalletClientV2.executeTSABatch registries dora
+    (daccept <> doraMerge <> doraMerge <> doraToExtra <> doraExtraToCharlie)
 
-  -- charlie accepts their offer
-  caccept <- acceptTransferInstructionV2s registries charlie instrY
-  (result, changes) <- WalletClientV2.executeTSABatch registries charlie caccept
+  -- charlie accepts their offer for Y
+  cacceptY <- acceptTransferInstructionV2s registries charlie instrY
+  (result, changes) <- WalletClientV2.executeTSABatch registries charlie cacceptY
 
   -- check tx history on V2 transfers
   when checkMetadata $ do
     let testTransferReason = "alice -> charlie - test transfer 2"
     WalletClientV2.expectTxHistoryReasons changes
-      [ (TSU.basicAccount alice, [testTransferReason], "")
-      , (TSU.basicAccount charlie, [testTransferReason], "")
+      [ (aliceAccount, [testTransferReason], "")
+      , (charlieAccount, [testTransferReason], "")
       ]
     -- V1 history metadata
     let expectedMeta = Metadata with
@@ -332,11 +365,22 @@ genericTestBatchedTransfer TestSetup {..} = do
     [BatchingUtilityV2.TSAR_TransferInstructionResultV2 acceptResult] <- pure result.actionResults
     acceptResult.meta === expectedMeta
 
+  -- charlie also accepts their offer for X
+  cacceptX <- acceptTransferInstructionV2s registries charlie instrX
+  WalletClientV2.executeTSABatch registries charlie cacceptX
+
   -- Check balances
   WalletClientV2.checkBalance alice instrX 980.0
   WalletClientV2.checkBalance alice instrY 975.0
+
   WalletClientV2.checkBalance bob instrX 5.0
+  WalletClientV2.checkBalance bob instrY 0.0
+
   WalletClientV2.checkBalance charlie instrY 25.0
+  WalletClientV2.checkBalance charlie instrX 3.0
+
+  WalletClientV2.checkBalance dora instrX 12.0
+  WalletClientV2.checkBalance dora instrY 0.0
 
   -- No transfer instructions left
   forA_ allParties $ \p -> do
