@@ -700,29 +700,39 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         beneficiaryParty.party,
       )
 
+      val externalPartyWallet = aliceValidatorBackend.appState.walletManager
+        .valueOrFail("WalletManager is expected to be defined")
+        .externalPartyWalletManager
+        .lookupExternalPartyWallet(beneficiaryParty.party)
+        .valueOrFail(
+          s"Expected ${beneficiaryParty.party} to have an external party wallet"
+        )
+
       // Pause the trigger, create two unassigned and one already-assigned
       // V2 coupon, then resume — the trigger should batch-assign
       // beneficiaries to both unassigned coupons and mint all in one transaction.
       setTriggersWithin(triggersToPauseAtStart = Seq(externalPartyMintingDelegationTrigger)) {
-        createRewardCouponsV2(
-          Seq(
-            (beneficiaryParty.party, unassignedAmount1, None),
-            (beneficiaryParty.party, unassignedAmount2, None),
-            (beneficiaryParty.party, assignedAmount, Some(beneficiaryParty.party)),
-          )
+        actAndCheck(
+          "Create V2 coupons",
+          createRewardCouponsV2(
+            Seq(
+              (beneficiaryParty.party, unassignedAmount1, None),
+              (beneficiaryParty.party, unassignedAmount2, None),
+              (beneficiaryParty.party, assignedAmount, Some(beneficiaryParty.party)),
+            )
+          ),
+        )(
+          "Coupons are visible in store",
+          _ =>
+            externalPartyWallet.store.multiDomainAcsStore
+              .listContracts(RewardCouponV2.COMPANION)
+              .futureValue should have size 3,
         )
       }
 
       advanceTimeForRewardAutomationToRunForCurrentRound
 
-      clue("Unassigned V2 coupon should be consumed by assign-and-mint") {
-        val externalPartyWallet = aliceValidatorBackend.appState.walletManager
-          .valueOrFail("WalletManager is expected to be defined")
-          .externalPartyWalletManager
-          .lookupExternalPartyWallet(beneficiaryParty.party)
-          .valueOrFail(
-            s"Expected ${beneficiaryParty.party} to have an external party wallet"
-          )
+      clue("Unassigned V2 coupons should be consumed by assign-and-mint") {
         eventually() {
           val v2Coupons = externalPartyWallet.store.multiDomainAcsStore
             .listContracts(RewardCouponV2.COMPANION)
