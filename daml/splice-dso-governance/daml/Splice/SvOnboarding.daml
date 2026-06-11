@@ -16,7 +16,6 @@ data SvNodeOnboardingConfirmed_ExpireResult = SvNodeOnboardingConfirmed_ExpireRe
 data SvNodeOnboardingRequest_ExpireResult = SvNodeOnboardingRequest_ExpireResult
 
 
--- FIXME: Deprecate
 -- | Template used by the SVs to collect confirmations for the onboarding of an SV candidate.
 -- The existence of this contract triggers SV automation that creates confirmation contracts for
 -- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
@@ -40,28 +39,6 @@ template SvOnboardingRequest with
         require "Onboarding has expired" (now >= expiresAt)
         pure SvOnboardingRequest_ExpireResult
 
--- | Template used by the SVs to collect confirmations for the onboarding of an SV node candidate.
--- The existence of this contract triggers SV automation that creates confirmation contracts for
--- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
-template SvNodeOnboardingRequest with
-    candidateName : Text            -- ^ Human-readable name of the SV candidate. Must match the one in `ApprovedSvIdentity`!
-    candidateParty : Party          -- ^ PartyId of the candidate SV node party.
-    candidateParticipantId : Text   -- ^ ParticipantId of the candidate SV node.
-    token : Text                    -- ^ An encoded and signed `SvOnboardingToken` that confirms the candidate's identity.
-    sponsor : Party                 -- ^ The established SV node that created this contract.
-    dso: Party
-    expiresAt : Time                -- ^ When this contract can be archived even if the onboarding did not succeed.
-  where
-    signatory dso
-    observer candidateParty
-
-    -- Archive if we are past the `expiresAt`.
-    choice SvNodeOnboardingRequest_Expire : SvNodeOnboardingRequest_ExpireResult
-      controller dso
-      do
-        now <- getTime
-        require "Onboarding has expired" (now >= expiresAt)
-        pure SvNodeOnboardingRequest_ExpireResult
 
 -- FIXME: Deprecate
 -- | A confirmation for approval of a candidate SV.
@@ -88,7 +65,6 @@ template SvOnboardingConfirmed with
         pure SvOnboardingConfirmed_ExpireResult
 
 
--- Note: Implement in phase 2
 -- | A confirmation for approval of a candidate SV node.
 --
 -- Once this contract is created, the workflows to onboard that SVs node starts.
@@ -98,7 +74,7 @@ template SvNodeOnboardingConfirmed with
     svNodeParticipantId: Text
     reason : Text
     dso : Party
-    expiresAt : Time            -- ^ When this contract can be archived.
+    expiresAt : Time -- ^ When this contract can be archived.
   where
     signatory dso
     observer svOperatorParty
@@ -155,9 +131,6 @@ instance HasCheckedFetch SvNodeOnboardingConfirmed ForOwner where
 
 instance HasCheckedFetch SvNodeOnboardingConfirmed ForDso where
   contractGroupId SvNodeOnboardingConfirmed {..} = ForDso with dso
-
-instance HasCheckedFetch SvNodeOnboardingRequest ForDso where
-  contractGroupId SvNodeOnboardingRequest {..} = ForDso with dso
 
 instance HasCheckedFetch SvOnboardingRequest ForDso where
   contractGroupId SvOnboardingRequest {..} = ForDso with dso

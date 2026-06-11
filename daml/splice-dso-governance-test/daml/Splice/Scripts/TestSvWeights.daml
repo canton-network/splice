@@ -357,11 +357,11 @@ testSvNodeOnboarding = do
 
   -- sv2 initiates the onboarding of the new sv node
   svSubmits app sv2 $ \cid -> exerciseCmd cid $
-    DsoRules_StartSvNodeOnboarding "svX" svX "svX-participant-id" token sv2
+    DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" token sv2
 
   -- an onboarding request for svX has been created
-  [(_, svNodeOnboardingRequest)] <- query @SvNodeOnboardingRequest dso
-  svNodeOnboardingRequest === SvNodeOnboardingRequest with
+  [(_, svNodeOnboardingRequest)] <- query @SvOnboardingRequest dso
+  svNodeOnboardingRequest === SvOnboardingRequest with
     candidateName = "svX"
     candidateParty = svX
     candidateParticipantId = "svX-participant-id"

@@ -95,10 +95,8 @@ data AmuletRules_ActionRequiringConfirmation
 data DsoRules_ActionRequiringConfirmation
   = SRARC_AddSv DsoRules_AddSv
     -- ^ Voted action to directly add an SV
-    -- FIXME: Deprecate
   | SRARC_OffboardSv DsoRules_OffboardSv
     -- ^ Voted action to remove an SV
-    -- FIXME: Deprecate
   | SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding
     -- ^ Automated action to confirm that a party can become an SV.
     -- FIXME: Deprecate
@@ -129,8 +127,6 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
   | SRARC_AddSvNode DsoRules_AddSvNode
     -- ^ Voted action to directly add an SV node.
-  | SRARC_OffboardSvNode DsoRules_OffboardSvNode
-    -- ^ Voted action to remove an SV node.
   | SRARC_ConfirmSvNodeOnboarding DsoRules_ConfirmSvNodeOnboarding
     -- ^ Automated action to confirm that a party can become an SV.
   deriving (Eq, Show)
@@ -202,9 +198,6 @@ data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
     hostedSvRewardStateCid : ContractId HostedSvRewardState
 
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
-    newDsoRules : ContractId DsoRules
-
-data DsoRules_OffboardSvNodeResult = DsoRules_OffboardSvNodeResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_SubmitStatusReportResult = DsoRules_SubmitStatusReportResult with
@@ -284,9 +277,6 @@ data DsoRules_MergeValidatorLicenseResult = DsoRules_MergeValidatorLicenseResult
 
 data DsoRules_StartSvOnboardingResult = DsoRules_StartSvOnboardingResult with
     onboardingRequest : ContractId SvOnboardingRequest
-
-data DsoRules_StartSvNodeOnboardingResult = DsoRules_StartSvNodeOnboardingResult with
-    onboardingRequest : ContractId SvNodeOnboardingRequest
 
 data DsoRules_ExpireSvOnboardingRequestResult = DsoRules_ExpireSvOnboardingRequestResult
 
@@ -691,7 +681,6 @@ template DsoRules with
       do newDsoRules <- dsoRules_AddSvNode this arg
          return DsoRules_AddSvOperatorResult with ..
 
-    -- FIXME: Deprecate
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
       with
         sv : Party
@@ -724,39 +713,6 @@ template DsoRules with
               isDevNet
 
             return DsoRules_OffboardSvResult with ..
-
-    choice DsoRules_OffboardSvNode : DsoRules_OffboardSvNodeResult
-      with
-        svOperator : Party
-      controller dso
-      do
-        require "There is more than one sv node" (Map.size svs > 1)
-        case Map.lookup svOperator svs of
-          None -> fail "Not an SV node operator"
-          Some info -> do
-            -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
-            -- revoking that sv's rights in the CometBFT network and the topology state.
-            let newSvs = Map.delete svOperator svs
-            -- We optimize for prompt removal of a sv if the vote said so.
-            -- and instead just choose the sv with the lexicographically smallest name.
-            let (newDsoDelegate, newEpoch)
-                  | svOperator == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
-                  | otherwise        = (dsoDelegate, epoch)
-            let offboardedSvInfo = OffboardedSvInfo with
-                    name = info.name
-                    participantId = info.participantId
-            -- create the new rules contract
-            newDsoRules <- create DsoRules with
-              dso
-              epoch = newEpoch
-              dsoDelegate = newDsoDelegate
-              svs = newSvs
-              offboardedSvs = Map.insert svOperator offboardedSvInfo offboardedSvs
-              config
-              initialTrafficState
-              isDevNet
-
-            return DsoRules_OffboardSvNodeResult with ..
 
     nonconsuming choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
       with
@@ -1528,7 +1484,6 @@ template DsoRules with
     -- SV node onboarding
     ---------------------
 
-    -- FIXME: Deprecate
     nonconsuming choice DsoRules_StartSvOnboarding : DsoRules_StartSvOnboardingResult
       with
         candidateName : Text
@@ -1544,22 +1499,6 @@ template DsoRules with
         onboardingRequest <- create SvOnboardingRequest with ..
         return DsoRules_StartSvOnboardingResult with ..
 
-    nonconsuming choice DsoRules_StartSvNodeOnboarding : DsoRules_StartSvNodeOnboardingResult
-      with
-        candidateName : Text
-        candidateParty : Party
-        candidateParticipantId: Text
-        token : Text
-        sponsor : Party
-      controller sponsor
-      do
-        require "Sponsor is an SV" (sponsor `Map.member` svs)
-        now <- getTime
-        let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
-        onboardingRequest <- create SvNodeOnboardingRequest with ..
-        return DsoRules_StartSvNodeOnboardingResult with ..
-
-    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
       with
         cid: ContractId SvOnboardingRequest
@@ -1570,17 +1509,6 @@ template DsoRules with
         exercise cid SvOnboardingRequest_Expire
         return DsoRules_ExpireSvOnboardingRequestResult
 
-    nonconsuming choice DsoRules_ExpireSvNodeOnboardingRequest : DsoRules_ExpireSvNodeOnboardingRequestResult
-      with
-        cid: ContractId SvNodeOnboardingRequest
-        svOperator : Party
-      controller svOperator
-      do
-        _ <- getAndValidateSvParty this (Some svOperator)
-        exercise cid SvNodeOnboardingRequest_Expire
-        return DsoRules_ExpireSvNodeOnboardingRequestResult
-
-    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ArchiveSvOnboardingRequest : DsoRules_ArchiveSvOnboardingRequestResult
       with
         svOnboardingRequestCid: ContractId SvOnboardingRequest
@@ -1594,20 +1522,6 @@ template DsoRules with
         require "SV party is an SV" (isSome sv)
         require "SV name matches" ((fromSome sv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
-
-    nonconsuming choice DsoRules_ArchiveSvNodeOnboardingRequest : DsoRules_ArchiveSvNodeOnboardingRequestResult
-      with
-        svNodeOnboardingRequestCid: ContractId SvNodeOnboardingRequest
-        svOperator : Party
-      controller svOperator
-      do
-        _ <- getAndValidateSvParty this (Some svOperator)
-        -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
-        svNodeOnboardingRequest <- fetchAndArchive (ForDso with dso) svNodeOnboardingRequestCid
-        let maybeSvOperator = Map.lookup svNodeOnboardingRequest.candidateParty svs
-        require "SV party is an SV node operator" (isSome maybeSvOperator)
-        require "SV name matches" ((fromSome maybeSvOperator).name == svNodeOnboardingRequest.candidateName)
-        return DsoRules_ArchiveSvNodeOnboardingRequestResult
 
     -- FIXME: Deprecate
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
@@ -1913,7 +1827,6 @@ template DsoRules with
                 svRewardState = newRewardStateCid
                 svRewardCoupons = couponCids
 
-    -- Note: Implement in phase 1
     nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCoupon_V2Result
       with
         openRoundCid : ContractId OpenMiningRound
@@ -2367,7 +2280,6 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_OffboardSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_ConfirmSvNodeOnboarding choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
