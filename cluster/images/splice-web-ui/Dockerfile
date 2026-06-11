@@ -11,5 +11,5 @@ USER nginx
 
 COPY default.conf /etc/nginx/conf.d/
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/custom-docker-entrypoint.sh"]
+ENTRYPOINT ["/sbin/tini", "--", "/custom-docker-entrypoint.sh"]
 HEALTHCHECK CMD service nginx status || exit 1
