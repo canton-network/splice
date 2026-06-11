@@ -154,6 +154,9 @@ abstract class CalculateRewardsTriggerBase(
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
+      rewardMetrics.calculateRewardsRootHashBftReads.mark()(
+        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+      )
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)

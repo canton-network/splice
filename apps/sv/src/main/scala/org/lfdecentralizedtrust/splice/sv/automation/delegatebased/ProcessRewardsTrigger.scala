@@ -141,7 +141,10 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
   ): Future[GetRewardAccountingBatchResponse] = {
-    def bftReadBatch: Future[GetRewardAccountingBatchResponse] =
+    def bftReadBatch: Future[GetRewardAccountingBatchResponse] = {
+      rewardMetrics.processRewardsBatchBftReads.mark()(
+        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+      )
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingBatch(round, batchHash)
@@ -156,6 +159,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
             )
             .asRuntimeException()
       }
+    }
 
     for {
       ownScan <- getOwnScanConnection()
