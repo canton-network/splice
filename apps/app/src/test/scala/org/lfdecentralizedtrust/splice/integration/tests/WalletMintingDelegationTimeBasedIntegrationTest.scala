@@ -730,8 +730,6 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         )
       }
 
-      advanceTimeForRewardAutomationToRunForCurrentRound
-
       clue("Unassigned V2 coupons should be consumed by assign-and-mint") {
         eventually() {
           val v2Coupons = externalPartyWallet.store.multiDomainAcsStore

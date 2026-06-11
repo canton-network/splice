@@ -154,8 +154,7 @@ class WalletRewardsTimeBasedIntegrationTest
       // (unminted) coupon from alice's sharing, while alice's triggers
       // run freely (sharing + minting). V2 coupons must be created after
       // pausing because they can be minted immediately.
-      var prevBobBalance = BigDecimal(0)
-      setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
+      val prevBobBalance = setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
         // Create unassigned V2 coupons for both validators.
         // Bob (no sharing config) → his coupon stays unminted (trigger paused).
         // Alice (has sharing config, 2 coupons) → shared then minted,
@@ -170,7 +169,7 @@ class WalletRewardsTimeBasedIntegrationTest
 
         // Capture balance after coupon creation but before advancement,
         // since bob's trigger is paused and won't mint during advancement.
-        prevBobBalance = bobValidatorWalletClient.balance().unlockedQty
+        val balance = bobValidatorWalletClient.balance().unlockedQty
 
         // Round advancement is needed for the treasury's transfer context
         // (non-V2 reward collection), not for V2 coupons specifically.
@@ -225,6 +224,8 @@ class WalletRewardsTimeBasedIntegrationTest
               "Bob should have an assigned coupon from alice's sharing"
           }
         }
+
+        balance
       }
 
       // Verify minting with no-sharing-config: bob's own V2 coupon is
