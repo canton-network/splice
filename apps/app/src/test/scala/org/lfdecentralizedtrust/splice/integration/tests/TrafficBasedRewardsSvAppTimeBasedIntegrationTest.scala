@@ -107,7 +107,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(5)
-      doTransfer(bobParty)
 
       // oldest=5: rounds 5,6,7 open. R8 will have
       // both dryRunVersion and mintingVersion set.
@@ -131,7 +130,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(7)
-        doTransfer(bobParty)
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(8)
@@ -139,7 +137,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(9)
-        doTransfer(bobParty)
 
         clue("CalculateRewardsV2 are created for rounds, 6 and 8") {
           eventually() {
@@ -230,10 +227,9 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       ) {
         val round = oldestOpenRound
         doTransfer(bobParty)
+        // Need to advance by two rounds, see note below about last_archived_round
         advanceRoundsToNextRoundOpening
-        doTransfer(bobParty)
         advanceRoundsToNextRoundOpening
-        doTransfer(bobParty)
 
         val (calculateRewardsCid, rootHash) =
           clue(
