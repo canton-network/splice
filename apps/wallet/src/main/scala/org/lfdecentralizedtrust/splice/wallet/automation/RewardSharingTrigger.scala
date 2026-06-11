@@ -107,14 +107,10 @@ class RewardSharingTrigger(
   override protected def isStaleTask(
       task: Task
   )(implicit tc: TraceContext): Future[Boolean] =
-    for {
-      contracts <- store.multiDomainAcsStore
-        .listAssignedContracts(RewardCouponV2.COMPANION)
-    } yield {
-      val activeIds = contracts.map(_.contractId).toSet
-      // Stale if none of the task's coupons are still active
-      !task.coupons.toList.exists(c => activeIds.contains(c.contract.contractId))
-    }
+    // Stale if all of the task's coupons have been archived
+    store.multiDomainAcsStore.containsArchived(
+      task.coupons.toList.map(_.contract.contractId)
+    )
 
   private def shouldShareNow(
       coupons: NonEmptyList[AssignedContract[RewardCouponV2.ContractId, RewardCouponV2]]
