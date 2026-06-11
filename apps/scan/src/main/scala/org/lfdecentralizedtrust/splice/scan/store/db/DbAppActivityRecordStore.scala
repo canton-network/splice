@@ -392,7 +392,8 @@ class DbAppActivityRecordStore(
 
   private def updateLastArchivedRoundDBIO(round: Long) =
     sql"""update #${Tables.activityRecordMeta}
-          set last_archived_round = $round
+          set last_archived_round = $round,
+              last_updated_at = now()
           where history_id = $historyId
             and activity_ingestion_code_version = ${ingestionVersions.code}
             and activity_ingestion_user_version = ${ingestionVersions.user}
