@@ -14,8 +14,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AmuletCreateSummary
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferResult
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules_AddSv,
-  DsoRules_AddSvResult,
   DsoRules_CloseVoteRequest,
   DsoRules_CloseVoteRequestResult,
 }
@@ -27,11 +25,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions 
 import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.*
 import org.lfdecentralizedtrust.splice.store.TxLogStore
-import org.lfdecentralizedtrust.splice.store.events.{
-  DsoBootstrapCreate,
-  DsoRulesAddSv,
-  DsoRulesCloseVoteRequest,
-}
+import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.dollarsToCC
 import org.lfdecentralizedtrust.splice.util.TransactionTreeExtensions.*
 import org.lfdecentralizedtrust.splice.util.{
@@ -365,8 +359,6 @@ class ScanTxLogParser(
             }
           case DsoRulesCloseVoteRequest(node) =>
             State.fromCloseVoteRequest(eventId, node)
-          case DsoRulesAddSv(node) =>
-            State.fromAddSv(eventId, synchronizerId, tree, node)
           case ExternalPartyAmuletRules_CreateTransferCommand(node) =>
             State.fromCreateTransferCommand(eventId, node)
           case TransferCommand_Send(node) =>
@@ -489,13 +481,6 @@ class ScanTxLogParser(
             } else {
               State.empty
             }
-          case DsoBootstrapCreate(contract) =>
-            State.fromBootstrapGenesis(
-              EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, root.getNodeId),
-              synchronizerId,
-              tree,
-              contract,
-            )
           case _ => State.empty
         }
 
@@ -1001,40 +986,6 @@ object ScanTxLogParser {
             eventId,
             result = Some(node.result.value),
           )
-        )
-      )
-    }
-
-    def fromAddSv(
-        eventId: String,
-        synchronizerId: SynchronizerId,
-        tree: Transaction,
-        node: ExerciseNode[DsoRules_AddSv, DsoRules_AddSvResult],
-    ): State = {
-      State(
-        AddSvTxLogEntry(
-          eventId = eventId,
-          domainId = synchronizerId,
-          date = tree.getEffectiveAt.toString,
-          svParty = PartyId.tryFromProtoPrimitive(node.argument.value.newSvParty),
-          newSvRewardWeight = node.argument.value.newSvRewardWeight,
-        )
-      )
-    }
-
-    def fromBootstrapGenesis(
-        eventId: String,
-        synchronizerId: SynchronizerId,
-        tree: Transaction,
-        contract: DsoBootstrapCreate.ContractType,
-    ): State = {
-      State(
-        AddSvTxLogEntry(
-          eventId = eventId,
-          domainId = synchronizerId,
-          date = tree.getEffectiveAt.toString,
-          svParty = PartyId.tryFromProtoPrimitive(contract.payload.sv1Party),
-          newSvRewardWeight = contract.payload.sv1RewardWeight,
         )
       )
     }

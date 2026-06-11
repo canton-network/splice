@@ -255,15 +255,6 @@ object SqlIndexInitializationTrigger {
           where entry_type = 'vot'
         """,
       ),
-    IndexAction
-      .Create(
-        indexName = "scan_txlog_store_sid_en_asv",
-        createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sid_en_asv
-          on scan_txlog_store (store_id, entry_number desc)
-          where entry_type = 'asv'
-        """,
-      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting
