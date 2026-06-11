@@ -132,3 +132,8 @@ WARN: InvalidDefaultArgInFrom
 
 # the script does not try to be secure
 .*api_jwt\.py:153: InsecureKeyLengthWarning:.*
+
+# com.daml.testing-utils seems to bring its own logback-test.xml, but it doesn't seem to break anything so we just ignore it
+Resource.*logback-test.xml.*occurs
+Setting level of logger.*to WARN
+Propagating WARN level on Logger

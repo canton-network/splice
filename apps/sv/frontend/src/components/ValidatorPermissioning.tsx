@@ -1,9 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  DisableConditionally,
-  SvClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+import { DisableConditionally, SvClientProvider } from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { Button, Stack, TextField, Typography } from '@mui/material';

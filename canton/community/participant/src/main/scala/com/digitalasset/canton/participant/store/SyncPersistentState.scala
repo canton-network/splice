@@ -6,6 +6,7 @@ package com.digitalasset.canton.participant.store
 import cats.Eval
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.crypto.{CryptoPureApi, SynchronizerCrypto}
+import com.digitalasset.canton.data.SynchronizerPredecessor
 import com.digitalasset.canton.lifecycle.LifeCycle
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.ParticipantNodeParameters
@@ -61,7 +62,8 @@ class SyncPersistentState(
   override def sequencedEventStore: SequencedEventStore = physical.sequencedEventStore
   override def sendTrackerStore: SendTrackerStore = physical.sendTrackerStore
   override def requestJournalStore: RequestJournalStore = physical.requestJournalStore
-  override def parameterStore: SynchronizerParameterStore = physical.parameterStore
+  override def connectivityStatusStore: SynchronizerConnectivityStatusStore =
+    physical.connectivityStatusStore
   override def submissionTrackerStore: SubmissionTrackerStore = physical.submissionTrackerStore
   override def isMemory: Boolean = physical.isMemory
   override def topologyStore: TopologyStore[SynchronizerStore] = physical.topologyStore
@@ -104,9 +106,11 @@ trait PhysicalSyncPersistentState extends NamedLogging with AutoCloseable {
   def sendTrackerStore: SendTrackerStore
   def requestJournalStore: RequestJournalStore
 
-  def parameterStore: SynchronizerParameterStore
+  def connectivityStatusStore: SynchronizerConnectivityStatusStore
   def submissionTrackerStore: SubmissionTrackerStore
   def isMemory: Boolean
+
+  def purgeableStores: Seq[ChunkPurgeable] = Seq(topologyStore, submissionTrackerStore)
 
   def topologyStore: TopologyStore[SynchronizerStore]
 
@@ -160,6 +164,7 @@ object PhysicalSyncPersistentState {
       staticSynchronizerParameters: StaticSynchronizerParameters,
       crypto: SynchronizerCrypto,
       parameters: ParticipantNodeParameters,
+      predecessor: Option[SynchronizerPredecessor],
       loggerFactory: NamedLoggerFactory,
       futureSupervisor: FutureSupervisor,
   )(implicit ec: ExecutionContext): PhysicalSyncPersistentState =
@@ -169,6 +174,7 @@ object PhysicalSyncPersistentState {
           crypto,
           physicalSynchronizerIdx,
           staticSynchronizerParameters,
+          predecessor,
           loggerFactory,
           parameters.processingTimeouts,
           futureSupervisor,
@@ -181,6 +187,7 @@ object PhysicalSyncPersistentState {
           db,
           crypto,
           parameters,
+          predecessor,
           loggerFactory,
           futureSupervisor,
         )

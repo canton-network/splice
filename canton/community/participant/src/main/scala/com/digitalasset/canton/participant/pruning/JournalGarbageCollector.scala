@@ -23,7 +23,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** Canton synchronisation journals garbage collectors
   *
-  * The difference between the normal ledger pruning feature and the journal garbage collector is
+  * The difference between the normal (ledger) pruning feature and the journal garbage collector is
   * that the ledger pruning is configured and invoked by the user, whereas the journal garbage
   * collector runs periodically in the background, where the retention period is generally not
   * configurable.
@@ -96,22 +96,17 @@ private[pruning] object JournalGarbageCollector {
 
     /** Manage internal state of the collector
       *
-      * @param request
+      * @param requested
       *   if true, then the acs commitment processor completed a commitment period and suggested to
       *   kick off pruning
-      * @param locks
-      *   number of locks that are currently active preventing pruning
       * @param running
       *   if set, then a prune is currently running and the promise will be completed once it is
       *   done
       */
-    private case class State(requested: Boolean, locks: Int, running: Option[Promise[Unit]]) {
-      def incrementLock: State = copy(locks = locks + 1)
-      def decrementLock: State = copy(locks = Math.max(0, locks - 1))
-    }
+    private case class State(requested: Boolean, running: Option[Promise[Unit]])
 
     private val state: AtomicReference[State] = new AtomicReference(
-      State(requested = false, locks = 0, running = None)
+      State(requested = false, running = None)
     )
 
     protected def run()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit]
@@ -124,35 +119,16 @@ private[pruning] object JournalGarbageCollector {
       if (!state.getAndUpdate(_.copy(requested = true)).requested)
         doFlush()(traceContext)
 
-    /** Temporarily turn off journal pruning (in order to download an ACS)
-      *
-      * This will add one lock. The lock will be removed when [[removeOneLock]] is called. Journal
-      * cleaning will resume once all locks are removed
-      */
-    def addOneLock()(implicit traceContext: TraceContext): Future[Unit] = {
-      val old = state.getAndUpdate(_.incrementLock)
-      logger.debug(s"Journal garbage collection is now blocked with ${old.locks + 1} locks")
-      old.running.map(_.future).getOrElse(Future.unit)
-    }
-
-    def removeOneLock()(implicit traceContext: TraceContext): Unit = {
-      val old = state.getAndUpdate(_.decrementLock)
-      logger.debug(s"Journal garbage collection has now ${old.locks - 1} locks")
-      if (old.locks == 1) {
-        doFlush()
-      }
-    }
-
     private def doFlush()(implicit traceContext: TraceContext): Unit =
       // if we are not closing and not running, then we can start a new prune
       if (!isClosing) {
         val currentState = state.getAndUpdate {
           // start new process if idle and not blocked
-          case State(true, 0, None) => State(requested = false, 0, Some(Promise()))
+          case State(true, None) => State(requested = false, Some(Promise()))
           // not enabled or already running, do nothing
           case x => x
         }
-        if (currentState.locks == 0 && currentState.running.isEmpty) {
+        if (currentState.running.isEmpty) {
           // we are enabled and not running, so start a new prune
           val runningF = run().onShutdown(()).thereafter { _ =>
             // once we've completed, see if we need to restart the next iteration immediately

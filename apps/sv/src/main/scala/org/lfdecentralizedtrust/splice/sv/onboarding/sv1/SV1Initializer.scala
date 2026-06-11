@@ -61,12 +61,7 @@ import org.lfdecentralizedtrust.splice.config.{
 }
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.store.{
-  AppStoreWithIngestion,
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, DomainTimeSynchronization}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.*
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
@@ -105,7 +100,6 @@ class SV1Initializer(
     override protected val participantAdminConnection: ParticipantAdminConnection,
     override protected val clock: Clock,
     override protected val domainTimeSync: DomainTimeSynchronization,
-    override protected val domainUnpausedSync: DomainUnpausedSynchronization,
     override protected val storage: DbStorage,
     override protected val retryProvider: RetryProvider,
     override protected val spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
@@ -173,7 +167,7 @@ class SV1Initializer(
           bootstrapDomain(synchronizerNodeService.nodes.current)
         }
       _ = logger.info("Domain is bootstrapped, connecting sv1 participant to domain")
-      _ <- participantAdminConnection.ensureDomainRegisteredAndConnected(
+      _ <- participantAdminConnection.ensureSynchronizerRegisteredAndConnected(
         SynchronizerConnectionConfig(
           config.domains.global.alias,
           sequencerConnections = SequencerConnections.tryMany(
@@ -252,17 +246,24 @@ class SV1Initializer(
         ),
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
-      migrationInfo =
-        DomainMigrationInfo(
-          currentMigrationId = config.domainMigrationId, // Note: not guaranteed to be 0 for sv1
-          migrationTimeInfo = None, // No previous migration, we're starting the network
-        )
-      svStore = newSvStore(storeKey, migrationInfo, participantId, svAcsStoreDescriptorUserVersion)
+      domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
+      svStore = newSvStore(
+        storeKey,
+        domainMigrationId,
+        participantId,
+        svAcsStoreDescriptorUserVersion,
+      )
       dsoStore = newDsoStore(
         svStore.key,
-        migrationInfo,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
+      )
+      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
+      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+        synchronizerId,
+        initConnection,
+        loggerFactory,
       )
       svAutomation = newSvSvAutomationService(
         svStore,
@@ -270,6 +271,7 @@ class SV1Initializer(
         ledgerClient,
         participantAdminConnection,
         synchronizerNodeService,
+        packageVersionSupport,
       )
       connection = svAutomation.connection(SpliceLedgerConnectionPriority.Low)
       (_, decentralizedSynchronizer) <- (
@@ -281,17 +283,7 @@ class SV1Initializer(
         config,
         sv1Config.name,
       )
-      _ <- DomainMigrationInfo.saveToUserMetadata(
-        connection,
-        config.ledgerApiUser,
-        migrationInfo,
-      )
       dsoPartyHosting = newDsoPartyHosting(storeKey.dsoParty)
-      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        decentralizedSynchronizer,
-        connection,
-        loggerFactory,
-      )
       initialRound <- establishInitialRound(
         connection,
         upgradesConfig,
@@ -330,12 +322,11 @@ class SV1Initializer(
         new SynchronizerNodeReconciler(
           dsoStore,
           connection,
-          config.legacyMigrationId,
           packageVersionSupport,
           clock,
           retryProvider,
           loggerFactory,
-          config.domainMigrationId,
+          domainMigrationId,
           config.scan,
         ),
       )
@@ -345,6 +336,7 @@ class SV1Initializer(
         dsoAutomation,
         decentralizedSynchronizer,
         packageVersionSupport,
+        domainMigrationId,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -599,6 +591,7 @@ class SV1Initializer(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
       synchronizerId: SynchronizerId,
       packageVersionSupport: PackageVersionSupport,
+      domainMigrationId: Long,
   ) {
 
     private val dsoStore = dsoStoreWithIngestion.store
@@ -607,11 +600,10 @@ class SV1Initializer(
     private val synchronizerNodeReconciler = new SynchronizerNodeReconciler(
       dsoStore,
       dsoStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-      config.legacyMigrationId,
       clock = clock,
       retryProvider = retryProvider,
       versionSupport = packageVersionSupport,
-      migrationId = config.domainMigrationId,
+      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -686,6 +678,7 @@ class SV1Initializer(
                   initialExternalPartyConfigStateTickDuration =
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
+                  initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(
@@ -694,7 +687,7 @@ class SV1Initializer(
                     config.scan,
                     synchronizerId,
                     clock,
-                    config.domainMigrationId,
+                    domainMigrationId,
                   )
                   _ = logger
                     .info(

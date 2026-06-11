@@ -6,8 +6,8 @@ import {
   Auth0Fetch,
   config,
   getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { InstalledMigrationSpecificSv } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { InstalledMigrationSpecificSv } from '@canton-network/splice-pulumi-common-sv';
 
 import { installNode } from './installNode';
 
@@ -34,9 +34,4 @@ function main(): pulumi.Output<InstalledMigrationSpecificSv | undefined> {
   return auth0FetchOutput.apply(async auth0Fetch => await auth0CacheAndInstallNode(auth0Fetch));
 }
 
-const output = main();
-
-export const participantDatabaseId = output.apply(node => node?.participant?.databaseId);
-export const participantDatabaseSecretName = output.apply(
-  node => node?.participant?.databaseSecretName
-);
+main();

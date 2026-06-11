@@ -10,20 +10,23 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAmuletTransferInstructionTrigger.*
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import scala.jdk.CollectionConverters.*
 
 class ExpiredAmuletTransferInstructionTrigger(
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
     clock: Clock,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -34,9 +37,7 @@ class ExpiredAmuletTransferInstructionTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletTransferInstructionBatchSize,
-      svTaskContext.dsoStore.listExpiredAmuletTransferInstructions(
-        context.config.ignoredExpiredAmuletTransferInstructionPartyIds
-      ),
+      svTaskContext.dsoStore.listExpiredAmuletTransferInstructions(ignoredPartiesStore.getAll),
       splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
@@ -47,19 +48,32 @@ class ExpiredAmuletTransferInstructionTrigger(
           svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
         ).map(PartyId.tryFromProtoPrimitive),
     )
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with IgnoredAmuletVersionGuard {
 
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
+    val informees = task.work.expiredContracts
+      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.sender))
+      .toSet ++ task.work.expiredContracts
+      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.receiver))
+      .toSet
+    completeWithIgnoredAmuletVersionCheck(
+      task.work.vettedVersion.toString,
+      informees,
+      enableUnresponsivePartiesAutoIgnore = true,
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+  }
 
-    val allParties = task.work.expiredContracts.flatMap { contract =>
-      val sender = PartyId.tryFromProtoPrimitive(contract.payload.transfer.sender)
-      val receiver = PartyId.tryFromProtoPrimitive(contract.payload.transfer.receiver)
-      Seq(sender, receiver)
-    }.toSet + store.key.dsoParty
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+      informees: Set[PartyId],
+  )(implicit tc: TraceContext): Future[TaskOutcome] = {
+    val allParties = informees + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(

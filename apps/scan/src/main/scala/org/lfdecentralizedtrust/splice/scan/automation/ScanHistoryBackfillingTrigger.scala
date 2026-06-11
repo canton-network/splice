@@ -63,7 +63,7 @@ class ScanHistoryBackfillingTrigger(
     mat: Materializer,
 ) extends PollingParallelTaskExecutionTrigger[ScanHistoryBackfillingTrigger.Task] {
 
-  private val currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId
+  private val currentMigrationId = updateHistory.domainMigrationId
 
   private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext(
@@ -231,8 +231,7 @@ class ScanHistoryBackfillingTrigger(
           case None =>
             for {
               connection <- BftScanConnection.peerScanConnection(
-                store,
-                svName,
+                () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
                 ledgerClient,
                 // When the network is starting up, the pool of SVs is changing fast
                 // Using a short refresh interval to quickly pick up new SVs

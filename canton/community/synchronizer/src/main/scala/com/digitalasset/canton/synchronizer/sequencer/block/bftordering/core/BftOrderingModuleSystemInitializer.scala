@@ -133,7 +133,6 @@ private[bftordering] class BftOrderingModuleSystemInitializer[
     implicit val c: BftBlockOrdererConfig = config
     val leaderSelectionPolicyFactory = LeaderSelectionInitializer.create[E](
       node,
-      config,
       synchronizerProtocolVersion,
       stores.outputStore,
       timeouts,
@@ -275,7 +274,6 @@ private[bftordering] class BftOrderingModuleSystemInitializer[
               storePbftMessages = true,
               stores.epochStore,
               dependencies,
-              config.consensusBlockCompletionTimeout,
               config.consensusEmptyBlockCreationTimeout,
               loggerFactory,
               timeouts,
@@ -342,26 +340,37 @@ private[bftordering] class BftOrderingModuleSystemInitializer[
     val (initialTopology, initialCryptoProvider) =
       getOrderingTopologyAt(moduleSystem, initialTopologyQueryTimestampO, "initial")
 
-    val leaderSelectionPolicyState = leaderSelectionPolicyFactory.stateForInitial(
-      moduleSystem,
-      sequencerSnapshotAdditionalInfo,
-      initialEpochNumber,
-    )
+    val leaderSelectionPolicyState =
+      leaderSelectionPolicyFactory.stateForInitial(
+        moduleSystem,
+        sequencerSnapshotAdditionalInfo,
+        initialEpochNumber,
+      )
     val initialLeaders =
-      leaderSelectionPolicyFactory.leaderFromState(
+      leaderSelectionPolicyFactory.leadersFromState(
+        leaderSelectionPolicyState,
+        initialTopology,
+      )
+    val initialBlacklistedNodes =
+      leaderSelectionPolicyFactory.blacklistedNodesFromState(
         leaderSelectionPolicyState,
         initialTopology,
       )
 
     val (previousTopology, previousCryptoProvider) =
       getOrderingTopologyAt(moduleSystem, previousTopologyQueryTimestampO, "previous")
-
     // the previousLeaders is not really used unless we are doing onboarding, in that case we should use previousTopology
     // to compute the "currentLeaders"
-    val previousLeaders = leaderSelectionPolicyFactory.leaderFromState(
-      leaderSelectionPolicyState,
-      previousTopology,
-    )
+    val previousLeaders =
+      leaderSelectionPolicyFactory.leadersFromState(
+        leaderSelectionPolicyState,
+        previousTopology,
+      )
+    val previousBlacklistedNodes =
+      leaderSelectionPolicyFactory.blacklistedNodesFromState(
+        leaderSelectionPolicyState,
+        previousTopology,
+      )
 
     val maybeOnboardingTopologyAndCryptoProvider = maybeOnboardingTopologyQueryTimestamp
       .map(onboardingTopologyQueryTimestamp =>
@@ -386,9 +395,11 @@ private[bftordering] class BftOrderingModuleSystemInitializer[
               )
           },
         currentLeaders = initialLeaders,
+        currentBlacklistedNodes = initialBlacklistedNodes,
         previousTopology, // for canonical commit set verification
         previousCryptoProvider, // for canonical commit set verification
         previousLeaders,
+        previousBlacklistedNodes,
       ),
       leaderSelectionPolicyState,
     )

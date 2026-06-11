@@ -32,7 +32,7 @@ import {
   DisableConditionally,
   extractApiErrorMessage,
   Loading,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import BftAnsEntry from './BftAnsEntry';
 
 // Active Coupons Table Component

@@ -7,7 +7,7 @@ import cats.syntax.either.*
 import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.ProtoDeserializationError.InvariantViolation
 import com.digitalasset.canton.admin.participant.v30
-import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
 import com.digitalasset.canton.serialization.ProtoConverter
@@ -24,7 +24,9 @@ final case class LateLsuRequest private (
     upgradeTime: CantonTimestamp,
     successorConfig: SynchronizerConnectionConfig,
     successorConnectionValidation: SequencerConnectionValidation,
-)
+) {
+  def successor: SynchronizerSuccessor = SynchronizerSuccessor(successorPsid, upgradeTime)
+}
 
 object LateLsuRequest {
   import scala.math.Ordered.orderingToOrdered
@@ -70,6 +72,7 @@ object LateLsuRequest {
       _ <- checkInvariants(
         currentPsid = currentPsid,
         successorPsid = successorPsid,
+        successorConfig = successorConfig,
       ).leftMap(InvariantViolation(None, _))
 
     } yield LateLsuRequest(
@@ -83,6 +86,7 @@ object LateLsuRequest {
   private def checkInvariants(
       currentPsid: PhysicalSynchronizerId,
       successorPsid: PhysicalSynchronizerId,
+      successorConfig: SynchronizerConnectionConfig,
   ): Either[String, Unit] = for {
     _ <- Either.cond(
       currentPsid.logical == successorPsid.logical,
@@ -94,6 +98,12 @@ object LateLsuRequest {
       currentPsid < successorPsid,
       (),
       s"Current physical synchronizer id must be smaller than the successor. Found: $currentPsid and $successorPsid",
+    )
+
+    _ <- Either.cond(
+      successorConfig.synchronizerId.forall(_ == successorPsid),
+      (),
+      s"Config synchronizer ID (${successorConfig.synchronizerId}) does not match the requested successor ID ($successorPsid)",
     )
   } yield ()
 }

@@ -41,10 +41,10 @@ import {
   standardStorageClassName,
   pvcSuffix,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { installParticipant } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { SplicePostgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
+import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
+import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { installPartyAllocator } from './partyAllocator';
 import { validatorConfig, validatorName } from './validatorConfig';
@@ -225,12 +225,6 @@ async function installValidator(
 
   const validatorValues: ChartValues = {
     ...validatorValuesFromYamlFiles,
-    migration: {
-      ...validatorValuesFromYamlFiles.migration,
-      migrating: DecentralizedSynchronizerUpgradeConfig.isRunningMigration()
-        ? true
-        : validatorValuesFromYamlFiles.migration.migrating,
-    },
     scanClient: validatorConfig.validatorApp?.scanClient ?? validatorValuesFromYamlFiles.scanClient,
     synchronizer:
       validatorConfig.validatorApp?.synchronizer ?? validatorValuesFromYamlFiles.synchronizer,

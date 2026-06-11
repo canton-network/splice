@@ -6,7 +6,7 @@ import { useAppForm } from '../../hooks/form';
 import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import {
   validateEffectiveDate,
   validateExpiration,

@@ -44,7 +44,7 @@ Initial setup:
 1. Check out the [Canton **Open Source** repo](https://github.com/digital-asset/canton)
 2. Define the environment variable used in the commands below using `export PATH_TO_CANTON_OSS=<your-canton-oss-repo-path>`. This can be added to your private env vars.
 
-Current Canton commit: `c2c5d1fc2420600ca85c3a08b87ccc9efa182862`
+Current Canton commit: `9b95fd4b486ccd8e436c64fa703453dd8350b92f`
 
 1. Checkout the **current Canton commit listed above** in the Canton open source repo from above, so we can diff our current fork against this checkout.
 2. Change to your checkout of the Splice repo and execute the following steps:
@@ -156,8 +156,3 @@ To update their versions, edit the respective Dockerfiles with the new version t
 SHA of the multi-arch manifest (docker then resolves that to the correct architecture at build time). A good source of
 official SHAs for images from docker.io is: https://github.com/docker-library/repo-info.
 To inspect a manifest locally, you can run e.g. `docker buildx imagetools inspect nginx:stable`.
-
-## Bumping splice-shared-gha
-
-In order to bump [splice-shared-gha](https://github.com/canton-network/splice-shared-gha), please run [Bump splice-shared-gha version](https://github.com/canton-network/splice/actions/workflows/bump_splice_shared_gha.yml) job and merge the PR that will
-be created by the job.

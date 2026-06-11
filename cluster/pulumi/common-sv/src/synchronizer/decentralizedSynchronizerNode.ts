@@ -1,14 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
-import { CLUSTER_HOSTNAME, DomainMigrationIndex } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { CLUSTER_HOSTNAME, DomainMigrationIndex } from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 
 export interface SvParticipant {
-  readonly asDependencies: pulumi.Resource[];
   readonly internalClusterAddress: pulumi.Output<string>;
-  readonly databaseId?: pulumi.Output<string>;
-  readonly databaseSecretName?: pulumi.Output<string>;
 }
 
 export interface CantonBftSynchronizerNode {
@@ -29,7 +26,6 @@ export interface DecentralizedSynchronizerNode {
 
 export type InstalledMigrationSpecificSv = {
   decentralizedSynchronizer: DecentralizedSynchronizerNode;
-  participant: SvParticipant;
 };
 
 export class CrossStackDecentralizedSynchronizerNode

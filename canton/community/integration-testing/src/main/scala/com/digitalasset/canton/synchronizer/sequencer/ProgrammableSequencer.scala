@@ -57,6 +57,11 @@ import com.digitalasset.canton.synchronizer.sequencer.traffic.{
 }
 import com.digitalasset.canton.time.{Clock, SynchronizerTimeTracker}
 import com.digitalasset.canton.topology.processing.EffectiveTime
+import com.digitalasset.canton.topology.transaction.{
+  LsuSequencerConnectionSuccessor,
+  TopologyChangeOp,
+  TopologyTransaction,
+}
 import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
@@ -452,10 +457,18 @@ class ProgrammableSequencer(
     baseSequencer.awaitContainingBlockLastTimestamp(timestamp)
 
   override private[sequencer] def updateLsuSuccessor(
-      successorO: Option[SynchronizerSuccessor],
+      successor: SynchronizerSuccessor,
       announcementEffectiveTime: EffectiveTime,
+      isReplace: Boolean,
   )(implicit traceContext: TraceContext): Unit =
-    baseSequencer.updateLsuSuccessor(successorO, announcementEffectiveTime)
+    baseSequencer.updateLsuSuccessor(successor, announcementEffectiveTime, isReplace = isReplace)
+
+  override def handleLsuSequencerConnectionSuccessor(
+      successor: TopologyTransaction[TopologyChangeOp, LsuSequencerConnectionSuccessor]
+  )(implicit
+      traceContext: TraceContext
+  ): Unit =
+    baseSequencer.handleLsuSequencerConnectionSuccessor(successor)
 
   override private[canton] def orderer: Option[BlockOrderer] = baseSequencer.orderer
 
@@ -625,9 +638,31 @@ object ProgrammableSequencer {
             testingInterceptor = Some(createAndStoreProgrammableSequencer(instanceName))
           )
         case external: External =>
-          external
+          val cfg = external
             .focus(_.block.testingInterceptor)
             .replace(Some(createAndStoreProgrammableSequencer(instanceName)))
+          // the reference sequencer
+          if (external.sequencerType == "reference") {
+            import com.typesafe.config.{ConfigObject, ConfigValueFactory}
+            import pureconfig.ConfigCursor
+            // As we are performing message reordering in the post processing stage,
+            // we need to avoid the reference sequencer to batch messages,
+            // as otherwise we might reverse the order of two messages that end up in the same
+            // batch for which we established a particular order.
+            val amendedCursor = external.config.asConfigValue
+              .map {
+                case obj: ConfigObject =>
+                  val updatedValue =
+                    obj.withValue("max-block-size", ConfigValueFactory.fromAnyRef(1))
+                  // Wrap it back into a cursor
+                  ConfigCursor.apply(updatedValue, List.empty)
+                case other =>
+                  // Handle cases where the cursor isn't pointing at an object
+                  external.config
+              }
+              .getOrElse(sys.error("Unable to replace config value for reference sequencer"))
+            cfg.focus(_.config).replace(amendedCursor)
+          } else cfg
 
         case bft: SequencerConfig.BftSequencer =>
           bft
@@ -635,6 +670,11 @@ object ProgrammableSequencer {
             .replace(
               Some(createAndStoreProgrammableSequencer(instanceName))
             )
+            // same as above, minimize the reordering that can happen
+            .focus(_.config.maxRequestsInBatch)
+            .replace(1)
+            .focus(_.config.minRequestsInBatch)
+            .replace(1)
       }
 
     val updateSequencerConfigs = ConfigTransforms.updateAllSequencerConfigs {

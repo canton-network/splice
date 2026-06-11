@@ -49,7 +49,7 @@ import {
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   approvedSvIdentitiesFile,
@@ -64,12 +64,9 @@ import {
   SynchronizerNodes,
   valuesForSvApp,
   valuesForSvValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
@@ -307,10 +304,6 @@ async function installSvAndValidator(
       ? { secretName: participantBootstrapDumpSecretName }
       : undefined,
     approvedSvIdentities: approvedSvIdentities(),
-    migration: {
-      ...valuesFromYamlFile.migration,
-      ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig().migration,
-    },
     metrics: {
       enable: true,
     },
@@ -360,7 +353,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(canton.active.dependencies)
         .concat(svAppSecrets)
         .concat([appsPg])
@@ -375,7 +367,6 @@ async function installSvAndValidator(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/scan-values.yaml`,
     {
       TARGET_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
@@ -425,7 +416,6 @@ async function installSvAndValidator(
     metrics: {
       enable: true,
     },
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...synchronizerValues,
     resources: svConfig.scanApp?.resources,
   };
@@ -442,10 +432,7 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
-        .concat(svAppSecrets)
-        .concat([appsPg]),
+      dependsOn: imagePullDeps.concat(svAppSecrets).concat([appsPg]),
     }
   );
 
@@ -518,7 +505,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(validatorSecrets)
         .concat(spliceConfig.pulumiProjectConfig.interAppsDependencies ? [sv] : [])
         .concat(backupConfigSecret ? [backupConfigSecret] : [])
@@ -543,6 +529,7 @@ function installInfoEndpoint(
     {
       TARGET_CLUSTER: clusterNetwork,
       MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+      SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
       MD5_HASH_OF_ALLOWED_IP_RANGES: `"${createHash('md5')
         .update(readFileOrEmptyString(externalIpRangesFile()))
         .digest('hex')}"`,

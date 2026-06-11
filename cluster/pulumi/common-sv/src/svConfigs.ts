@@ -7,9 +7,9 @@ import {
   isMainNet,
   SvCometBftKeys,
   svCometBftKeysFromSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig';
+} from '@canton-network/splice-pulumi-common';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 
 import { StaticSvConfig } from './config';
 import { dsoSize, skipExtraSvs } from './dsoConfig';

@@ -126,15 +126,6 @@
         "interval": {
           "type": "string",
           "pattern": "^[0-9]+[smh]$"
-        },
-        "migration": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
         }
       }
     },

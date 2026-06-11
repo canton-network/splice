@@ -11,8 +11,8 @@ import {
   infraAffinityAndTolerations,
   K8sResourceSchema,
   SingleK8sResourceSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { DockerConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/dockerConfig';
+} from '@canton-network/splice-pulumi-common';
+import { DockerConfig } from '@canton-network/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { ConfigMap, Namespace, PersistentVolumeClaim, Secret } from '@pulumi/kubernetes/core/v1';
 import { Release } from '@pulumi/kubernetes/helm/v3';
@@ -305,7 +305,7 @@ function installDockerRunnerScaleSets(
     .filter(spec => spec.docker)
     .forEach(spec => {
       installDockerRunnerScaleSet(
-        `self-hosted-docker-${spec.name}`,
+        repo == 'splice' ? `self-hosted-docker-${spec.name}` : `docker-${spec.name}`,
         runnersNamespace,
         controller,
         tokenSecret,
@@ -673,7 +673,7 @@ function installK8sRunnerScaleSets(
     .forEach(spec => {
       installK8sRunnerScaleSet(
         runnersNamespace,
-        `self-hosted-k8s-${spec.name}`,
+        repo == 'splice' ? `self-hosted-k8s-${spec.name}` : `k8s-${spec.name}`,
         tokenSecret,
         cachePvcName,
         spec.resources,

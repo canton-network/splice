@@ -71,6 +71,7 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.Topol
 }
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.reflect.ClassTag
 
@@ -446,7 +447,7 @@ abstract class TopologyAdminConnection(
       tc: TraceContext
   ): Future[Seq[StoredTopologyTransaction[TopologyChangeOp, TopologyMapping]]] = {
     runCmd(
-      TopologyAdminCommands.Read.ListAll(
+      TopologyAdminCommands.Read.ListAllV2(
         query = BaseQuery(
           store = store,
           proposals = proposals,
@@ -456,9 +457,7 @@ abstract class TopologyAdminConnection(
           protocolVersion = None,
         ),
         filterNamespace = filterNamespace.fold("")(_.filterString),
-        excludeMappings =
-          if (includeMappings.isEmpty) Seq.empty
-          else TopologyMapping.Code.all.diff(includeMappings.toSeq).map(_.code),
+        includeMappings = includeMappings.map(_.code).toSeq,
       )
     ).map(_.result)
   }
@@ -583,6 +582,8 @@ abstract class TopologyAdminConnection(
         TopologyResult(base, mapping)
       }
     }
+  // ImportTopologySnapshot currently causes a PROTO_DESERIALIZATION_FAILURE
+  @nowarn("msg=deprecated")
   private def exportTopologySnapshot(
       store: TopologyStoreId,
       proposals: Boolean,
@@ -606,10 +607,12 @@ abstract class TopologyAdminConnection(
         excludeMappings = excludeMappings.map(_.code),
         observer = observer,
       )
-    ).discard
+    )(traceContext).discard
     observer.resultBytes
   }
 
+  // ImportTopologySnapshot currently causes a PROTO_DESERIALIZATION_FAILURE
+  @nowarn("msg=deprecated")
   def importTopologySnapshot(
       topologyTransactions: ByteString,
       store: TopologyStoreId,

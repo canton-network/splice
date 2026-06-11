@@ -13,7 +13,7 @@ import {
   spliceConfig,
   standardStorageClassName,
   createVolumeSnapshot,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { multiValidatorConfig } from './config';

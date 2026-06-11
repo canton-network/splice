@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   DevelopmentFundCoupon,
   LockedAmulet,
+  RewardCouponV2,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -18,7 +19,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegat
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.*
 import org.lfdecentralizedtrust.splice.store.{Limit, TransferInputStore}
 import org.lfdecentralizedtrust.splice.util.*
@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.ExternalPart
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.pretty.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.tracing.TraceContext
@@ -119,7 +120,7 @@ object ExternalPartyWalletStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -133,7 +134,7 @@ object ExternalPartyWalletStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       defaultLimit,
@@ -175,6 +176,22 @@ object ExternalPartyWalletStore {
           co.payload.provider == externalParty
         }(co =>
           ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
+        ),
+        mkFilter(RewardCouponV2.COMPANION)(
+          co =>
+            co.payload.dso == dso &&
+              (co.payload.provider == externalParty ||
+                co.payload.beneficiary == java.util.Optional.of(externalParty)),
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.externalParty), now)(tc)
+          },
+        )(co =>
+          ExternalPartyWalletAcsStoreRowData(
+            co,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(co.payload.expiresAt)),
+            rewardCouponRound = Some(co.payload.round.number),
+          )
         ),
         mkFilter(ValidatorRewardCoupon.COMPANION) { co =>
           co.payload.dso == dso &&

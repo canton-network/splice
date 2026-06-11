@@ -25,7 +25,13 @@ import com.digitalasset.canton.connection.GrpcApiInfoService
 import com.digitalasset.canton.connection.v30.ApiInfoServiceGrpc
 import com.digitalasset.canton.crypto.provider.symbolic.SymbolicCrypto
 import com.digitalasset.canton.crypto.signer.SyncCryptoSigner.SigningTimestampOverrides
-import com.digitalasset.canton.crypto.{HashPurpose, Nonce, SigningKeyUsage, SyncCryptoApi}
+import com.digitalasset.canton.crypto.{
+  HashPurpose,
+  Nonce,
+  SigningKeyUsage,
+  SyncCryptoApi,
+  SynchronizerCryptoClient,
+}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.CantonBaseError
@@ -48,12 +54,9 @@ import com.digitalasset.canton.logging.{
 import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.networking.Endpoint
 import com.digitalasset.canton.networking.grpc.{CantonGrpcUtil, ClientChannelParams}
-import com.digitalasset.canton.protocol.SynchronizerParametersLookup.SequencerSynchronizerParameters
 import com.digitalasset.canton.protocol.messages.UnsignedProtocolMessage
 import com.digitalasset.canton.protocol.{
   DynamicSynchronizerParameters,
-  DynamicSynchronizerParametersLookup,
-  SynchronizerParametersLookup,
   TestSynchronizerParameters,
   v30 as protocolV30,
   v31 as protocolV31,
@@ -70,6 +73,7 @@ import com.digitalasset.canton.sequencing.client.pool.GrpcSequencerConnectionPoo
 import com.digitalasset.canton.sequencing.client.pool.SequencerConnectionPool.SequencerConnectionPoolConfig
 import com.digitalasset.canton.sequencing.protocol.*
 import com.digitalasset.canton.serialization.HasCryptographicEvidence
+import com.digitalasset.canton.store.SequencedEventStore.SequencedEventWithTraceContext
 import com.digitalasset.canton.store.memory.{InMemorySendTrackerStore, InMemorySequencedEventStore}
 import com.digitalasset.canton.synchronizer.metrics.SequencerTestMetrics
 import com.digitalasset.canton.synchronizer.sequencer.Sequencer
@@ -118,10 +122,10 @@ class Env(
   implicit val executionSequencerFactory: ExecutionSequencerFactory =
     PekkoUtil.createExecutionSequencerFactory("GrpcSequencerIntegrationTest", noTracingLogger)
   val sequencer = mock[Sequencer]
-  private val participant = ParticipantId("testing")
+  val participant = ParticipantId("testing")
   val anotherParticipant = ParticipantId("another")
   val synchronizerId = DefaultTestIdentities.physicalSynchronizerId
-  val sequencerId = DefaultTestIdentities.daSequencerId
+  val sequencerId = DefaultTestIdentities.sequencerId
   private val cryptoApi =
     TestingTopology()
       .withSimpleParticipants(participant, anotherParticipant)
@@ -136,10 +140,10 @@ class Env(
       .build()
       .forOwnerAndSynchronizer(participant, synchronizerId)
   val clock = new SimClock(loggerFactory = loggerFactory)
-  val sequencerSubscriptionFactory = mock[DirectSequencerSubscriptionFactory]
-  def timeouts = DefaultProcessingTimeouts.testing
+  private[service] val sequencerSubscriptionFactory = mock[DirectSequencerSubscriptionFactory]
+  private[service] def timeouts = DefaultProcessingTimeouts.testing
   private val futureSupervisor = FutureSupervisor.Noop
-  private val topologyClient = mock[SynchronizerTopologyClient]
+  private[service] val topologyClient = mock[SynchronizerTopologyClient]
   private val mockSynchronizerTopologyManager = mock[SynchronizerTopologyManager]
   private val mockTopologySnapshot = mock[TopologySnapshot]
   private val confirmationRequestsMaxRate =
@@ -178,14 +182,6 @@ class Env(
       )
     )
 
-  val synchronizerParamsLookup
-      : DynamicSynchronizerParametersLookup[SequencerSynchronizerParameters] =
-    SynchronizerParametersLookup.forSequencerSynchronizerParameters(
-      None,
-      topologyClient,
-      loggerFactory,
-    )
-
   val authenticationCheck = new AuthenticationCheck {
 
     override def authenticate(
@@ -204,6 +200,7 @@ class Env(
     override def maxConfirmationRequestsBurstFactor: PositiveDouble = PositiveDouble.tryCreate(0.1)
     override def processingTimeouts: ProcessingTimeout = timeouts
     override def maxSubscriptionsPerMember: PositiveInt = PositiveInt.three
+    override def disableSubmissionChecksForTesting: Boolean = false
   }
   private val service =
     new GrpcSequencerService(
@@ -220,7 +217,8 @@ class Env(
         loggerFactory,
       ),
       sequencerSubscriptionFactory,
-      synchronizerParamsLookup,
+      topologyClient,
+      None,
       params,
       topologyStateForInitializationService,
       BaseTest.testedProtocolVersion,
@@ -239,7 +237,10 @@ class Env(
     cryptoApi = cryptoApi,
     clock = clock,
     lsuSequencingBounds = None,
+    sanitizePublicErrorMessages = false,
+    disableReleaseVersionHandshakeCheck = false,
     synchronizerTopologyManager = mockSynchronizerTopologyManager,
+    metrics = SequencerTestMetrics,
     loggerFactory = loggerFactory,
   )
   private val connectService = makeConnectService(sequencerId)
@@ -334,7 +335,8 @@ class Env(
   private val clients = new AtomicReference[Seq[SequencerClient]](Seq.empty)
 
   def makeClient(
-      connections: SequencerConnections
+      connections: SequencerConnections,
+      cryptoApi: SynchronizerCryptoClient,
   ): EitherT[FutureUnlessShutdown, String, RichSequencerClient] = {
     val clientConfig = SequencerClientConfig(authToken = authConfig)
     val clientFactory = SequencerClientFactory(
@@ -400,7 +402,7 @@ class Env(
     }
   }
 
-  def makeDefaultClient = makeClient(connections)
+  def makeDefaultClient = makeClient(connections, cryptoApi)
 
   override def close(): Unit =
     LifeCycle.close(
@@ -539,7 +541,8 @@ class GrpcSequencerIntegrationTest
               env.loggerFactory,
             ),
             sequencerSubscriptionFactory,
-            synchronizerParamsLookup,
+            topologyClient,
+            None,
             params,
             topologyStateForInitializationService,
             BaseTest.testedProtocolVersion,
@@ -562,6 +565,42 @@ class GrpcSequencerIntegrationTest
 
         env.spinUpSequencer(service2, sequencer2ConnectService, port2)
 
+        // We need an event in the event store otherwise the factory will skip the traffic state call
+        val now = clock.now
+        val dummyEvent = SequencedEventWithTraceContext(
+          SignedContent(
+            SequencerTestUtils.mockDeliver(now, synchronizerId = synchronizerId),
+            SymbolicCrypto.emptySignature,
+            None,
+            testedProtocolVersion,
+          )
+        )(
+          TraceContext.empty
+        )
+        sequencedEventStore.store(Seq(dummyEvent))(traceContext, closeContext).futureValueUS
+
+        // The connection pool only serves connections to sequencers active in the `SequencerGroup`.
+        // Consequently, we need a topology with a properly populated `SequencerGroup` containing both sequencers
+        // for the traffic control calls to succeed.
+        val cryptoApi =
+          TestingTopology()
+            .withSimpleParticipants(env.participant, anotherParticipant)
+            .withDynamicSynchronizerParameters(
+              DynamicSynchronizerParameters
+                .defaultValues(testedProtocolVersion)
+                .tryUpdate(trafficControlParameters = Some(TrafficControlParameters())),
+              validFrom = CantonTimestamp.MinValue,
+            )
+            .withSequencerGroup(
+              SequencerGroup(
+                active = Seq(DefaultTestIdentities.sequencerId, sequencerId2),
+                passive = Seq.empty,
+                threshold = PositiveInt.one,
+              )
+            )
+            .build()
+            .forOwnerAndSynchronizer(participant, synchronizerId)
+
         env.loggerFactory.assertLogs(
           SuppressionRule.Level(Level.INFO) && SuppressionRule.forLogger[SequencerClientFactory]
         )(
@@ -574,7 +613,8 @@ class GrpcSequencerIntegrationTest
                 submissionRequestAmplification = SubmissionRequestAmplification.NoAmplification,
                 sequencerConnectionPoolDelays = SequencerConnectionPoolDelays.default,
               )
-              .value
+              .value,
+            cryptoApi,
           ).futureValueUS.isRight shouldBe true,
           assertions = _.infoMessage should include(
             "Initializing traffic state at timestamp: Some(1970-01-01T00:00:00Z)"

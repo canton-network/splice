@@ -78,7 +78,6 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.{
   BftNodeId,
   BlockNumber,
-  EpochLength,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.OrderingRequest
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.snapshot.SequencerSnapshotAdditionalInfo
@@ -109,6 +108,7 @@ import com.digitalasset.canton.util.{PekkoUtil, SingleUseCell}
 import com.digitalasset.canton.version.ProtocolVersion
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
+import io.grpc.protobuf.services.ProtoReflectionServiceV1
 import io.grpc.stub.StreamObserver
 import io.grpc.{ServerInterceptors, ServerServiceDefinition}
 import io.opentelemetry.api.trace.Tracer
@@ -418,14 +418,13 @@ final class BftBlockOrderer(
       config.standalone.fold[OrderingTopologyProvider[PekkoEnv]](
         new CantonOrderingTopologyProvider(
           cryptoApi,
-          EpochLength(config.epochLength), // TODO(#24184) make this dynamic sequencing parameter
+          config,
           loggerFactory,
           metrics,
         )
       ) { standaloneConfig =>
         new FixedFileBasedOrderingTopologyProvider(
           standaloneConfig,
-          EpochLength(config.epochLength),
           cryptoApi.pureCrypto,
           metrics,
         )
@@ -511,11 +510,11 @@ final class BftBlockOrderer(
   //  it either returns a new receiver for the gRPC stream or throws, which fails the stream establishment and
   //  is propagated to the peer as an error.
   private def createPeerReceiverForIncomingConnection(
-      peerSender: StreamObserver[BftOrderingMessage]
+      sendingStreamObserver: StreamObserver[BftOrderingMessage]
   )(implicit traceContext: TraceContext): UnlessShutdown[StreamObserver[BftOrderingMessage]] =
     p2pNetworkManager.connectionManager.createServerSidePeerReceiver(
       p2pNetworkInModuleRef,
-      peerSender,
+      sendingStreamObserver,
     )
 
   private def createServer(
@@ -550,6 +549,7 @@ final class BftBlockOrderer(
             ),
             withLogging = false,
           )
+          .addService(ProtoReflectionServiceV1.newInstance().bindService(), withLogging = false)
       config.standalone.foreach { _ =>
         val standaloneService =
           new P2PGrpcStandaloneBftOrderingService(orderSendRequest, loggerFactory)
@@ -674,13 +674,14 @@ final class BftBlockOrderer(
       (maybeServerAuthenticatingFilter.map(_.closeAsync()).getOrElse(Seq.empty) ++
         blockSubscription.closeAsync() ++
         Seq[AsyncOrSyncCloseable](
+          // Shut down the actors so they stop processing and release resources thereafter
+          SyncCloseable("shutdownPekkoActorSystem()", shutdownPekkoActorSystem()),
           SyncCloseable("epochStore.close()", epochStore.close()),
           SyncCloseable("outputStore.close()", outputStore.close()),
           SyncCloseable("availabilityStore.close()", availabilityStore.close()),
           SyncCloseable("p2pEndpointsStore.close()", p2pEndpointsStore.close()),
           SyncCloseable("pruningScheduler.close()", pruningScheduler.close()),
           SyncCloseable("pruningSchedulerStore.close()", pruningSchedulerStore.close()),
-          SyncCloseable("shutdownPekkoActorSystem()", shutdownPekkoActorSystem()),
         ) ++
         // Shutdown the dedicated local storage if present
         Option

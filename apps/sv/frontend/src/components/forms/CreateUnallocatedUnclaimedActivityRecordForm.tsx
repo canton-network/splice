@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { useDsoInfos } from '../../contexts/SvContext';

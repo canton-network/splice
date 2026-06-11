@@ -19,9 +19,425 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1215,
   "links": [],
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 30,
+      "panels": [],
+      "title": "Automation Service Health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 5,
+        "x": 0,
+        "y": 1
+      },
+      "id": 34,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "count by (namspace, job, automation_service, exported_service, party) (splice_automation_background_service_health{namespace=~\"$namespace\", node_type=~\"$app\"} == 1) or vector(0)",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Unhealthy services",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Current health of registered automation background services.\n-1 = no reading yet (or error reading health), 0 = healthy, 1 = unhealthy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "healthy"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "unhealthy"
+                },
+                "-1": {
+                  "color": "text",
+                  "index": 0,
+                  "text": "unknown"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "exported_service"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 785
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Node"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 109
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "automation_service"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 296
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "App"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 94
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 19,
+        "x": 5,
+        "y": 1
+      },
+      "id": 31,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Status"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "splice_automation_background_service_health{namespace=~\"$namespace\", node_type=~\"$app\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Background service health",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "container": true,
+              "endpoint": true,
+              "instance": true,
+              "job": true,
+              "migration": true,
+              "otel_scope_name": true,
+              "pod": true,
+              "prometheus": true,
+              "service": true
+            },
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Status",
+              "instance": "Instance",
+              "namespace": "Namespace",
+              "node_name": "Node",
+              "node_type": "App",
+              "service": "Service"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Health of automation background services over time (-1 unknown, 0 healthy, 1 unhealthy).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 1,
+                  "text": "healthy"
+                },
+                "1": {
+                  "index": 2,
+                  "text": "unhealthy"
+                },
+                "-1": {
+                  "index": 0,
+                  "text": "unknown"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 1,
+          "min": -1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "splice_automation_background_service_health{namespace=~\"$namespace\", node_type=~\"$app\"}",
+          "instant": false,
+          "legendFormat": "{{namespace}} {{node_type}} {{automation_service}} {{exported_service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Background service health over time",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 33,
+      "panels": [],
+      "title": "Runs",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "prometheus",
@@ -56,6 +472,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -100,12 +517,14 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 21
       },
       "id": 18,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -118,7 +537,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -146,7 +565,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 31
       },
       "id": 3,
       "panels": [],
@@ -183,7 +602,7 @@
         "h": 7,
         "w": 4,
         "x": 0,
-        "y": 11
+        "y": 32
       },
       "id": 5,
       "options": {
@@ -193,7 +612,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -201,7 +622,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -211,7 +632,6 @@
           "editorMode": "code",
           "exemplar": false,
           "expr": "sum(histogram_sum(rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", node_type=~\"$app\", trigger_name=~\"$trigger_name\", trigger_type=\"$trigger_type\"}[$__rate_interval])))",
-          "hide": false,
           "instant": true,
           "range": false,
           "refId": "A"
@@ -248,7 +668,7 @@
         "h": 7,
         "w": 4,
         "x": 4,
-        "y": 11
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -258,7 +678,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -266,7 +688,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -311,7 +733,7 @@
         "h": 7,
         "w": 4,
         "x": 8,
-        "y": 11
+        "y": 32
       },
       "id": 8,
       "options": {
@@ -321,7 +743,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -329,7 +753,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -381,6 +805,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -412,7 +837,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 32
       },
       "id": 6,
       "options": {
@@ -428,7 +853,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -451,7 +876,6 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -461,6 +885,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -501,22 +928,16 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 18
+        "y": 39
       },
       "id": 10,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
         "frameIndex": 0,
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -540,7 +961,9 @@
             "includeTimeField": false,
             "labelsToFields": true,
             "mode": "seriesToRows",
-            "reducers": ["sum"]
+            "reducers": [
+              "sum"
+            ]
           }
         },
         {
@@ -612,6 +1035,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -639,12 +1063,14 @@
         "h": 8,
         "w": 16,
         "x": 8,
-        "y": 18
+        "y": 39
       },
       "id": 9,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -657,7 +1083,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -711,6 +1137,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -738,12 +1165,14 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 47
       },
       "id": 23,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -756,7 +1185,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -809,6 +1238,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -839,7 +1269,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 55
       },
       "id": 22,
       "options": {
@@ -855,7 +1285,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "disableTextWrap": false,
@@ -877,7 +1307,6 @@
           "editorMode": "code",
           "expr": "sum(rate(splice_trigger_attempted_total{statusCode!~\"OK\", isDsoDelegateTrigger=~\"$isDsoDelegateTrigger\", namespace=~\"$namespace\", node_type=~\"$app\", trigger_name=~\"$trigger_name\", contentionFailure=\"true\"}[$__rate_interval]))",
           "fullMetaSearch": false,
-          "hide": false,
           "includeNullMetadata": true,
           "legendFormat": "total contentions",
           "range": true,
@@ -922,6 +1351,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -952,12 +1382,14 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 63
       },
       "id": 20,
       "options": {
         "legend": {
-          "calcs": ["last"],
+          "calcs": [
+            "last"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -968,7 +1400,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -979,7 +1411,6 @@
           "editorMode": "code",
           "expr": "sum by(errorCodeId, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", node_type=~\"$app\", trigger_name=~\"$trigger_name\", isDsoDelegateTrigger=~\"$isDsoDelegateTrigger\", contentionFailure=\"true\"}[$__rate_interval]))",
           "fullMetaSearch": false,
-          "hide": false,
           "includeNullMetadata": true,
           "instant": false,
           "legendFormat": "__auto",
@@ -1025,6 +1456,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1055,12 +1487,14 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 71
       },
       "id": 21,
       "options": {
         "legend": {
-          "calcs": ["last"],
+          "calcs": [
+            "last"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1071,7 +1505,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -1082,7 +1516,6 @@
           "editorMode": "code",
           "expr": "sum by (errorCodeId, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\",node_type=~\"$app\",trigger_name=~\"$trigger_name\",isDsoDelegateTrigger=~\"$isDsoDelegateTrigger\", statusCode!~\"OK\", contentionFailure=\"false\"}[$__rate_interval]))",
           "fullMetaSearch": false,
-          "hide": false,
           "includeNullMetadata": true,
           "instant": false,
           "legendFormat": "__auto",
@@ -1097,7 +1530,7 @@
   ],
   "preload": false,
   "refresh": "",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -1122,12 +1555,13 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "current": {
-          "text": "sv",
-          "value": "sv"
+          "text": "scan",
+          "value": "scan"
         },
         "datasource": {
           "type": "prometheus",
@@ -1145,12 +1579,13 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "current": {
-          "text": "ExpireRewardCouponsTrigger",
-          "value": "ExpireRewardCouponsTrigger"
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
@@ -1168,12 +1603,19 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "current": {
-          "text": ["taskbased", "polling"],
-          "value": ["taskbased", "polling"]
+          "text": [
+            "taskbased",
+            "polling"
+          ],
+          "value": [
+            "taskbased",
+            "polling"
+          ]
         },
         "includeAll": false,
         "multi": true,
@@ -1191,7 +1633,8 @@
           }
         ],
         "query": "taskbased, polling",
-        "type": "custom"
+        "type": "custom",
+        "valuesFormat": "csv"
       },
       {
         "current": {
@@ -1210,6 +1653,7 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       }
     ]
@@ -1222,5 +1666,6 @@
   "timezone": "",
   "title": "Automations",
   "uid": "a3e1385f-6f03-46d9-908c-34aca0f507a6",
-  "version": 2
+  "version": 3,
+  "weekStart": ""
 }

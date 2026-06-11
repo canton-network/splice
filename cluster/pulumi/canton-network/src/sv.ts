@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as postgres from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
@@ -35,7 +35,7 @@ import {
   SvIdKey,
   svUserIds,
   validatorOnboardingSecretName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   CantonBftSynchronizerNode,
@@ -46,17 +46,17 @@ import {
   SynchronizerNodes,
   valuesForSvApp,
   valuesForSvValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { SvConfig, svsConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/config';
-import { installValidatorApp } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validator';
+} from '@canton-network/splice-pulumi-common-sv';
+import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
+import { installValidatorApp } from '@canton-network/splice-pulumi-common-validator/src/validator';
 import {
   BucketConfig,
   installBucketSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/buckets';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { initialAmuletPrice } from '@lfdecentralizedtrust/splice-pulumi-common/src/initialAmuletPrice';
-import { Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
-import { topologySnapshotConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/topology-snapshot';
+} from '@canton-network/splice-pulumi-common/src/buckets';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { initialAmuletPrice } from '@canton-network/splice-pulumi-common/src/initialAmuletPrice';
+import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { topologySnapshotConfig } from '@canton-network/splice-pulumi-common/src/topology-snapshot';
 import { Resource } from '@pulumi/pulumi';
 
 import {
@@ -369,13 +369,10 @@ async function installValidator(
   return await installValidatorApp({
     xns,
     ...commonValidatorAppValues,
-    migration: {
-      id: decentralizedSynchronizerMigrationConfig.activeMigrationId,
-    },
     validatorWalletUsers: svUserIds(svConfig.auth0Client.getCfg()).apply(ids =>
       ids.concat(svConfig.validatorWalletUser ? [svConfig.validatorWalletUser] : [])
     ),
-    dependencies: sv.participant.asDependencies,
+    dependencies: [],
     disableAllocateLedgerApiUserParty: true,
     topupConfig: svConfig.topupConfig,
     backupConfig:
@@ -441,7 +438,6 @@ function installSvApp(
 
   const svValues = {
     ...commonSvAppValues,
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...spliceInstanceNames,
     onboardingType: config.onboarding.type,
     onboardingName: config.onboardingName,
@@ -522,10 +518,7 @@ function installSvApp(
     svValues,
     config.version,
     {
-      dependsOn: dependsOn
-        .concat([postgres])
-        .concat(participant.asDependencies)
-        .concat(allSynchronizerDependencies),
+      dependsOn: dependsOn.concat([postgres]).concat(allSynchronizerDependencies),
     },
     undefined,
     appsAffinityAndTolerations
@@ -542,7 +535,6 @@ function installScan(
   postgres: Postgres
 ) {
   const useCantonBft = decentralizedSynchronizerMigrationConfig.active.sequencer.enableBftSequencer;
-  const lsuEnabled = decentralizedSynchronizerMigrationConfig.lsuEnabled;
   const { active, participant } = synchronizerNodes;
   const scanDbName = `scan_${sanitizedForPostgres(config.nodeName)}`;
 
@@ -554,42 +546,37 @@ function installScan(
     };
   };
 
-  const synchronizerValues = lsuEnabled
-    ? {
-        synchronizers: {
-          current: {
-            sequencer: active.namespaceInternalSequencerAddress,
-            mediator: active.namespaceInternalMediatorAddress,
-            ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
-          },
-          ...(synchronizerNodes.upgrade
-            ? {
-                successor: {
-                  sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
-                  mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
-                  ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                    ? bftSequencerConfigFor(synchronizerNodes.upgrade)
-                    : {}),
-                },
-              }
-            : {}),
-          ...(synchronizerNodes.legacy
-            ? {
-                legacy: {
-                  sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
-                  mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
-                  ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                    ? bftSequencerConfigFor(synchronizerNodes.legacy)
-                    : {}),
-                },
-              }
-            : {}),
-        },
-      }
-    : {
-        sequencerAddress: active.namespaceInternalSequencerAddress,
-        mediatorAddress: active.namespaceInternalMediatorAddress,
-      };
+  const synchronizerValues = {
+    synchronizers: {
+      current: {
+        sequencer: active.namespaceInternalSequencerAddress,
+        mediator: active.namespaceInternalMediatorAddress,
+        ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
+      },
+      ...(synchronizerNodes.upgrade
+        ? {
+            successor: {
+              sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
+              mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
+              ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
+                ? bftSequencerConfigFor(synchronizerNodes.upgrade)
+                : {}),
+            },
+          }
+        : {}),
+      ...(synchronizerNodes.legacy
+        ? {
+            legacy: {
+              sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
+              mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
+              ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
+                ? bftSequencerConfigFor(synchronizerNodes.legacy)
+                : {}),
+            },
+          }
+        : {}),
+    },
+  };
 
   const scanValues = {
     ...spliceInstanceNames,
@@ -601,9 +588,9 @@ function installScan(
     additionalJvmOptions: getAdditionalJvmOptions(config.scanApp?.additionalJvmOptions),
     failOnAppVersionMismatch: failOnAppVersionMismatch,
     participantAddress: participant.internalClusterAddress,
-    migration: {
-      id: decentralizedSynchronizerMigrationConfig.activeMigrationId,
-    },
+    ...(config.onboarding.type == 'join-with-key'
+      ? { sponsorScanUrl: config.onboarding.sponsorScanUrl }
+      : {}),
     ...synchronizerValues,
     enablePostgresMetrics: true,
     logLevel: config.logging?.appsLogLevel,
@@ -637,7 +624,7 @@ function installScan(
       .concat(
         spliceConfig.pulumiProjectConfig.interAppsDependencies && !useCantonBft
           ? [svApp]
-          : participant.asDependencies.concat([postgres])
+          : [postgres]
       ),
   });
 }

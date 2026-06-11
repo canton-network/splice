@@ -5,7 +5,12 @@ package com.digitalasset.canton.integration
 
 import cats.syntax.option.*
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, Port, PositiveInt}
+import com.digitalasset.canton.config.RequireTypes.{
+  NonNegativeInt,
+  NonNegativeLong,
+  Port,
+  PositiveInt,
+}
 import com.digitalasset.canton.config.StartupMemoryCheckConfig.ReportingLevel
 import com.digitalasset.canton.config.StorageConfig.Memory
 import com.digitalasset.canton.config.{
@@ -23,6 +28,7 @@ import com.digitalasset.canton.participant.config.{
 }
 import com.digitalasset.canton.platform.apiserver.SeedService.Seeding
 import com.digitalasset.canton.platform.apiserver.configuration.RateLimitingConfig
+import com.digitalasset.canton.platform.indexer.IndexerConfig.AchsConfig
 import com.digitalasset.canton.sequencing.client.SequencerClientConfig
 import com.digitalasset.canton.synchronizer.mediator.MediatorNodeConfig
 import com.digitalasset.canton.synchronizer.sequencer.SequencerConfig.{
@@ -32,7 +38,7 @@ import com.digitalasset.canton.synchronizer.sequencer.SequencerConfig.{
 import com.digitalasset.canton.synchronizer.sequencer.config.SequencerNodeConfig
 import com.digitalasset.canton.synchronizer.sequencer.{BlockSequencerConfig, SequencerConfig}
 import com.digitalasset.canton.time.{NonNegativeFiniteDuration, PositiveFiniteDuration}
-import com.digitalasset.canton.version.{EngineMode, ParticipantProtocolVersion, ProtocolVersion}
+import com.digitalasset.canton.version.{ParticipantProtocolVersion, ProtocolVersion}
 import com.digitalasset.canton.{BaseTest, UniquePortGenerator, config}
 import com.typesafe.config.ConfigValueFactory
 import monocle.macros.syntax.lens.*
@@ -74,15 +80,6 @@ object ConfigTransforms {
     val enableAlpha = configTransformsWhen(pv.isAlpha)(enableAlphaVersionSupport)
     val enableBeta = configTransformsWhen(pv.isBeta)(setBetaSupport(true))
 
-    val setContractStateMode: Seq[ConfigTransform] = configTransformsWhen(!pv.isStable)(
-      Seq(
-        updateAllParticipantConfigs_(
-          _.focus(_.parameters.engine.contractStateMode)
-            .replace(EngineMode.forProtocolVersion(pv))
-        )
-      )
-    )
-
     val deprecatedPVWarning = if (pv.isDeprecated) dontWarnOnDeprecatedPV else Seq()
 
     val updateParticipants = Seq(
@@ -92,7 +89,7 @@ object ConfigTransforms {
       )
     )
 
-    updateParticipants ++ enableAlpha ++ enableBeta ++ deprecatedPVWarning ++ setContractStateMode
+    updateParticipants ++ enableAlpha ++ enableBeta ++ deprecatedPVWarning
   }
 
   val protocolVersionTransforms: Seq[ConfigTransform] = setProtocolVersion(
@@ -856,8 +853,27 @@ object ConfigTransforms {
       .modify(_ + (InstanceName.tryCreate(target) -> remote))
   }
 
+  private val defaultAchsConfig: AchsConfig = AchsConfig(
+    validAtDistanceTarget = NonNegativeLong.tryCreate(10L),
+    lastPopulatedDistanceTarget = NonNegativeLong.tryCreate(5L),
+    aggregationThreshold = 5L,
+    initAggregationThreshold = 5L,
+  )
+
+  def enableAchs: ConfigTransform =
+    updateAllParticipantConfigs_(
+      _.focus(_.parameters.ledgerApiServer.indexer.achsConfig)
+        .replace(Some(defaultAchsConfig))
+    )
+
+  def disableAchs: ConfigTransform =
+    updateAllParticipantConfigs_(
+      _.focus(_.parameters.ledgerApiServer.indexer.achsConfig)
+        .replace(None)
+    )
+
   def defaultsForNodes: Seq[ConfigTransform] =
-    setProtocolVersion(ProtocolVersion.v34)
+    setProtocolVersion(ProtocolVersion.v34) :+ enableAchs
 
   def setTopologyTransactionRegistrationTimeout(
       timeout: config.NonNegativeFiniteDuration
@@ -921,7 +937,7 @@ object ConfigTransforms {
       )
     )
 
-  def enableUnsafeMutiSynchronizerTopologyFeatureFlag: ConfigTransform = {
+  def enableAlphaMultiSynchronizerTopologyFeatureFlag: ConfigTransform = {
     (cantonConfig: CantonConfig) =>
       cantonConfig.focus(_.parameters.enableAlphaStateViaConfig).replace(true)
   }.compose(

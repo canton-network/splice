@@ -3,6 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.wallet.automation
 
+import com.daml.metrics.api.MetricsContext
+import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.time.Clock
+import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AssignTrigger,
   AutomationServiceCompanion,
@@ -10,24 +15,24 @@ import org.lfdecentralizedtrust.splice.automation.{
   TransferFollowTrigger,
   UnassignTrigger,
 }
-import AutomationServiceCompanion.{TriggerClass, aTrigger}
+import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
+  aTrigger,
+  TriggerClass,
+}
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.wallet.config.{
+  AutoAcceptTransfersConfig,
+  RewardSharingConfig,
+  WalletSweepConfig,
 }
-import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
-import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.time.Clock
-import io.opentelemetry.api.trace.Tracer
-import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
 import scala.concurrent.ExecutionContext
 
@@ -38,7 +43,6 @@ class UserWalletAutomationService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     scanConnection: BftScanConnection,
     retryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
@@ -46,6 +50,7 @@ class UserWalletAutomationService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
+    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
     paramsConfig: SpliceParametersConfig,
 )(implicit
@@ -56,12 +61,19 @@ class UserWalletAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
       paramsConfig,
+      packageVersionSupport,
     ) {
+
+  override protected def metricsContext: MetricsContext =
+    MetricsContext(
+      "automation_service" -> getClass.getSimpleName,
+      "party" -> store.key.endUserParty.toString,
+    )
+
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService.type =
     UserWalletAutomationService
@@ -165,6 +177,17 @@ class UserWalletAutomationService(
     )
   }
 
+  if (rewardSharingConfig.beneficiaries.nonEmpty) {
+    registerTrigger(
+      new RewardSharingTrigger(
+        triggerContext,
+        store,
+        rewardSharingConfig,
+        connection(SpliceLedgerConnectionPriority.Low),
+      )
+    )
+  }
+
   registerTrigger(
     new AmuletMetricsTrigger(triggerContext, store, scanConnection)
   )
@@ -208,5 +231,6 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[AmuletMetricsTrigger],
       aTrigger[ExpireMintingDelegationTrigger],
       aTrigger[ExpireMintingDelegationProposalTrigger],
+      aTrigger[RewardSharingTrigger],
     )
 }

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import { DesktopDateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useFieldContext } from '../../hooks/formContext';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 

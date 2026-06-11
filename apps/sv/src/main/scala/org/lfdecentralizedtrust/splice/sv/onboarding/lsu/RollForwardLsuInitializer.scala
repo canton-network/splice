@@ -21,10 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvOnboardingConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{LsuNodeInitializer, LsuStateExporter}
@@ -42,7 +39,6 @@ class RollForwardLsuInitializer(
     override protected val participantAdminConnection: ParticipantAdminConnection,
     override protected val clock: Clock,
     override protected val domainTimeSync: DomainTimeSynchronization,
-    override protected val domainUnpausedSync: DomainUnpausedSynchronization,
     override protected val storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
@@ -91,7 +87,7 @@ class RollForwardLsuInitializer(
         "sequencer_startup",
         "New sequencer has started",
         currentNode.sequencerAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION
@@ -105,7 +101,7 @@ class RollForwardLsuInitializer(
         "mediator_startup",
         "New mediator has started",
         currentNode.mediatorAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION

@@ -111,6 +111,7 @@ lazy val root: Project = (project in file("."))
     `splice-dso-governance-test-daml`,
     `splice-validator-lifecycle-daml`,
     `splice-validator-lifecycle-test-daml`,
+    `splice-api-reward-assignment-v1-daml`,
     `splice-api-token-metadata-v1-daml`,
     `splice-api-token-holding-v1-daml`,
     `splice-api-token-transfer-instruction-v1-daml`,
@@ -688,6 +689,14 @@ lazy val `splice-featured-app-api-v2-daml` =
       ),
     )
 
+lazy val `splice-api-reward-assignment-v1-daml` =
+  project
+    .in(file("daml/splice-api-reward-assignment-v1"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings
+    )
+
 lazy val `splice-amulet-daml` =
   project
     .in(file("daml/splice-amulet"))
@@ -703,7 +712,8 @@ lazy val `splice-amulet-daml` =
           (`splice-api-token-allocation-request-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-instruction-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
-          (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value,
+          (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
+          (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-amulet-test-daml` =
@@ -948,6 +958,7 @@ lazy val `apps-common` =
       `splice-token-test-trading-app-daml`,
       `splice-featured-app-api-v1-daml`,
       `splice-featured-app-api-v2-daml`,
+      `splice-api-reward-assignment-v1-daml`,
       `splice-util-batched-markers-daml`,
     )
     .enablePlugins(BuildInfoPlugin)
@@ -1331,31 +1342,31 @@ lazy val `apps-common-frontend` = {
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-frontend-utils",
+              "@canton-network/splice-common-frontend-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-utils",
+              "@canton-network/splice-common-test-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-handlers",
+              "@canton-network/splice-common-test-handlers",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-test-vite-utils",
+              "@canton-network/splice-common-test-vite-utils",
               log,
             )
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
-              "@lfdecentralizedtrust/splice-common-frontend",
+              "@canton-network/splice-common-frontend",
               log,
             )
             (baseDirectory.value / "lib" ** "*").get.toSet
@@ -1391,11 +1402,11 @@ lazy val `apps-common-frontend` = {
         npmInstall.value
         for (
           workspace <- Seq(
-            "@lfdecentralizedtrust/splice-common-test-vite-utils",
-            "@lfdecentralizedtrust/splice-common-frontend-utils",
-            "@lfdecentralizedtrust/splice-common-test-utils",
-            "@lfdecentralizedtrust/splice-common-test-handlers",
-            "@lfdecentralizedtrust/splice-common-frontend",
+            "@canton-network/splice-common-test-vite-utils",
+            "@canton-network/splice-common-frontend-utils",
+            "@canton-network/splice-common-test-utils",
+            "@canton-network/splice-common-test-handlers",
+            "@canton-network/splice-common-frontend",
           )
         )
           BuildCommon.TS.runWorkspaceCommand(npmRootDir.value, "build", workspace, log)
@@ -1438,7 +1449,7 @@ lazy val `apps-wallet-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-wallet-frontend",
+      frontendWorkspace := "@canton-network/splice-wallet-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1449,7 +1460,7 @@ lazy val `apps-scan-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-scan-frontend",
+      frontendWorkspace := "@canton-network/splice-scan-frontend",
       sharedFrontendSettings,
       npmInstallOpenApiDeps := Seq(
         (
@@ -1467,7 +1478,7 @@ lazy val `apps-splitwell-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-splitwell-frontend",
+      frontendWorkspace := "@canton-network/splice-splitwell-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1478,7 +1489,7 @@ lazy val `apps-ans-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-ans-frontend",
+      frontendWorkspace := "@canton-network/splice-ans-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1489,7 +1500,7 @@ lazy val `apps-sv-frontend` = {
     .dependsOn(`apps-common-frontend`)
     .settings(
       commonFrontendBundle := (`apps-common-frontend` / bundle).value._2,
-      frontendWorkspace := "@lfdecentralizedtrust/splice-sv-frontend",
+      frontendWorkspace := "@canton-network/splice-sv-frontend",
       sharedFrontendSettings,
     )
 }
@@ -1717,6 +1728,8 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.last
     case PathList("org", "checkerframework", _ @_*) => MergeStrategy.first
     case PathList("google", "protobuf", _*) => MergeStrategy.first
+    case "google/longrunning/operations.proto" => MergeStrategy.first
+    case "google/apps/card/v1/card.proto" => MergeStrategy.first
     case PathList("org", "apache", "logging", _*) => MergeStrategy.first
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
     case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
@@ -1926,7 +1939,7 @@ checkErrors := {
     val ignorePatternsFilenames = ignorePatterns.map(ignorePatternsFilename)
     val cmd =
       Seq(
-        "splice-shared-gha/.github/actions/scripts/check-logs.sh",
+        ".github/actions/scripts/check-logs.sh",
         logFileName,
       ) ++ ignorePatternsFilenames
     if (cmd.! != 0) {
@@ -1944,7 +1957,7 @@ checkErrors := {
 
     // Note that this will split the given file and then delete it, so it is idempotent.
     Seq(
-      "splice-shared-gha/.github/actions/scripts/split-canton-logs.sh",
+      ".github/actions/scripts/split-canton-logs.sh",
       logFile,
       logFileBefore,
       logFileAfter,
@@ -2026,6 +2039,7 @@ lazy val `apps-dar-resources-generator` =
       `splice-token-test-trading-app-daml`,
       `splice-featured-app-api-v1-daml`,
       `splice-featured-app-api-v2-daml`,
+      `splice-api-reward-assignment-v1-daml`,
       `splice-util-batched-markers-daml`,
     )
     .settings(

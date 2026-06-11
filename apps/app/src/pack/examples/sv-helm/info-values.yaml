@@ -2,8 +2,8 @@
 #updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:<version>@sha256:<digest>
 
 runtimeDetails:
-  migrationId: MIGRATION_ID
-  scanUrl: "http://scan-app.sv:5012"
+  synchronizerSerialId: SERIAL_ID
+  #scanUrl: "http://scan-app:5012"
 
 deploymentDetails:  # optional, exposes static configuration under path /
   network: TARGET_CLUSTER  # One of "main", "test" or "dev"
@@ -15,16 +15,20 @@ deploymentDetails:  # optional, exposes static configuration under path /
       type: "md5"
       value: MD5_HASH_OF_APPROVED_SV_IDENTITIES
   synchronizer:
-    active:
+    current:
       chainIdSuffix: CHAIN_ID_SUFFIX
-      migrationId: MIGRATION_ID
-    #staging:  # Configure this when staging synchronizer is enabled
-    #  chainIdSuffix: CHAIN_ID_SUFFIX
-    #  migrationId: STAGING_SYNCHRONIZER_MIGRATION_ID
+      migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
+      synchronizerSerialId: SERIAL_ID
+      #version: SYNCHRONIZER_VERSION
+    #successor:  # Configure this when successor synchronizer is enabled
+    #  chainIdSuffix: STAGING_SYNCHRONIZER_CHAIN_ID_SUFFIX
+    #  migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
+    #  synchronizerSerialId: STAGING_SYNCHRONIZER_SERIAL_ID
     #  version: STAGING_SYNCHRONIZER_VERSION
     #legacy:  # Configure this when legacy synchronizer is enabled
-    #  chainIdSuffix: CHAIN_ID_SUFFIX
-    #  migrationId: LEGACY_SYNCHRONIZER_MIGRATION_ID
+    #  chainIdSuffix: LEGACY_SYNCHRONIZER_CHAIN_ID_SUFFIX
+    #  migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
+    #  synchronizerSerialId: LEGACY_SYNCHRONIZER_SERIAL_ID
     #  version: LEGACY_SYNCHRONIZER_VERSION
 
 #istioVirtualService:  # optional, configures the Istio VirtualService for routing

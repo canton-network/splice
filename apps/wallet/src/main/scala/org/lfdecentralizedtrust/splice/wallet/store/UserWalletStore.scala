@@ -27,7 +27,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.*
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
@@ -573,7 +572,7 @@ object UserWalletStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -587,7 +586,7 @@ object UserWalletStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       defaultLimit,
@@ -672,6 +671,21 @@ object UserWalletStore {
             None,
             rewardCouponRound = Some(co.payload.round.number),
             rewardCouponWeight = Some(co.payload.weight),
+          )
+        ),
+        mkFilter(amuletCodegen.RewardCouponV2.COMPANION)(
+          co =>
+            co.payload.dso == dso &&
+              (co.payload.provider == endUser ||
+                co.payload.beneficiary == java.util.Optional.of(endUser)),
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.endUserParty), now)(tc)
+          },
+        )(co =>
+          UserWalletAcsStoreRowData(
+            co,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(co.payload.expiresAt)),
+            rewardCouponRound = Some(co.payload.round.number),
           )
         ),
         mkFilter(amuletCodegen.UnclaimedActivityRecord.COMPANION)(co =>
@@ -808,9 +822,11 @@ object UserWalletStore {
           co.payload.dso == dso && (co.payload.fundManager == endUser || co.payload.beneficiary == endUser)
         )(UserWalletAcsStoreRowData(_)),
         // Minting delegations for user as the delegate
-        mkFilter(mintingDelegationCodegen.MintingDelegationProposal.COMPANION)(co =>
-          co.payload.delegation.dso == dso &&
-            co.payload.delegation.delegate == endUser
+        mkFilter(mintingDelegationCodegen.MintingDelegationProposal.COMPANION)(
+          co => co.payload.delegation.dso == dso && co.payload.delegation.delegate == endUser,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsMintingDelegation(Seq(key.endUserParty), now)(tc)
+          },
         )(contract =>
           UserWalletAcsStoreRowData(
             contract,
@@ -818,9 +834,11 @@ object UserWalletStore {
               Some(Timestamp.assertFromInstant(contract.payload.delegation.expiresAt)),
           )
         ),
-        mkFilter(mintingDelegationCodegen.MintingDelegation.COMPANION)(co =>
-          co.payload.dso == dso &&
-            co.payload.delegate == endUser
+        mkFilter(mintingDelegationCodegen.MintingDelegation.COMPANION)(
+          co => co.payload.dso == dso && co.payload.delegate == endUser,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsMintingDelegation(Seq(key.endUserParty), now)(tc)
+          },
         )(contract =>
           UserWalletAcsStoreRowData(
             contract,

@@ -1,15 +1,14 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { DeploySvRunbook } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { DeploySvRunbook } from '@canton-network/splice-pulumi-common';
 import {
   mustInstallSplitwell,
   mustInstallValidator1,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validators';
-import { runSvCantonForAllMigrations } from '@lfdecentralizedtrust/splice-pulumi-sv-canton/pulumi';
+} from '@canton-network/splice-pulumi-common-validator/src/validators';
+import { runSvCantonForAllMigrations } from '@canton-network/splice-pulumi-sv-canton/pulumi';
 import {
   runSvProjectForAllSvs,
-  runSvProjectForAllSvsIfLsu,
-} from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
+} from '@canton-network/splice-pulumi-sv/pulumi';
 
 import { awaitAllOrThrowAllExceptions, Operation, PulumiAbortController, stack } from './pulumi';
 import { upOperation, upStack } from './pulumiOperations';
@@ -39,7 +38,7 @@ async function runAllStacksUp() {
     false
   );
   operations = operations.concat(cantonStacks);
-  const svStacks = runSvProjectForAllSvsIfLsu(
+  const svStacks = runSvProjectForAllSvs(
     'up',
     stack => {
       return upStack(stack, abortController);
@@ -61,7 +60,7 @@ async function runAllStacksUp() {
 runAllStacksUp().catch((err: unknown) => {
   console.error(
     `\nPulumi up finished with errors. See the summary above for details.\n` +
-      (err instanceof Error ? err.message : String(err))
+    (err instanceof Error ? err.message : String(err))
   );
   process.exit(1);
 });

@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.automation
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   RetryProvider,
   SpliceLedgerClient,
   SpliceLedgerConnection,
@@ -14,7 +15,6 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
   UpdateHistory,
 }
 import com.digitalasset.canton.time.{Clock, WallClock}
@@ -33,11 +33,11 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     override val store: Store,
     ledgerClient: SpliceLedgerClient,
     retryProvider: RetryProvider,
     parametersConfig: SpliceParametersConfig,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -46,7 +46,6 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       retryProvider,
     )
     with AppStoreWithIngestion[Store] {
@@ -105,8 +104,10 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
         updateHistory.ingestionSink,
         connection(SpliceLedgerConnectionPriority.High),
         automationConfig,
+        triggerContext.clock,
         backoffClock = triggerContext.pollingClock,
         triggerContext.retryProvider,
+        packageVersionSupport,
         triggerContext.loggerFactory,
       )
     )
@@ -121,8 +122,10 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
       store.multiDomainAcsStore.ingestionSink,
       connection(SpliceLedgerConnectionPriority.High),
       automationConfig,
+      triggerContext.clock,
       backoffClock = triggerContext.pollingClock,
       triggerContext.retryProvider,
+      packageVersionSupport,
       triggerContext.loggerFactory,
     )
   )

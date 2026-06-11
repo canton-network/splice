@@ -22,15 +22,15 @@ import {
   loadTesterConfig,
   ObservabilityReleaseName,
   SPLICE_ROOT,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { allSvsConfiguration } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/singleSvConfig';
+} from '@canton-network/splice-pulumi-common';
+import { allSvsConfiguration } from '@canton-network/splice-pulumi-common-sv/src/singleSvConfig';
 import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { SplicePostgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
-import { infraStack } from '@lfdecentralizedtrust/splice-pulumi-common/src/stackReferences';
+} from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';

@@ -13,17 +13,12 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
 }
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  Limit,
-  LimitHelpers,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, Limit, LimitHelpers}
 import org.lfdecentralizedtrust.splice.util.{Contract, HasHealth, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TreasuryConfig,
   WalletSweepConfig,
 }
@@ -52,18 +47,18 @@ class UserWalletManager(
     automationConfig: AutomationConfig,
     private[splice] val clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     treasuryConfig: TreasuryConfig,
     storage: DbStorage,
     retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
     override val loggerFactory: NamedLoggerFactory,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     validatorTopupConfig: ValidatorTopupConfig,
     walletSweep: Map[String, WalletSweepConfig],
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig],
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig],
     dedupDuration: DedupDuration,
     params: SpliceParametersConfig,
 )(implicit
@@ -225,19 +220,19 @@ class UserWalletManager(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       treasuryConfig,
       storage,
       userRetryProvider,
       userLoggerFactory,
       scanConnection,
       packageVersionSupport,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
       // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
       walletSweep.get(endUserParty.toProtoPrimitive),
       autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
+      rewardSharingConfigByParty.getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
       dedupDuration,
       params,
     )

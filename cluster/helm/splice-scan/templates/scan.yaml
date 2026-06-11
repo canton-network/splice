@@ -15,7 +15,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -29,7 +28,6 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
@@ -83,9 +81,11 @@ spec:
               tx-log-backfill-batch-size = "{{ .batchSize }}"
             }
         {{- end }}
-        - name: ADDITIONAL_CONFIG_MIGRATION_ID
+        {{- with .Values.sponsorScanUrl }}
+        - name: ADDITIONAL_CONFIG_SPONSOR_SCAN_URL
           value: |
-            canton.scan-apps.scan-app.domain-migration-id = {{ .Values.migration.id }}
+            canton.scan-apps.scan-app.sponsor-scan-url.url = "{{ . }}"
+        {{- end }}
         {{- if .Values.synchronizers }}
         {{- with .Values.synchronizers.current.bftSequencerConfig }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_CURRENT
@@ -296,7 +296,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $scanAppLabel }}
@@ -320,7 +319,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -334,7 +332,6 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
       containers:
       - env:
@@ -389,7 +386,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $scanWebUiAppLabel }}

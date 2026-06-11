@@ -114,6 +114,7 @@ object SvOnboardingConfig {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
+      initialRewardConfig: Option[InitialRewardConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -237,6 +238,35 @@ object SvOnboardingConfig {
   ) extends SvOnboardingConfig
 }
 
+final case class InitialRewardConfig(
+    mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
+    dryRunVersion: Option[String] = None,
+    batchSize: Long = 100,
+    rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
+    appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
+) {
+  def toRewardConfig: splice.amuletconfig.RewardConfig = {
+    def parseVersion(s: String): splice.amuletconfig.RewardVersion = s match {
+      case "RewardVersion_FeaturedAppMarkers" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS
+      case "RewardVersion_TrafficBasedAppRewards" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
+      case other => throw new IllegalArgumentException(s"Unknown RewardVersion: $other")
+    }
+    new splice.amuletconfig.RewardConfig(
+      parseVersion(mintingVersion),
+      dryRunVersion
+        .map(parseVersion)
+        .fold(java.util.Optional.empty[splice.amuletconfig.RewardVersion]())(java.util.Optional.of),
+      batchSize,
+      new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+        rewardCouponTimeToLiveMicros
+      ),
+      appRewardCouponThreshold.bigDecimal,
+    )
+  }
+}
+
 final case class InitialAnsConfig(
     renewalDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(30),
     entryLifetime: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
@@ -318,8 +348,6 @@ case class SvAppBackendConfig(
     participantBootstrappingDump: Option[ParticipantBootstrapDumpConfig] = None,
     identitiesDump: Option[BackupDumpConfig] = None,
     domainMigrationDumpPath: Option[Path] = None,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
     onLedgerStatusReportInterval: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMinutes(2),
     lsuSequencingTestInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
@@ -344,7 +372,6 @@ case class SvAppBackendConfig(
       NonNegativeFiniteDuration.ofSeconds(10),
     // Identifier for all Canton nodes controlled by this application
     cantonIdentifierConfig: Option[SvCantonIdentifierConfig] = None,
-    legacyMigrationId: Option[Long] = None,
     // Defaults to 24h to allow for 24h between preparation and execution of an externally signed transaction
     preparationTimeRecordTimeTolerance: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofHours(24),
@@ -404,7 +431,14 @@ case class SvAppBackendConfig(
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
+    ignoredAmuletVersions: Set[String] = Set.empty,
 ) extends SpliceBackendConfig {
+
+  def allIgnoredAmuletVersions: Set[String] =
+    ignoredAmuletVersions ++ DarResources.amulet.all
+      .map(_.metadata.version)
+      .filter(_ < DarResources.amulet.minimumInitialization.metadata.version)
+      .map(_.toString)
 
   def shouldSkipSynchronizerInitialization: Boolean =
     skipSynchronizerInitialization &&
