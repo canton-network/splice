@@ -54,7 +54,9 @@ abstract class CalculateRewardsTriggerBase(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
+    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+  )
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     // These are ordered by round, so we process the oldest first
@@ -107,9 +109,7 @@ abstract class CalculateRewardsTriggerBase(
               task.calculateRewards.payload.roundClosedAt,
               context.clock.now.toInstant,
             )
-            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(MetricsContext.Empty)
           } yield TaskSuccess(
             s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
           )
@@ -154,9 +154,7 @@ abstract class CalculateRewardsTriggerBase(
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
-      rewardMetrics.calculateRewardsRootHashBftReads.mark()(
-        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-      )
+      rewardMetrics.calculateRewardsRootHashBftReads.mark()(MetricsContext.Empty)
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)

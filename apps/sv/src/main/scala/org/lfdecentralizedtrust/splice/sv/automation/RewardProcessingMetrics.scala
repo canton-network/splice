@@ -3,13 +3,14 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation
 
-import com.daml.metrics.api.{MetricInfo, MetricName}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter, Timer}
 import com.daml.metrics.api.MetricQualification.{Latency, Traffic}
-import com.daml.metrics.api.MetricsContext.Implicits.empty
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
-class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory) {
+class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory)(
+    metricsContext: MetricsContext
+) {
 
   private val prefix: MetricName = SpliceMetrics.MetricsPrefix
 
@@ -22,7 +23,7 @@ class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory) {
           "This metric captures the time it took between the closing of a round, and this SV's confirmation for the CalculateRewardsV2 contract's processing. Labeled with dryRun.",
         qualification = Latency,
       )
-    )
+    )(metricsContext)
 
   val processRewardsProcessingDelay: Timer =
     metricsFactory.timer(
@@ -33,7 +34,7 @@ class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory) {
           "This metric captures the time it took between the closing of a round, and this SV's processing of a ProcessRewardsV2 contract for that round. Labeled with dryRun.",
         qualification = Latency,
       )
-    )
+    )(metricsContext)
 
   val calculateRewardsRootHashBftReads: Meter =
     metricsFactory.meter(
@@ -44,7 +45,7 @@ class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory) {
           "This metric counts the BFT reads of the reward-accounting root-hash performed by the CalculateRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the root-hash and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
         qualification = Traffic,
       )
-    )
+    )(metricsContext)
 
   val processRewardsBatchBftReads: Meter =
     metricsFactory.meter(
@@ -55,5 +56,5 @@ class RewardProcessingMetrics(metricsFactory: LabeledMetricsFactory) {
           "This metric counts the BFT reads of the reward-accounting batch performed by the ProcessRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the batch and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
         qualification = Traffic,
       )
-    )
+    )(metricsContext)
 }

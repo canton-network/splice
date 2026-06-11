@@ -62,7 +62,9 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     with SvTaskBasedTrigger[ProcessRewardsV2Contract] {
 
   private val store = svTaskContext.dsoStore
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
+    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+  )
 
   override protected def source(implicit
       traceContext: TraceContext
@@ -104,9 +106,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         .yieldUnit()
       delay = java.time.Duration
         .between(task.payload.roundClosedAt, context.clock.now.toInstant)
-      _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(
-        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-      )
+      _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(MetricsContext.Empty)
     } yield TaskSuccess(
       s"Processed round $round, processingDelay=$delay, batchType=${batchTypeOf(batch)}"
     )
@@ -142,9 +142,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       tc: TraceContext
   ): Future[GetRewardAccountingBatchResponse] = {
     def bftReadBatch: Future[GetRewardAccountingBatchResponse] = {
-      rewardMetrics.processRewardsBatchBftReads.mark()(
-        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-      )
+      rewardMetrics.processRewardsBatchBftReads.mark()(MetricsContext.Empty)
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingBatch(round, batchHash)
