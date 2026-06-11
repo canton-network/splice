@@ -24,6 +24,12 @@
 
           - Increase ``sv-app`` default memory requests from 3Gi to 6Gi to ensure the max heap size fits in the requests and to avoid OOM evictions.
 
+          - The ``splice-participant`` helm chart now refuses to create the participant database if another database
+            whose name starts with ``participant`` already exists, guarding against accidentally creating a new
+            participant database on a non-fresh deployment (e.g. due to a misconfigured ``persistence.databaseName``).
+            A participant database should only be created during a fresh deployment. This safety check can be disabled
+            by setting the new ``persistence.enableParticipantDbConflictCheck`` helm value to ``false``.
+
       - Validator
 
           - The ``migration.id`` value was removed from the validator (validator app) helm chart. For docker-compose
@@ -32,6 +38,18 @@
             used to name the participant database for backwards compatibility: if provided, the database
             ``participant-<migration_id>`` is used (set this to the migration id you previously deployed with); if omitted,
             the database ``participant`` is used, which is recommended for new deployments.
+
+          - The ``splice-participant`` helm chart now refuses to create the participant database if another database
+            whose name starts with ``participant`` already exists, guarding against accidentally creating a new
+            participant database on a non-fresh deployment (e.g. due to a misconfigured ``persistence.databaseName``).
+            A participant database should only be created during a fresh deployment. This safety check can be disabled
+            by setting the new ``persistence.enableParticipantDbConflictCheck`` helm value to ``false``.
+
+          - For docker-compose deployments, the Postgres entrypoint now refuses to create a participant database if
+            another database whose name starts with ``participant`` already exists, guarding against accidentally
+            creating a new participant database on a non-fresh deployment (e.g. due to a misconfigured ``-m <migration_id>``).
+            A participant database should only be created during a fresh deployment. This safety check can be disabled
+            by passing the new ``-k`` flag to the validator ``start.sh`` script.
 
       .. Important::
 
