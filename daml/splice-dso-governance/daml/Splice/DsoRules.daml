@@ -188,6 +188,9 @@ data HostedSv_UpdateRewardWeightResult = HostedSv_UpdateRewardWeightResult with
 data HostedSv_UpdateBeneficiariesResult = HostedSv_UpdateBeneficiariesResult with
     hostedSvCid : ContractId HostedSv
 
+data HostedSv_UpdateSvOperatorResult = HostedSv_UpdateSvOperatorResult with
+    hostedSvCid : ContractId HostedSv
+
 data DsoRules_AddSvResult = DsoRules_AddSvResult with
     newDsoRules : ContractId DsoRules
 
@@ -254,7 +257,7 @@ data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSv
 data DsoRules_OffboardHostedSvResult = DsoRules_OffboardHostedSvResult
 
 data DsoRules_UpdateSvOperatorForHostedSvResult = DsoRules_UpdateSvOperatorForHostedSvResult with
-    hostedSvCid : ContractId HostedSv
+    result : HostedSv_UpdateSvOperatorResult
 
 data DsoRules_InstructUpdateSvOperatorForHostedSvResult = DsoRules_InstructUpdateSvOperatorForHostedSvResult with
     instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
@@ -622,6 +625,18 @@ template HostedSv
 
         hostedSvCid <- create this with beneficiaries = newBeneficiaries
         pure HostedSv_UpdateBeneficiariesResult with hostedSvCid
+
+    choice HostedSv_UpdateSvOperator : HostedSv_UpdateSvOperatorResult
+      with
+        newSvOperator : Party
+      controller dso
+      do
+        -- Sanity checks
+        require "New SV operator must differ from the existing SV operator" $
+          newSvOperator /= svOperator
+
+        hostedSvCid <- create this with svOperator = newSvOperator
+        pure HostedSv_UpdateSvOperatorResult with hostedSvCid
 
 
 -- This template distinguishes between three kinds of parties:
@@ -1298,16 +1313,16 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some svOperator)
 
         instruction <- fetchAndArchive (ForDso with dso) instructionCid
-        hostedSvCo <- fetchAndArchive (ForDso with dso) hostedSvCid
+        hostedSvCo <- fetchChecked (ForDso with dso) hostedSvCid
 
         -- Sanity checks
         require "The hosted SV party in HostedSv and UpdateSvOperatorForHostedSvInstruction contracts must match" $
           hostedSvCo.hostedSv == instruction.hostedSv
 
-        -- Create a new HostedSv contract with the new SV operator
-        hostedSvCid <- create hostedSvCo with svOperator = instruction.newSvOperator
+        result <- exercise hostedSvCid HostedSv_UpdateSvOperator with
+          newSvOperator = instruction.newSvOperator
 
-        pure DsoRules_UpdateSvOperatorForHostedSvResult with hostedSvCid
+        pure DsoRules_UpdateSvOperatorForHostedSvResult with result
 
     -- FIXME: Deprecate once all hosted SVs have been migrated.
     --
