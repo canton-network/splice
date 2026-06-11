@@ -216,6 +216,14 @@ trait SvDsoStore
     splice.amuletallocation.AmuletAllocation,
   ]
 
+  /** List amulet allocations V2 that are expired */
+  def listExpiredAmuletAllocationsV2(
+      ignoredParties: Set[PartyId]
+  ): ListExpiredContracts[
+    splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+    splice.amuletallocationv2.AmuletAllocationV2,
+  ]
+
   /** List locked amulets that are expired and can never be used as transfer input. */
   def listLockedExpiredAmulets(
       ignoredParties: Set[PartyId]
@@ -1554,6 +1562,14 @@ object SvDsoStore {
           // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
+        )
+      },
+      mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(co =>
+        co.payload.allocation.admin == dso
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },
     )

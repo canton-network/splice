@@ -61,6 +61,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpiredAmuletAllocationTrigger,
+  ExpiredAmuletAllocationV2Trigger,
   ExpiredAmuletTransferInstructionTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.{
@@ -91,7 +92,8 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     with HasActorSystem
     with TimeTestUtil
     with HasExecutionContext
-    with TriggerTestUtil {
+    with TriggerTestUtil
+    with TokenStandardV2TestUtil {
 
   override protected def runUpdateHistorySanityCheck: Boolean = false
 
@@ -132,6 +134,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[ExpiredAmuletAllocationTrigger]
+            .withPausedTrigger[ExpiredAmuletAllocationV2Trigger]
         )(config)
       )
       .addConfigTransforms((_, config) =>
@@ -976,7 +979,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     val emptyMeta = new metadatav1.Metadata(java.util.Collections.emptyMap())
     val instrumentId = new holdingv1.InstrumentId(dsoParty.toProtoPrimitive, "Amulet")
 
-    def createAllocationSpec(legId: String) = {
+    def createAllocationSpecV1(legId: String) = {
       new org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.AllocationSpecification(
         new org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.SettlementInfo(
           bobParty.toProtoPrimitive,
@@ -1001,27 +1004,37 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     }
 
     actAndCheck(
-      "Alice creates two AmuletAllocations", {
-        aliceWalletClient.allocateAmulet(createAllocationSpec("leg-1"))
-        aliceWalletClient.allocateAmulet(createAllocationSpec("leg-2"))
+      "Alice creates two AmuletAllocationsV1, two AmuletAllocationsV2", {
+        // V1
+        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-1"))
+        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-2"))
+
+        aliceWalletClient.allocateAmulet(
+          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId()),
+          mkAllocationSpecV2(dsoParty, aliceParty, bobParty, "legv2-1", settleBefore),
+        )
+        aliceWalletClient.allocateAmulet(
+          mkSettlementV2(aliceValidatorBackend.getValidatorPartyId()),
+          mkAllocationSpecV2(dsoParty, aliceParty, bobParty, "legv2-2", settleBefore),
+        )
       },
     )(
-      "Alice's wallet shows 2 locked amulets",
-      _ => aliceWalletClient.list().lockedAmulets should have length 2,
+      "Alice's wallet shows 4 locked amulets",
+      _ => aliceWalletClient.list().lockedAmulets should have length 4,
     )
 
     val allocations =
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(AmuletAllocation.COMPANION)(aliceParty)
 
-    allocations should have length 2
+    allocations should have length 4
 
     val amuletsBeforeExpiry = aliceWalletClient.list().amulets.length
 
     advanceTime(Duration.ofMinutes(30))
 
     actAndCheck(
-      "Alice manually expires the lock for Allocation 1",
+      "Alice manually expires the lock for AllocationV1 1",
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
         .submitJava(
           Seq(aliceParty),
@@ -1033,11 +1046,31 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         ),
     )(
       "One lock is gone",
-      _ => aliceWalletClient.list().lockedAmulets should have length 1,
+      _ => aliceWalletClient.list().lockedAmulets should have length 3,
+    )
+
+    actAndCheck(
+      "Alice manually expires the lock for AllocationV2 2",
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitJava(
+          Seq(aliceParty),
+          allocations.last.data.lockedAmulet
+            .exerciseLockedAmulet_OwnerExpireLockV2()
+            .commands()
+            .asScala
+            .toSeq,
+        ),
+    )(
+      "Another lock is gone",
+      _ => aliceWalletClient.list().lockedAmulets should have length 2,
     )
 
     sv1Backend.dsoDelegateBasedAutomation
       .trigger[ExpiredAmuletAllocationTrigger]
+      .resume()
+
+    sv1Backend.dsoDelegateBasedAutomation
+      .trigger[ExpiredAmuletAllocationV2Trigger]
       .resume()
 
     advanceTime(Duration.ofDays(1))
@@ -1048,7 +1081,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
 
       aliceWalletClient.list().lockedAmulets shouldBe empty
 
-      aliceWalletClient.list().amulets should have length (amuletsBeforeExpiry + 2).toLong
+      aliceWalletClient.list().amulets should have length (amuletsBeforeExpiry + 4).toLong
     }
   }
 

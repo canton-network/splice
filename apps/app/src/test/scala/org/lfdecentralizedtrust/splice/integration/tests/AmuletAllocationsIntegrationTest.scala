@@ -4,7 +4,6 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.http.v0.definitions.AllocationInstructionResultOutput.members
@@ -68,37 +67,14 @@ class AmuletAllocationsIntegrationTest
     val now = CantonTimestamp.now()
     val settlementDeadline = now.plusSeconds(3600 * 2)
 
-    def wantedSettlementV2() =
-      new allocationv2.SettlementInfo(
-        java.util.List.of(validatorPartyId.toProtoPrimitive),
-        "some_reference",
-        Optional.empty,
-        new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
-      )
-    def wantedAllocationV2() = new allocationv2.AllocationSpecification(
-      dsoParty.toProtoPrimitive,
-      basicAccount(sender),
-      java.util.List.of(
-        transferLegSideForAuthorizer(
-          sender,
-          new allocationv2.TransferLeg(
-            "some_transfer_leg",
-            basicAccount(sender),
-            basicAccount(validatorPartyId),
-            BigDecimal(12).bigDecimal.setScale(10),
-            amuletInstrumentIdName,
-            new Metadata(java.util.Map.of("k3", "v3")),
-          ),
-        )
-      ),
-      java.util.Optional.of(settlementDeadline.toInstant),
-      java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
-      false,
-      new Metadata(java.util.Map.of("k4", "v4")),
+    val settlement = mkSettlementV2(validatorPartyId)
+    val specification = mkAllocationSpecV2(
+      dsoParty,
+      sender,
+      validatorPartyId,
+      "some_transfer_leg",
+      settlementDeadline.toInstant,
     )
-
-    val settlement = wantedSettlementV2()
-    val specification = wantedAllocationV2()
     specification -> aliceWalletClient.allocateAmulet(settlement, specification)
   }
 

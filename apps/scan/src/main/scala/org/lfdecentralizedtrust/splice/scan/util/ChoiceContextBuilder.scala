@@ -13,7 +13,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
-import org.lfdecentralizedtrust.splice.util.{AmuletConfigSchedule, Contract, ContractWithState}
+import org.lfdecentralizedtrust.splice.util.{
+  AmuletConfigSchedule,
+  Contract,
+  ContractWithState,
+  TokenStandardMetadata,
+}
 
 import java.time.Instant
 import scala.collection.mutable
@@ -192,14 +197,14 @@ object ChoiceContextBuilder {
         } else {
           // only communicate that the amulet does not need to be unlocked
           newBuilder(choiceContextBuilder.activeSynchronizerId)
-            .addBool("expire-lock", false)
+            .addBool(TokenStandardMetadata.expireLockKey, false)
             .build()
         }
       } else {
         optLockedAmulet.foreach(contract => choiceContextBuilder.disclose(contract))
         choiceContextBuilder
           // the choice implementation should only attempt to expire the lock if it exists
-          .addBool("expire-lock", optLockedAmulet.isDefined)
+          .addBool(TokenStandardMetadata.expireLockKey, optLockedAmulet.isDefined)
           .addOptionalContract("featured-app-right", featuredAppRightO.map(_.contract))
           .build()
       }
