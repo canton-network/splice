@@ -182,6 +182,9 @@ data HostedSvMigrationData = HostedSvMigrationData with
 
 data Confirmation_ExpireResult = Confirmation_ExpireResult
 
+data HostedSv_UpdateRewardWeightResult = HostedSv_UpdateRewardWeightResult with
+    hostedSvCid : ContractId HostedSv
+
 data DsoRules_AddSvResult = DsoRules_AddSvResult with
     newDsoRules : ContractId DsoRules
 
@@ -244,7 +247,7 @@ data DsoRules_UpdateSvRewardWeightResult = DsoRules_UpdateSvRewardWeightResult w
     newDsoRules : ContractId DsoRules
 
 data DsoRules_UpdateHostedSvWeightResult = DsoRules_UpdateHostedSvWeightResult with
-    newHostedSvCid : ContractId HostedSv
+    result : HostedSv_UpdateRewardWeightResult
 
 data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSvResult with
     instructionCid : ContractId OffboardHostedSvInstruction
@@ -624,6 +627,14 @@ template HostedSv
 
     signatory dso
     observer hostedSv
+
+    choice HostedSv_UpdateRewardWeight : HostedSv_UpdateRewardWeightResult
+      with
+        newRewardWeight : Int
+      controller dso
+      do
+        hostedSvCid <- create this with rewardWeight = newRewardWeight
+        pure HostedSv_UpdateRewardWeightResult with hostedSvCid
 
 
 
@@ -1257,9 +1268,8 @@ template DsoRules with
           -- ^ The new positive reward weight for the hosted SV.
       controller dso
       do
-        hostedSv <- fetchAndArchive (ForDso with dso) hostedSvCid
-        newHostedSvCid <- create hostedSv with rewardWeight = newRewardWeight
-        pure DsoRules_UpdateHostedSvWeightResult with newHostedSvCid
+        result <- exercise hostedSvCid HostedSv_UpdateRewardWeight with newRewardWeight
+        pure DsoRules_UpdateHostedSvWeightResult with result
 
     -- Note: Implement in phase 1
     -- | Creates an instruction to offboard a hosted SV.
