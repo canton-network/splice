@@ -179,7 +179,7 @@ class MintingDelegationCollectRewardsTrigger(
 
     val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
     if (shouldAssign) {
-      performAssignAndMint(submission, unassignedV2, rewardSharingConfig)
+      performAssignAndMint(submission, unassignedV2.toList, rewardSharingConfig)
     } else if (couponsToMint.hasRewards || shouldMergeAmulets) {
       performMint(submission)
     } else {
@@ -211,21 +211,20 @@ class MintingDelegationCollectRewardsTrigger(
 
   private def performAssignAndMint(
       submission: MintSubmissionData,
-      unassignedV2: Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
+      unassignedV2: List[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
       config: RewardSharingConfig,
   )(implicit tc: TraceContext): Future[Boolean] = {
-    unassignedV2.headOption match {
-      case None =>
+    unassignedV2 match {
+      case Nil =>
         Future.failed(
           Status.INTERNAL
             .withDescription(s"No unassigned RewardCouponV2 contracts to assign for $externalParty")
             .asRuntimeException()
         )
-      case Some(primaryCoupon) =>
+      case primaryCoupon :: additionalCoupons =>
         val newBeneficiaries = config.allDamlBeneficiaries(externalParty).map { case (party, pct) =>
           new RewardBeneficiary(party.toProtoPrimitive, pct)
         }
-        val additionalCoupons = unassignedV2.drop(1)
         val assignArgs = new RewardCoupon_AssignBeneficiaries(
           additionalCoupons
             .map(_.contractId.toInterface(RewardCoupon.INTERFACE))
