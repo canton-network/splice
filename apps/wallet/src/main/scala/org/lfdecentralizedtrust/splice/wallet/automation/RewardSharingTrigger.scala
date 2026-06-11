@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv
 }
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, ChoiceContextWithDisclosures}
+import cats.data.NonEmptyList
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -48,52 +49,55 @@ class RewardSharingTrigger(
       tc: TraceContext
   ): Future[Seq[Task]] =
     for {
-      unassignedCoupons <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+      unassignedCoupons <- store.listRewardCouponsV2(
+        includeUnassigned = true,
+        includeAssigned = false,
+      )
     } yield {
-      val couponsToAssign = unassignedCoupons.flatMap(_.toAssignedContract)
-      if (couponsToAssign.isEmpty || !shouldShareNow(couponsToAssign)) Seq.empty
-      else Seq(Task(couponsToAssign))
+      val couponsToAssign = unassignedCoupons.flatMap(_.toAssignedContract).toList
+      NonEmptyList.fromList(couponsToAssign) match {
+        case Some(nel) if shouldShareNow(nel) => Seq(Task(nel))
+        case _ => Seq.empty
+      }
     }
 
   override protected def completeTask(
       task: Task
-  )(implicit tc: TraceContext): Future[TaskOutcome] =
-    task.coupons.headOption match {
-      case None => Future.successful(TaskSuccess("No coupons to assign"))
-      case Some(primaryCoupon) =>
-        val additionalCoupons = task.coupons.drop(1)
+  )(implicit tc: TraceContext): Future[TaskOutcome] = {
+    val primaryCoupon = task.coupons.head
+    val additionalCoupons = task.coupons.tail
 
-        val newBeneficiaries = config.allDamlBeneficiaries(endUserParty).map { case (party, pct) =>
-          new RewardBeneficiary(party.toProtoPrimitive, pct)
-        }
-
-        val assignArgs = new RewardCoupon_AssignBeneficiaries(
-          additionalCoupons
-            .map(_.contract.contractId.toInterface(RewardCoupon.INTERFACE))
-            .asJava,
-          newBeneficiaries.asJava,
-          ChoiceContextWithDisclosures.emptyExtraArgs,
-        )
-
-        val primaryInterfaceCid =
-          primaryCoupon.contract.contractId
-            .toInterface(RewardCoupon.INTERFACE)
-
-        spliceLedgerConnection
-          .submit(
-            actAs = Seq(endUserParty),
-            readAs = Seq(endUserParty),
-            primaryInterfaceCid.exerciseRewardCoupon_AssignBeneficiaries(assignArgs),
-          )
-          .withSynchronizerId(primaryCoupon.domain)
-          .noDedup
-          .yieldUnit()
-          .map { _ =>
-            TaskSuccess(
-              s"Shared ${task.coupons.size} RewardCouponV2 with ${newBeneficiaries.size} beneficiaries for $endUserParty"
-            )
-          }
+    val newBeneficiaries = config.allDamlBeneficiaries(endUserParty).map { case (party, pct) =>
+      new RewardBeneficiary(party.toProtoPrimitive, pct)
     }
+
+    val assignArgs = new RewardCoupon_AssignBeneficiaries(
+      additionalCoupons
+        .map(_.contract.contractId.toInterface(RewardCoupon.INTERFACE))
+        .asJava,
+      newBeneficiaries.asJava,
+      ChoiceContextWithDisclosures.emptyExtraArgs,
+    )
+
+    val primaryInterfaceCid =
+      primaryCoupon.contract.contractId
+        .toInterface(RewardCoupon.INTERFACE)
+
+    spliceLedgerConnection
+      .submit(
+        actAs = Seq(endUserParty),
+        readAs = Seq(endUserParty),
+        primaryInterfaceCid.exerciseRewardCoupon_AssignBeneficiaries(assignArgs),
+      )
+      .withSynchronizerId(primaryCoupon.domain)
+      .noDedup
+      .yieldUnit()
+      .map { _ =>
+        TaskSuccess(
+          s"Shared ${task.coupons.size} RewardCouponV2 with ${newBeneficiaries.size} beneficiaries for $endUserParty"
+        )
+      }
+  }
 
   override protected def isStaleTask(
       task: Task
@@ -103,11 +107,11 @@ class RewardSharingTrigger(
     } yield {
       val unassignedIds = unassigned.map(_.contractId).toSet
       // Stale if none of the task's coupons are still unassigned
-      !task.coupons.exists(c => unassignedIds.contains(c.contract.contractId))
+      !task.coupons.toList.exists(c => unassignedIds.contains(c.contract.contractId))
     }
 
   private def shouldShareNow(
-      coupons: Seq[AssignedContract[RewardCouponV2.ContractId, RewardCouponV2]]
+      coupons: NonEmptyList[AssignedContract[RewardCouponV2.ContractId, RewardCouponV2]]
   ): Boolean = {
     val now = context.clock.now.toInstant
     val minTtl = config.minTtlAfterSharing.asJava
@@ -120,7 +124,7 @@ class RewardSharingTrigger(
 object RewardSharingTrigger {
 
   final case class Task(
-      coupons: Seq[AssignedContract[RewardCouponV2.ContractId, RewardCouponV2]]
+      coupons: NonEmptyList[AssignedContract[RewardCouponV2.ContractId, RewardCouponV2]]
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
