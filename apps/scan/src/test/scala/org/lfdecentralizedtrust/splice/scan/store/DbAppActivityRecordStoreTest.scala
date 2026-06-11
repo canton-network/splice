@@ -375,7 +375,6 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    // #5186: rounds with zero activity must not block progress
     "not depend on activity records existing in rounds after earliest" in {
       for {
         (store, historyId) <- newStore()
