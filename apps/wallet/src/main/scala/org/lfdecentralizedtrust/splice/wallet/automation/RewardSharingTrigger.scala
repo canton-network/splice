@@ -48,11 +48,11 @@ class RewardSharingTrigger(
       tc: TraceContext
   ): Future[Seq[Task]] =
     for {
-      unassigned <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+      unassignedCoupons <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
     } yield {
-      val assigned = unassigned.flatMap(_.toAssignedContract)
-      if (assigned.isEmpty || !shouldShareNow(assigned)) Seq.empty
-      else Seq(Task(assigned))
+      val couponsToAssign = unassignedCoupons.flatMap(_.toAssignedContract)
+      if (couponsToAssign.isEmpty || !shouldShareNow(couponsToAssign)) Seq.empty
+      else Seq(Task(couponsToAssign))
     }
 
   override protected def completeTask(
