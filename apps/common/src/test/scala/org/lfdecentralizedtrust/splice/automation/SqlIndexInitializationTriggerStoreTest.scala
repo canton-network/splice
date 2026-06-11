@@ -61,6 +61,7 @@ class SqlIndexInitializationTriggerStoreTest
           "updt_hist_tran_hi_eth",
           "scan_txlog_store_sid_en_vot",
           "dso_acs_store_sid_mid_pn_tid_rbio",
+          "scan_txlog_store_sid_rt_en_vot",
         )
       }
     }

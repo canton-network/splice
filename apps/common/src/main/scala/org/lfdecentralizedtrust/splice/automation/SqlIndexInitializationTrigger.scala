@@ -264,6 +264,15 @@ object SqlIndexInitializationTrigger {
           where reward_beneficiary_is_observer = false
         """,
       ),
+    IndexAction
+      .Create(
+        indexName = "scan_txlog_store_sid_rt_en_vot",
+        createAction = sqlu"""
+          create index concurrently if not exists scan_txlog_store_sid_rt_en_vot
+          on scan_txlog_store (store_id, record_time desc, entry_number desc)
+          where entry_type = 'vot'
+        """,
+      ),
   )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting

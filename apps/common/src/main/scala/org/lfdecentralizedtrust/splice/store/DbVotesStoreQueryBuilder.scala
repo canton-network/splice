@@ -42,7 +42,10 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
     val afterCondition = after match {
-      case Some(a) => Some(sql"""entry_number < $a""")
+      case Some(a) =>
+        Some(
+          sql"""(record_time, entry_number) < ((select record_time from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
+        )
       case None => None
     }
     val actionNameCondition = actionName match {
@@ -92,7 +95,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       txLogTableName,
       txLogStoreId,
       where = whereClause.toActionBuilder,
-      orderLimit = sql"""order by entry_number desc limit ${sqlLimit(limit)}""",
+      orderLimit = sql"""order by record_time desc, entry_number desc limit ${sqlLimit(limit)}""",
     )
   }
 }

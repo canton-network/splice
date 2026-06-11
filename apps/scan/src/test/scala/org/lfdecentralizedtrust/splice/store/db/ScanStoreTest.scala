@@ -479,6 +479,66 @@ abstract class ScanStoreTest
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
         }
+
+        "return results in record time order, including backfilled entries" in {
+          // Simulates a txlog where backfilling inserted older entries after live ingestion
+          // started: backfilling walks backwards in time, so backfilled entries get entry
+          // numbers in reverse record time order.
+          val baseTime = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          def recordTime(n: Int) = baseTime.plusSeconds(n.toLong)
+          val voteRequests = (1 to 4).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results = voteRequests.map(mkVoteRequestResult(_))
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            // Live ingestion of results 3 and 4...
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 4)
+            // ...then backfilling inserts the older results, walking backwards in time.
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 1)
+            page1 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(4, 3, 2).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(1).map(userParty(_).toProtoPrimitive)
+          }
+        }
       }
 
       "lookupLatestSvRewardWeightChange" should {
