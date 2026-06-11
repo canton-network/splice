@@ -232,6 +232,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         doTransfer(bobParty)
         advanceRoundsToNextRoundOpening
         doTransfer(bobParty)
+        advanceRoundsToNextRoundOpening
+        doTransfer(bobParty)
 
         val (calculateRewardsCid, rootHash) =
           clue(
