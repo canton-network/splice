@@ -103,11 +103,12 @@ class RewardSharingTrigger(
       task: Task
   )(implicit tc: TraceContext): Future[Boolean] =
     for {
-      unassigned <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+      contracts <- store.multiDomainAcsStore
+        .listAssignedContracts(RewardCouponV2.COMPANION)
     } yield {
-      val unassignedIds = unassigned.map(_.contractId).toSet
-      // Stale if none of the task's coupons are still unassigned
-      !task.coupons.toList.exists(c => unassignedIds.contains(c.contract.contractId))
+      val activeIds = contracts.map(_.contractId).toSet
+      // Stale if none of the task's coupons are still active
+      !task.coupons.toList.exists(c => activeIds.contains(c.contract.contractId))
     }
 
   private def shouldShareNow(
