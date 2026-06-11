@@ -25,7 +25,7 @@
       - Validator
 
           - The ``migration.id`` value was removed from the validator (validator app) helm chart. For docker-compose
-            deployments the ``-m <migration_id>`` flag of the validator ``start.sh`` script is now optional. The validator
+            deployments the ``-m <migration_id>`` flag of the validator ``start.sh`` script is now optional (if you deployed your validator before this change you **must** keep this flag set to the existing value). The validator
             resolves the synchronizer migration id automatically at start-up from its database. The migration id is now only
             used to name the participant database for backwards compatibility: if provided, the database
             ``participant-<migration_id>`` is used (set this to the migration id you previously deployed with); if omitted,
