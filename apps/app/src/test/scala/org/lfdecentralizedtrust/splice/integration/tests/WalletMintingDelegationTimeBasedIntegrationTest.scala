@@ -27,12 +27,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllValidatorConfigs
-import org.lfdecentralizedtrust.splice.store.{
-  HardLimit,
-  Limit,
-  RewardCouponV2Filter,
-  RewardCouponV2SortOrder,
-}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit}
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
@@ -608,10 +603,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               .listDevelopmentFundCoupons()
               .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
             externalPartyWallet.store
-              .listRewardCouponsV2(
-                RewardCouponV2Filter.All,
-                RewardCouponV2SortOrder.ByRoundAscAmountDesc,
-              )
+              .listRewardCouponsV2(includeUnassigned = true, includeAssigned = true)
               .futureValue shouldBe empty withClue "RewardCouponV2"
           }
         }

@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv
   RewardCoupon_AssignBeneficiaries,
 }
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
-import org.lfdecentralizedtrust.splice.store.{RewardCouponV2Filter, RewardCouponV2SortOrder}
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, ChoiceContextWithDisclosures}
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
@@ -49,10 +48,7 @@ class RewardSharingTrigger(
       tc: TraceContext
   ): Future[Seq[Task]] =
     for {
-      unassigned <- store.listRewardCouponsV2(
-        RewardCouponV2Filter.UnassignedOnly,
-        RewardCouponV2SortOrder.ByExpiresAtAsc,
-      )
+      unassigned <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
     } yield {
       val assigned = unassigned.flatMap(_.toAssignedContract)
       if (assigned.isEmpty || !shouldShareNow(assigned)) Seq.empty
@@ -103,10 +99,7 @@ class RewardSharingTrigger(
       task: Task
   )(implicit tc: TraceContext): Future[Boolean] =
     for {
-      unassigned <- store.listRewardCouponsV2(
-        RewardCouponV2Filter.UnassignedOnly,
-        RewardCouponV2SortOrder.ByExpiresAtAsc,
-      )
+      unassigned <- store.listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
     } yield {
       val unassignedIds = unassigned.map(_.contractId).toSet
       // Stale if none of the task's coupons are still unassigned

@@ -42,7 +42,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegation.MintingDelegation
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{RewardCouponV2Filter, RewardCouponV2SortOrder}
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
   ChoiceContextWithDisclosures,
@@ -342,8 +341,8 @@ class MintingDelegationCollectRewardsTrigger(
       )
       appRewardCouponsWithQuantity <- store.listSortedAppRewards(issuingRoundsMap)
       rewardCouponsV2 <- store.listRewardCouponsV2(
-        RewardCouponV2Filter.All,
-        RewardCouponV2SortOrder.ByRoundAscAmountDesc,
+        includeUnassigned = true,
+        includeAssigned = true,
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()

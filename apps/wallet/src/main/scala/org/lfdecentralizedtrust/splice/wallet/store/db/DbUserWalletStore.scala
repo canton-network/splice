@@ -28,8 +28,6 @@ import org.lfdecentralizedtrust.splice.store.{
   LimitHelpers,
   PageLimit,
   ResultsPage,
-  RewardCouponV2Filter,
-  RewardCouponV2SortOrder,
   TxLogStore,
 }
 import org.lfdecentralizedtrust.splice.util.{
@@ -211,25 +209,18 @@ class DbUserWalletStore(
     )
 
   override def listRewardCouponsV2(
-      filter: RewardCouponV2Filter,
-      sortOrder: RewardCouponV2SortOrder,
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
     ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
   ]] =
     waitUntilAcsIngested {
-      val whereClause = filter match {
-        case RewardCouponV2Filter.UnassignedOnly =>
-          sql"and acs.create_arguments->>'beneficiary' is null"
-        case RewardCouponV2Filter.AssignedOnly =>
-          sql"and acs.create_arguments->>'beneficiary' is not null"
-        case RewardCouponV2Filter.All => sql""
-      }
-      val orderClause = sortOrder match {
-        case RewardCouponV2SortOrder.ByExpiresAtAsc =>
-          sql"order by acs.contract_expires_at asc limit ${sqlLimit(limit)}"
-        case RewardCouponV2SortOrder.ByRoundAscAmountDesc =>
-          sql"order by acs.reward_coupon_round asc limit ${sqlLimit(limit)}"
+      val whereClause = (includeUnassigned, includeAssigned) match {
+        case (true, true) => sql""
+        case (true, false) => sql"and acs.create_arguments->>'beneficiary' is null"
+        case (false, true) => sql"and acs.create_arguments->>'beneficiary' is not null"
+        case (false, false) => sql"and false"
       }
       for {
         result <- storage.query(
@@ -239,13 +230,12 @@ class DbUserWalletStore(
             domainMigrationId,
             amuletCodegen.RewardCouponV2.COMPANION,
             additionalWhere = whereClause,
-            orderLimit = orderClause,
+            orderLimit = sql"order by acs.contract_expires_at asc limit ${sqlLimit(limit)}",
           ),
           "listRewardCouponsV2",
         )
       } yield result
         .map(contractWithStateFromRow(amuletCodegen.RewardCouponV2.COMPANION)(_))
-        .sorted(sortOrder.ordering)
     }
 
   override def listTransactions(

@@ -116,50 +116,15 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         ),
     )
 
-  /** Returns RewardCouponV2 contracts filtered by assignment status and
-    * sorted according to the specified order. Implemented in DB stores
-    * with SQL-level filtering to avoid page-limit issues.
+  /** Returns RewardCouponV2 contracts filtered by assignment status,
+    * sorted by expiresAt ascending. Implemented in DB stores with
+    * SQL-level filtering to avoid page-limit issues.
     */
   def listRewardCouponsV2(
-      filter: RewardCouponV2Filter,
-      sortOrder: RewardCouponV2SortOrder,
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
     ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
   ]]
-}
-
-sealed trait RewardCouponV2Filter {
-  def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean
-}
-
-object RewardCouponV2Filter {
-  case object UnassignedOnly extends RewardCouponV2Filter {
-    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean =
-      rw.payload.beneficiary.isEmpty
-  }
-  case object AssignedOnly extends RewardCouponV2Filter {
-    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean =
-      rw.payload.beneficiary.isPresent
-  }
-  case object All extends RewardCouponV2Filter {
-    def matches(rw: ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]): Boolean = true
-  }
-}
-
-sealed trait RewardCouponV2SortOrder {
-  def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]]
-}
-
-object RewardCouponV2SortOrder {
-  case object ByExpiresAtAsc extends RewardCouponV2SortOrder {
-    def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]] =
-      Ordering.by(_.payload.expiresAt)
-  }
-  case object ByRoundAscAmountDesc extends RewardCouponV2SortOrder {
-    def ordering: Ordering[ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]] =
-      Ordering[(Long, BigDecimal)].on(rw =>
-        (rw.payload.round.number, -BigDecimal(rw.payload.amount))
-      )
-  }
 }
