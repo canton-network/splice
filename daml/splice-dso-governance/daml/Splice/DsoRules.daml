@@ -259,9 +259,6 @@ data DsoRules_UpdateSvOperatorForHostedSvResult = DsoRules_UpdateSvOperatorForHo
 data DsoRules_InstructUpdateSvOperatorForHostedSvResult = DsoRules_InstructUpdateSvOperatorForHostedSvResult with
     instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
 
-data DsoRules_SetSvRewardBeneficiariesResult = DsoRules_SetSvRewardBeneficiariesResult with
-    hostedSvCid : ContractId HostedSv
-
 data DsoRules_MigrateHostedSvsResult = DsoRules_MigrateHostedSvsResult with
     newDsoRules : ContractId DsoRules
 
@@ -619,6 +616,10 @@ template HostedSv
         newBeneficiaries : Map Party Decimal
       controller hostedSv
       do
+        -- Sanity checks
+        require "New beneficiaries must differ from the existing beneficiaries" $
+          newBeneficiaries /= beneficiaries
+
         hostedSvCid <- create this with beneficiaries = newBeneficiaries
         pure HostedSv_UpdateBeneficiariesResult with hostedSvCid
 
@@ -1307,41 +1308,6 @@ template DsoRules with
         hostedSvCid <- create hostedSvCo with svOperator = instruction.newSvOperator
 
         pure DsoRules_UpdateSvOperatorForHostedSvResult with hostedSvCid
-
-    -- | Replaces the reward beneficiary distribution for a hosted SV.
-    --
-    -- The beneficiary distribution is stored directly on the 'HostedSv' contract.
-    -- This choice archives the existing 'HostedSv' contract and recreates it with
-    -- the new beneficiary distribution.
-    --
-    -- The SV operator currently configured on the 'HostedSv' contract is responsible
-    -- for managing the hosted SV's beneficiary distribution.
-    nonconsuming choice DsoRules_SetHostedSvRewardBeneficiaries : DsoRules_SetSvRewardBeneficiariesResult
-      with
-        hostedSvCid : ContractId HostedSv
-          -- ^ The hosted SV contract whose beneficiary distribution is being updated.
-        newBeneficiaries : Map Party Decimal
-          -- ^ The full beneficiary distribution to set.
-        svOperator : Party
-          -- ^ The SV node operator hosting the hosted SV whose beneficiary distribution is being managed.
-      controller svOperator
-      do
-        _ <- getAndValidateSvParty this (Some svOperator)
-        hostedSvCo <- fetchAndArchive (ForDso with dso) hostedSvCid
-
-        -- Sanity checks
-        require
-          ( "Beneficiary's distribution for hosted SV "
-              <> show hostedSvCo.hostedSv
-              <> " is managed by the SV operator "
-              <> show hostedSvCo.svOperator
-          ) $ hostedSvCo.svOperator == svOperator
-        require "New beneficiaries must differ from the existing beneficiaries" $
-          newBeneficiaries /= hostedSvCo.beneficiaries
-
-        hostedSvCid <- create hostedSvCo with beneficiaries = newBeneficiaries
-
-        pure DsoRules_SetSvRewardBeneficiariesResult with hostedSvCid
 
     -- FIXME: Deprecate once all hosted SVs have been migrated.
     --

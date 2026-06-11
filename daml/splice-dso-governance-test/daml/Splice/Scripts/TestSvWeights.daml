@@ -84,13 +84,10 @@ test_SvWeightsFullyOnledger = do
 
   -- Replace beneficiaries
   let hsv1ExtraBeneficiaries = Map.fromList [(hsv1_b, unsafeLookup hsv1_b hsv1BeneficiariesMap)]
-  [(rulesCid, _)] <- query @DsoRules app.dso
   hsv1HostedSvCid <- getHostedSvCid app hsv1
-  void $ submit (actAs sv5 <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
-      hostedSvCid = hsv1HostedSvCid
+  void $ submit (actAs hsv1 <> readAs dso) $
+    exerciseCmd hsv1HostedSvCid HostedSv_UpdateBeneficiaries with
       newBeneficiaries = hsv1ExtraBeneficiaries
-      svOperator = sv5
 
   assertHostedSv app hsv1 sv5 hsv1Weight hsv1ExtraBeneficiaries
 
@@ -113,6 +110,7 @@ test_SvWeightsFullyOnledger = do
 
   -- sv5 tries to create coupons using the new DsoRules_ReceiveSvRewardCoupon_V2 for the same round
   [(roundCid, _), _, _] <- getActiveOpenRoundsSorted app.dso
+  [(rulesCid, _)] <- query @DsoRules app.dso
   hostedSvRewardInputs <- getHostedSvRewardInputsBySvOperator app sv5
   void $ submitMustFail (actAs sv5 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_ReceiveSvRewardCoupon_V2 with
@@ -191,13 +189,10 @@ test_SvWeightsFullyOnledger = do
   runNextIssuance app
 
   -- Remove hsv1_b's weight
-  [(rulesCid, _)] <- query @DsoRules app.dso
   hsv1HostedSvCid <- getHostedSvCid app hsv1
-  void $ submit (actAs sv1 <> readAs dso) $
-    exerciseCmd rulesCid DsoRules_SetHostedSvRewardBeneficiaries with
-      hostedSvCid = hsv1HostedSvCid
+  void $ submit (actAs hsv1 <> readAs dso) $
+    exerciseCmd hsv1HostedSvCid HostedSv_UpdateBeneficiaries with
       newBeneficiaries = Map.empty
-      svOperator = sv1
 
   -- Create SV coupons
   [(roundCid, round), _, _] <- getActiveOpenRoundsSorted app.dso
@@ -218,6 +213,7 @@ test_SvWeightsFullyOnledger = do
   [(hostedSvRewardStateCid, _)] <- queryFilter @HostedSvRewardState dso (\co -> co.hostedSv == hsv1)
 
   -- Offboard
+  [(rulesCid, _)] <- query @DsoRules app.dso
   hsv1HostedSvCid <- getHostedSvCid app hsv1
   void $ submit (actAs sv1 <> readAs dso) $
     exerciseCmd rulesCid DsoRules_OffboardHostedSv with
