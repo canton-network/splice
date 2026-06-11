@@ -271,6 +271,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               .listConfirmations(startProcessingAction)
               .futureValue should have size 2
           }
+          sv1Backend.appState.dsoStore
+            .listOldestSummarizingMiningRounds()
+            .futureValue
+            .map(_.payload.round.number) should contain(round)
         }
 
         // This is trying to simulate AppActivityRecordMetaT's userVersion bump
