@@ -3,19 +3,12 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
-import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider}
-import org.lfdecentralizedtrust.splice.store.{
-  HardLimit,
-  HistoryMetrics,
-  Limit,
-  S3BucketConnection,
-  TimestampWithMigrationId,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, HistoryMetrics, Limit, S3BucketConnection, TimestampWithMigrationId, UpdateHistory}
 
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.OptionT
@@ -35,15 +28,9 @@ class AcsSnapshotBulkStorageStaging(
     s3Connection: S3BucketConnection,
     kvProvider: ScanKeyValueProvider,
     historyMetrics: HistoryMetrics,
-    override val loggerFactory: NamedLoggerFactory,
+    val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
-    extends AcsSnapshotBulkStorage(
-      appConfig,
-      acsSnapshotStore,
-      updateHistory,
-      kvProvider,
-      loggerFactory,
-    ) {
+    extends AcsSnapshotBulkStorageWriter with NamedLogging with Spanning {
 
   override val description = "ACS Snapshot Bulk Storage (Staging)"
   override val kvStoreKey = "latest_acs_snapshot_in_bulk_storage"

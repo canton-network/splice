@@ -24,9 +24,24 @@ import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHi
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
-/** An abstract class for pipelines that process ACS snapshots for bulk storage.
-  */
-abstract class AcsSnapshotBulkStorage(
+trait AcsSnapshotBulkStorageWriter {
+  val description: String
+  val kvStoreKey: String
+  val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp]
+  def getNextSnapshotTimestampAfter(
+      last: TimestampWithMigrationId
+  )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
+  def shouldProcessSnapshotAt(ts: TimestampWithMigrationId)(implicit
+      tc: TraceContext
+  ): Boolean
+  def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
+      tc: TraceContext
+  ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
+
+}
+
+class AcsSnapshotBulkStorage(
+    processor: AcsSnapshotBulkStorageWriter,
     appConfig: BulkStorageConfig,
     acsSnapshotStore: AcsSnapshotStore,
     updateHistory: UpdateHistory,
@@ -36,47 +51,47 @@ abstract class AcsSnapshotBulkStorage(
     extends NamedLogging
     with Spanning {
 
-  protected val description: String
-
-  /** The key in the key-value store where the timestamp of the latest processed snapshot is stored. This is
-    * used to resume processing from the correct point in case of restarts.
-    */
-  protected val kvStoreKey: String
-
-  /** A metric that should be updated with the timestamp of the latest snapshot that was processed.
-    */
-  protected val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp]
-
-  /** This method should return the timestamp of the next snapshot available, after `last`, if any.
-    * The pipeline will  poll this method until it returns a new snapshot, and then process that snapshot
-    * before polling for the next one. It is ok for this method to return a snapshot that should not actually
-    * be processed, as the pipeline will call `shouldProcessSnapshotAt` to check if the snapshot should be
-    * processed or skipped (but will remember that it was skipped and update `last` for the future calls accordingly).
-    */
-  protected def getNextSnapshotTimestampAfter(
-      last: TimestampWithMigrationId
-  )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
-
-  /** This method should return true if the snapshot at the given timestamp should be processed,
-    * or false if it should be skipped. This is used to skip snapshots that are not relevant for bulk storage
-    * (e.g. because they are in the DB, but are more frequent then the frequency we need for bulk storage).
-    */
-  protected def shouldProcessSnapshotAt(ts: TimestampWithMigrationId)(implicit
-      tc: TraceContext
-  ): Boolean
-
-  /** This method should return the main Flow that processes the snapshot at the given timestamp.
-    * It must emit back the same timestamp as its output once processing is complete.
-    */
-  protected def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
-      tc: TraceContext
-  ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
+//  protected val description: String
+//
+//  /** The key in the key-value store where the timestamp of the latest processed snapshot is stored. This is
+//    * used to resume processing from the correct point in case of restarts.
+//    */
+//  protected val kvStoreKey: String
+//
+//  /** A metric that should be updated with the timestamp of the latest snapshot that was processed.
+//    */
+//  protected val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp]
+//
+//  /** This method should return the timestamp of the next snapshot available, after `last`, if any.
+//    * The pipeline will  poll this method until it returns a new snapshot, and then process that snapshot
+//    * before polling for the next one. It is ok for this method to return a snapshot that should not actually
+//    * be processed, as the pipeline will call `shouldProcessSnapshotAt` to check if the snapshot should be
+//    * processed or skipped (but will remember that it was skipped and update `last` for the future calls accordingly).
+//    */
+//  protected def getNextSnapshotTimestampAfter(
+//      last: TimestampWithMigrationId
+//  )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
+//
+//  /** This method should return true if the snapshot at the given timestamp should be processed,
+//    * or false if it should be skipped. This is used to skip snapshots that are not relevant for bulk storage
+//    * (e.g. because they are in the DB, but are more frequent then the frequency we need for bulk storage).
+//    */
+//  protected def shouldProcessSnapshotAt(ts: TimestampWithMigrationId)(implicit
+//      tc: TraceContext
+//  ): Boolean
+//
+//  /** This method should return the main Flow that processes the snapshot at the given timestamp.
+//    * It must emit back the same timestamp as its output once processing is complete.
+//    */
+//  protected def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
+//      tc: TraceContext
+//  ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
 
   protected[bulk] def readLatestProcessedSnapshotTimestamp(implicit
       tc: TraceContext
   ): Future[Option[TimestampWithMigrationId]] = {
     import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
-    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+    kvProvider.store.readValueAndLogOnDecodingFailure(processor.kvStoreKey).value
   }
 
   private def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
@@ -84,7 +99,7 @@ abstract class AcsSnapshotBulkStorage(
   ): Future[Unit] = {
     import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
     kvProvider.store
-      .setValue(kvStoreKey, ts)
+      .setValue(processor.kvStoreKey, ts)
       .map(_ => {
         logger.info(
           s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
@@ -97,7 +112,7 @@ abstract class AcsSnapshotBulkStorage(
   )(implicit tc: TraceContext): Source[TimestampWithMigrationId, NotUsed] = {
     Source
       .unfoldAsync(start) { (last: TimestampWithMigrationId) =>
-        getNextSnapshotTimestampAfter(last).flatMap {
+        processor.getNextSnapshotTimestampAfter(last).flatMap {
           case Some(snapshot) =>
             logger.info(
               s"next snapshot available, at migration ${snapshot.migrationId}, record time ${snapshot.timestamp}"
@@ -155,14 +170,14 @@ abstract class AcsSnapshotBulkStorage(
             logger.info("No processed snapshots yet, starting from genesis")
             getAcsSnapshotTimestampsAfter(TimestampWithMigrationId(CantonTimestamp.MinValue, 0))
         }
-        .filter { shouldProcessSnapshotAt }
+        .filter { processor.shouldProcessSnapshotAt }
         .flatMapConcat(ts =>
           Source
             .single(ts)
-            .via(processSnapshotAt(ts))
+            .via(processor.processSnapshotAt(ts))
         )
         .mapAsync(1) { ts =>
-          processedTimestampMetric.updateValue(ts.timestamp)
+          processor.processedTimestampMetric.updateValue(ts.timestamp)
           persistLatestProcessedSnapshotTimestamp(ts).map(_ => ts)
         }
     }
@@ -180,7 +195,7 @@ abstract class AcsSnapshotBulkStorage(
         Sink.ignore,
         automationConfig,
         backoffClock,
-        description,
+        processor.description,
         retryProvider,
         loggerFactory,
       )
