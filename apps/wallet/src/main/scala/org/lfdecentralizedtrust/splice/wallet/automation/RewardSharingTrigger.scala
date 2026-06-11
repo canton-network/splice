@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv
   RewardCoupon_AssignBeneficiaries,
 }
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.store.HardLimit
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, ChoiceContextWithDisclosures}
 import cats.data.NonEmptyList
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
@@ -52,13 +53,17 @@ class RewardSharingTrigger(
       unassignedCoupons <- store.listRewardCouponsV2(
         includeUnassigned = true,
         includeAssigned = false,
+        limit = HardLimit.tryCreate(context.config.parallelism * config.batchSize),
       )
     } yield {
-      val couponsToAssign = unassignedCoupons.flatMap(_.toAssignedContract).toList
-      NonEmptyList.fromList(couponsToAssign) match {
-        case Some(nel) if shouldShareNow(nel) => Seq(Task(nel))
-        case _ => Seq.empty
-      }
+      unassignedCoupons
+        .flatMap(_.toAssignedContract)
+        .toList
+        .grouped(config.batchSize)
+        .flatMap(NonEmptyList.fromList)
+        .filter(shouldShareNow)
+        .map(Task(_))
+        .toSeq
     }
 
   override protected def completeTask(
