@@ -234,8 +234,12 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         val round = oldestOpenRound
         doTransfer(bobParty)
         // Need to advance by two rounds, see note below about last_archived_round
-        advanceRoundsToNextRoundOpening
-        advanceRoundsToNextRoundOpening
+        // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
+        // on summarizing and issuing round to complete, and here the
+        // summarizing round will block until the sv2 provides the round totals
+        // via bft read.
+        advanceTimeAndWaitForRoundOpening
+        advanceTimeAndWaitForRoundOpening
 
         val (calculateRewardsCid, rootHash) =
           clue(
