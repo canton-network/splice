@@ -147,7 +147,7 @@ monitoring:
           seconds: 1200
       acsSnapshots:
         # This task repeats every ~3h
-        saveLatencyThresholdSeconds: 2700
+        saveLatencyThresholdSeconds: 5400
         # This task repeats every ~30sec
         updateLatencyThresholdSeconds: 3
       sequencerRateLimits:
