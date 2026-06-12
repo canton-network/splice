@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Happy path and negative test cases for V1 transfer instruction API calls.
-module Splice.Testing.Tokens.TestTokenV2.TestTransferInstructionV1 where
+module Splice.Testing.Tokens.TestTokenV1.TestTransferInstructionV1 where
 
 import DA.Assert
 import DA.Map qualified as Map
@@ -22,7 +22,7 @@ import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.Utils
 
-import Splice.Testing.Tokens.TestTokenV2.TokenStandardTestEnv (TestEnv(..), setupTest, createLockedHoldings)
+import Splice.Testing.Tokens.TestTokenV1.TokenStandardTestEnv (TestEnv(..), setupTest, createLockedHoldings)
 
 
 -- Happy-path test cases
@@ -50,20 +50,6 @@ test_transfer_singleStep_selfTransfer = test_transfer_singleStep_generic $ \Test
         transfer = transferV1 with
           receiver = alice
   pure (choiceArg, 1000.0, 0.0)
-
-{-
-
--- Note: TestTokenV2 does not (yet) support direct sender-receiver authz, which is why this test is commented out.
--- For a production token, it is useful to consider allowing sender-receiver authz for non-custodial accounts to
--- achieve smaller transactions.
-
-test_transfer_singleStep_senderReceiverAuthz : Script ()
-test_transfer_singleStep_senderReceiverAuthz = test_transfer_singleStep_generic $ \TestEnv {..} -> do
-  let choiceArg = transferArgV1 with
-        actors = [alice, bob]
-  pure (choiceArg, 990.0, 10.0)
-
--}
 
 test_happy_instr_generic : (TestEnv -> ContractId V1.TransferInstruction -> Script ()) -> Script ()
 test_happy_instr_generic mkTest = do
@@ -127,8 +113,7 @@ test_transfer_TransferV1_cannotUseLockedHoldings = test_transfer_negative_generi
         transfer = transferV1 with
           inputHoldingCids = map coerceContractId lockedCids
   pure $ (,) choiceArg $
-    expectErrorId "stdlib.daml.com/deadline-not-exceeded" <>
-    expectMessageContains "Ledger time is strictly before deadline 'input holding lock expiresAt' at 2023-01-01T00:00:00Z"
+    expectMessageContains "'holding.lock' is not equal to 'expected value'"
 
 test_transfer_TransferV1_wrongInstrumentId : Script ()
 test_transfer_TransferV1_wrongInstrumentId = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -139,8 +124,8 @@ test_transfer_TransferV1_wrongInstrumentId = test_transfer_negative_generic $ \T
         transfer = transferV1 with
           instrumentId = wrongInstrId
   pure $ (,) choiceArg $
-    expectMessageContains "'inputHolding.instrumentId' is not equal to 'expectedInstrumentId'" <>
-    expectMessageContains ("expectedInstrumentId: " <> show wrongInstrId)
+    expectMessageContains "'holding.instrumentId' is not equal to 'expected value'" <>
+    expectMessageContains ("expected value: " <> show wrongInstrId)
 
 test_transfer_TransferV1_inputHoldingCids_noneGiven : Script ()
 test_transfer_TransferV1_inputHoldingCids_noneGiven = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -148,7 +133,7 @@ test_transfer_TransferV1_inputHoldingCids_noneGiven = test_transfer_negative_gen
         transfer = transferV1 with
           inputHoldingCids = []
   pure $ (,) choiceArg $
-    expectMessageContains ("'inputAmount + mintAmount for " <> show instrId <> "' is less than 'transfer.amount'")
+    expectMessageContains "'input amount' is less than 'transfer.amount'"
 
 test_transfer_TransferV1_inputHoldingCids_insufficientFunds : Script ()
 test_transfer_TransferV1_inputHoldingCids_insufficientFunds = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -156,7 +141,7 @@ test_transfer_TransferV1_inputHoldingCids_insufficientFunds = test_transfer_nega
         transfer = transferV1 with
           amount = 10000000.0
   pure $ (,) choiceArg $
-    expectMessageContains ("'inputAmount + mintAmount for " <> show instrId <> "' is less than 'transfer.amount'")
+    expectMessageContains "'input amount' is less than 'transfer.amount'"
 
 test_transfer_TransferV1_inputHoldingCids_wrongAdmin : Script ()
 test_transfer_TransferV1_inputHoldingCids_wrongAdmin = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -166,10 +151,10 @@ test_transfer_TransferV1_inputHoldingCids_wrongAdmin = test_transfer_negative_ge
   inputHoldingCids <- createLockedHoldings wrongInstrId alice 500.0 (now `addRelTime` days (-365))
   let choiceArg = transferArgV1 with
         transfer = transferV1 with
-          inputHoldingCids = map TSU.downcast inputHoldingCids
+          inputHoldingCids
   pure $ (,) choiceArg $
-    expectMessageContains "'inputHolding.instrumentId' is not equal to 'expectedInstrumentId'" <>
-    expectMessageContains ("expectedInstrumentId: " <> show instrId)
+    expectMessageContains "'holding.instrumentId' is not equal to 'expected value'" <>
+    expectMessageContains ("expected value: " <> show instrId)
 
 test_transfer_TransferV1_inputHoldingCids_wrongOwner : Script ()
 test_transfer_TransferV1_inputHoldingCids_wrongOwner = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -179,22 +164,9 @@ test_transfer_TransferV1_inputHoldingCids_wrongOwner = test_transfer_negative_ge
         transfer = transferV1 with
           inputHoldingCids = map TSU.downcast bobHoldingCids
   pure $ (,) choiceArg $
-    expectMessageContains "'inputHolding.account' is not equal to 'expectedOwner'." <>
-    expectMessageContains ("expectedOwner: " <> show aliceAccount)
+    expectMessageContains "'holding owner' is not equal to 'expected value'." <>
+    expectMessageContains ("expected value: " <> show alice)
 
-
-test_transfer_inputHoldingCids_wrongAccount : Script ()
-test_transfer_inputHoldingCids_wrongAccount = test_transfer_negative_generic $ \TestEnv {..} -> do
-  let senderAccount = V2.Account with
-        owner = Some alice
-        provider = None
-        id = "BAD_ACCOUNT_ID"
-  let choiceArg = transferArgV1 with
-        transfer = transferV1 with
-          meta = TSU.accountToMeta "sender" senderAccount emptyMetadata
-  pure $ (,) choiceArg $
-    expectMessageContains "'inputHolding.account' is not equal to 'expectedOwner'." <>
-    expectMessageContains ("expectedOwner: " <> show senderAccount)
 
 test_transfer_amount_negative : Script ()
 test_transfer_amount_negative = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -202,7 +174,7 @@ test_transfer_amount_negative = test_transfer_negative_generic $ \TestEnv {..} -
         transfer = transferV1 with
           amount = -10.0
   pure $ (,) choiceArg $
-    expectErrorId  "UNHANDLED_EXCEPTION/DA.Exception.PreconditionFailed:PreconditionFailed" -- using an ensure clause to enforce this
+    expectUnmetRequirement "Amount must be positive"
 
 test_transfer_requestedAt : Script ()
 test_transfer_requestedAt = test_transfer_negative_generic $ \TestEnv {..} -> do
@@ -216,6 +188,5 @@ test_transfer_executeBefore = test_transfer_negative_generic $ \TestEnv {..} -> 
   let choiceArg = transferArgV1 with
         transfer = transferV1 with
           executeBefore = now `addRelTime` microseconds (-1)
-  pure $ (,) choiceArg $
-    expectErrorId  "UNHANDLED_EXCEPTION/DA.Exception.PreconditionFailed:PreconditionFailed" -- using an ensure clause to enforce this
+  pure $ (,) choiceArg $ expectErrorId  "stdlib.daml.com/deadline-exceeded"
 

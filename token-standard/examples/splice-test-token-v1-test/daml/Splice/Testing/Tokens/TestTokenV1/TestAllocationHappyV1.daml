@@ -4,28 +4,22 @@
 -- | Test happy path V1 allocation API calls.
 --
 -- Note that settlement scenarios are tested as part of the token standard DvP tests.
-module Splice.Testing.Tokens.TestTokenV2.TestAllocationHappyV1 where
+module Splice.Testing.Tokens.TestTokenV1.TestAllocationHappyV1 where
 
 import DA.Assert
 
 import Daml.Script
 
 import Splice.Api.Token.MetadataV1
-import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV1 qualified as V1
 import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 
-import Splice.TokenStandard.Utils qualified as TSU
-
-import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
-
 import Splice.Testing.Utils
-import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
 import Splice.Testing.TokenStandard.RegistryApi qualified as V1
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 
-import Splice.Testing.Tokens.TestTokenV2.TokenStandardTestEnv (TestEnv(..), setupTest)
+import Splice.Testing.Tokens.TestTokenV1.TokenStandardTestEnv (TestEnv(..), setupTest)
 
 
 -- V1 API: allocate, withdraw and cancel
@@ -46,18 +40,6 @@ test_allocation_CancelV1 = test_allocation_withdrawCancel_generic $ \TestEnv {..
   context <- V1.getAllocation_CancelContext registryV1 allocCid emptyMetadata
   submit (actAs provider <> actAs bob <> actAs alice <> discloseMany' context.disclosures) $
     exerciseCmd allocCid V1.Allocation_Cancel with
-      extraArgs = ExtraArgs with
-        context = context.choiceContext
-        meta = emptyMetadata
-  pure ()
-
--- No test for allocationInstruction cancel, as instructions are not visible to
--- executors and thus do not have a cancel action.
-test_allocationInstruction_WithdrawV1 : Script ()
-test_allocationInstruction_WithdrawV1 = test_allocationInstruction_withdraw_generic $ \TestEnv {..} allocCid -> do
-  context <- V1.getAllocationInstruction_WithdrawContext registryV1 allocCid emptyMetadata
-  submit (actAs alice <> discloseMany' context.disclosures) $
-    exerciseCmd allocCid V1.AllocationInstruction_Withdraw with
       extraArgs = ExtraArgs with
         context = context.choiceContext
         meta = emptyMetadata
@@ -96,7 +78,6 @@ test_allocation_withdrawCancel_generic mkTest = do
   let checkReset = do
         WalletClientV2.checkUnlockedBalance alice instrId 1000.0
         [] <- WalletClientV2.listAllocationsV1 alice
-        [] <- WalletClientV2.listAllocationsV2 aliceAccount alice
         pure ()
 
   -- test v1 version
@@ -106,46 +87,6 @@ test_allocation_withdrawCancel_generic mkTest = do
   mkTest testEnv allocCid
   checkReset
   -- note: no test of allocation via v2 version, as that does not implement the V1 interface
-
-
-test_allocationInstruction_withdraw_generic : (TestEnv -> ContractId V1.AllocationInstruction -> Script ()) -> Script ()
-test_allocationInstruction_withdraw_generic mkTest = do
-  testEnv@(TestEnv {..}) <- setupTest
-
-  let checkReset = do
-        WalletClientV2.checkUnlockedBalance alice instrId 1000.0
-        [] <- WalletClientV2.listAllocationInstructionsV1 alice
-        [] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
-        pure ()
-
-  -- use a joint-control account to test the allocation instruction
-  accountProvider <- allocatePartyExact "accountProvider"
-  let aliceJointControl = V2.Account with
-        owner = Some alice
-        provider = Some accountProvider
-        id = "test-account"
-  TestTokenRegistryV2.makeAccountIfMissing TestTokenV2.AccountConfig with
-        admin = instrId.admin
-        account = aliceJointControl
-        ownerConfig = TestTokenV2.PartyConfig with
-          canInitiate = True
-          mustApprove = True
-        providerConfig = TestTokenV2.PartyConfig with
-          canInitiate = True
-          mustApprove = True
-
-  -- test v1 creation
-  WalletClientV2.allocateV1 registries allocationV1 with
-    transferLeg = allocationV1.transferLeg with
-      meta = TSU.accountToMeta "sender" aliceJointControl emptyMetadata
-  WalletClientV2.checkUnlockedBalance alice instrId 1000.0 -- instructions do not lock the funds immediately
-  instrs <- WalletClientV2.listAllocationInstructionsV2 aliceJointControl alice
-  debug instrs
-  let [(allocInstrCid, _)] = instrs
-  mkTest testEnv (coerceContractId allocInstrCid)
-  checkReset
-  -- note: no test of allocation instruction via v2 version, as that does not implement the V1 interface
-
 
 
 -- Testing PublicFetch methods

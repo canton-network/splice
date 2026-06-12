@@ -134,6 +134,7 @@ template TokenAllocation with
           meta = emptyMetadata
 
       allocation_executeTransferImpl _self _arg = do
+        assertWithinDeadline "Allocation.settlement.settleBefore" allocation.settlement.settleBefore
         tokenCid <- create Token with
           holding = (allocationHoldingView allocation) with
             owner = allocation.transferLeg.receiver
@@ -259,10 +260,11 @@ consumeHoldingAmount : Party -> [ContractId V1.Holding] -> Decimal -> V1.Instrum
 consumeHoldingAmount sender inputCids amount instrumentId = do
   inputAmounts <- forA inputCids $ \cid -> do
     holding <- fetch cid
-    archive cid
     let holdingView = view holding
-    require' ("holding owner", holdingView.owner) isEqualR ("transfer.sender", sender)
-    require' ("holding.instrumentId", holdingView.instrumentId) isEqualR ("transfer.instrumentId", instrumentId)
+    requireMatchExpected ("holding owner", holdingView.owner) sender
+    requireMatchExpected ("holding.instrumentId", holdingView.instrumentId) instrumentId
+    requireMatchExpected ("holding.lock", holdingView.lock) None
+    archive cid
     pure holdingView.amount
   let totalAmount = sum inputAmounts
   require' ("input amount", totalAmount) isGreaterOrEqualR ("transfer.amount", amount)

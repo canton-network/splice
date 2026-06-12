@@ -133,7 +133,9 @@ lazy val root: Project = (project in file("."))
     `splice-token-test-trading-app-v2-daml`,
     `splice-token-test-dummy-holding-daml`,
     `splice-test-token-v1-daml`,
+    `splice-test-token-v1-test-daml`,
     `splice-test-token-v2-daml`,
+    `splice-test-token-v2-test-daml`,
     `build-tools-dar-lock-checker`,
     `canton-community-base`,
     `canton-community-common`,
@@ -925,6 +927,19 @@ lazy val `splice-amulet-daml` =
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
+    )
+
+lazy val `splice-test-token-v1-test-daml` =
+  project
+    .in(file("token-standard/examples/splice-test-token-v1-test"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-test-token-v1-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-v1-test-daml` / Compile / damlBuild).value ++
+          (`splice-token-standard-v2-test-daml` / Compile / damlBuild).value,
+      Compile / damlEnableJavaCodegen := false,
     )
 
 lazy val `splice-test-token-v2-test-daml` =
