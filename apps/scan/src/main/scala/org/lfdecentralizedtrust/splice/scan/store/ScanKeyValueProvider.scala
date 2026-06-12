@@ -14,20 +14,6 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
 class ScanKeyValueProvider(val store: KeyValueStore, val loggerFactory: NamedLoggerFactory)
     extends NamedLogging {
 
-//  private val latestUpdatesSegmentInBulkStorageKey = "latest_updates_segment_in_bulk_storage"
-//
-//  final def setLatestUpdatesSegmentInBulkStorage(
-//      segment: UpdatesSegment
-//  )(implicit tc: TraceContext): Future[Unit] = store.setValue(
-//    latestUpdatesSegmentInBulkStorageKey,
-//    segment,
-//  )
-//
-//  final def getLatestUpdatesSegmentInBulkStorage()(implicit
-//      tc: TraceContext,
-//      ec: ExecutionContext,
-//  ): OptionT[Future, UpdatesSegment] =
-//    store.readValueAndLogOnDecodingFailure(latestUpdatesSegmentInBulkStorageKey)
 }
 
 object ScanKeyValueProvider {
@@ -39,10 +25,6 @@ object ScanKeyValueProvider {
       )
   implicit val acsSnapshotTimestampMigrationCodec: Codec[TimestampWithMigrationId] =
     deriveCodec[TimestampWithMigrationId]
-//  implicit val acsSnapshotTimestampMigrationEncoder: Encoder[TimestampWithMigrationId] =
-//    acsSnapshotTimestampMigrationCodec
-//  implicit val acsSnapshotTimestampMigrationDecoder: Decoder[TimestampWithMigrationId] =
-//    acsSnapshotTimestampMigrationCodec
 
   implicit val updatesSegmentCodec: Codec[UpdatesSegment] = deriveCodec[UpdatesSegment]
 }
