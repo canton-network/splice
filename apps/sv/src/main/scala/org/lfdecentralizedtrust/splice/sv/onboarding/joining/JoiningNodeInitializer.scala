@@ -490,7 +490,7 @@ class JoiningNodeInitializer(
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
                   synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-                    Some(synchronizerNodeService.nodes),
+                    synchronizerNodeService.nodes,
                     decentralizedSynchronizer,
                     Onboarding(participantReportedPSid.serial),
                   ),
@@ -522,7 +522,7 @@ class JoiningNodeInitializer(
         if (!config.shouldSkipSynchronizerInitialization) {
           synchronizerNodeReconciler
             .reconcileSynchronizerNodeConfigIfRequired(
-              synchronizerNodeService.nodes.some,
+              synchronizerNodeService.nodes,
               decentralizedSynchronizer,
               OnboardedAfterDelay,
             )

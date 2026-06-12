@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   MediatorConfig,
   PhysicalSynchronizerNodeConfig,
   ScanConfig,
-  SequencerConfig,
   SequencerConnectionConfig,
   SequencerIdentityConfig,
   SynchronizerNodeConfig,
@@ -58,17 +57,17 @@ class SynchronizerNodeReconciler(
   private val dsoParty = dsoStore.key.dsoParty
 
   def reconcileSynchronizerNodeConfigIfRequired(
-      synchronizerNodes: Option[LocalSynchronizerNodes[LocalSynchronizerNode]],
+      synchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
       synchronizerId: SynchronizerId,
       state: SynchronizerNodeState,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Unit] = {
-    val currentNode = synchronizerNodes.map(_.current)
+    val currentNode = synchronizerNodes.current
     def setConfigIfRequired() = for {
-      localSequencerConfig <- SvUtil.getSequencerConfig(currentNode, migrationId)
-      localMediatorConfig <- SvUtil.getMediatorConfig(currentNode)
+      localSequencerConfig <- SvUtil.getSequencerConfig(Some(currentNode), migrationId)
+      localMediatorConfig <- SvUtil.getMediatorConfig(Some(currentNode))
       localScanConfig = java.util.Optional.of(new ScanConfig(scanConfig.publicUrl.toString()))
       rulesAndState <- dsoStore.getDsoRulesWithSvNodeState(svParty)
       nodeState = rulesAndState.svNodeState.payload
@@ -144,13 +143,7 @@ class SynchronizerNodeReconciler(
 
           val sequencerAvailableAfter: Option[Instant] = localSequencerConfig.flatMap { _ =>
             val sequencerAvailabilityDelay =
-              currentNode
-                .map(_.sequencerAvailabilityDelay)
-                .getOrElse(
-                  sys.error(
-                    "synchronizerNode is not expected to be empty."
-                  )
-                )
+              currentNode.sequencerAvailabilityDelay
             state match {
               case SynchronizerNodeState.OnboardedAfterDelay =>
                 Some(clock.now.toInstant.plus(sequencerAvailabilityDelay))
@@ -182,17 +175,8 @@ class SynchronizerNodeReconciler(
 
           val nodeConfig = new SynchronizerNodeConfig(
             synchronizerNodeConfig.map(_.cometBft).getOrElse(SvUtil.emptyCometBftConfig),
-            localSequencerConfig.map { c =>
-              new SequencerConfig(
-                c.migrationId,
-                c.sequencerId,
-                c.url,
-                sequencerConfig
-                  .flatMap(_.availableAfter.toScala)
-                  .orElse(sequencerAvailableAfter)
-                  .toJava,
-              )
-            }.toJava,
+            // deprecated in favor of the sequencerIdentityConfig and physicalSynchronizers
+            None.toJava,
             localMediatorConfig
               .map(c =>
                 new MediatorConfig(
@@ -201,7 +185,8 @@ class SynchronizerNodeReconciler(
               )
               .toJava,
             localScanConfig,
-            updatedSequencerConfigUpdate.getOrElse(existingLegacySequencerConfig).toJava,
+            // deprecated legacy sequencer config
+            None.toJava,
             sequencerIdentityConfig,
             localPhysicalSynchronizers
               .map(_.asJava)
@@ -225,7 +210,7 @@ class SynchronizerNodeReconciler(
   }
 
   private[onboarding] def buildPhysicalSynchronizers(
-      synchronizerNodes: Option[LocalSynchronizerNodes[LocalSynchronizerNode]],
+      synchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
       existingState: Option[Map[lang.Long, PhysicalSynchronizerNodeConfig]],
       state: SynchronizerNodeState,
   )(implicit
@@ -237,35 +222,34 @@ class SynchronizerNodeReconciler(
       .map(_.supported)
       .flatMap { hasSupport =>
         if (hasSupport) {
-          val currentEntryFuture =
-            synchronizerNodes.map(_.current).traverse { currentNode =>
-              val serialOverride = state match {
-                case SynchronizerNodeState.OnboardedAfterDelay => None
-                case SynchronizerNodeState.OnboardedImmediately => None
-                case SynchronizerNodeState.Onboarding(serial) => Some(serial)
-              }
-              buildNodeConfig(currentNode, serialOverride)
+          val currentEntryFuture = {
+            val currentNode = synchronizerNodes.current
+            val serialOverride = state match {
+              case SynchronizerNodeState.OnboardedAfterDelay => None
+              case SynchronizerNodeState.OnboardedImmediately => None
+              case SynchronizerNodeState.Onboarding(serial) => Some(serial)
             }
+            buildNodeConfig(currentNode, serialOverride)
+          }
 
           val legacyEntryFuture =
-            synchronizerNodes.flatMap(_.legacy).traverse { legacyNode =>
+            synchronizerNodes.legacy.traverse { legacyNode =>
               buildNodeConfig(legacyNode)
             }
 
           val additionalLegacyEntriesFuture =
-            MonadUtil.sequentialTraverse(synchronizerNodes.toList.flatMap(_.additionalLegacy)) {
-              legacyNode =>
-                buildNodeConfig(legacyNode)
+            MonadUtil.sequentialTraverse(synchronizerNodes.additionalLegacy.toList) { legacyNode =>
+              buildNodeConfig(legacyNode)
             }
 
           val successorEntryFuture =
-            synchronizerNodes.flatMap(_.successor).flatTraverse { successorNode =>
+            synchronizerNodes.successor.flatTraverse { successorNode =>
               successorNode.sequencerAdminConnection
                 .isNodeInitialized()
                 .attemptT
                 .foldF(
                   failure =>
-                    currentEntryFuture.map(_.flatMap { case (currentSyncSerial, _) =>
+                    currentEntryFuture.map { case (currentSyncSerial, _) =>
                       val existingSuccessors =
                         existingState.map(_.view.filterKeys(_ > currentSyncSerial).toSeq)
                       logger.info(
@@ -273,7 +257,7 @@ class SynchronizerNodeReconciler(
                         failure,
                       )
                       existingSuccessors
-                    }),
+                    },
                   {
                     case true =>
                       buildNodeConfig(successorNode).map(config => Some(Seq(config)))
@@ -290,7 +274,9 @@ class SynchronizerNodeReconciler(
             additionalLegacyEntries <- additionalLegacyEntriesFuture
           } yield {
             Some(
-              (legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
+              (legacyEntry.toList ++ List(
+                currentEntry
+              ) ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
             )
           }
         } else Future.successful(None)

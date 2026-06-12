@@ -170,7 +170,7 @@ class LsuTrigger(
           Future.unit
         }
       _ <- reconciler.reconcileSynchronizerNodeConfigIfRequired(
-        localSynchronizerNodes.some,
+        localSynchronizerNodes,
         currentPsid.logical,
         OnboardedImmediately,
       )

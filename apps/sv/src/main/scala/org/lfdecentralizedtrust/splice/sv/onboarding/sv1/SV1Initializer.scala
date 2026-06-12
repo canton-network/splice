@@ -625,7 +625,7 @@ class SV1Initializer(
         tc: TraceContext
     ): Future[Unit] = {
       synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-        synchronizerNodeService.nodes.some,
+        synchronizerNodeService.nodes,
         synchronizerId,
         SynchronizerNodeState.OnboardedImmediately,
       )
