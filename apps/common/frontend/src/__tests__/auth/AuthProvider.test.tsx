@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { render } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockOidcAuthProvider = vi.fn(({ children }: React.PropsWithChildren) => <>{children}</>);
 
@@ -31,8 +31,11 @@ const rs256Config: AuthConfig = {
 };
 
 describe('AuthProvider', () => {
-  test('passes automaticSilentRenew=true to the OIDC provider', () => {
+  beforeEach(() => {
     mockOidcAuthProvider.mockClear();
+  });
+
+  test('passes automaticSilentRenew=true to the OIDC provider', () => {
     render(
       <AuthProvider authConf={rs256Config}>
         <div />
@@ -44,7 +47,6 @@ describe('AuthProvider', () => {
   });
 
   test('hs256-unsafe config short-circuits without rendering the OIDC provider', () => {
-    mockOidcAuthProvider.mockClear();
     render(
       <AuthProvider
         authConf={{
