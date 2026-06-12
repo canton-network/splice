@@ -21,6 +21,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicenserequest.ValidatorLicenseRequest
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
 
@@ -34,11 +35,13 @@ trait SvSvStore extends AppStore {
   override protected lazy val loggerFactory: NamedLoggerFactory =
     outerLoggerFactory.append("store", "svParty")
 
+  def permissionedSynchronizer: Boolean
+
   override lazy val acsContractFilter
       : org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractFilter[
         org.lfdecentralizedtrust.splice.sv.store.db.SvTables.SvAcsStoreRowData,
         AcsInterfaceViewRowData.NoInterfacesIngested,
-      ] = SvSvStore.contractFilter(key)
+      ] = SvSvStore.contractFilter(key, permissionedSynchronizer)
 
   def lookupValidatorOnboardingBySecretWithOffset(
       secret: String
@@ -101,6 +104,7 @@ object SvSvStore {
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
+      permissionedSynchronizer: Boolean = false,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -116,40 +120,53 @@ object SvSvStore {
       ingestionConfig,
       acsStoreDescriptorUserVersion,
       defaultLimit = defaultLimit,
+      permissionedSynchronizer = permissionedSynchronizer,
     )
 
   /** Contract filter of an sv acs store for a specific acs party. */
-  def contractFilter(key: SvStore.Key): MultiDomainAcsStore.ContractFilter[
+  def contractFilter(
+      key: SvStore.Key,
+      permissionedSynchronizer: Boolean = false,
+  ): MultiDomainAcsStore.ContractFilter[
     SvAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
   ] = {
     import MultiDomainAcsStore.mkFilter
     val sv = key.svParty.toProtoPrimitive
+    val svFilters = Map(
+      mkFilter(vo.ValidatorOnboarding.COMPANION)(co => co.payload.sv == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          onboardingSecret = Some(contract.payload.candidateSecret),
+        )
+      },
+      mkFilter(vo.UsedSecret.COMPANION)(co => co.payload.sv == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          onboardingSecret = Some(contract.payload.secret),
+        )
+      },
+      mkFilter(so.SvOnboardingConfirmed.COMPANION)(co => co.payload.svParty == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          svCandidateName = Some(contract.payload.svName),
+        )
+      },
+    )
+
+    val permissionedFilters = if (permissionedSynchronizer) {
+      Map(mkFilter(ValidatorLicenseRequest.COMPANION)(co => co.payload.sponsor == sv) { contract =>
+        SvAcsStoreRowData(contract)
+      })
+    } else {
+      Map.empty
+    }
 
     MultiDomainAcsStore.SimpleContractFilter(
       key.svParty,
-      Map(
-        mkFilter(vo.ValidatorOnboarding.COMPANION)(co => co.payload.sv == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-            onboardingSecret = Some(contract.payload.candidateSecret),
-          )
-        },
-        mkFilter(vo.UsedSecret.COMPANION)(co => co.payload.sv == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            onboardingSecret = Some(contract.payload.secret),
-          )
-        },
-        mkFilter(so.SvOnboardingConfirmed.COMPANION)(co => co.payload.svParty == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-            svCandidateName = Some(contract.payload.svName),
-          )
-        },
-      ),
+      svFilters ++ permissionedFilters,
     )
   }
 }

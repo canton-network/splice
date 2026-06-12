@@ -68,6 +68,8 @@ trait SvDsoStore
   protected val outerLoggerFactory: NamedLoggerFactory
   protected def templateJsonDecoder: TemplateJsonDecoder
 
+  def permissionedSynchronizer: Boolean
+
   override protected lazy val loggerFactory: NamedLoggerFactory =
     outerLoggerFactory.append("store", "dsoParty")
 
@@ -76,7 +78,7 @@ trait SvDsoStore
         org.lfdecentralizedtrust.splice.sv.store.db.DsoTables.DsoAcsStoreRowData,
         AcsInterfaceViewRowData.NoInterfacesIngested,
       ] =
-    SvDsoStore.contractFilter(key.dsoParty, domainMigrationId)
+    SvDsoStore.contractFilter(key.dsoParty, domainMigrationId, permissionedSynchronizer)
 
   def key: SvStore.Key
 
@@ -855,6 +857,25 @@ trait SvDsoStore
     QueryResult[Option[Contract[so.SvOnboardingRequest.ContractId, so.SvOnboardingRequest]]]
   ]
 
+  def listSponsoredValidatorPermissions(sponsor: PartyId, after: Option[Long], limit: PageLimit)(
+      implicit tc: TraceContext
+  ): Future[
+    (
+        Seq[Contract[
+          splice.validatorpermission.ValidatorPermission.ContractId,
+          splice.validatorpermission.ValidatorPermission,
+        ]],
+        Option[Long],
+    )
+  ]
+
+  def lookupValidatorPermissionWithOffset(validator: PartyId)(implicit
+      tc: TraceContext
+  ): Future[QueryResult[Option[Contract[
+    splice.validatorpermission.ValidatorPermission.ContractId,
+    splice.validatorpermission.ValidatorPermission,
+  ]]]]
+
   def lookupValidatorLicenseWithOffset(validator: PartyId)(implicit
       tc: TraceContext
   ): Future[QueryResult[Option[Contract[vl.ValidatorLicense.ContractId, vl.ValidatorLicense]]]]
@@ -1114,6 +1135,7 @@ object SvDsoStore {
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
+      permissionedSynchronizer: Boolean = false,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -1129,6 +1151,7 @@ object SvDsoStore {
       ingestionConfig,
       acsStoreDescriptorUserVersion,
       defaultLimit = defaultLimit,
+      permissionedSynchronizer = permissionedSynchronizer,
     )
   }
 
@@ -1136,6 +1159,7 @@ object SvDsoStore {
   def contractFilter(
       dsoParty: PartyId,
       domainMigrationId: Long,
+      permissionedSynchronizer: Boolean = false,
   ): MultiDomainAcsStore.ContractFilter[
     DsoAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
@@ -1557,9 +1581,25 @@ object SvDsoStore {
       },
     )
 
+    val permissionedFilters = if (permissionedSynchronizer) {
+      Map(
+        mkFilter(splice.validatorpermission.ValidatorPermission.COMPANION)(vp =>
+          vp.payload.dso == dso
+        ) { contract =>
+          DsoAcsStoreRowData(
+            contract,
+            validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+            svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sponsor)),
+          )
+        }
+      )
+    } else {
+      Map.empty
+    }
+
     MultiDomainAcsStore.SimpleContractFilter(
       dsoParty,
-      dsoFilters,
+      dsoFilters ++ permissionedFilters,
     )
   }
 

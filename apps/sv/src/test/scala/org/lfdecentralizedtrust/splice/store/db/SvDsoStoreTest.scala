@@ -113,6 +113,10 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     }
 
     lookupTests("lookupDsoRulesWithOffset")(dsoRules())(_.lookupDsoRulesWithStateWithOffset())
+    lookupTests("lookupValidatorPermissionWithOffset")(
+      create = validatorPermission(dsoParty, storeSvParty, userParty(1), "PAR:v1::namespace"),
+      noise = Seq(validatorPermission(dsoParty, storeSvParty, userParty(2), "PAR:v2::namespace")),
+    )(_.lookupValidatorPermissionWithOffset(userParty(1)))
     lookupTests("lookupAmuletRulesWithOffset")(amuletRules())(_.lookupAmuletRulesWithOffset())
     lookupTests("lookupAnsRulesWithOffset")(ansRules())(
       _.lookupAnsRulesWithOffset()
@@ -205,6 +209,38 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "listSponsoredValidatorPermissions" should {
+      "return only permissions sponsored by the given SV" in {
+        val sv1 = userParty(1)
+        val sv2 = userParty(2)
+        val v1 = userParty(3)
+        val v2 = userParty(4)
+        val v3 = userParty(5)
+
+        val sv1Permission1 = validatorPermission(dsoParty, sv1, v1, "PAR::v1::namespace")
+        val sv1Permission2 = validatorPermission(dsoParty, sv1, v2, "PAR::v2::namespace")
+        val sv2Permission1 = validatorPermission(dsoParty, sv2, v3, "PAR::v3::namespace")
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(sv1Permission1, sv1Permission2, sv2Permission1))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          (result, token) <- store.listSponsoredValidatorPermissions(
+            sv1,
+            None,
+            PageLimit.Max,
+          )
+        } yield {
+          result shouldBe Seq(
+            sv1Permission2,
+            sv1Permission1,
+          )
+          token shouldBe None
+        }
+      }
+    }
 
     "getOpenMiningRoundTriple" should {
 
@@ -1889,6 +1925,7 @@ class DbSvDsoStoreTest
       participantId = mkParticipantId("SvDsoStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      permissionedSynchronizer = true,
     )(parallelExecutionContext, implicitly, implicitly)
     for {
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()

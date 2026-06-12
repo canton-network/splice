@@ -26,6 +26,8 @@ import {
   LookupDsoRulesVoteRequestResponse,
   Middleware,
   PrepareValidatorOnboardingRequest,
+  GrantValidatorPermissionResponse,
+  GrantValidatorPermissionRequest,
   PrepareValidatorOnboardingResponse,
   RequestContext,
   ResponseContext,
@@ -74,6 +76,10 @@ export interface SvAdminClient {
     reasonUrl: string,
     reasonDescription: string
   ) => Promise<void>;
+  grantValidatorPermission: (
+    validatorPartyId: string,
+    validatorParticipantId: string
+  ) => Promise<GrantValidatorPermissionResponse>;
   prepareValidatorOnboarding: (
     expiresIn: number,
     partyHint: string
@@ -184,6 +190,16 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
           reason_description,
         };
         return await svAdminClient.castVote(request);
+      },
+      grantValidatorPermission: async (
+        validatorPartyId: string,
+        validatorParticipantId: string
+      ): Promise<GrantValidatorPermissionResponse> => {
+        const request: GrantValidatorPermissionRequest = {
+          validator_party_id: validatorPartyId,
+          validator_participant_id: validatorParticipantId,
+        };
+        return await svAdminClient.grantValidatorPermission(request);
       },
       prepareValidatorOnboarding: async (
         expires_in: number,

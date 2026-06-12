@@ -42,9 +42,10 @@ import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSe
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.store.{Limit, PageLimit}
 
 import java.util.Optional
-import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 
 class HttpSvOperatorHandler(
     svStoreWithIngestion: AppStoreWithIngestion[SvSvStore],
@@ -197,6 +198,92 @@ class HttpSvOperatorHandler(
             )
           }.toVector
         )
+      }
+    }
+  }
+
+  override def listValidatorPermissions(
+      respond: r0.ListValidatorPermissionsResponse.type
+  )(after: Option[Long], limit: Option[Int])(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.ListValidatorPermissionsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.listValidatorPermissions") { _ => _ =>
+      if (!config.permissionedSynchronizer) {
+        Future.failed(
+          HttpErrorHandler.notFound(
+            "Validator permissioning is disabled. The permissionedSynchronizer flag must be enabled."
+          )
+        )
+      } else {
+        val svParty = dsoStoreWithIngestion.store.key.svParty
+        val pageLimit =
+          limit.fold(PageLimit.Max)(l => PageLimit.tryCreate(l, Limit.DefaultMaxPageSize))
+
+        for {
+          dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+          (permissions, nextPageToken) <- SvApp.listValidatorPermissions(
+            svParty,
+            dsoStoreWithIngestion.store,
+            after,
+            pageLimit,
+          )
+        } yield {
+          r0.ListValidatorPermissionsResponseOK(
+            definitions.ListValidatorPermissionsResponse(
+              validatorPermissions = permissions.map { case (party, participant) =>
+                definitions.ValidatorPermissionsResponse(party, participant)
+              }.toVector,
+              nextPageToken = nextPageToken,
+            )
+          )
+        }
+      }
+    }
+  }
+
+  override def grantValidatorPermission(
+      respond: r0.GrantValidatorPermissionResponse.type
+  )(
+      body: definitions.GrantValidatorPermissionRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.GrantValidatorPermissionResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.grantValidatorPermission") { _ => _ =>
+      if (!config.permissionedSynchronizer) {
+        Future.failed(
+          HttpErrorHandler.notFound(
+            "Validator permissioning is disabled. The permissionedSynchronizer feature flag must be enabled."
+          )
+        )
+      } else {
+        Codec.decode(Codec.Party)(body.validatorPartyId) match {
+          case Left(error) =>
+            Future.failed(HttpErrorHandler.badRequest(s"Invalid validator_party_id: $error"))
+          case Right(validatorParty) =>
+            SvApp
+              .grantValidatorPermission(
+                validatorParty.toProtoPrimitive,
+                body.validatorParticipantId,
+                dsoStoreWithIngestion,
+                retryProvider,
+                logger,
+              )
+              .flatMap {
+                case Left(reason) =>
+                  Future.failed(
+                    HttpErrorHandler
+                      .internalServerError(s"Could not grant validator permission: $reason")
+                  )
+                case Right(permissionCid) =>
+                  Future.successful(
+                    r0.GrantValidatorPermissionResponseOK(
+                      definitions.GrantValidatorPermissionResponse(permissionCid.contractId)
+                    )
+                  )
+              }
+        }
       }
     }
   }
