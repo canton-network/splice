@@ -786,6 +786,7 @@ class BftScanConnection(
             logger,
             shortenResponsesForLog,
             consensusLogConfig,
+            connectionMetrics,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -924,7 +925,12 @@ object BftScanConnection {
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
       consensusLogConfig: ConsensusLogConfig = ConsensusLogConfig(),
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      mc: MetricsContext = MetricsContext.Empty,
+  ): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
     val responses =
@@ -962,7 +968,13 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses, consensusLogConfig)
+                logDisagreements(
+                  logger,
+                  consensusResponse,
+                  responses,
+                  consensusLogConfig,
+                  connectionMetrics,
+                )
             }
           }
         }
@@ -1007,10 +1019,35 @@ object BftScanConnection {
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
       consensusLogConfig: ConsensusLogConfig,
-  )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
+      connectionMetrics: Option[ScanConnectionMetrics],
+  )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
     implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
+    def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
+      connectionMetrics.foreach { metrics =>
+        val context = mc.merge(
+          MetricsContext(
+            Map(
+              "scan_connection" -> url.authority.host.address(),
+              "consensus" -> consensus,
+            ) ++ extraLabels
+          )
+        )
+        metrics.bftPerConnectionConsensus.mark()(context)
+      }
+    def disagreementLabels(response: BftScanConnection.ScanResponse[T]): Map[String, String] =
+      response match {
+        case _: SuccessfulResponse[?] => Map("success" -> "true")
+        case HttpFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case NonJsonHttpFailureResponse(status) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case TextFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case _: ExceptionFailureResponse[?] => Map("success" -> "false")
+      }
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
       val agreeingScanUrls = responses.remove(consensusResponseKey)
+      agreeingScanUrls.foreach(recordConsensus(_, "agree", Map.empty))
       consensusLogConfig.agreementLogLevel.foreach { level =>
         LoggerUtil.logAtLevel(
           level,
@@ -1018,6 +1055,8 @@ object BftScanConnection {
         )
       }
       responses.forEach { (disagreeingResponse, scanUrls) =>
+        val extraLabels = disagreementLabels(disagreeingResponse)
+        scanUrls.foreach(recordConsensus(_, "disagree", extraLabels))
         val shouldLog = disagreeingResponse match {
           case _: SuccessfulResponse[?] => true
           case _ => !consensusLogConfig.onlyLogDisagreementsInSuccessResponse
@@ -1671,7 +1710,7 @@ object BftScanConnection {
             clock,
             retryProvider,
             loggerFactory,
-            None,
+            connectionMetrics,
           )
 
           _ <- retryProvider.waitUntil(
