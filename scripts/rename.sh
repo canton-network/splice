@@ -1202,7 +1202,7 @@ function subcmd_no_illegal_daml_references() {
       'CC(?!(OUNT))'
       '(?<!(Map|Set)[.])(?<!sequencer )member(?!(ship| of|Id|.*[tT]raffic))'
       # Allow only Dso as in DsoRules in comments
-      '[-][-] .*Dso(?!(Rules))'
+      '[-][-] .*Dso(?!(Rules))(?!(Expire))'
       # Disallow dso in comments other than dsoParty
       '[-][-] .*(?!(\.)).dso'
       # Allow only very specific mentions of DSO
