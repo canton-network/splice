@@ -25,9 +25,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
 trait AcsSnapshotBulkStorageWriter {
-  val description: String
-  val kvStoreKey: String
-  val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp]
   def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
   )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
@@ -40,12 +37,45 @@ trait AcsSnapshotBulkStorageWriter {
 
 }
 
+class AcsSnapshotBulkStoragePersistentProgress(
+    kvStoreKey: String,
+    kvProvider: ScanKeyValueProvider,
+    metric: MetricHandle.Gauge[CantonTimestamp],
+    override val loggerFactory: NamedLoggerFactory,
+) extends NamedLogging
+    with Spanning {
+
+  import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
+
+  def readLatestProcessedSnapshotTimestamp(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Option[TimestampWithMigrationId]] = {
+    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+  }
+
+  def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Unit] = {
+    metric.updateValue(ts.timestamp)
+    kvProvider.store
+      .setValue(kvStoreKey, ts)
+      .map(_ => {
+        logger.info(
+          s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
+        )
+      })
+  }
+}
+
 class AcsSnapshotBulkStorage(
-    processor: AcsSnapshotBulkStorageWriter,
+    description: String,
+    writer: AcsSnapshotBulkStorageWriter,
+    val persistentProgress: AcsSnapshotBulkStoragePersistentProgress,
     appConfig: BulkStorageConfig,
     acsSnapshotStore: AcsSnapshotStore,
     updateHistory: UpdateHistory,
-    kvProvider: ScanKeyValueProvider,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
@@ -87,32 +117,19 @@ class AcsSnapshotBulkStorage(
 //      tc: TraceContext
 //  ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
 
-  protected[bulk] def readLatestProcessedSnapshotTimestamp(implicit
-      tc: TraceContext
-  ): Future[Option[TimestampWithMigrationId]] = {
-    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
-    kvProvider.store.readValueAndLogOnDecodingFailure(processor.kvStoreKey).value
-  }
-
-  private def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
-      tc: TraceContext
-  ): Future[Unit] = {
-    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
-    kvProvider.store
-      .setValue(processor.kvStoreKey, ts)
-      .map(_ => {
-        logger.info(
-          s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
-        )
-      })
-  }
+//  protected[bulk] def readLatestProcessedSnapshotTimestamp(implicit
+//      tc: TraceContext
+//  ): Future[Option[TimestampWithMigrationId]] = {
+//    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
+//    kvProvider.store.readValueAndLogOnDecodingFailure(processor.kvStoreKey).value
+//  }
 
   private def getAcsSnapshotTimestampsAfter(
       start: TimestampWithMigrationId
   )(implicit tc: TraceContext): Source[TimestampWithMigrationId, NotUsed] = {
     Source
       .unfoldAsync(start) { (last: TimestampWithMigrationId) =>
-        processor.getNextSnapshotTimestampAfter(last).flatMap {
+        writer.getNextSnapshotTimestampAfter(last).flatMap {
           case Some(snapshot) =>
             logger.info(
               s"next snapshot available, at migration ${snapshot.migrationId}, record time ${snapshot.timestamp}"
@@ -159,7 +176,7 @@ class AcsSnapshotBulkStorage(
 
     backfillingCompleteGate.flatMap { _ =>
       Source
-        .future(readLatestProcessedSnapshotTimestamp)
+        .future(persistentProgress.readLatestProcessedSnapshotTimestamp)
         .flatMapConcat {
           case Some(start: TimestampWithMigrationId) =>
             logger.info(
@@ -170,15 +187,14 @@ class AcsSnapshotBulkStorage(
             logger.info("No processed snapshots yet, starting from genesis")
             getAcsSnapshotTimestampsAfter(TimestampWithMigrationId(CantonTimestamp.MinValue, 0))
         }
-        .filter { processor.shouldProcessSnapshotAt }
+        .filter { writer.shouldProcessSnapshotAt }
         .flatMapConcat(ts =>
           Source
             .single(ts)
-            .via(processor.processSnapshotAt(ts))
+            .via(writer.processSnapshotAt(ts))
         )
         .mapAsync(1) { ts =>
-          processor.processedTimestampMetric.updateValue(ts.timestamp)
-          persistLatestProcessedSnapshotTimestamp(ts).map(_ => ts)
+          persistentProgress.persistLatestProcessedSnapshotTimestamp(ts).map(_ => ts)
         }
     }
   }
@@ -195,7 +211,7 @@ class AcsSnapshotBulkStorage(
         Sink.ignore,
         automationConfig,
         backoffClock,
-        processor.description,
+        description,
         retryProvider,
         loggerFactory,
       )

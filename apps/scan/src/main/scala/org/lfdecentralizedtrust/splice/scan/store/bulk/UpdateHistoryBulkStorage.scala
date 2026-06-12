@@ -24,36 +24,76 @@ import org.lfdecentralizedtrust.splice.store.{PageLimit, TimestampWithMigrationI
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
+trait UpdateHistoryBulkStorageWriter {
+  def processSegment(segment: UpdatesSegment)(implicit
+      tc: TraceContext
+  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
+}
+
+class UpdateHistoryBulkStoragePersistentProgress(
+    kvStoreKey: String,
+    kvProvider: ScanKeyValueProvider,
+    metric: MetricHandle.Gauge[CantonTimestamp],
+    override val loggerFactory: NamedLoggerFactory,
+) extends NamedLogging
+    with Spanning {
+
+  import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.updatesSegmentCodec
+
+  def readLatestProcessedSegment(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Option[UpdatesSegment]] = {
+    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+  }
+
+  def persistLatestProcessedSegment(segment: UpdatesSegment)(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Unit] = {
+    metric.updateValue(segment.toTimestamp.timestamp)
+    kvProvider.store
+      .setValue(kvStoreKey, segment)
+      .map(_ => {
+        logger.info(
+          s"Successfully completed processing updates segment $segment, persisted as the latest processed segment in bulk storage"
+        )
+      })
+  }
+}
+
 /** An abstract class for pipelines that process update history for bulk storage.
   */
-abstract class UpdateHistoryBulkStorage(
-    val storageConfig: ScanStorageConfig,
-    val appConfig: BulkStorageConfig,
-    val updateHistory: UpdateHistory,
-    val kvProvider: ScanKeyValueProvider,
-    val currentMigrationId: Long,
+class UpdateHistoryBulkStorage(
+    description: String,
+    writer: UpdateHistoryBulkStorageWriter,
+    val persistentProgress: UpdateHistoryBulkStoragePersistentProgress,
+    storageConfig: ScanStorageConfig,
+    appConfig: BulkStorageConfig,
+    updateHistory: UpdateHistory,
+    currentMigrationId: Long,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning {
 
-  protected val description: String
+//  protected val description: String
 
-  /** The key in the key-value store where the timestamp of the latest updates segment is stored. This is
-    * used to resume processing from the correct point in case of restarts.
-    */
-  protected val kvStoreKey: String
+//  /** The key in the key-value store where the timestamp of the latest updates segment is stored. This is
+//    * used to resume processing from the correct point in case of restarts.
+//    */
+//  protected val kvStoreKey: String
 
-  /** A metric that should be updated with the timestamp of the latest segment that was processed.
-    */
-  val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp]
+//  /** A metric that should be updated with the timestamp of the latest segment that was processed.
+//    */
+//  val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp]
 
-  /** This method should return the main Flow that processes a given segment of updates.
-    * It must emit back the same segment as its output once processing is complete.
-    */
-  protected def processSegment(segment: UpdatesSegment)(implicit
-      tc: TraceContext
-  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
+//  /** This method should return the main Flow that processes a given segment of updates.
+//    * It must emit back the same segment as its output once processing is complete.
+//    */
+//  protected def processSegment(segment: UpdatesSegment)(implicit
+//      tc: TraceContext
+//  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
 
   private def getMigrationIdForAcsSnapshot(
       snapshotTimestamp: CantonTimestamp
@@ -117,30 +157,10 @@ abstract class UpdateHistoryBulkStorage(
     * May return None if unknown yet. The caller should then sleep and retry.
     */
   private def getFirstSegment(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = {
-    readLatestProcessedSegment.flatMap {
+    persistentProgress.readLatestProcessedSegment.flatMap {
       case None => getFirstSegmentFromGenesis
       case Some(after) => getNextSegment(Some(after))
     }
-  }
-
-  protected[bulk] def readLatestProcessedSegment(implicit
-      tc: TraceContext
-  ): Future[Option[UpdatesSegment]] = {
-    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.updatesSegmentCodec
-    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
-  }
-
-  private def persistLatestProcessedSegment(
-      segment: UpdatesSegment
-  )(implicit tc: TraceContext): Future[Unit] = {
-    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.updatesSegmentCodec
-    kvProvider.store
-      .setValue(kvStoreKey, segment)
-      .map(_ => {
-        logger.info(
-          s"Successfully completed processing updates segment $segment, persisted as the latest processed segment in bulk storage"
-        )
-      })
   }
 
   private def getNextSegment(
@@ -187,10 +207,9 @@ abstract class UpdateHistoryBulkStorage(
           }
         }
         .collect { case Some(segment) => segment }
-        .flatMapConcat(segment => Source.single(segment).via(processSegment(segment)))
+        .flatMapConcat(segment => Source.single(segment).via(writer.processSegment(segment)))
         .mapAsync(1) { segment =>
-          processedSegmentMetric.updateValue(segment.toTimestamp.timestamp)
-          persistLatestProcessedSegment(segment).map(_ => segment)
+          persistentProgress.persistLatestProcessedSegment(segment).map(_ => segment)
         }
     }
   }

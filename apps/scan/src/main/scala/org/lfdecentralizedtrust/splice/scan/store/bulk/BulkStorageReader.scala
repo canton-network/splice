@@ -1,71 +1,68 @@
-// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
-// SPDX-License-Identifier: Apache-2.0
-
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
-import com.daml.metrics.api.MetricHandle
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
-import org.apache.pekko.NotUsed
+import io.grpc.Status
 import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.scaladsl.Flow
-import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
+import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
+import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
-import org.lfdecentralizedtrust.splice.store.{
-  HardLimit,
-  HistoryMetrics,
-  Limit,
-  PageLimit,
-  S3BucketConnection,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, S3BucketConnection}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class UpdateHistoryBulkStorageStaging(
+class BulkStorageReader(
+    val acsSnapshotBulkStorage: AcsSnapshotBulkStorage,
+    val updateHistoryBulkStorage: UpdateHistoryBulkStorage,
     storageConfig: ScanStorageConfig,
-    appConfig: BulkStorageConfig,
-    updateHistory: UpdateHistory,
-    kvProvider: ScanKeyValueProvider,
-    currentMigrationId: Long,
     s3Connection: S3BucketConnection,
-    historyMetrics: HistoryMetrics,
     override val loggerFactory: NamedLoggerFactory,
-)(implicit actorSystem: ActorSystem, ec: ExecutionContext)
-    extends UpdateHistoryBulkStorage(
-      storageConfig,
-      appConfig,
-      updateHistory,
-      kvProvider,
-      currentMigrationId,
-      loggerFactory,
-    ) {
-  override val description = "Update History Bulk Storage (Staging)"
-  override val kvStoreKey = "latest_updates_segment_in_bulk_storage"
+)(implicit actorSystem: ActorSystem)
+    extends NamedLogging {
 
-  override val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp] =
-    historyMetrics.BulkStorage.latestUpdatesSegment
-
-  override protected def processSegment(
-      segment: UpdatesSegment
-  )(implicit tc: TraceContext): Flow[UpdatesSegment, UpdatesSegment, NotUsed] = {
-    UpdateHistorySegmentBulkStorage
-      .asFlow(
-        storageConfig,
-        appConfig,
-        updateHistory,
-        s3Connection,
-        historyMetrics,
-        loggerFactory,
-      )
-      .map(keys => {
-        logger.debug(
-          s"Successfully dumped updates segment $segment to bulk storage, with object keys: $keys"
+  // TODO(#5844): this should be read from the committed bucket once that exists, not from staging
+  def getAcsSnapshotAtOrBefore(
+      atOrBeforeTimestamp: CantonTimestamp
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
+    for {
+      snapshotTs <- acsSnapshotBulkStorage.persistentProgress.readLatestProcessedSnapshotTimestamp
+        .map {
+          case None =>
+            throw Status.NOT_FOUND
+              .withDescription("no snapshot in bulk storage yet")
+              .asRuntimeException()
+          case Some(ts) if ts.timestamp < atOrBeforeTimestamp =>
+            logger.trace(
+              s"Latest snapshot in bulk storage is at ${ts.timestamp}, which is before the requested timestamp ${atOrBeforeTimestamp}, returning that one"
+            )
+            ts.timestamp
+          case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
+        }
+      prefix = storageConfig.findSegmentFolderPrefixByStartTimestamp(snapshotTs)
+      objects <- s3Connection
+        // A single object currently holds ~700K contracts, we apply a Limit just for safety,
+        // but we don't expect to get anywhere near 1000 such objects in the foreseeable future
+        // (hence the HardLimit, just as a safety precaution).
+        .listObjects(
+          prefix,
+          _.matches(".*ACS_\\d+\\.zstd"),
+          HardLimit.tryCreate(Limit.DefaultMaxPageSize),
         )
-        segment
-      })
+      objectsWithChecksums <- s3Connection.getChecksums(objects)
+    } yield {
+      if (objects.isEmpty) {
+        throw Status.NOT_FOUND
+          .withDescription(
+            s"No snapshot objects found in bulk storage at expected timestamp at or before $atOrBeforeTimestamp, this may be because the timestamp is before network genesis"
+          )
+          .asRuntimeException()
+      }
+      logger.trace(
+        s"Found snapshot in bulk storage at timestamp $snapshotTs, with objects: ${objects.mkString(", ")}"
+      )
+      AcsSnapshotObjects(snapshotTs, objectsWithChecksums)
+    }
   }
 
   // TODO(#5884): everything below is for fetching bulk storage updates, and should probably be moved to the committed bucket instead of staging, once that exists
@@ -74,7 +71,7 @@ class UpdateHistoryBulkStorageStaging(
       atOrBeforeRecordTime: CantonTimestamp,
       limit: PageLimit,
       nextPageTokenO: Option[String],
-  )(implicit tc: TraceContext): Future[UpdateHistoryObjectsResponse] = {
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] = {
 
     def isFolderInRange(folder: String): Boolean = {
       storageConfig.getStartAndEndTimestampsForFolder(folder) match {
@@ -201,7 +198,7 @@ class UpdateHistoryBulkStorageStaging(
 
     for {
       // We first read the storageCaughtUpTo value once here, and then use it for filtering folders and computing the next page token, to avoid races where the value moves in between those operations.
-      storageCaughtUpTo <- readLatestProcessedSegment
+      storageCaughtUpTo <- updateHistoryBulkStorage.persistentProgress.readLatestProcessedSegment
       nextFolders <- s3Connection.listFolders(folderFilter(storageCaughtUpTo), limit)
       objKeys <- getFolderUpdateObjectsUpToLimit(nextFolders)
       objectsWithChecksums <- s3Connection.getChecksums(objKeys)
