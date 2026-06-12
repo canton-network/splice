@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.onboarding.sv1
 
 import cats.implicits.{
-  catsSyntaxOptionId,
   catsSyntaxTuple2Semigroupal,
   catsSyntaxTuple3Semigroupal,
   catsSyntaxTuple4Semigroupal,
