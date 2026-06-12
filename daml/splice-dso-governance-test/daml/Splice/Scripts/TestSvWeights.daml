@@ -124,15 +124,26 @@ test_SvWeightsFullyOnledger = do
 
   runNextIssuance app
 
-  [(hsv1HostedSvCid, _)] <-
-    queryFilter @HostedSv app.dso (\co -> co.hostedSv == hsv1 && co.svOperator == sv5)
+  -- [(hsv1HostedSvCid, _)] <-
+    -- queryFilter @HostedSv app.dso (\co -> co.hostedSv == hsv1 && co.svOperator == sv5)
   let updatedHostedSvWeight = hsv1Weight - 10
-  -- Update hsv1 weight (this includes the weight shared with hsv1_b)
+
+  -- Instruct update
   initiateAndAcceptVote app [sv1, sv2, sv3, sv4, sv5] $
     ARC_DsoRules with
-      dsoAction = SRARC_UpdateHostedSvWeight DsoRules_UpdateHostedSvWeight with
-        hostedSvCid = hsv1HostedSvCid
+      dsoAction = SRARC_InstructUpdateHostedSvWeight DsoRules_InstructUpdateHostedSvWeight with
+        hostedSv = hsv1
         newRewardWeight = updatedHostedSvWeight
+
+  -- Update
+  [(rulesCid, _)] <- query @DsoRules app.dso
+  [(instructionCid, _)] <- query @UpdateHostedSvWeightInstruction dso
+  hsv1HostedSvCid <- getHostedSvCid app hsv1
+  void $ submit (actAs sv5 <> readAs dso) $
+    exerciseCmd rulesCid DsoRules_UpdateHostedSvWeight with
+      instructionCid
+      hostedSvCid = hsv1HostedSvCid
+      svOperator = sv5
 
   assertHostedSv app hsv1 sv5 updatedHostedSvWeight hsv1ExtraBeneficiaries
 

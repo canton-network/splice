@@ -120,7 +120,7 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
   | SRARC_AddHostedSv DsoRules_AddHostedSv
     -- ^ Voted action to directly add a hosted SV.
-  | SRARC_UpdateHostedSvWeight DsoRules_UpdateHostedSvWeight
+  | SRARC_InstructUpdateHostedSvWeight DsoRules_InstructUpdateHostedSvWeight
     -- ^ Voted action to update the weight of a hosted SV.
   | SRARC_InstructOffboardHostedSv DsoRules_InstructOffboardHostedSv
     -- ^ Voted action to instruct the offboarding of a hosted SV.
@@ -253,6 +253,9 @@ data DsoRules_UpdateHostedSvWeightResult = DsoRules_UpdateHostedSvWeightResult w
 
 data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSvResult with
     instructionCid : ContractId OffboardHostedSvInstruction
+
+data DsoRules_InstructUpdateHostedSvWeightResult = DsoRules_InstructUpdateHostedSvWeightResult with
+    instructionCid : ContractId UpdateHostedSvWeightInstruction
 
 data DsoRules_OffboardHostedSvResult = DsoRules_OffboardHostedSvResult
 
@@ -637,6 +640,25 @@ template HostedSv
 
         hostedSvCid <- create this with svOperator = newSvOperator
         pure HostedSv_UpdateSvOperatorResult with hostedSvCid
+
+-- | Instruction created by the DSO to authorize updating the reward weight of a
+-- hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV and the new reward weight, and the current 'HostedSv'
+-- contract is resolved and updated when the instruction is consumed by
+-- 'DsoRules_UpdateHostedSvWeight'.
+template UpdateHostedSvWeightInstruction
+  with
+    hostedSv : Party
+      -- ^ The hosted SV party whose reward weight should be updated.
+    newRewardWeight : Int
+      -- ^ The new reward weight to assign to the hosted SV.
+    dso : Party
+      -- ^ The DSO party.
+  where
+    ensure newRewardWeight > 0
+    signatory dso
 
 
 -- This template distinguishes between three kinds of parties:
@@ -1211,19 +1233,57 @@ template DsoRules with
             newDsoRules <- create this with svs = newSvs
             return DsoRules_UpdateSvRewardWeightResult with ..
 
-    -- | Updates the reward weight of a hosted SV.
+   -- | Creates an instruction to update the reward weight of a hosted SV.
     --
-    -- Updates the reward weight stored in the corresponding 'HostedSv' contract.
-    -- The hosted SV must already exist, and the new reward weight must be positive.
-    nonconsuming choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateHostedSvWeightResult
+    -- This is the first step of the hosted-SV reward weight update flow. The DSO
+    -- records which hosted SV should be updated and the new reward weight to assign.
+    -- The current 'HostedSv' contract is resolved when the instruction is consumed
+    -- by 'DsoRules_UpdateHostedSvWeight'.
+    nonconsuming choice DsoRules_InstructUpdateHostedSvWeight : DsoRules_InstructUpdateHostedSvWeightResult
       with
-        hostedSvCid : ContractId HostedSv
-          -- ^ The hosted SV contract whose reward weight should be updated.
+        hostedSv : Party
+          -- ^ The hosted SV party whose reward weight should be updated.
         newRewardWeight : Int
           -- ^ The new positive reward weight for the hosted SV.
       controller dso
       do
-        result <- exercise hostedSvCid HostedSv_UpdateRewardWeight with newRewardWeight
+        instructionCid <- create UpdateHostedSvWeightInstruction with
+          hostedSv
+          newRewardWeight
+          dso
+        pure DsoRules_InstructUpdateHostedSvWeightResult with instructionCid
+
+    -- | Completes the update of the reward weight of a hosted SV.
+    --
+    -- This is the second step of the hosted-SV reward weight update flow. It consumes
+    -- the DSO instruction and updates the reward weight stored on the current
+    -- 'HostedSv' contract.
+    --
+    -- The provided 'HostedSv' contract must belong to the hosted SV referenced by the
+    -- instruction.
+    nonconsuming choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateHostedSvWeightResult
+      with
+        instructionCid : ContractId UpdateHostedSvWeightInstruction
+          -- ^ The DSO instruction authorizing the reward weight update.
+        hostedSvCid : ContractId HostedSv
+          -- ^ The hosted SV contract whose reward weight should be updated.
+        svOperator : Party
+          -- ^ An SV node operator completing the update.
+      controller svOperator
+      do
+        _ <- getAndValidateSvParty this (Some svOperator)
+
+        -- Archive the hosted SV's associated contracts.
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        hostedSvCo <- fetchChecked (ForDso with dso) hostedSvCid
+
+        -- Sanity checks
+        require "The hosted SV party in HostedSv and UpdateHostedSvWeightInstruction contracts must match" $
+          hostedSvCo.hostedSv == instruction.hostedSv
+
+        result <- exercise hostedSvCid HostedSv_UpdateRewardWeight with
+          newRewardWeight = instruction.newRewardWeight
+
         pure DsoRules_UpdateHostedSvWeightResult with result
 
     -- | Creates an instruction to offboard a hosted SV.
@@ -2257,7 +2317,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
-      SRARC_UpdateHostedSvWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructUpdateHostedSvWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
@@ -2519,6 +2579,9 @@ instance HasCheckedFetch UnallocatedUnclaimedActivityRecord ForDso where
 
 instance HasCheckedFetch Confirmation ForDso where
   contractGroupId Confirmation {..} = ForDso with dso
+
+instance HasCheckedFetch UpdateHostedSvWeightInstruction ForDso where
+  contractGroupId UpdateHostedSvWeightInstruction {..} = ForDso with dso
 
 
 instance Patchable DsoRulesConfig where
