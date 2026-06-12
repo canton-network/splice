@@ -65,6 +65,7 @@
             to prevent excessively long-lived transfer instructions
           - allow the DSO to expire both V1 and V2 amulet allocations older than
             ``tokenStandardMaxTTL``, even if the settlement deadline has not yet passed
+          - support creating Amulet allocations for burn
 
 
       - Add preview of the V2 token standard APIs and implement them for Amulet

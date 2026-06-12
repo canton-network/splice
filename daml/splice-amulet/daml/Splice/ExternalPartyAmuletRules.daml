@@ -500,21 +500,9 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- allocation.authorizer: checked above as part of actors
   -- allocation.transferLegSides:
   let transferLegSides = allocation.transferLegSides
-  requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
   unless (isSome allocation.nextIterationFunding) $
     require' ("transferLegSides", transferLegSides) (notR isEqualR) ("empty list", [])
-  forA_ transferLegSides $ \transferLeg -> do
-      -- transferLegId: no check
-      -- transferLeg.side: no check
-      -- transferLeg.otherside:
-      ensureBasicAccount "transferLeg.otherside" transferLeg.otherside
-      -- transferLeg.amount
-      require "Transfer amount must be positive" (transferLeg.amount > 0.0)
-      -- transferLeg.instrumentId
-      requireMatchExpected ("transferLeg.instrumentId", transferLeg.instrumentId) amuletInstrumentIdName
-      -- transferLeg.meta: check no redundant account information
-      ensureNoAccountMeta "transferLeg" "sender" transferLeg.meta
-      ensureNoAccountMeta "transferLeg" "receiver" transferLeg.meta
+  AmuletAllocationV2.validateAmuletTransferLegSides transferLegSides
 
   -- allocation.nextIterationFunding: validated `amulet_allocationFactoryV2_allocateImpl`
   -- allocation.committed: nothing to validate

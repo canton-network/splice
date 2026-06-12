@@ -5,6 +5,7 @@
 -- V1 and V2 amulet allocations.
 module Splice.Scripts.TokenStandard.TestAmuletAllocationNegative where
 
+import DA.Foldable (foldMap)
 import DA.Time
 import DA.Map qualified as Map
 import DA.TextMap qualified as TextMap
@@ -203,7 +204,7 @@ test_allocateV1_transferLeg_negativeAmount = test_allocateV1_generic $ \TestEnv 
         requestedAt = now
         extraArgs = emptyExtraArgs
   pure $ (choiceArg,) $
-    expectMessageContains "The requirement 'Transfer amount must be positive' was not met"
+    expectMessageContains "'transferLeg.amount' is not greater than 'zero'"
 
 
 -- Testing V2.AllocationFactory_Allocate
@@ -279,6 +280,23 @@ test_allocateV2_nextIterationFunding_negativeAmount = test_allocateV2_generic $ 
         extraArgs = emptyExtraArgs
         actors = [alice]
   pure (choiceArg, expectMessageContains "'nextIterationFunding.amount' is less than 'zero'")
+
+test_allocateV2_authorizer_nonBasicAccount : Script ()
+test_allocateV2_authorizer_nonBasicAccount = test_allocateV2_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let nonBasicAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "extraAccount"
+  let choiceArg = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2 with
+          authorizer = nonBasicAccount
+        inputHoldingCids
+        requestedAt = now
+        actors = [alice]
+        extraArgs = emptyExtraArgs
+  pure (choiceArg, expectMessageContains "Expected a basic account for field 'allocation.authorizer', but got: Account {owner = Some 'alice', provider = None, id = \"extraAccount\"}")
 
 test_allocateV2_authorizer_extraMeta : Script ()
 test_allocateV2_authorizer_extraMeta = test_allocateV2_generic $ \TestEnv {..} -> do
@@ -387,6 +405,23 @@ test_allocateV2_transferLegSides_wrongInstrumentId = test_allocateV2_generic $ \
   pure $ (choiceArg,) $
     expectMessageContains "'transferLeg.instrumentId' is not equal to 'expected value'" <>
     expectMessageContains "WRONG_INSTRUMENT_ID"
+
+test_allocateV2_transferLegSides_nonBasicAccount : Script ()
+test_allocateV2_transferLegSides_nonBasicAccount = test_allocateV2_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let nonBasicAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "extraAccount"
+  let choiceArg = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2 with
+          transferLegSides = [ TSU.senderSide legV2 with receiver = nonBasicAccount ]
+        inputHoldingCids
+        requestedAt = now
+        actors = [alice]
+        extraArgs = emptyExtraArgs
+  pure (choiceArg, expectMessageContains "Expected a basic account for field 'transferLeg.otherside', but got: Account {owner = Some 'alice', provider = None, id = \"extraAccount\"}")
 
 test_allocateV2_wrongActor : Script ()
 test_allocateV2_wrongActor = test_allocateV2_generic $ \TestEnv {..} -> do
@@ -584,6 +619,7 @@ test_settleBatchV2_nextIterationFunding_wrongInstrumentId = test_settleBatchV2_g
     expectMessageContains "'nextIterationFunding.instrumentId' is not equal to 'expected value'" <>
     expectMessageContains "BAD_INSTRUMENT_ID"
 
+
 -- | Test overflow from the net amount of two legs being larger than the max or min decimal value.
 test_settleBatchV2_decimal_overflow : Script ()
 test_settleBatchV2_decimal_overflow = do
@@ -644,68 +680,113 @@ test_settleBatchV2_generic mkTest = do
 -- Test V2.Allocation_Settle
 ----------------------------
 
-test_allocationv1_Settle_wrongActor : Script ()
-test_allocationv1_Settle_wrongActor = do
-  (TestEnv{..}) <- setupTest
-  WalletClientV2.allocateV1 registries allocationV1
+test_allocation_Settle_generic : (TestEnv -> ExtraArgs -> Script (V2.Allocation_Settle, FailureStatusCheck)) -> Script ()
+test_allocation_Settle_generic mkTest = do
+  env@(TestEnv{..}) <- setupTest
+  enrichedChoice <- V2.getSettlementFactory registryV2 V2.SettlementFactory_SettleBatch with
+    settlement = settlementV2
+    transferLegs = []
+    allocations = []
+    extraArgs = emptyExtraArgs
+    actors = [provider, instrId.admin]
+  (choiceArg, check) <- mkTest env enrichedChoice.arg.extraArgs
   [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  submitMustFail'' check (foldMap actAs choiceArg.actors) $ exerciseCmd aliceAllocCid choiceArg
 
-  submitMustFail''
-    ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
+test_allocationv1_Settle_nonEmpty_extraLegs : Script ()
+test_allocationv1_Settle_nonEmpty_extraLegs = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
+  WalletClientV2.allocateV1 registries allocationV1
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = [TSU.senderSide legV2]
+        nextIterationFunding = None
+        extraArgs
+        actors = [provider, instrId.admin]
+    , expectMessageContains "'arg.extraTransferLegSides' is not equal to 'expected value'"  <>
+      expectMessageContains "expected value: []"
+    )
+
+test_allocationv1_Settle_set_nextIterationFunding : Script ()
+test_allocationv1_Settle_set_nextIterationFunding = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
+  WalletClientV2.allocateV1 registries allocationV1
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = []
+        nextIterationFunding = Some $ TextMap.fromList [(instrId.id, 0.0)]
+        extraArgs
+        actors = [provider, instrId.admin]
+    , expectMessageContains "'arg.nextIterationFunding' is not equal to 'expected value'"  <>
+      expectMessageContains "expected value: None"
+    )
+
+test_allocationv2_Settle_iterated_extraTransferLeg_nonBasicAccount : Script ()
+test_allocationv2_Settle_iterated_extraTransferLeg_nonBasicAccount = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
+  let nonBasicAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "extraAccount"
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = [TSU.senderSide legV2 with receiver = nonBasicAccount]
+        nextIterationFunding = None
+        extraArgs
+        actors = [provider, instrId.admin]
+    , expectMessageContains $ "Expected a basic account for field 'transferLeg.otherside', but got: " <> show nonBasicAccount
+    )
+
+test_allocationv1_Settle_wrongActor : Script ()
+test_allocationv1_Settle_wrongActor = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
+  WalletClientV2.allocateV1 registries allocationV1
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = []
+        nextIterationFunding = None
+        extraArgs
+        actors = [alice]
+    , expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
       expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider']]")
     )
-    (actAs alice) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
-      extraTransferLegSides = []
-      nextIterationFunding = None
-      extraArgs = emptyExtraArgs
-      actors = [alice]
 
 test_allocationv2_Settle_wrongActor : Script ()
-test_allocationv2_Settle_wrongActor = do
-  (TestEnv{..}) <- setupTest
+test_allocationv2_Settle_wrongActor = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
   WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
-  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
-
-  submitMustFail''
-    ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = []
+        nextIterationFunding = None
+        extraArgs
+        actors = [alice]
+    , expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
       expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider']]")
     )
-    (actAs alice) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
-      extraTransferLegSides = []
-      nextIterationFunding = None
-      extraArgs = emptyExtraArgs
-      actors = [alice]
 
 test_allocationv1_Settle_after_settlementDeadline : Script ()
-test_allocationv1_Settle_after_settlementDeadline = do
-  (TestEnv{..}) <- setupTest
+test_allocationv1_Settle_after_settlementDeadline = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
   WalletClientV2.allocateV1 registries allocationV1
   setTime allocationV1.settlement.settleBefore
-  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
-
-  submitMustFail''
-    (expectErrorId "stdlib.daml.com/deadline-exceeded")
-    (actAs provider <> actAs instrId.admin) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
-      extraTransferLegSides = []
-      nextIterationFunding = None
-      extraArgs = emptyExtraArgs
-      actors = [provider, instrId.admin]
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = []
+        nextIterationFunding = None
+        extraArgs
+        actors = [provider, instrId.admin]
+    , expectErrorId "stdlib.daml.com/deadline-exceeded"
+    )
 
 test_allocationv2_Settle_after_settlementDeadline : Script ()
-test_allocationv2_Settle_after_settlementDeadline = do
-  (TestEnv{..}) <- setupTest
+test_allocationv2_Settle_after_settlementDeadline = test_allocation_Settle_generic $ \TestEnv{..} extraArgs -> do
   WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
     settlementDeadline = Some $ now `addRelTime` days 1
   passTime (days 1)
-  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
-
-  submitMustFail''
-    (expectErrorId "stdlib.daml.com/deadline-exceeded")
-    (actAs provider <> actAs instrId.admin) $ exerciseCmd aliceAllocCid V2.Allocation_Settle with
-      extraTransferLegSides = []
-      nextIterationFunding = None
-      extraArgs = emptyExtraArgs
-      actors = [provider, instrId.admin]
+  pure
+    ( V2.Allocation_Settle with
+        extraTransferLegSides = []
+        nextIterationFunding = None
+        extraArgs
+        actors = [provider, instrId.admin]
+    , expectErrorId "stdlib.daml.com/deadline-exceeded"
+    )
 
 
 -- Test V2.Allocation_Cancel

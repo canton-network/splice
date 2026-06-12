@@ -38,8 +38,6 @@ import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv (TestEnv(..),
 
 
 
--- TODO(#5929): test DvBurn for Amulet
-
 
 -- V2 API: allocate, withdraw and cancel
 ----------------------------------------
@@ -102,7 +100,6 @@ test_allocation_CancelV2 = test_withdrawCancel_generic $ \TestEnv {..} allocCid 
         context = context.choiceContext
         meta = emptyMetadata
   pure ()
-
 
 
 -- Expiry via V2.Allocation_Cancel of V1 and V2 amulet allocations
