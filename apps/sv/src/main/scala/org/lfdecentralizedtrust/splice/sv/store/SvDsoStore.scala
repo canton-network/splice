@@ -68,6 +68,8 @@ trait SvDsoStore
   protected val outerLoggerFactory: NamedLoggerFactory
   protected def templateJsonDecoder: TemplateJsonDecoder
 
+  def permissionedSynchronizer: Boolean
+
   override protected lazy val loggerFactory: NamedLoggerFactory =
     outerLoggerFactory.append("store", "dsoParty")
 
@@ -76,7 +78,7 @@ trait SvDsoStore
         org.lfdecentralizedtrust.splice.sv.store.db.DsoTables.DsoAcsStoreRowData,
         AcsInterfaceViewRowData.NoInterfacesIngested,
       ] =
-    SvDsoStore.contractFilter(key.dsoParty, domainMigrationId)
+    SvDsoStore.contractFilter(key.dsoParty, domainMigrationId, permissionedSynchronizer)
 
   def key: SvStore.Key
 
@@ -1132,6 +1134,7 @@ object SvDsoStore {
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
+      permissionedSynchronizer: Boolean = false,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -1147,6 +1150,7 @@ object SvDsoStore {
       ingestionConfig,
       acsStoreDescriptorUserVersion,
       defaultLimit = defaultLimit,
+      permissionedSynchronizer = permissionedSynchronizer,
     )
   }
 
@@ -1154,6 +1158,7 @@ object SvDsoStore {
   def contractFilter(
       dsoParty: PartyId,
       domainMigrationId: Long,
+      permissionedSynchronizer: Boolean = false,
   ): MultiDomainAcsStore.ContractFilter[
     DsoAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
@@ -1310,15 +1315,6 @@ object SvDsoStore {
           contract,
           rewardRound = Some(contract.payload.round.number),
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
-        )
-      },
-      mkFilter(splice.validatorpermission.ValidatorPermission.COMPANION)(vp =>
-        vp.payload.dso == dso
-      ) { contract =>
-        DsoAcsStoreRowData(
-          contract,
-          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
-          svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sponsor)),
         )
       },
       mkFilter(splice.validatorlicense.ValidatorLivenessActivityRecord.COMPANION)(co =>
@@ -1584,9 +1580,25 @@ object SvDsoStore {
       },
     )
 
+    val permissionedFilters = if (permissionedSynchronizer) {
+      Map(
+        mkFilter(splice.validatorpermission.ValidatorPermission.COMPANION)(vp =>
+          vp.payload.dso == dso
+        ) { contract =>
+          DsoAcsStoreRowData(
+            contract,
+            validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+            svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sponsor)),
+          )
+        }
+      )
+    } else {
+      Map.empty
+    }
+
     MultiDomainAcsStore.SimpleContractFilter(
       dsoParty,
-      dsoFilters,
+      dsoFilters ++ permissionedFilters,
     )
   }
 

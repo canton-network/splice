@@ -72,17 +72,19 @@ class SvSvAutomationService(
     )
   )
 
-  registerTrigger(
-    new ValidatorLicenseRequestTrigger(
-      triggerContext,
-      svStore,
-      dsoStore,
-      connection(
-        SpliceLedgerConnectionPriority.Medium
-      ),
-      participantAdminConnection,
+  if (config.permissionedSynchronizer) {
+    registerTrigger(
+      new ValidatorLicenseRequestTrigger(
+        triggerContext,
+        svStore,
+        dsoStore,
+        connection(
+          SpliceLedgerConnectionPriority.Medium
+        ),
+        participantAdminConnection,
+      )
     )
-  )
+  }
 
   // notice the absence of UpdateHistory: the history for the sv party is not needed as we don't foresee ever adding TxLog for it
 

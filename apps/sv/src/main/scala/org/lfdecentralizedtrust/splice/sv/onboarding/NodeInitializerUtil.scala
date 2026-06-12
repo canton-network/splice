@@ -95,6 +95,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     config.automation.ingestion,
     config.parameters.defaultLimit,
     acsStoreDescriptorUserVersion,
+    config.permissionedSynchronizer,
   )
 
   protected def newSvSvAutomationService(
@@ -147,6 +148,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       config.automation.ingestion,
       config.parameters.defaultLimit,
       acsStoreDescriptorUserVersion,
+      config.permissionedSynchronizer,
     )
   }
 
