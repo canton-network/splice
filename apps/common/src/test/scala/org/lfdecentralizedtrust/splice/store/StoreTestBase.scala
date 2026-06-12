@@ -523,6 +523,7 @@ abstract class StoreTestBase
       provider: PartyId,
       amount: Numeric.Numeric = numeric(1.0),
       beneficiary: Option[PartyId] = None,
+      expiresAt: Instant = Instant.now().plusSeconds(3600),
       contractId: String = nextCid(),
   ): Contract[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2] =
     contract(
@@ -533,7 +534,7 @@ abstract class StoreTestBase
         provider.toProtoPrimitive,
         new Round(round),
         amount,
-        java.time.Instant.now().plusSeconds(3600),
+        expiresAt,
         true,
         beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
       ),

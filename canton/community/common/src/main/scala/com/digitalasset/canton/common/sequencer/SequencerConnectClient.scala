@@ -20,7 +20,7 @@ import com.digitalasset.canton.sequencing.client.SequencerClient
 import com.digitalasset.canton.sequencing.protocol.{HandshakeRequest, HandshakeResponse}
 import com.digitalasset.canton.sequencing.{GrpcSequencerConnection, SequencerConnection}
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
-import com.digitalasset.canton.topology.{Member, ParticipantId, PhysicalSynchronizerId, SequencerId}
+import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId, SequencerId}
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.ExecutionContextExecutor
@@ -31,9 +31,6 @@ trait SequencerConnectClient extends NamedLogging with AutoCloseable {
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, SynchronizerClientBootstrapInfo]
 
-  /** @param synchronizerIdentifier
-    *   Used for logging purpose
-    */
   def getSynchronizerParameters()(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, StaticSynchronizerParameters]
@@ -46,8 +43,7 @@ trait SequencerConnectClient extends NamedLogging with AutoCloseable {
   ): EitherT[FutureUnlessShutdown, Error, HandshakeResponse]
 
   def isActive(
-      participantId: ParticipantId,
-      waitForActive: Boolean,
+      waitForActive: Boolean
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, Boolean]
@@ -57,8 +53,6 @@ trait SequencerConnectClient extends NamedLogging with AutoCloseable {
   ): Either[Error, Boolean] = response.value match {
     case v30.SequencerConnect.VerifyActiveResponse.Value.Success(success) =>
       Right(success.isActive)
-    case v30.SequencerConnect.VerifyActiveResponse.Value.Failure(failure) =>
-      Left(Error.DeserializationFailure(failure.reason))
     case v30.SequencerConnect.VerifyActiveResponse.Value.Empty =>
       Left(Error.InvalidResponse("Missing response from VerifyActive"))
   }
@@ -86,6 +80,7 @@ object SequencerConnectClient {
   }
 
   def apply(
+      member: Member,
       synchronizerAlias: SynchronizerAlias,
       sequencerConnection: SequencerConnection,
       timeouts: ProcessingTimeout,
@@ -97,8 +92,9 @@ object SequencerConnectClient {
     sequencerConnection match {
       case connection: GrpcSequencerConnection =>
         new GrpcSequencerConnectClient(
+          member,
           connection,
-          synchronizerAlias,
+          synchronizerAlias.unwrap,
           timeouts,
           params,
           SequencerClient

@@ -167,7 +167,8 @@ private[mediator] class DefaultVerdictSender(
           .send(
             batch,
             timestamps = SendRequestTimestamps(
-              topologyTimestamp = Some(requestId.unwrap),
+              topologyTimestamp =
+                if (protocolVersion <= ProtocolVersion.v34) Some(requestId.unwrap) else None,
               // We use `clock.now` to stay consistent with how other submission requests are signed.
               approximateTimestampForSigning = sequencerSend.clock.now,
               maxSequencingTime = decisionTime,
@@ -306,9 +307,17 @@ private[mediator] class DefaultVerdictSender(
             "MediatorGroup is expected to have at least 1 active member at this point"
           )
         )
+
       // We need aggregation only if the mediator group is truly decentralized
-      Option.when(mediatorGroup.threshold.unwrap > 1)(
-        AggregationRule(activeNE, mediatorGroup.threshold, protocolVersion)
+      // With PV35 we do always need to set it as we will be checking the group at
+      // time of delivery and not at time of construction.
+      Option.when(mediatorGroup.threshold.unwrap > 1 || protocolVersion > ProtocolVersion.v34)(
+        AggregationRule.activeMediators(
+          activeNE,
+          mediatorGroup.index,
+          mediatorGroup.threshold,
+          protocolVersion,
+        )
       )
     }
   }

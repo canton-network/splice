@@ -12,8 +12,14 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllValidatorConfigs
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
-import org.lfdecentralizedtrust.splice.util.{SpliceUtil, TimeTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  SpliceUtil,
+  TimeTestUtil,
+  TriggerTestUtil,
+  WalletTestUtil,
+}
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
+import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   RewardSharingConfig,
@@ -21,10 +27,17 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 
 import scala.concurrent.duration.DurationInt
 
+/** Tests end-to-end reward collection including reward sharing: verifies
+  * that the sharing trigger correctly assigns beneficiaries with the right
+  * amounts (batching multiple coupons), that the minting trigger does not
+  * re-assign unshared coupons, and that balances reflect the minted rewards.
+  */
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletRewardsTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
-    with TimeTestUtil {
+    with TimeTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -40,17 +53,16 @@ class WalletRewardsTimeBasedIntegrationTest
           PartyId.tryFromProtoPrimitive(s"${partyHint}::${participant.split("::").last}")
         }
         val aliceValidatorPartyId = validatorPartyId("alice_validator_user", "aliceValidator")
-        val bobPartyId = validatorPartyId("bob_validator_user", "bobValidator")
+        val bobValidatorPartyId = validatorPartyId("bob_validator_user", "bobValidator")
         updateAllValidatorConfigs { case (name, c) =>
           if (name == "aliceValidator") {
-            // Specify a RewardConfig for Alice's validator,
-            // so that unassigned RewardCouponV2 should not get minted
+            // Alice shares 40% with bob; the implicit remainder (60%) goes to alice.
             c.copy(
               rewardSharingConfigByParty = Map(
                 aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
                   beneficiaries = Seq(
-                    AppRewardBeneficiaryConfig(bobPartyId, BigDecimal(0.4))
+                    AppRewardBeneficiaryConfig(bobValidatorPartyId, BigDecimal(0.4))
                   ),
                 )
               )
@@ -97,7 +109,8 @@ class WalletRewardsTimeBasedIntegrationTest
         validatorRewards = Seq((bob, 0.33)),
       )
 
-      val rewardCouponV2Amount = BigDecimal(1000.0)
+      val bobV2Amount = BigDecimal(1000.0)
+      val aliceV2Amounts = Seq(BigDecimal(10.0), BigDecimal(5.0))
 
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
@@ -126,71 +139,109 @@ class WalletRewardsTimeBasedIntegrationTest
           .listValidatorLivenessActivityRecords() should have size openRounds.size.toLong withClue "alice ValidatorLivenessActivityRecords"
       }
 
-      // avoid messing with the computation of balance
+      // Pause bob's faucet coupon trigger to avoid messing with balance computation
       bobValidatorBackend.validatorAutomation
         .trigger[ReceiveFaucetCouponTrigger]
         .pause()
         .futureValue
 
-      val prevBalance = bobValidatorWalletClient.balance().unlockedQty
+      val bobRewardTrigger = bobValidatorBackend
+        .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+        .futureValue
+        .trigger[CollectRewardsAndMergeAmuletsTrigger]
 
-      // Create unassigned V2 coupons after capturing prevBalance, so the
-      // minted V2 amount is reflected in the balance delta.
-      // Bob (no sharing config) → treasury mints unassigned coupons.
-      // Alice (has sharing config) → treasury does NOT mint unassigned coupons.
-      clue("Create unassigned RewardCouponV2 for both validators") {
-        createRewardCouponsV2(
-          Seq(
-            (bobValidatorParty, rewardCouponV2Amount, None),
-            (aliceValidatorParty, rewardCouponV2Amount, None),
+      // Pause bob's minting trigger so we can observe his assigned
+      // (unminted) coupon from alice's sharing, while alice's triggers
+      // run freely (sharing + minting). V2 coupons must be created after
+      // pausing because they can be minted immediately.
+      val prevBobBalance = setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
+        // Create unassigned V2 coupons for both validators.
+        // Bob (no sharing config) → his coupon stays unminted (trigger paused).
+        // Alice (has sharing config, 2 coupons) → shared then minted,
+        // exercising batching via additionalCoupons in AssignBeneficiaries.
+        clue("Create unassigned RewardCouponV2 for both validators") {
+          createRewardCouponsV2(
+            Seq(
+              (bobValidatorParty, bobV2Amount, None)
+            ) ++ aliceV2Amounts.map((aliceValidatorParty, _, None))
           )
-        )
+        }
+
+        // Capture balance after coupon creation but before advancement,
+        // since bob's trigger is paused and won't mint during advancement.
+        val balance = bobValidatorWalletClient.balance().unlockedQty
+
+        // Round advancement is needed for the treasury's transfer context
+        // (non-V2 reward collection), not for V2 coupons specifically.
+        advanceRoundsToNextRoundOpening
+        advanceRoundsToNextRoundOpening
+        advanceRoundsToNextRoundOpening
+        advanceTimeForRewardAutomationToRunForCurrentRound
+
+        clue("Alice's V2 coupons are shared with correct amounts per beneficiary") {
+          val aliceWallet = aliceValidatorBackend.appState.walletManager
+            .valueOrFail("WalletManager is expected to be defined")
+            .lookupEndUserPartyWallet(aliceValidatorParty)
+            .valueOrFail("Expected alice to have a wallet")
+          eventually() {
+            val allCoupons = aliceWallet.store.multiDomainAcsStore
+              .listContracts(RewardCouponV2.COMPANION)
+              .futureValue
+              .filter(_.payload.provider == aliceValidatorParty.toProtoPrimitive)
+
+            allCoupons.filter(_.payload.beneficiary.isEmpty) shouldBe
+              empty withClue "Unassigned coupons should be consumed by sharing trigger"
+
+            // Each input coupon produces one assigned coupon per beneficiary
+            val assigned = allCoupons
+              .filter(_.payload.beneficiary.isPresent)
+              .map(c => (c.payload.beneficiary.get(), BigDecimal(c.payload.amount)))
+
+            assigned should contain theSameElementsAs Seq(
+              (aliceValidatorParty.toProtoPrimitive, BigDecimal(6.0)), // 60% of 10.0
+              (aliceValidatorParty.toProtoPrimitive, BigDecimal(3.0)), // 60% of 5.0
+              (bobValidatorParty.toProtoPrimitive, BigDecimal(4.0)), // 40% of 10.0
+              (bobValidatorParty.toProtoPrimitive, BigDecimal(2.0)), // 40% of 5.0
+            ) withClue "one assigned coupon per input coupon per beneficiary"
+          }
+        }
+
+        clue("Bob has unminted assigned coupon from alice's sharing") {
+          val bobWallet = bobValidatorBackend.appState.walletManager
+            .valueOrFail("WalletManager is expected to be defined")
+            .lookupEndUserPartyWallet(bobValidatorParty)
+            .valueOrFail("Expected bob to have a wallet")
+          eventually() {
+            val bobAssigned = bobWallet.store.multiDomainAcsStore
+              .listContracts(RewardCouponV2.COMPANION)
+              .futureValue
+              .filter { c =>
+                c.payload.provider == aliceValidatorParty.toProtoPrimitive &&
+                c.payload.beneficiary.isPresent &&
+                c.payload.beneficiary.get() == bobValidatorParty.toProtoPrimitive
+              }
+            bobAssigned should not be empty withClue
+              "Bob should have an assigned coupon from alice's sharing"
+          }
+        }
+
+        balance
       }
 
-      // Bob's validator collects rewards
-      // it takes 3 ticks for the IssuingMiningRound 1 to be created and open.
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-      advanceTimeForRewardAutomationToRunForCurrentRound
-
-      eventually() {
-        bobValidatorWalletClient
-          .listAppRewardCoupons() should have size 0 withClue "AppRewardCoupons"
-        bobValidatorWalletClient
-          .listValidatorRewardCoupons() should have size 0 withClue "ValidatorRewardCoupons"
-        bobValidatorWalletClient
-          .listValidatorLivenessActivityRecords() should have size 0 withClue "ValidatorLivenessActivityRecords"
-
-        val newBalance = bobValidatorWalletClient.balance().unlockedQty
-
-        // We just check that the balance has increased by roughly the right amount,
-        // rather then repeating the calculation for the reward amount.
-        // 2.85 USD per faucet coupon; RewardCouponV2 amount is added directly.
-        val faucetCouponAmountUsd = 2.85 * openRounds.size
-        assertInRange(
-          newBalance - prevBalance,
-          (
-            walletUsdToAmulet(-0.1 + faucetCouponAmountUsd) + rewardCouponV2Amount,
-            walletUsdToAmulet(0.5 + faucetCouponAmountUsd) + rewardCouponV2Amount,
-          ),
-        )
-      }
-
-      clue("Alice's unassigned V2 coupon is NOT minted (sharing config present)") {
-        val aliceWallet = aliceValidatorBackend.appState.walletManager
-          .valueOrFail("WalletManager is expected to be defined")
-          .lookupEndUserPartyWallet(aliceValidatorParty)
-          .valueOrFail("Expected alice to have a wallet")
-        val unassigned = aliceWallet.store.multiDomainAcsStore
-          .listContracts(RewardCouponV2.COMPANION)
-          .futureValue
-          .filter(c =>
-            c.payload.provider == aliceValidatorParty.toProtoPrimitive &&
-              c.payload.beneficiary.isEmpty
-          )
-        unassigned should have size 1 withClue
-          "Unassigned V2 coupon should remain (not minted) because sharing config is present"
+      // Verify minting with no-sharing-config: bob's own V2 coupon is
+      // minted directly, and alice's shared 40% is also minted into
+      // bob's balance.
+      val aliceShareToBob = aliceV2Amounts.sum * BigDecimal(0.4)
+      val expectedV2Delta = bobV2Amount + aliceShareToBob
+      clue("Bob's balance reflects his own V2 coupon + alice's shared 40%") {
+        eventually() {
+          val newBobBalance = bobValidatorWalletClient.balance().unlockedQty
+          val delta = newBobBalance - prevBobBalance
+          // Delta must include at least the V2 coupons; may also include
+          // faucet rewards earned after prevBobBalance was captured.
+          delta should be >= expectedV2Delta withClue
+            s"delta=$delta should be at least V2 coupons ($expectedV2Delta)"
+        }
       }
     }
   }

@@ -367,6 +367,58 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
+    "lookupLatestArchivedOpenMiningRound returns the max archived round as of a time" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = ts(100).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.5)
+        .copy(createdAt = ts(200).toInstant)
+      val omr5 = openMiningRound(dsoParty, round = 5, amuletPrice = 2.0)
+        .copy(createdAt = ts(300).toInstant)
+      // Archived with a higher round number, but not an OpenMiningRound —
+      // must not be counted.
+      val cr9 = calculateRewardsV2(dsoParty, round = 9)
+        .copy(createdAt = ts(300).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(omr3, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr5, recordTime = ts(300).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr9, recordTime = ts(300).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr3, recordTime = ts(350).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(cr9, recordTime = ts(400).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr4, recordTime = ts(450).toInstant)(store.multiDomainAcsStore)
+        // Advance record time past all query points to unblock waitUntilRecordTimeReached
+        _ <- store.multiDomainAcsStore.testIngestionSink.ingestUpdateBatch(
+          NonEmptyList.of(
+            TreeUpdateOrOffsetCheckpoint.Checkpoint(
+              new OffsetCheckpoint(
+                nextOffset(),
+                java.util.List.of(
+                  new SynchronizerTime(sync1.toProtoPrimitive, ts(600).toInstant)
+                ),
+              )
+            )
+          )
+        )
+
+        beforeAnyArchival <- store.lookupLatestArchivedOpenMiningRound(ts(300))
+        atArchivalBoundary <- store.lookupLatestArchivedOpenMiningRound(ts(350))
+        betweenArchivals <- store.lookupLatestArchivedOpenMiningRound(ts(449))
+        atSecondArchival <- store.lookupLatestArchivedOpenMiningRound(ts(450))
+        afterAllArchivals <- store.lookupLatestArchivedOpenMiningRound(ts(600))
+      } yield {
+        beforeAnyArchival shouldBe None
+        // archived_at <= asOf is inclusive
+        atArchivalBoundary shouldBe Some(3L)
+        // cr9 (round 9, archived at t=400) is not an OpenMiningRound
+        betweenArchivals shouldBe Some(3L)
+        atSecondArchival shouldBe Some(4L)
+        // omr5 is still active, so the max archived round stays 4
+        afterAllArchivals shouldBe Some(4L)
+      }
+    }
+
     "lookupActiveOpenMiningRounds" in {
       val store = mkStore()
       // Timeline (ingestion start = 250, earliest archived_at):

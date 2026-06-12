@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.Future
@@ -116,36 +116,15 @@ trait TransferInputStore extends AppStore with LimitHelpers {
         ),
     )
 
-  /** Returns mintable RewardCouponV2 sorted by round ascending, amount descending.
-    * When `includeUnassigned` is true, includes coupons where the party is provider
-    * with no beneficiary.
+  /** Returns RewardCouponV2 contracts filtered by assignment status,
+    * sorted by expiresAt ascending. Implemented in DB stores with
+    * SQL-level filtering to avoid page-limit issues.
     */
-  def listSortedMintableRewardCouponV2s(
+  def listRewardCouponsV2(
       includeUnassigned: Boolean,
+      includeAssigned: Boolean,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[
-    (Contract[RewardCouponV2.ContractId, RewardCouponV2], BigDecimal)
-  ]] =
-    for {
-      rewards <- multiDomainAcsStore.listContracts(
-        RewardCouponV2.COMPANION
-      )
-    } yield applyLimit(
-      "listSortedMintableRewardCouponV2s",
-      limit,
-      rewards
-        .filter { rw =>
-          rw.payload.beneficiary.isPresent ||
-          (includeUnassigned && rw.payload.beneficiary.isEmpty)
-        }
-        .map(rw => (rw.contract, BigDecimal(rw.payload.amount)))
-        .sorted(
-          Ordering[(Long, BigDecimal)].on(
-            (x: (
-                Contract.Has[RewardCouponV2.ContractId, RewardCouponV2],
-                BigDecimal,
-            )) => (x._1.payload.round.number, -x._2)
-          )
-        ),
-    )
+    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
+  ]]
 }

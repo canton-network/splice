@@ -166,6 +166,7 @@ object ReplayingParticipant extends FutureHelpers with EitherValues with OptionV
           SynchronizerStore(psid),
           storage,
           indexedStringStore,
+          predecessor = None,
           testedProtocolVersion,
           timeouts,
           BatchingConfig(),
@@ -190,6 +191,7 @@ object ReplayingParticipant extends FutureHelpers with EitherValues with OptionV
             loggerFactory,
           ),
           synchronizerUpgradeTime = None,
+          sequencerSnapshotTimestamp = None,
           NoPackageDependencies,
           CachingConfigs(),
           // turn off consistency checks for performance tests
@@ -198,7 +200,7 @@ object ReplayingParticipant extends FutureHelpers with EitherValues with OptionV
           timeouts,
           futureSupervisor,
           extendedLoggerFactory,
-        )()
+        )
         .futureValueUS
     val synchronizerCryptoClient =
       SynchronizerCryptoClient.create(
@@ -207,7 +209,6 @@ object ReplayingParticipant extends FutureHelpers with EitherValues with OptionV
         synchronizerTopologyClient,
         defaultStaticSynchronizerParameters,
         synchronizerCrypto,
-        verificationParallelismLimit = PositiveInt.one,
         CachingConfigs.defaultPublicKeyConversionCache,
         timeouts,
         futureSupervisor,

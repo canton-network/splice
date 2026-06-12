@@ -3,8 +3,8 @@
 
 package com.digitalasset.canton.admin.api.client.commands
 
-import cats.syntax.option.*
 import cats.syntax.either.*
+import cats.syntax.option.*
 import cats.syntax.traverse.*
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   DefaultUnboundedTimeout,
@@ -1609,6 +1609,13 @@ object ParticipantAdminCommands {
           SynchronizerConnectionConfig,
         ],
     ) extends Base[v30.PerformManualLsuRequest, v30.PerformManualLsuResponse, Unit] {
+
+      /*
+      The manual LSU involves connects and disconnects, that can take quite some time (e.g., because
+      of the shutdown of the ACS commitment processor). Hence, we pick a generous timeout.
+       */
+      override def timeoutType: GrpcAdminCommand.CustomClientTimeout =
+        GrpcAdminCommand.CustomClientTimeout(NonNegativeDuration.ofMinutes(10))
 
       override protected def createRequest(): Either[String, v30.PerformManualLsuRequest] = {
         val conf: PerformManualLsuRequest.SuccessorConnectionConfiguration =

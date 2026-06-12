@@ -158,15 +158,39 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.persistence.databaseName }}' 2>&1); do
-                if [[ $errmsg == *"already exists"* ]]; then
-                  echo "Database {{ .Values.persistence.databaseName }} already exists. Done."
-                  break
-                fi
+              {{- $conflictCheck := true }}
+              {{- if hasKey .Values.persistence "enableParticipantDbConflictCheck" }}
+              {{- $conflictCheck = .Values.persistence.enableParticipantDbConflictCheck }}
+              {{- end }}
+              DB_TO_CREATE='{{ .Values.persistence.databaseName }}'
 
-                echo "trying to create postgres database {{ .Values.persistence.databaseName }}, last error: $errmsg";
+              until db_exists=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_TO_CREATE}'" 2>&1); do
+                echo "trying to connect to postgres, last error: ${db_exists}";
                 sleep 2;
               done
+
+              if [ "${db_exists}" = "1" ]; then
+                echo "Database ${DB_TO_CREATE} already exists. Done."
+              else
+                {{- if $conflictCheck }}
+                existing=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'participant%'" | paste -sd ', ' -)
+                if [ -n "${existing}" ]; then
+                  echo "ERROR: Refusing to create participant database '${DB_TO_CREATE}' because the following participant database(s) already exist: ${existing}." >&2
+                  echo "       A participant database should only be created during a fresh deployment. Please double-check that this is intended and not a misconfiguration." >&2
+                  echo "       If this is expected, disable this check by setting persistence.enableParticipantDbConflictCheck=false." >&2
+                  exit 1
+                fi
+                {{- end }}
+                until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c "create database ${DB_TO_CREATE}" 2>&1); do
+                  if [[ ${errmsg} == *"already exists"* ]]; then
+                    echo "Database ${DB_TO_CREATE} already exists. Done."
+                    break
+                  fi
+
+                  echo "trying to create postgres database ${DB_TO_CREATE}, last error: ${errmsg}";
+                  sleep 2;
+                done
+              fi
         {{- end }}
         {{- if .Values.extraInitContainers }}
         {{ .Values.extraInitContainers | toYaml | nindent 8 }}

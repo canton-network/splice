@@ -22,6 +22,7 @@ import com.digitalasset.canton.platform.store.backend.ParameterStorageBackend.{
   AchsState,
   PruneUptoInclusiveAndLedgerEnd,
 }
+import com.digitalasset.canton.platform.store.backend.common.ComposableQuery.CompositeSql
 import com.digitalasset.canton.platform.store.backend.common.{
   EventPayloadSourceForUpdatesAcsDelta,
   EventPayloadSourceForUpdatesLedgerEffects,
@@ -184,6 +185,9 @@ trait ParameterStorageBackend {
   def updateACHSLastPointers(pointers: AchsLastPointers)(connection: Connection): Unit
 
   def clearACHSState(connection: Connection): Unit
+
+  /** Clears all ACHS data (both the state row and the filter data table). */
+  def clearAchsData(connection: Connection): Unit
 }
 
 object ParameterStorageBackend {
@@ -303,16 +307,6 @@ trait CompletionStorageBackend {
 
 trait ContractStorageBackend {
 
-  /** Batch lookup of key states
-    *
-    * If the backend does not support batch lookups, the implementation will fall back to sequential
-    * lookups
-    */
-  def keyStates(keys: Seq[Key], validAtEventSeqId: Long)(connection: Connection): Map[Key, Long]
-
-  /** Sequential lookup of key states */
-  def keyState(key: Key, validAtEventSeqId: Long)(connection: Connection): Option[Long]
-
   def activeContracts(internalContractIds: Seq[Long], beforeEventSeqId: Long)(
       connection: Connection
   ): Map[Long, Boolean]
@@ -324,9 +318,16 @@ trait ContractStorageBackend {
   /** Returns true if the batch lookup is implemented */
   def supportsBatchKeyStateLookups: Boolean
 
-  def nonUniqueContractKey(keyPageQuery: ContractStorageBackend.KeysPageQuery)(
+  def contractKey(keyPageQuery: ContractStorageBackend.KeysPageQuery)(
       connection: Connection
   ): ContractStorageBackend.KeysPageResult
+
+  def contractKeysPlain(
+      keyPageQueries: Seq[ContractStorageBackend.KeysPageQuery],
+      validAtEventSeqId: Long,
+  )(
+      connection: Connection
+  ): Seq[ContractStorageBackend.KeysPageResult]
 }
 
 object ContractStorageBackend {
@@ -357,7 +358,8 @@ trait EventStorageBackend {
   def eventReaderQueries: EventReaderQueries
 
   /** Part of pruning process, this needs to be in the same transaction as the other pruning related
-    * database operations
+    * database operations. The underlying DB operation will populate the
+    * lapi_pruning_contract_candidate table to prepare for Contract pruning.
     */
   def pruneEvents(
       previousPruneUpToInclusive: Option[Offset],
@@ -365,6 +367,41 @@ trait EventStorageBackend {
       pruneUpToInclusive: Offset,
       incompleteReassignmentOffsets: Vector[Offset],
   )(implicit
+      connection: Connection,
+      traceContext: TraceContext,
+  ): Unit
+
+  /** Attempt to prune contracts prepared in the lapi_pruning_contract_candidate table. This method
+    * is not guaranteed to succeed as issuing write locks, but guaranteed to be not starved / fail
+    * fast, if cannot acquire all necessary locks immediately. In case of locking related failure
+    * PruningContractsBlockedException will be thrown to adhere to DbDispatcher semantics, and the
+    * DB transaction will be rolled back. In case of success the lapi_pruning_contract_candidate
+    * table will be emptied.
+    *
+    * @return
+    *   The pruned internal_contract_id-s.
+    */
+  def pruneContracts()(implicit
+      connection: Connection,
+      traceContext: TraceContext,
+  ): Iterable[Long]
+
+  /** Removes all contract candidates from lapi_pruning_contract_candidate table which are not
+    * eligible for pruning.
+    */
+  def cleanPruningCandidates()(implicit
+      connection: Connection,
+      traceContext: TraceContext,
+  ): Unit
+
+  /** Adds contracts to contract pruning candidates lapi_pruning_contract_candidate after the
+    * defined exclusive bound. This function intended for indexer crash recovery, where during
+    * initialization before the events getting cleaned after ledger-end watermark, the related new
+    * contracts are marked for pruning. This function is not pruning the contracts, only adds them
+    * as candidates, which will be validated and potentially pruned as part of the next pruning
+    * Index DB pruning.
+    */
+  def addContractPruningCandidatesAfter(eventSeqIdExclusive: Long)(implicit
       connection: Connection,
       traceContext: TraceContext,
   ): Unit
@@ -418,13 +455,6 @@ trait EventStorageBackend {
       beforeOrAtOffsetInclusive: Offset,
   )(connection: Connection): Option[CantonTimestamp]
 
-  /** The contracts which were archived or participant-divulged in the specified range. These are
-    * the contracts in the ContractStore, which can be pruned in a single-synchronizer setup.
-    */
-  def prunableContracts(fromExclusive: Option[Offset], toInclusive: Offset)(
-      connection: Connection
-  ): Set[Long]
-
   def fetchTopologyPartyEventIds(party: Option[Party]): IdPageQuery
 
   def topologyPartyEventBatch(
@@ -459,7 +489,7 @@ trait EventStorageBackend {
     * @param connection
     *   The database connection to be used for the operation.
     */
-  def addActivationsToACHS(
+  def addActivationsToAchs(
       params: AchsAddActivationsParams
   )(connection: Connection): Unit
 
@@ -473,12 +503,28 @@ trait EventStorageBackend {
     * @param connection
     *   The database connection to be used for the operation.
     */
-  def removeDeactivatedFromACHS(
+  def removeDeactivatedFromAchs(
       params: AchsRemoveDeactivatedParams
   )(connection: Connection): Unit
+
+  def lockExclusivelyPruningProcessingTable(connection: Connection): Unit
+
+  def lockExclusivelyContractPruningProcessingTable(connection: Connection): Unit
+
+  /** @return
+    *   the missing internal contract IDs
+    */
+  def readLockInternalContractIds(internalContractIds: Set[Long])(connection: Connection): Set[Long]
+
+  def writeLockInternalContractIds(whereInternalContractIdExprs: CompositeSql)(
+      connection: Connection
+  ): Unit
 }
 
 object EventStorageBackend {
+  class PruningContractsBlockedException extends RuntimeException
+  class CannotAcquireAllRowLocksException extends RuntimeException
+
   sealed trait RawEvent extends Product with Serializable {
     def commonEventProperties: CommonEventProperties
     final def offset: Long = commonEventProperties.offset

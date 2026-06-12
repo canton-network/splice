@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.store
 
 import com.daml.ledger.javaapi.data.{ArchivedEvent, CreatedEvent, ExercisedEvent, Transaction}
+import com.digitalasset.canton.resource.DbStorage
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequestOutcome as VRO
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Accepted
 
@@ -40,4 +41,7 @@ object IngestedEvents {
             throw new IllegalArgumentException(s"Unrecognized event type: $e")
         }
       }
+
+  implicit val ingestedEventsRowsAltered: DbStorage.RowsAltered[IngestedEvents] = ingested =>
+    ingested.numCreatedEvents + ingested.numExercisedEvents > 0
 }

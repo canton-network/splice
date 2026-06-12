@@ -13,6 +13,7 @@ import com.daml.ledger.api.v2.interactive.interactive_submission_service.{
   PreparedTransaction,
 }
 import com.daml.ledger.api.v2.reassignment.AssignedEvent
+import com.daml.ledger.api.v2.update_service.GetUpdatesPageResponse
 import com.digitalasset.canton.http.json.v2.IdentifierConverter.illegalValue
 import com.digitalasset.canton.http.json.v2.JsContractEntry.JsContractEntry
 import com.digitalasset.canton.http.json.v2.JsSchema.JsReassignmentEvent.JsReassignmentEvent
@@ -28,6 +29,7 @@ import com.digitalasset.canton.http.json.v2.JsSchema.{
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.daml.lf.crypto.Hash
 import com.digitalasset.daml.lf.data.Ref
 import com.google.protobuf.ByteString
@@ -151,9 +153,9 @@ class ProtocolConverters(
                 jsonArgsValue = cmd.choiceArgument,
               )
             contractKey <-
-              schemaProcessors.contractArgFromJsonToProto(
+              schemaProcessors.keyArgFromJsonToProto(
                 template = cmd.templateId.withDecodingPackageId,
-                jsonArgsValue = cmd.contractKey,
+                protoArgs = cmd.contractKey,
               )
           } yield lapi.commands.Command.Command.ExerciseByKey(
             lapi.commands.ExerciseByKeyCommand(
@@ -961,6 +963,37 @@ class ProtocolConverters(
         )
   }
 
+  object GetActiveContractsPageResponse
+      extends ProtocolConverter[
+        lapi.state_service.GetActiveContractsPageResponse,
+        JsGetActiveContractsPageResponse,
+      ] {
+    def toJson(v: lapi.state_service.GetActiveContractsPageResponse)(implicit
+        traceContext: TraceContext
+    ): Future[JsGetActiveContractsPageResponse] =
+      for {
+        activeContracts <- MonadUtil.sequentialTraverse(v.activeContracts)(
+          GetActiveContractsResponse.toJson
+        )
+      } yield v
+        .into[JsGetActiveContractsPageResponse]
+        .withFieldConst(_.activeContracts, activeContracts)
+        .transform
+
+    def fromJson(
+        v: JsGetActiveContractsPageResponse
+    )(implicit
+        traceContext: TraceContext
+    ): Future[lapi.state_service.GetActiveContractsPageResponse] =
+      for {
+        activeContracts <- v.activeContracts.map(GetActiveContractsResponse.fromJson).sequence
+      } yield lapi.state_service.GetActiveContractsPageResponse(
+        activeContracts = activeContracts,
+        activeAtOffset = v.activeAtOffset,
+        nextPageToken = v.nextPageToken,
+      )
+  }
+
   object ReassignmentEvent
       extends ProtocolConverter[lapi.reassignment.ReassignmentEvent.Event, JsReassignmentEvent] {
     def toJson(v: lapi.reassignment.ReassignmentEvent.Event)(implicit
@@ -1065,6 +1098,38 @@ class ProtocolConverters(
             lapi.update_service.GetUpdatesResponse.Update.TopologyTransaction(value)
           )
       }).map(lapi.update_service.GetUpdatesResponse(_))
+  }
+
+  object GetUpdatesPageResponse
+      extends ProtocolConverter[
+        lapi.update_service.GetUpdatesPageResponse,
+        JsGetUpdatesPageResponse,
+      ] {
+    override def fromJson(
+        jsObj: JsGetUpdatesPageResponse
+    )(implicit traceContext: TraceContext): Future[GetUpdatesPageResponse] = jsObj.updates
+      .parTraverse(GetUpdateResponse.fromJson)
+      .map(updates =>
+        lapi.update_service.GetUpdatesPageResponse(
+          updates = updates,
+          lowestPageOffsetExclusive = jsObj.lowestPageOffsetExclusive,
+          highestPageOffsetInclusive = jsObj.highestPageOffsetInclusive,
+          nextPageToken = jsObj.nextPageToken,
+        )
+      )
+
+    override def toJson(lapiObj: GetUpdatesPageResponse)(implicit
+        traceContext: TraceContext
+    ): Future[JsGetUpdatesPageResponse] = lapiObj.updates
+      .parTraverse(GetUpdateResponse.toJson)
+      .map(updates =>
+        JsGetUpdatesPageResponse(
+          updates = updates,
+          lowestPageOffsetExclusive = lapiObj.lowestPageOffsetExclusive,
+          highestPageOffsetInclusive = lapiObj.highestPageOffsetInclusive,
+          nextPageToken = lapiObj.nextPageToken,
+        )
+      )
   }
 
   object GetUpdateResponse
@@ -1448,6 +1513,7 @@ class ProtocolConverters(
     } yield obj
       .into[js.PrefetchContractKey]
       .withFieldConst(_.contractKey, toCirce(contractKey.getOrElse(ujson.Null)))
+      .withFieldConst(_.limit, obj.limit)
       .transform
   }
 

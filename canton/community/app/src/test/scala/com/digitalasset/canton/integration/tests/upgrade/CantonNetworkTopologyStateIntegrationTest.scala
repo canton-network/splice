@@ -14,6 +14,7 @@ import com.digitalasset.canton.integration.tests.toxiproxy.ToxiproxyHelpers
 import com.digitalasset.canton.integration.{
   CommunityIntegrationTest,
   EnvironmentDefinition,
+  EnvironmentSetup,
   SharedEnvironment,
   TestConsoleEnvironment,
 }
@@ -38,7 +39,69 @@ import eu.rekawek.toxiproxy.model.ToxicDirection
 import org.apache.pekko.stream.scaladsl.Sink
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
+import scala.annotation.nowarn
 import scala.concurrent.duration.*
+
+trait CantonNetworkTopologyIntegrationTestBase extends CommunityIntegrationTest {
+  this: EnvironmentSetup =>
+  protected def runValidation(
+      topoStoreIdx: Int,
+      txs: GenericStoredTopologyTransactions,
+      cleanupTopologyState: Boolean,
+      timeout: FiniteDuration,
+  )(implicit
+      env: TestConsoleEnvironment
+  ): (TopologyStore[TopologyStoreId], InitialTopologySnapshotValidator) = {
+    import env.*
+
+    val synchronizerId = txs
+      .collectOfMapping[SynchronizerParametersState]
+      .result
+      .headOption
+      .value
+      .mapping
+      .synchronizerId
+    val static = StaticSynchronizerParameters.defaultsWithoutKMS(testedProtocolVersion).toInternal
+    val storeId = SynchronizerStore(synchronizerId.toPhysical)
+    val store = participant1.underlying.valueOrFail("is there").storage match {
+      case _: MemoryStorage =>
+        new InMemoryTopologyStore[TopologyStoreId](
+          SynchronizerStore(synchronizerId.toPhysical),
+          predecessor = None,
+          testedProtocolVersion,
+          loggerFactory,
+          timeouts,
+        )
+      case storage: DbStorage =>
+        new DbTopologyStore(
+          storage,
+          storeId,
+          IndexedTopologyStoreId.tryCreate(storeId, topoStoreIdx),
+          predecessor = None,
+          testedProtocolVersion,
+          timeouts,
+          BatchingConfig(),
+          loggerFactory,
+        )
+    }
+    val validator = new InitialTopologySnapshotValidator(
+      participant1.underlying.value.cryptoPureApi,
+      store,
+      BatchAggregatorConfig.defaultsForTesting,
+      TopologyConfig.forTesting.copy(validateInitialTopologySnapshot = true),
+      Some(static),
+      timeouts,
+      futureSupervisor = env.environment.futureSupervisor,
+      loggerFactory,
+      cleanupTopologySnapshot = cleanupTopologyState,
+    )
+    validator
+      .validateAndApplyInitialTopologySnapshot(txs)
+      .futureValueUS(Timeout(timeout)) // See https://github.com/DACH-NY/canton/issues/26651
+      .value
+    (store, validator)
+  }
+}
 
 /** Try to load CN genesis state and ensure that the history state can still be loaded with the
   * stricter checks in Canton's topology management.
@@ -49,7 +112,7 @@ import scala.concurrent.duration.*
   *     [[SignedTopologyTransaction.InitialTopologySequencingTime]]
   */
 final class CantonNetworkTopologyStateIntegrationTest
-    extends CommunityIntegrationTest
+    extends CantonNetworkTopologyIntegrationTestBase
     with SharedEnvironment {
 
   private val enablePostgres = true
@@ -96,58 +159,6 @@ final class CantonNetworkTopologyStateIntegrationTest
 
   private var topologyStoreAfterImport: Option[TopologyStore[?]] = None
 
-  private def runValidation(
-      topoStoreIdx: Int,
-      txs: GenericStoredTopologyTransactions,
-      cleanupTopologyState: Boolean,
-  )(implicit env: TestConsoleEnvironment) = {
-    import env.*
-
-    val synchronizerId = txs
-      .collectOfMapping[SynchronizerParametersState]
-      .result
-      .headOption
-      .value
-      .mapping
-      .synchronizerId
-    val static = StaticSynchronizerParameters.defaultsWithoutKMS(testedProtocolVersion).toInternal
-    val storeId = SynchronizerStore(synchronizerId.toPhysical)
-    val store = participant1.underlying.valueOrFail("is there").storage match {
-      case _: MemoryStorage =>
-        new InMemoryTopologyStore[TopologyStoreId](
-          SynchronizerStore(synchronizerId.toPhysical),
-          testedProtocolVersion,
-          loggerFactory,
-          timeouts,
-        )
-      case storage: DbStorage =>
-        new DbTopologyStore(
-          storage,
-          storeId,
-          IndexedTopologyStoreId.tryCreate(storeId, topoStoreIdx),
-          testedProtocolVersion,
-          timeouts,
-          BatchingConfig(),
-          loggerFactory,
-        )
-    }
-    val validator = new InitialTopologySnapshotValidator(
-      participant1.underlying.value.cryptoPureApi,
-      store,
-      BatchAggregatorConfig.defaultsForTesting,
-      TopologyConfig.forTesting.copy(validateInitialTopologySnapshot = true),
-      Some(static),
-      timeouts,
-      loggerFactory,
-      cleanupTopologySnapshot = cleanupTopologyState,
-    )
-    validator
-      .validateAndApplyInitialTopologySnapshot(txs)
-      .futureValueUS(Timeout(timeout)) // See https://github.com/DACH-NY/canton/issues/26651
-      .value
-    (store, validator)
-  }
-
   "Canton node " can {
     "load topology transactions from Canton Network genesis state to a temporary store" in {
       implicit env =>
@@ -157,8 +168,9 @@ final class CantonNetworkTopologyStateIntegrationTest
           participant1.topology.stores
             .create_temporary_topology_store("test", testedProtocolVersion)
 
-        participant1.topology.transactions
-          .import_topology_snapshot(genesisBytes, testTempStoreId)
+        // The genesis fixture is in the V1 bytestring format, so we use the deprecated import_topology_snapshot here.
+        (participant1.topology.transactions
+          .import_topology_snapshot(genesisBytes, testTempStoreId): @nowarn("cat=deprecation"))
 
         val importedState = participant1.topology.transactions
           .list(testTempStoreId, timeQuery = TimeQuery.Range(None, None), operation = None)
@@ -190,7 +202,7 @@ final class CantonNetworkTopologyStateIntegrationTest
         client.toxics().latency("participant-db", ToxicDirection.UPSTREAM, toxiProxyLatency.toLong)
       }
 
-      val (store1, _) = runValidation(11, genesisSnapshot, cleanupTopologyState = true)
+      val (store1, _) = runValidation(11, genesisSnapshot, cleanupTopologyState = true, timeout)
       topologyStoreAfterImport = Some(store1)
 
     }
@@ -209,7 +221,7 @@ final class CantonNetworkTopologyStateIntegrationTest
             .futureValue
         )
 
-        runValidation(12, stateAfterImport, cleanupTopologyState = false)
+        runValidation(12, stateAfterImport, cleanupTopologyState = false, timeout)
       }
     }
 

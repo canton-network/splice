@@ -11,6 +11,7 @@ import com.digitalasset.canton.admin.api.client.data.{ComponentStatus, NodeStatu
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.logging.pretty.Pretty
 import com.digitalasset.canton.topology.UniqueIdentifier
+import com.digitalasset.canton.version.ReleaseVersion
 
 import java.time.Duration
 
@@ -30,6 +31,8 @@ case class SpliceStatus(
     }.toSeq)
   private[environment] def multiline(elements: Seq[String]): String =
     if (elements.isEmpty) "None" else elements.map(el => s"\n\t$el").mkString
+
+  override def version: ReleaseVersion = ReleaseVersion.tryCreate(BuildInfo.compiledVersion)
 
   override def pretty: Pretty[SpliceStatus] =
     prettyOfString(_ =>
@@ -63,7 +66,7 @@ object SpliceStatus {
     status match {
       case NodeStatus.Success(status) =>
         jsonV0.SuccessStatusResponse(SpliceStatus.fromStatus(status).toHttp)
-      case NodeStatus.NotInitialized(active, _) =>
+      case NodeStatus.NotInitialized(active, _, _) =>
         jsonV0.NotInitializedStatusResponse(jsonV0.NotInitialized(active))
       case NodeStatus.Failure(msg) =>
         jsonV0.FailureStatusResponse(jsonV0.ErrorResponse(msg))
@@ -77,7 +80,7 @@ object SpliceStatus {
         deserialize(success).map(NodeStatus.Success(_))
       case jsonV0.NodeStatus.members
             .NotInitializedStatusResponse(jsonV0.NotInitializedStatusResponse(notInitialized)) =>
-        Right(NodeStatus.NotInitialized(notInitialized.active, None))
+        Right(NodeStatus.NotInitialized(notInitialized.active, None, None))
       case jsonV0.NodeStatus.members.FailureStatusResponse(jsonV0.FailureStatusResponse(failure)) =>
         Left(failure.error)
     }

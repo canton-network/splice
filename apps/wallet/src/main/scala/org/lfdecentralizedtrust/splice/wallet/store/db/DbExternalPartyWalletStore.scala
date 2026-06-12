@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store.db
 
+import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
@@ -16,7 +17,7 @@ import org.lfdecentralizedtrust.splice.store.db.{
   DbTransferInputQueries,
 }
 import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers}
-import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -75,6 +76,7 @@ class DbExternalPartyWalletStore(
     with LimitHelpers {
 
   import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
+  import multiDomainAcsStore.waitUntilAcsIngested
 
   override protected def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
   override protected def acsTableName: String = WalletTables.externalPartyAcsTableName
@@ -87,6 +89,17 @@ class DbExternalPartyWalletStore(
     org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.ExternalPartyWalletAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
   ] = ExternalPartyWalletStore.contractFilter(key)
+
+  override def listRewardCouponsV2(
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
+  ]] =
+    waitUntilAcsIngested {
+      queryRewardCouponsV2(includeUnassigned, includeAssigned, limit)
+    }
 
   override def listSortedLivenessActivityRecords(
       issuingRoundsMap: Map[Round, IssuingMiningRound],

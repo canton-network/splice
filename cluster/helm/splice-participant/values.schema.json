@@ -70,6 +70,12 @@
         },
         "initImageName": {
           "type": "string"
+        },
+        "enablePgInitContainer": {
+          "type": "boolean"
+        },
+        "enableParticipantDbConflictCheck": {
+          "type": "boolean"
         }
       }
     },

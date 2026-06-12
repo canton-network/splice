@@ -36,8 +36,7 @@ export async function installNode(
   const isSvRunbook = nodeConfig.nodeName === svRunbookConfig.nodeName;
 
   const config = configForSv(nodeConfig.nodeName);
-  const catchupTestEnabled = config?.testing?.catchup?.enabled ?? false;
-  const supportsReset = isSvRunbook ? supportsSvRunbookReset : catchupTestEnabled || undefined;
+  const supportsReset = isSvRunbook ? supportsSvRunbookReset : undefined;
 
   // namespace lifecycle is managed by the main canton-network stack
   const xns = exactNamespace(nodeConfig.nodeName, true, true);

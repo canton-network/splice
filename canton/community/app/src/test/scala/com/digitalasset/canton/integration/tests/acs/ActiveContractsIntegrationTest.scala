@@ -11,6 +11,7 @@ import com.daml.ledger.api.v2.event.CreatedEvent.toJavaProto
 import com.daml.ledger.api.v2.state_service.GetActiveContractsResponse.ContractEntry
 import com.daml.ledger.api.v2.value.{Identifier, Record}
 import com.daml.ledger.javaapi.data.CreatedEvent.fromProto as createdEventFromProto
+import com.daml.ledger.javaapi.data.codegen.UnknownTrailingFieldPolicy
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.{
   AssignedWrapper,
   UnassignedWrapper,
@@ -55,6 +56,7 @@ import com.digitalasset.canton.{BaseTest, ReassignmentCounter, config}
 import com.digitalasset.daml.lf
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.transaction.test.TestNodeBuilder
+import com.digitalasset.daml.lf.transaction.test.TestNodeBuilder.CreateSerializationVersion
 import com.digitalasset.daml.lf.transaction.{CreationTime, SerializationVersion}
 import monocle.macros.syntax.lens.*
 import org.scalatest.Assertion
@@ -96,7 +98,7 @@ abstract class ActiveContractsIntegrationTestBase(alphaMultiSynchronizerSupport:
         ConfigTransforms.updateAllParticipantConfigs_(
           _.focus(_.parameters.alphaMultiSynchronizerSupport).replace(alphaMultiSynchronizerSupport)
         ),
-        ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag,
+        ConfigTransforms.enableAlphaMultiSynchronizerTopologyFeatureFlag,
       )
       .withSetup { implicit env =>
         import env.*
@@ -214,6 +216,7 @@ abstract class ActiveContractsIntegrationTestBase(alphaMultiSynchronizerSupport:
       signatories = Set(signatory.toLf),
       observers = Set(observer.toLf),
       packageName = packageName,
+      version = CreateSerializationVersion.Version(LfSerializationVersion.V1),
     )
 
     val contractSalt = ContractSalt.createV1(pureCrypto)(
@@ -279,7 +282,10 @@ abstract class ActiveContractsIntegrationTestBase(alphaMultiSynchronizerSupport:
         updates.map(_.createEvents)
       }
     }.flatten.loneElement
-    val contract = Iou.Contract.fromCreatedEvent(createdEventFromProto(toJavaProto(createdEvent)))
+    val contract = Iou.Contract.fromCreatedEvent(
+      createdEventFromProto(toJavaProto(createdEvent)),
+      UnknownTrailingFieldPolicy.STRICT,
+    )
     ContractData(contract, createdEvent)
   }
 

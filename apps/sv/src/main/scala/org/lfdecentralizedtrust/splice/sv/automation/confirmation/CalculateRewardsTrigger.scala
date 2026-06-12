@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -41,8 +42,8 @@ abstract class CalculateRewardsTriggerBase(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -54,7 +55,9 @@ abstract class CalculateRewardsTriggerBase(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
+    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+  )
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     // These are ordered by round, so we process the oldest first
@@ -107,9 +110,7 @@ abstract class CalculateRewardsTriggerBase(
               task.calculateRewards.payload.roundClosedAt,
               context.clock.now.toInstant,
             )
-            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)
           } yield TaskSuccess(
             s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
           )
@@ -154,8 +155,9 @@ abstract class CalculateRewardsTriggerBase(
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
+      rewardMetrics.calculateRewardsRootHashBftReads.mark()
       for {
-        bftScan <- bftScanConnectionF
+        bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)
       } yield response match {
         case RewardAccountingRootHashOk(ok) =>
@@ -166,7 +168,7 @@ abstract class CalculateRewardsTriggerBase(
     }
 
     for {
-      ownScan <- scanConnectionF
+      ownScan <- getOwnScanConnection()
       response <- ownScan.getRewardAccountingRootHash(round)
       rootHash <- response match {
         case RewardAccountingRootHashOk(ok) => Future.successful(new Hash(ok.rootHash))
@@ -196,8 +198,8 @@ class CalculateRewardsTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -206,8 +208,8 @@ class CalculateRewardsTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = false,
     )
 
@@ -215,8 +217,8 @@ class CalculateRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -225,8 +227,8 @@ class CalculateRewardsDryRunTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = true,
     )
 

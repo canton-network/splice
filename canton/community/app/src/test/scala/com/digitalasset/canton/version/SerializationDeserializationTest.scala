@@ -3,9 +3,11 @@
 
 package com.digitalasset.canton.version
 
+import com.daml.nonempty.NonEmptyUtil
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.crypto.{SymmetricKey, TestHash}
 import com.digitalasset.canton.data.*
+import com.digitalasset.canton.data.ViewParticipantData.InvalidSerializationVersion
 import com.digitalasset.canton.participant.GeneratorsParticipant
 import com.digitalasset.canton.participant.admin.party.PartyReplicationStatus
 import com.digitalasset.canton.participant.protocol.party.{
@@ -14,10 +16,9 @@ import com.digitalasset.canton.participant.protocol.party.{
   PartyReplicationTargetParticipantMessage,
 }
 import com.digitalasset.canton.participant.protocol.submission.SubmissionTrackingData
-import com.digitalasset.canton.participant.synchronizer.PendingHandshakeWithLsuSuccessor
+import com.digitalasset.canton.participant.synchronizer.PendingLsuOperation
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.messages.*
-import com.digitalasset.canton.protocol.messages.EncryptedViewMessage.computeRandomnessLength
 import com.digitalasset.canton.pruning.*
 import com.digitalasset.canton.sequencing.SequencerConnections
 import com.digitalasset.canton.sequencing.channel.{
@@ -50,6 +51,7 @@ import com.digitalasset.canton.util.ReassignmentTag.{Source, Target}
 import com.digitalasset.daml.lf.data.Bytes
 import com.google.protobuf.ByteString
 import org.scalacheck.Arbitrary
+import org.scalatest.Assertion
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
@@ -94,7 +96,7 @@ final class SerializationDeserializationTest
 
         test(StaticSynchronizerParameters, version)
         test(DynamicSynchronizerParameters, version)
-        test(DynamicSequencingParameters, version)
+        test(SequencingParameters, version)
 
         test(AcsCommitment, version)
         if (version >= ProtocolVersion.v35) {
@@ -118,20 +120,22 @@ final class SerializationDeserializationTest
           version,
         )
         test(ConfirmationResultMessage, version)
-        test(PendingHandshakeWithLsuSuccessor, version)
-        test(OnboardingClearanceOperation, version)
+        test(PendingLsuOperation, version)
+        if (version >= ProtocolVersion.v35) {
+          test(OnboardingClearanceOperation, version)
+        }
 
         test(AcknowledgeRequest, version)
-        test(AggregationRule, version)
+        testContext(AggregationRule, version, version)
         if (version < ProtocolVersion.v35) {
           test(ClosedUncompressedEnvelope, version)
         }
         test(SequencingSubmissionCost, version)
         testVersioned(ContractMetadata, version)(
-          generators.protocol.contractMetadataArb(canHaveEmptyKey = true)
+          generators.protocol.contractMetadataArb
         )
         testVersioned[SerializableContract](SerializableContract, version)(
-          generators.protocol.serializableContractArb(canHaveEmptyKey = true)
+          generators.protocol.serializableContractArb
         )
 
         // Merkle tree leaves
@@ -159,18 +163,23 @@ final class SerializationDeserializationTest
         // InformeeMessage become large due to the embedded ExternalAuthorization (quadratic list)
         // on top of transaction view trees, so give this test more time.
         testContext(InformeeMessage, (TestHash, version), version)(informeeMessageArb)
-        test(EncryptedViewMessage, version)(encryptedViewMessage)
+
+        if (version >= ProtocolVersion.v35) {
+          test(EncryptedMultipleViewsMessage, version)(encryptedMultipleViewsMessage)
+        } else {
+          test(EncryptedSingleViewMessage, version)(encryptedSingleViewMessage)
+        }
 
         test(TopologyTransaction, version)
         testContext(TopologyTransactionsBroadcast, version, version)
         testContext(SignedTopologyTransaction, ProtocolVersionValidation(version), version)
         testContext(SignedTopologyTransactions, ProtocolVersionValidation(version), version)
-        test(SequencerSnapshot, version)
+        testContext(SequencerSnapshot, version, version)
         test(OnboardingStateForSequencer, version)
         test(OnboardingStateForSequencerV2, version)
         test(LsuTrafficState, version)
 
-        testContext(ViewParticipantData, TestHash, version)
+        testContext(ViewParticipantData, (TestHash, version), version)
         // the generated recipient trees can be quite big, even they are already limited
         testContext(Batch, defaultMaxBytesToDecompress, version)
         test(SetTrafficPurchasedMessage, version)
@@ -215,7 +224,8 @@ final class SerializationDeserializationTest
           ),
           version,
         )
-        val randomnessLength = computeRandomnessLength(ExampleTransactionFactory.pureCrypto)
+        val randomnessLength =
+          EncryptedViewMessage.computeRandomnessLength(ExampleTransactionFactory.pureCrypto)
         testContext(LightTransactionViewTree, ((TestHash, randomnessLength), version), version)
         testContextTaggedProtocolVersion(AssignmentViewTree, TestHash, Target(version))
         testContext(
@@ -244,6 +254,7 @@ final class SerializationDeserializationTest
       "com.digitalasset.canton.participant.admin.data.ActiveContract$",
 
       // TODO(#26601) Remove these exceptions
+      "com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters$",
       "com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.leaders.BlacklistLeaderSelectionPolicyState$",
       "com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.OrderingRequestBatch$",
       "com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.modules.Availability$RemoteDissemination$RemoteBatch$",
@@ -302,6 +313,63 @@ final class SerializationDeserializationTest
           ContractAuthenticationData.fromSerializableContractAdminProtoV30(version, _),
         )
       }
+    }
+  }
+
+  // Test that it is not possible to create ViewParticipantData containing contracts
+  // serialized with a LF serialization version that is not supported by the protocol version.
+  // In practice, at time of writing, this means that PV v34 should not allow V2 contracts, while PV v35 should allow them.
+  s"ViewParticipantData.tryCreate with protocol version ${ProtocolVersion.v34}" should {
+
+    val generators = new CommonGenerators(ProtocolVersion.v34)
+
+    def recreateWith(
+        extraCoreInput: Option[InputContract],
+        extraCreatedCore: Option[CreatedContract],
+    ): Assertion = {
+      val vpd = generators.data.viewParticipantDataArb.arbitrary.sample.value
+      ViewParticipantData.tryCreate(
+        coreInputs = vpd.coreInputs ++ extraCoreInput.map(i => i.contract.contractId -> i),
+        createdCore = vpd.createdCore ++ extraCreatedCore,
+        createdInSubviewArchivedInCore = vpd.createdInSubviewArchivedInCore,
+        keyResolution = vpd.keyResolution,
+        actionDescription = vpd.actionDescription,
+        rollbackContext = vpd.rollbackContext,
+        salt = vpd.salt,
+      )(
+        hashOps = vpd.hashOps,
+        protocolVersion = ProtocolVersion.v34,
+        deserializedFrom = vpd.deserializedFrom,
+      )
+      succeed
+    }
+
+    val v2Contract =
+      ExampleContractFactory.build(keyOpt = Some(ExampleContractFactory.buildKeyWithMaintainers()))
+    v2Contract.inst.version shouldBe LfSerializationVersion.V2
+
+    s"allow ${LfSerializationVersion.V1} contracts" in {
+      recreateWith(None, None)
+    }
+    s"disallow ${LfSerializationVersion.V2} input contracts" in {
+      intercept[InvalidSerializationVersion] {
+        recreateWith(Some(InputContract(v2Contract, consumed = false)), None)
+      } shouldBe InvalidSerializationVersion(
+        NonEmptyUtil.fromUnsafe(Map(v2Contract.contractId -> v2Contract.inst.version)),
+        ProtocolVersion.v34,
+      )
+    }
+
+    s"disallow ${LfSerializationVersion.V2} created contracts" in {
+      intercept[InvalidSerializationVersion] {
+        recreateWith(
+          None,
+          Some(CreatedContract.tryCreate(v2Contract, consumedInCore = false, rolledBack = false)),
+        )
+      } shouldBe InvalidSerializationVersion(
+        NonEmptyUtil.fromUnsafe(Map(v2Contract.contractId -> v2Contract.inst.version)),
+        ProtocolVersion.v34,
+      )
     }
 
   }
