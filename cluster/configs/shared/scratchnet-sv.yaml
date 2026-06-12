@@ -56,6 +56,9 @@ sequencer:
           }
           strict = false
         }
+    - name: ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION
+      value: |
+        canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true
 mediator:
   resources:
     limits:
