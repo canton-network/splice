@@ -197,6 +197,7 @@ export const Governance: React.FC = () => {
             uniqueId="vote-history"
             showStatus
             showVoteStats
+            sortOrder="effectiveAtDesc"
             fetchNextPage={voteResultsInfiniteQuery.fetchNextPage}
             hasNextPage={voteResultsInfiniteQuery.hasNextPage}
             isFetchingNextPage={voteResultsInfiniteQuery.isFetchingNextPage}
