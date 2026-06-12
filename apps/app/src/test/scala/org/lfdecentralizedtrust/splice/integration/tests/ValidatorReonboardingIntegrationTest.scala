@@ -274,7 +274,7 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
 
         val lockedAmount = walletUsdToAmulet(BigDecimal(50))
         actAndCheck(
-          "alice locks a amulet that both aliceParty and aliceValidatorWalletParty are stake holders",
+          "alice locks an amulet that has both aliceParty and aliceValidatorWalletParty as stakeholders",
           lockAmulets(
             aliceValidatorBackend,
             aliceParty,
