@@ -29,7 +29,13 @@
 
         See [CIP 119](https://github.com/canton-foundation/cips/blob/main/cip-0119/cip-0119.md) for more details.
 
-        This requires a Daml upgrade to the following versions:
+      - Set ``sponsor = validator`` in ``ValidatorLicense`` contracts
+        for new validators and ones that report liveness through
+        ``ValidatorLicense_ReportActive``. This change was made to
+        reduce some confusion around the sponsor having a special role
+        for a validator after the initial onboarding.
+
+      - These changes require a Daml upgrade to the following versions:
 
           ================== =======
           name               version
