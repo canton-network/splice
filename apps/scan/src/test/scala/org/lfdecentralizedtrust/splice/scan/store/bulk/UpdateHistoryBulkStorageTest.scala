@@ -212,6 +212,7 @@ class UpdateHistoryBulkStorageTest
           SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment"
         )
         .value
+      val metrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
 
       val mockStore = new MockUpdateHistoryStore(
         initialStoreSize,
@@ -229,15 +230,13 @@ class UpdateHistoryBulkStorageTest
           appConfig,
           mockStore.store,
           bucketConnection,
-          new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+          metrics,
           loggerFactory,
         )
         val progress = new UpdateHistoryBulkStoragePersistentProgress(
           "latest_updates_segment_in_bulk_storage",
           kvProvider,
-          new HistoryMetrics(metricsFactory)(
-            MetricsContext.Empty
-          ).BulkStorage.latestUpdatesSegment,
+          metrics.BulkStorage.latestUpdatesSegment,
           loggerFactory,
         )
         val bulkStorage = new UpdateHistoryBulkStorage(
