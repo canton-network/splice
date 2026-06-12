@@ -25,12 +25,28 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
 trait AcsSnapshotBulkStorageWriter {
+
+  /** This method should return the timestamp of the next snapshot available, after `last`, if any.
+    * The pipeline will poll this method until it returns a new snapshot, and then process that snapshot
+    * before polling for the next one. It is ok for this method to return a snapshot that should not actually
+    * be processed, as the pipeline will call `shouldProcessSnapshotAt` to check if the snapshot should be
+    * processed or skipped (but will remember that it was skipped and update `last` for the future calls accordingly).
+    */
   def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
   )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
+
+  /** This method should return true if the snapshot at the given timestamp should be processed,
+    * or false if it should be skipped. This is used to skip snapshots that are not relevant for bulk storage
+    * (e.g. because they are in the DB, but are more frequent than the frequency we need for bulk storage).
+    */
   def shouldProcessSnapshotAt(ts: TimestampWithMigrationId)(implicit
       tc: TraceContext
   ): Boolean
+
+  /** Return the main Flow that processes the snapshot at the given timestamp.
+    * The Flow must emit back the same timestamp as its output once processing is complete.
+    */
   def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
       tc: TraceContext
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
@@ -80,49 +96,6 @@ class AcsSnapshotBulkStorage(
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning {
-
-//  protected val description: String
-//
-//  /** The key in the key-value store where the timestamp of the latest processed snapshot is stored. This is
-//    * used to resume processing from the correct point in case of restarts.
-//    */
-//  protected val kvStoreKey: String
-//
-//  /** A metric that should be updated with the timestamp of the latest snapshot that was processed.
-//    */
-//  protected val processedTimestampMetric: MetricHandle.Gauge[CantonTimestamp]
-//
-//  /** This method should return the timestamp of the next snapshot available, after `last`, if any.
-//    * The pipeline will  poll this method until it returns a new snapshot, and then process that snapshot
-//    * before polling for the next one. It is ok for this method to return a snapshot that should not actually
-//    * be processed, as the pipeline will call `shouldProcessSnapshotAt` to check if the snapshot should be
-//    * processed or skipped (but will remember that it was skipped and update `last` for the future calls accordingly).
-//    */
-//  protected def getNextSnapshotTimestampAfter(
-//      last: TimestampWithMigrationId
-//  )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]]
-//
-//  /** This method should return true if the snapshot at the given timestamp should be processed,
-//    * or false if it should be skipped. This is used to skip snapshots that are not relevant for bulk storage
-//    * (e.g. because they are in the DB, but are more frequent then the frequency we need for bulk storage).
-//    */
-//  protected def shouldProcessSnapshotAt(ts: TimestampWithMigrationId)(implicit
-//      tc: TraceContext
-//  ): Boolean
-//
-//  /** This method should return the main Flow that processes the snapshot at the given timestamp.
-//    * It must emit back the same timestamp as its output once processing is complete.
-//    */
-//  protected def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
-//      tc: TraceContext
-//  ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
-
-//  protected[bulk] def readLatestProcessedSnapshotTimestamp(implicit
-//      tc: TraceContext
-//  ): Future[Option[TimestampWithMigrationId]] = {
-//    import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.acsSnapshotTimestampMigrationCodec
-//    kvProvider.store.readValueAndLogOnDecodingFailure(processor.kvStoreKey).value
-//  }
 
   private def getAcsSnapshotTimestampsAfter(
       start: TimestampWithMigrationId

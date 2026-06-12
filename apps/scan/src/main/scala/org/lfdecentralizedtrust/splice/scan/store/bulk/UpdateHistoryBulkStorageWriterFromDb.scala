@@ -24,11 +24,6 @@ class UpdateHistoryBulkStorageWriterFromDb(
     extends UpdateHistoryBulkStorageWriter
     with NamedLogging
     with Spanning {
-//  override val description = "Update History Bulk Storage (Staging)"
-//  override val kvStoreKey = "latest_updates_segment_in_bulk_storage"
-//
-//  override val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp] =
-//    historyMetrics.BulkStorage.latestUpdatesSegment
 
   override def processSegment(
       segment: UpdatesSegment

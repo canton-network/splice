@@ -21,7 +21,6 @@ class BulkStorageReader(
 )(implicit actorSystem: ActorSystem)
     extends NamedLogging {
 
-  // TODO(#5844): this should be read from the committed bucket once that exists, not from staging
   def getAcsSnapshotAtOrBefore(
       atOrBeforeTimestamp: CantonTimestamp
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
@@ -65,7 +64,6 @@ class BulkStorageReader(
     }
   }
 
-  // TODO(#5884): everything below is for fetching bulk storage updates, and should probably be moved to the committed bucket instead of staging, once that exists
   def getUpdatesBetweenDates(
       afterRecordTime: CantonTimestamp,
       atOrBeforeRecordTime: CantonTimestamp,

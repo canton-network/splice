@@ -25,6 +25,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
 trait UpdateHistoryBulkStorageWriter {
+
+  /** The main Flow that processes a given segment of updates.
+    * The Flow must emit back the same segment as its output once processing is complete.
+    */
   def processSegment(segment: UpdatesSegment)(implicit
       tc: TraceContext
   ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
@@ -76,24 +80,6 @@ class UpdateHistoryBulkStorage(
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning {
-
-//  protected val description: String
-
-//  /** The key in the key-value store where the timestamp of the latest updates segment is stored. This is
-//    * used to resume processing from the correct point in case of restarts.
-//    */
-//  protected val kvStoreKey: String
-
-//  /** A metric that should be updated with the timestamp of the latest segment that was processed.
-//    */
-//  val processedSegmentMetric: MetricHandle.Gauge[CantonTimestamp]
-
-//  /** This method should return the main Flow that processes a given segment of updates.
-//    * It must emit back the same segment as its output once processing is complete.
-//    */
-//  protected def processSegment(segment: UpdatesSegment)(implicit
-//      tc: TraceContext
-//  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
 
   private def getMigrationIdForAcsSnapshot(
       snapshotTimestamp: CantonTimestamp

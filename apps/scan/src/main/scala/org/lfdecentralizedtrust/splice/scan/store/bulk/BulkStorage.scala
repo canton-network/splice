@@ -61,17 +61,9 @@ object BulkStorage {
 
     appConfig.s3.fold {
       logger.debug("s3 connection not configured, not dumping to bulk storage")(tc)
-      // FIXME: don't call this when not configured
       throw Status.FAILED_PRECONDITION
         .withDescription("S3 connection not configured, cannot initialize bulk storage")
         .asRuntimeException()
-//      new BulkStorage(
-//        acsSnapshotBulkStorage = None,
-//        updateHistoryBulkStorage = None,
-//        services = Seq.empty,
-//        retryProvider = retryProvider,
-//        loggerFactory = loggerFactory,
-//      )
     } { s3Config =>
       val s3Connection = S3BucketConnection(s3Config, loggerFactory)
       val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
