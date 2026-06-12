@@ -12,4 +12,4 @@ USER nginx
 COPY default.conf /etc/nginx/conf.d/
 
 ENTRYPOINT ["/sbin/tini", "--", "/custom-docker-entrypoint.sh"]
-HEALTHCHECK CMD service nginx status || exit 1
+HEALTHCHECK CMD nc -z 127.0.0.1 8080 || exit 1
