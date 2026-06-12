@@ -8,10 +8,11 @@ pulumiProjectConfig:
   default:
     cloudSql:
       enabled: true
-      protected: true
+      protected: false
   sv-runbook:
     cloudSql:
       enabled: false
+      protected: false
 validator1:
   participantPruningSchedule:
     cron: "0 /10 * * * ?" # Run every 10min
