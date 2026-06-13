@@ -46,6 +46,7 @@ class ScanTimeBasedIntegrationTest
     with HasActorSystem {
 
   val initialRound = 4815L
+  override val initialBuckets: Seq[String] = Seq("staging", "committed")
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -68,7 +69,8 @@ class ScanTimeBasedIntegrationTest
             bulkStorage = BulkStorageConfig(
               snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
-              s3 = Some(s3ConfigMock),
+              staging = Some(s3ConfigMock("staging")),
+              committed = Some(s3ConfigMock("committed")),
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )
@@ -442,7 +444,7 @@ class ScanTimeBasedIntegrationTest
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
     val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
-    val bucketConnection = new S3BucketConnectionForTests(s3ConfigMock, loggerFactory)
+    val bucketConnection = new S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory)
     eventually() {
 
       // wait for latest ACS snapshots to be created

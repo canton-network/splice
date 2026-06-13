@@ -223,7 +223,7 @@ class AcsSnapshotBulkStorageTest
           expectedTs: CantonTimestamp,
           expectedNumObjects: Int,
       ) = {
-        val getObjectsResult = reader.getAcsSnapshotAtOrBefore(queryTs).futureValue
+        val getObjectsResult = reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
             s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"
@@ -236,7 +236,7 @@ class AcsSnapshotBulkStorageTest
       }
 
       Using.resources(svc, retryProvider) { (_, _) =>
-        val ex = reader.getAcsSnapshotAtOrBefore(ts1).failed.futureValue
+        val ex = reader.getCommittedObjectsForAcsSnapshotAtOrBefore(ts1).failed.futureValue
         ex shouldBe a[StatusRuntimeException]
         ex.asInstanceOf[StatusRuntimeException]
           .getStatus
@@ -282,7 +282,7 @@ class AcsSnapshotBulkStorageTest
         }
 
         val ex1 = reader
-          .getAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
           .failed
           .futureValue
         ex1 shouldBe a[StatusRuntimeException]

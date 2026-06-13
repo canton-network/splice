@@ -161,7 +161,11 @@ class AcsSnapshotBulkStorage(
             getAcsSnapshotTimestampsAfter(TimestampWithMigrationId(CantonTimestamp.MinValue, 0))
         }
         .filter { writer.shouldProcessSnapshotAt }
+<<<<<<< HEAD
         .via(writer.processSnapshotsFlow)
+=======
+        .via(writer.processSnapshot)
+>>>>>>> 7002693264 (wip)
         .mapAsync(1) { ts =>
           persistentProgress.persistLatestProcessedSnapshotTimestamp(ts).map(_ => ts)
         }

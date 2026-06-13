@@ -42,7 +42,8 @@ final case class BulkStorageConfig(
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
-    s3: Option[S3Config] = None,
+    staging: Option[S3Config] = None,
+    committed: Option[S3Config] = None,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

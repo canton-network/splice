@@ -16,55 +16,100 @@ import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, S3Buc
 import scala.concurrent.{ExecutionContext, Future}
 
 class BulkStorageReader(
-    val acsSnapshotBulkStorage: AcsSnapshotBulkStorage,
+    val acsSnapshotBulkStorageStaging: AcsSnapshotBulkStorage,
+    val acsSnapshotBulkStorageCommitted: AcsSnapshotBulkStorage,
     val updateHistoryBulkStorage: UpdateHistoryBulkStorage,
     storageConfig: ScanStorageConfig,
-    s3Connection: S3BucketConnection,
+    stagingS3Connection: S3BucketConnection,
+    committedS3Connection: S3BucketConnection,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem)
     extends NamedLogging {
 
-  def getAcsSnapshotAtOrBefore(
-      atOrBeforeTimestamp: CantonTimestamp
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
+  private def getAcsSnapshotObjects(
+      timestamp: CantonTimestamp,
+      s3Connection: S3BucketConnection,
+      storageConfig: ScanStorageConfig,
+  ): Future[AcsSnapshotObjects] = {
     for {
-      snapshotTs <- acsSnapshotBulkStorage.persistentProgress.readLatestProcessedSnapshotTimestamp
-        .map {
-          case None =>
-            throw Status.NOT_FOUND
-              .withDescription("no snapshot in bulk storage yet")
-              .asRuntimeException()
-          case Some(ts) if ts.timestamp < atOrBeforeTimestamp =>
-            logger.trace(
-              s"Latest snapshot in bulk storage is at ${ts.timestamp}, which is before the requested timestamp ${atOrBeforeTimestamp}, returning that one"
-            )
-            ts.timestamp
-          case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
-        }
-      prefix = storageConfig.findSegmentFolderPrefixByStartTimestamp(snapshotTs)
       objects <- s3Connection
         // A single object currently holds ~700K contracts, we apply a Limit just for safety,
         // but we don't expect to get anywhere near 1000 such objects in the foreseeable future
         // (hence the HardLimit, just as a safety precaution).
         .listObjects(
-          prefix,
+          storageConfig.findSegmentFolderPrefixByStartTimestamp(timestamp),
           _.matches(".*ACS_\\d+\\.zstd"),
           HardLimit.tryCreate(Limit.DefaultMaxPageSize),
         )
-      objectsWithChecksums <- s3Connection.getChecksums(objects)
+      objectsWithChecksums <- committedS3Connection.getChecksums(objects)
     } yield {
       if (objects.isEmpty) {
         throw Status.NOT_FOUND
           .withDescription(
-            s"No snapshot objects found in bulk storage at expected timestamp at or before $atOrBeforeTimestamp, this may be because the timestamp is before network genesis"
+            s"No snapshot objects found in bulk storage at expected timestamp $timestamp, this may be because the timestamp is before network genesis"
           )
           .asRuntimeException()
       }
       logger.trace(
-        s"Found snapshot in bulk storage at timestamp $snapshotTs, with objects: ${objects.mkString(", ")}"
+        s"Found snapshot in bulk storage at timestamp $timestamp, with objects: ${objects.mkString(", ")}"
       )
-      AcsSnapshotObjects(snapshotTs, objectsWithChecksums)
+      AcsSnapshotObjects(timestamp, objectsWithChecksums)
     }
+  }
+
+  def getCommittedObjectsForAcsSnapshotAtOrBefore(
+      atOrBeforeTimestamp: CantonTimestamp
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
+    for {
+      snapshotTs <-
+        acsSnapshotBulkStorageCommitted.persistentProgress.readLatestProcessedSnapshotTimestamp
+          .map {
+            case None =>
+              throw Status.NOT_FOUND
+                .withDescription("no snapshot in committed bulk storage yet")
+                .asRuntimeException()
+            case Some(ts) if ts.timestamp < atOrBeforeTimestamp =>
+              logger.trace(
+                s"Latest snapshot in committed bulk storage is at ${ts.timestamp}, which is before the requested timestamp $atOrBeforeTimestamp, returning that one"
+              )
+              ts.timestamp
+            case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
+          }
+      objects <- getAcsSnapshotObjects(snapshotTs, committedS3Connection, storageConfig)
+    } yield {
+      objects
+    }
+  }
+
+  def getTimestampOfStagingAcsSnapshotAfter(
+      afterTimestamp: CantonTimestamp
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Option[CantonTimestamp]] = {
+    acsSnapshotBulkStorageStaging.persistentProgress.readLatestProcessedSnapshotTimestamp
+      .map {
+        case None =>
+          logger.debug(
+            s"No snapshot in staging bulk storage yet"
+          )
+          None
+        case Some(ts) if ts.timestamp <= afterTimestamp =>
+          logger.trace(
+            s"Latest snapshot in staging bulk storage is at ${ts.timestamp}, which is not after the requested timestamp $afterTimestamp"
+          )
+          None
+        case Some(ts) =>
+          Some(
+            storageConfig.computeSnapshotTimeAfter(
+              afterTimestamp,
+              storageConfig.bulkAcsSnapshotPeriodHours,
+            )
+          )
+      }
+  }
+
+  def getStagingObjectsForAcsSnapshotAt(
+      timestamp: CantonTimestamp
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
+    getAcsSnapshotObjects(timestamp, stagingS3Connection, storageConfig)
   }
 
   def getUpdatesBetweenDates(
