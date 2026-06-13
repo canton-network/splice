@@ -14,3 +14,8 @@
           - All Helm charts now support overriding full image names.
             It is possible to override the default image names using new Helm values.
             This change helps deployments that require specific naming conventions for images.
+
+      - Docker Images
+
+          - All Splice web UI Docker images have been updated to use the latest nginx-unprivileged base image,
+            and switched to the version based on alpine-slim, to improve security and reduce image size.
