@@ -318,3 +318,19 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='ADDITIONAL_CONFIG_MIGRATE_VALIDATOR_PARTY')].value
           pattern: 'canton\.validator-apps\.validator_backend\.migrate-validator-party\.scan\.admin-api\.url = \$\{_scan\.admin-api\.address\}'
+
+  - it: "allows overriding imageName and persistence.initImage"
+    set:
+      imageName: "validator-2"
+      persistence.initImageName: "secure-registry.com/postgres:14"
+      persistence.enablePgInitContainer: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].image
+          pattern: "validator-2:0\\.1\\.0$"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].image
+          pattern: "secure-registry.com/postgres:14"

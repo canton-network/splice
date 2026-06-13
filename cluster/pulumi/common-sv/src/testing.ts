@@ -16,7 +16,6 @@ const CatchupTestThresholdsSchema = z
 
 export const CatchupTestSchema = z
   .object({
-    enabled: z.boolean().default(false),
     thresholds: CatchupTestThresholdsSchema,
   })
   .strict();

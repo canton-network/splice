@@ -270,6 +270,7 @@ tests:
             secretName: custom-pg-secret
             databaseName: custom_bft_db
             user: custom-user
+            initImageName: "postgres:14"
     documentSelector:
       path: kind
       value: Deployment
@@ -312,3 +313,42 @@ tests:
                   secretKeyRef:
                     key: postgresPassword
                     name: custom-pg-secret
+
+  - it: "allows setting cometbft sequencer image and primary initImage"
+    set:
+      imageRepo: "secure-registry.example.com"
+      sequencer.cometbft.imageName: "custom-cometbft-sequencer"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].image
+          pattern: "^secure-registry\\.example\\.com/custom-cometbft-sequencer:"
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
+          value: "secure-registry.example.com/postgres:14-primary"
+
+  - it: "allows setting standard sequencer image and initImages for non-cometbft driver"
+    set:
+      sequencer.driver.type: "cantonbft"
+      imageRepo: "secure-registry.example.com"
+      sequencer.imageName: "custom-standard-sequencer"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
+      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:14-driver"
+      sequencer.driver.persistence.host: "dummy-host"
+      sequencer.driver.persistence.databaseName: "dummy_db"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].image
+          pattern: "^secure-registry\\.example\\.com/custom-standard-sequencer:"
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
+          value: "secure-registry.example.com/postgres:14-primary"
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].image
+          value: "secure-registry.example.com/postgres:14-driver"

@@ -1,7 +1,20 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": ["imageName"],
   "properties": {
+    "imageName": {
+      "type": "string"
+    },
+    "ui": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
@@ -446,7 +459,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -465,6 +479,9 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 65535
+            },
+            "initImageName": {
+              "type": "string"
             }
           }
         },

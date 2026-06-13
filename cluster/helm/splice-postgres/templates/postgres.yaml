@@ -36,7 +36,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: {{ .Release.Name }}
-        image: postgres:14
+        image: {{ .Values.imageName}}
         imagePullPolicy: IfNotPresent
         args:
           - "-c"

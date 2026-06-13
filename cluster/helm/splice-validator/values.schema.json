@@ -2,6 +2,15 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "ansWebUi": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
     "imagePullPolicy": {
       "type": "string"
     },
@@ -90,6 +99,15 @@
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
+    },
+    "wallet": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
     }
   },
   "allOf": [
@@ -203,10 +221,14 @@
         "migration",
         "nodeIdentifier",
         "persistence",
-        "spliceInstanceNames"
+        "spliceInstanceNames",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
+          "type": "string"
+        },
+        "imageName": {
           "type": "string"
         },
         "imageDigests": {
@@ -268,7 +290,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -287,6 +310,9 @@
               "type": "string"
             },
             "secretName": {
+              "type": "string"
+            },
+            "initImageName": {
               "type": "string"
             }
           }

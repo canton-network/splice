@@ -369,3 +369,34 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_SPONSOR_SCAN_URL')]
+
+  - it: "allows overriding backend image, ui image, and initImage"
+    set:
+      imageRepo: "secure-registry.example.com"
+      imageName: "custom-scan-app"
+      ui.imageName: "custom-scan-ui"
+      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      participantAddress: "dummy"
+      sequencerAddress: "dummy"
+      mediatorAddress: "dummy"
+      persistence.host: "dummy"
+      persistence.schema: "dummy"
+      spliceInstanceNames.networkName: "dummy"
+      spliceInstanceNames.networkFaviconUrl: "http://dummy"
+      spliceInstanceNames.amuletName: "dummy"
+      spliceInstanceNames.amuletNameAcronym: "dummy"
+      spliceInstanceNames.nameServiceName: "dummy"
+      spliceInstanceNames.nameServiceNameAcronym: "dummy"
+    asserts:
+      - documentIndex: 0
+        matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].image
+          pattern: "^secure-registry\\.example\\.com/custom-scan-app:"
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "secure-registry.example.com/postgres:14-custom"
+      - documentIndex: 2
+        matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-web-ui')].image
+          pattern: "^secure-registry\\.example\\.com/custom-scan-ui:"

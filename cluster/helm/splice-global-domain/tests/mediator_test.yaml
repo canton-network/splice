@@ -152,3 +152,19 @@ tests:
             limits:
               cpu: 200m
               memory: 1Gi
+
+  - it: "allows overriding mediator imageName and initImage"
+    set:
+      imageRepo: "secure-registry.com"
+      mediator.imageName: "approved-mediator"
+      mediator.persistence.initImageName: "secure-registry.com/postgres:14-hardened"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='mediator')].image
+          pattern: "^secure-registry.com/approved-mediator:"
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
+          value: "secure-registry.com/postgres:14-hardened"

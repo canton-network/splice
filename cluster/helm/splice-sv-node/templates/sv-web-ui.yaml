@@ -59,7 +59,7 @@ spec:
               value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
             - name: SPLICE_APP_UI_POLL_INTERVAL
               value: {{ .Values.uiPollInterval | quote }}
-          image: "{{ .Values.imageRepo }}/sv-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).sv_web_ui) }}"
+          image: {{ .Values.imageRepo }}/{{ .Values.ui.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).sv_web_ui) }}
           {{- with .Values.imagePullPolicy }}
           imagePullPolicy: {{ . }}
           {{- end }}

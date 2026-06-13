@@ -114,6 +114,7 @@ class UserWalletService(
     validatorTopupConfigO,
     walletSweep,
     autoAcceptTransfers,
+    rewardSharingConfig,
     dedupDuration,
     params,
   )

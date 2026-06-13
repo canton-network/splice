@@ -20,6 +20,7 @@ import com.digitalasset.canton.admin.api.client.data.topology.{
   BaseResult,
   ListNamespaceDelegationResult,
   ListOwnerToKeyMappingResult,
+  ListSequencingParametersStateResult,
   ListSynchronizerParametersStateResult,
 }
 import com.digitalasset.canton.config.{
@@ -340,6 +341,58 @@ abstract class TopologyAdminConnection(
             .asRuntimeException()
         )
     }
+
+  def lookupSequencingParametersState(
+      synchronizerId: SynchronizerId,
+      topologyTransactionType: TopologyTransactionType = AuthorizedState,
+  )(implicit
+      traceContext: TraceContext
+  ): Future[Option[TopologyResult[SequencingParametersState]]] =
+    runCommandM(
+      TopologyStoreId.Synchronizer(synchronizerId),
+      topologyTransactionType,
+      TimeQuery.HeadState,
+    )(
+      baseQuery =>
+        TopologyAdminCommands.Read.ListSequencingParametersState(
+          baseQuery,
+          filterSynchronizerId = synchronizerId.filterString,
+        ),
+      (r: ListSequencingParametersStateResult) =>
+        TopologyResult(
+          r.context,
+          SequencingParametersState(
+            synchronizerId,
+            r.item.toInternal.valueOr(err =>
+              throw new IllegalStateException(s"Failed to convert SequencingParameters: $err")
+            ),
+          ),
+        ),
+    ).map(_.headOption)
+
+  def ensureSequencingParametersState(
+      synchronizerId: SynchronizerId,
+      parameters: SequencingParametersState,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[TopologyResult[SequencingParametersState]] =
+    ensureTopologyMappingO(
+      synchronizerId,
+      "update sequencing parameters",
+      topologyType =>
+        EitherT
+          .liftF(lookupSequencingParametersState(synchronizerId, topologyType))
+          .subflatMap {
+            case Some(s) if s.mapping == parameters => Right(s)
+            case other => Left(other)
+          },
+      { (_: Option[SequencingParametersState]) =>
+        Right(parameters)
+      },
+      isProposal = true,
+      retryFor = RetryFor.Automation,
+    )
 
   def getMediatorSynchronizerState(
       synchronizerId: SynchronizerId,
