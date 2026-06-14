@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM nginxinc/nginx-unprivileged:1.31.1-alpine-slim@sha256:3123b0a1300f3d7c641855d07db6492a5157694fd8291e84fc486403b1e80dae
+FROM nginxinc/nginx-unprivileged:1.31.1-alpine-slim@sha256:6616de6eaa82bc2ee3541fa287a8fca7dc7271e6374e9402014dbd13f4a980ae
 
 USER root
 
