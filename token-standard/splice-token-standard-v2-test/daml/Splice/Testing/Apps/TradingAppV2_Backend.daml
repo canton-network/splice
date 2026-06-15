@@ -19,7 +19,7 @@ module Splice.Testing.Apps.TradingAppV2_Backend
 import Daml.Script
 
 import DA.Action
-import DA.Foldable (foldMap)
+import DA.Foldable (foldMap, forA_)
 import DA.Map as Map hiding (filter)
 import DA.Optional
 import DA.Set qualified as Set
@@ -126,11 +126,13 @@ querySettleableTrades registries venue = do
             let legV2 = upcast_v1_v2_TransferLeg allocView.allocation.transferLegId legV1
             -- V1 allocations authorize both sides of the transfer
             transferLegSidesWithAuthorizer legV2
-
-    if minimallyRequiredAuthorizations `Set.isSubsetOf` actualAuthorizations
+    let missingAuthorizations = minimallyRequiredAuthorizations `Set.difference` actualAuthorizations
+    if Set.null missingAuthorizations
       then do
         Some <$> mkSettleableTrade trade agreementsByTrader
-      else
+      else do
+        debug "missingAuthorizations"
+        forA_ missingAuthorizations debug
         pure None
   where
     mkSettleableTrade trade agreementsByTrader = do

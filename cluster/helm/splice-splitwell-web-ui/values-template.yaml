@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "splitwell-web-ui"
+
 resources:
   requests:
     cpu: 100m

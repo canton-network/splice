@@ -36,7 +36,7 @@ spec:
       {{- include "splice-util-lib.service-account" $.Values | nindent 6 }}
       containers:
         - name: "cometbft"
-          image: {{ $.Values.imageRepo }}/cometbft:{{ $.Chart.AppVersion }}{{ (($.Values.imageDigests).cometbft) }}
+          image: {{ $.Values.imageRepo }}/{{ $.Values.imageName}}:{{ $.Chart.AppVersion }}{{ (($.Values.imageDigests).cometbft) }}
           {{- with $.Values.imagePullPolicy }}
           imagePullPolicy: {{ . }}
           {{- end }}

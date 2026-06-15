@@ -686,7 +686,11 @@ object UserWalletStore {
             (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.endUserParty), now)(tc)
           },
         )(co =>
-          UserWalletAcsStoreRowData(co, None, rewardCouponRound = Some(co.payload.round.number))
+          UserWalletAcsStoreRowData(
+            co,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(co.payload.expiresAt)),
+            rewardCouponRound = Some(co.payload.round.number),
+          )
         ),
         mkFilter(amuletCodegen.UnclaimedActivityRecord.COMPANION)(co =>
           co.payload.dso == dso &&

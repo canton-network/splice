@@ -6,7 +6,6 @@ module Splice.AmuletAllocation (
   AmuletAllocation(..),
 
   -- * Construction
-  allocationToTwoStepTransfer,
   mkAllocationLockContext,
 
   -- * Expiry
@@ -100,19 +99,27 @@ template AmuletAllocation
                 [(allocation.transferLeg.instrumentId.id, map upcast senderHoldingCids)]
           pure (authorizerHoldingCids, emptyMetadata)
 
-      allocation_settleImpl self arg = do
-        -- V2 settlement of a V1 allocation
+      allocation_settleImpl self (V2.Allocation_Settle actors extraTransferLegSides nextIterationFunding extraArgs) = do
+        -- check all arguments
         let leg = allocation.transferLeg
         let dso = leg.instrumentId.admin
-        archiveAndCheckActors self arg.actors [[dso, allocation.settlement.executor]]
-        -- TODO(#4517): add test for this deadline
+        archiveAndCheckActors self actors [[dso, allocation.settlement.executor]]
+        -- prudent engineering: these args are in principle already checked by SettlementFactory_SettleBatch,
+        -- but we defensively check them here as well to avoid surprises for burn allocations settled
+        -- directly via a call by the DSO party to Allocation_Settle.
+        requireMatchExpected ("arg.extraTransferLegSides", extraTransferLegSides) []
+        requireMatchExpected ("arg.nextIterationFunding", nextIterationFunding) None
+
+        -- check allocation constraints
         assertWithinDeadline "allocation.settlement.settleBefore" allocation.settlement.settleBefore
+        -- Note: we do not enforce 'expiresAt', as that is only a DoS protection mechanism
+
         -- Archive locked amulet to execute the debit (extra checks part of defensive programming)
         la <- fetchAndArchive (ForOwner with dso, owner = leg.sender) lockedAmulet
         requireMatchExpected ("lockedAmulet.amount", la.amulet.amount.initialAmount) leg.amount
 
         -- report transfer events for V2 transaction history parsing
-        (configStateCid, _) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
+        (configStateCid, _) <- getExternalPartyConfigStateFromChoiceContext dso extraArgs.context
         logAllocationSettlement (toInterfaceContractId configStateCid) [toInterfaceContractId lockedAmulet] (upcast allocation) []
 
          -- construct metadata to aid V1 tx history parsers
@@ -181,8 +188,8 @@ transferAmuletAllocation amuletAllocation extraArgs = do
 
 unlockAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update [ContractId V1.Holding]
 unlockAmuletAllocation amuletAllocation extraArgs = do
-  let lockExpiresAt = amuletAllocation.allocation.settlement.settleBefore
-  abortTwoStepTransfer lockExpiresAt amuletAllocation.lockedAmulet extraArgs
+  let expiresAt = fromOptional amuletAllocation.allocation.settlement.settleBefore amuletAllocation.expiresAt
+  abortTwoStepTransfer expiresAt amuletAllocation.lockedAmulet extraArgs
 
 
 instance HasCheckedFetch AmuletAllocation ForDso where

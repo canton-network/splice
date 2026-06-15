@@ -32,7 +32,7 @@ import Splice.Amulet.TokenApiUtils (burnedMetaKey)
 
 import Splice.Testing.Apps.TradingApp hiding (require)
 import Splice.Testing.Utils
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
@@ -164,18 +164,9 @@ setupOtcTrade  = do
   submitWithDisclosuresMustFail' alice enrichedChoice.disclosures $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
-  -- alice accepts allocation request directly via her wallet
-  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
-    expectedAdmin = registry.admin
-    allocation = aliceAlloc
-    inputHoldingCids
-    requestedAt = now
-    extraArgs = emptyExtraArgs
-  result <- submitWithDisclosures' alice enrichedChoice.disclosures $
-    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-
-  -- check metadata
-  expectNoBurn result.meta
+  -- alice accepts allocation request directly using a V2 wallet
+  [(_, req)] <- WalletClientV2.listAllocationRequestsV1 alice
+  WalletClientV2.acceptAndCreateRequestedAllocationsV1 env.registries alice req
 
   -- check lock context
   [(_, lockedHolding)] <- WalletClient.listLockedHoldings alice yId

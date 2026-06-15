@@ -11,6 +11,11 @@ module Splice.Testing.Tokens.TestTokenV2 (
   TokenRules(..),
   TokenRules_OfferMint(..),
   TokenRules_OfferMintResult(..),
+
+  module Splice.Testing.Tokens.TestTokenV2.AccountConfig,
+  module Splice.Testing.Tokens.TestTokenV2.Holding,
+  module Splice.Testing.Tokens.TestTokenV2.Allocation,
+  module Splice.Testing.Tokens.TestTokenV2.Transfer,
 ) where
 
 import DA.Assert
@@ -160,6 +165,7 @@ token_transferFactory_transferImpl
   -> Update V2.TransferInstructionResult
 token_transferFactory_transferImpl admin actors transfer extraArgs = do
   require' ("transfer.instrumentId.admin", transfer.instrumentId.admin) isEqualR ("transferFactory.admin", admin)
+  assertDeadlineExceeded "transfer.requestedAt" transfer.requestedAt
 
   let offer = TokenTransferOffer with
         mintAmount = 0.0
@@ -183,6 +189,8 @@ token_allocationFactoryV2_allocateImpl
 token_allocationFactoryV2_allocateImpl callSource allocationKind tokenRules allocateBefore _self arg = do
   let admin = tokenRules.admin
   requireMatchExpected ("allocation.admin", arg.allocation.admin) admin
+  assertDeadlineExceeded "requestedAt" arg.requestedAt
+
   -- check that the holdings are owned by the right account and have the right admin
   inputHoldingMap <- fmap (TextMap.fromListWithR (++)) $ forA arg.inputHoldingCids $ \cid -> do
     let tokenCid = coerceContractId cid : ContractId Token

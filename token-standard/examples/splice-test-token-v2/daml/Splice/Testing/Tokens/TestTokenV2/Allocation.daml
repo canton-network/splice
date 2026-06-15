@@ -4,6 +4,9 @@
 -- | Allocation templates for the TestTokenV2 token.
 module Splice.Testing.Tokens.TestTokenV2.Allocation
 ( TokenAllocationInstructionV2(..)
+, TokenAllocationV2(..)
+, TokenAllocationInstructionV1(..)
+, TokenAllocationV1(..)
 , AllocationKind(..)
 , applyAllocationInstructionTransitions
 ) where
@@ -55,7 +58,9 @@ template TokenAllocationInstructionV2 with
     allocateBefore : Optional Time
       -- ^ Until when the allocation should be created. Used for V1 compatibility.
   where
-    ensure isValidAllocationSpecificationV2 (const True) allocation
+    ensure
+      isValidAllocationSpecificationV2 (const True) allocation &&
+      validAllocateBefore requestedAt allocateBefore allocation.settlementDeadline
     signatory fromOptional [] (Map.lookup V2.AIA_Accept actionAuthorizers), admin
     observer dedupSort (concatMap concat (Map.values availableActions) <> concat (Map.values actionAuthorizers))
 
@@ -79,6 +84,15 @@ template TokenAllocationInstructionV2 with
 
       allocationInstruction_withdrawImpl = token_allocationInstruction_withdrawImplV2 CalledFromV2 CreateV2Allocation this
       allocationInstruction_acceptImpl = token_allocationInstruction_acceptImplV2 CalledFromV2 CreateV2Allocation this
+
+-- | Validate allocateBefore wrt to what V1 requires.
+validAllocateBefore : Time -> Optional Time -> Optional Time -> Bool
+validAllocateBefore requestedAt optAllocateBefore optSettlementDeadline =
+  case optAllocateBefore of
+    None -> True
+    Some allocateBefore ->
+      requestedAt < allocateBefore &&
+      optional True (allocateBefore <=) optSettlementDeadline
 
 
 applyAllocationInstructionTransitions
@@ -155,12 +169,16 @@ template TokenAllocationV2 with
     settlement : V2.SettlementInfo
       -- ^ Settlement for which the allocation is being requested.
     allocation : V2.AllocationSpecification
-    createdAt : Time
+    requestedAt : Time
     allocateBefore : Optional Time
       -- ^ Until when the allocation should be created. Used for V1 compatibility.
+      -- Still relevant to wallet users, as they could decide to withdraw the allocation
+      -- and recreate it later provided the allocateBefore deadline has not passed.
     numIterations : Int
   where
-    ensure isValidAllocationSpecificationV2 (const True) allocation
+    ensure
+      isValidAllocationSpecificationV2 (const True) allocation &&
+      validAllocateBefore requestedAt allocateBefore allocation.settlementDeadline
     signatory accountParties allocation.admin allocation.authorizer, allocation.admin
     observer settlement.executors
 
@@ -174,7 +192,7 @@ template TokenAllocationV2 with
         allocation
         holdingCids = Foldable.concat lockedTokens
         availableActions = allocationV2_availableActionsDefault settlement.executors allocation
-        createdAt
+        createdAt = requestedAt
         numIterations
         meta = emptyMetadata
 
@@ -280,7 +298,7 @@ allocateTokenAllocation eventLogCid accountMap this allocationKind = do
         textMapUnionWith (+) transferOutAmounts $ fromOptional TextMap.empty allocation.nextIterationFunding
 
   -- lock funds and return change
-  inputAmounts <- debitInputTokens admin allocation.authorizer this.inputHoldingCids
+  inputAmounts <- debitInputTokens fetchAndArchiveUnlockedToken admin allocation.authorizer this.inputHoldingCids
   (lockedTokens, authorizerChangeCids) <- lockAllocationFunds
     settlement
     allocation.settlementDeadline
@@ -291,7 +309,7 @@ allocateTokenAllocation eventLogCid accountMap this allocationKind = do
     originalAllocationCid = None
     availableActions = mkAvailableAllocationActions settlement allocation accountMap
     actionAuthorizers = Map.empty
-    createdAt = this.requestedAt
+    requestedAt = this.requestedAt
     numIterations = 0
     lockedTokens
     settlement
@@ -329,7 +347,7 @@ settleTokenAllocationV2 accountMap this self arg = do
     arg.extraTransferLegSides arg.nextIterationFunding
 
   -- compute required funding and settle
-  debitInputAmounts <- debitInputTokens allocation.admin allocation.authorizer this.lockedTokens
+  debitInputAmounts <- debitInputTokens fetchAndArchiveLockedToken allocation.admin allocation.authorizer this.lockedTokens
   let actualTransferLegs = allocation.transferLegSides ++ arg.extraTransferLegSides
   let netTransferAmounts = netAllocationCreditAmounts allocation.authorizer actualTransferLegs
   let netInputAmounts = textMapUnionWith (+) debitInputAmounts netTransferAmounts
@@ -351,7 +369,7 @@ settleTokenAllocationV2 accountMap this self arg = do
       allocation = allocation with
           transferLegSides = []
           nextIterationFunding = arg.nextIterationFunding
-      createdAt = this.createdAt
+      requestedAt = this.requestedAt
       allocateBefore = this.allocateBefore
       numIterations = this.numIterations + 1
 
@@ -369,15 +387,16 @@ settleTokenAllocationV2 accountMap this self arg = do
     meta = allocationSettlementTxHistoryV1ToMeta allocation emptyMetadata
 
 -- | Archive the given tokens and return the total amounts debited per instrument-id.
-debitInputTokens : Party -> V2.Account -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap Decimal)
-debitInputTokens admin authorizer inputTokenCids = do
-  amounts <- forA (Foldable.concat inputTokenCids) $ \cid -> do
-    let tokenCid = coerceContractId cid : ContractId Token
-    token <- fetch tokenCid
-    archive tokenCid
-    require' ("inputToken.account", token.holding.account) isEqualR ("authorizer", authorizer)
-    requireMatchExpected ("lockedToken.instrumentId.admin", token.holding.instrumentId.admin) admin
-    pure (token.holding.instrumentId.id, token.holding.amount)
+debitInputTokens
+  : (V2.InstrumentId -> V2.Account -> ContractId Token -> Update Token)
+  -> Party -> V2.Account -> TextMap.TextMap [ContractId V2.Holding] -> Update (TextMap.TextMap Decimal)
+debitInputTokens fetchAndArchiveToken admin authorizer inputTokenCids = do
+  amounts <- forA (TextMap.toList inputTokenCids) $ \(id, cids) -> do
+    let instrId = V2.InstrumentId with id, admin
+    amounts <- forA cids $ \cid -> do
+      token <- fetchAndArchiveToken instrId authorizer (coerceContractId cid)
+      pure token.holding.amount
+    pure (id, sum amounts)
   pure $ TextMap.fromListWithR (+) amounts
 
 -- | Create the locked tokens that back an allocation, and return any change to the authorizer.

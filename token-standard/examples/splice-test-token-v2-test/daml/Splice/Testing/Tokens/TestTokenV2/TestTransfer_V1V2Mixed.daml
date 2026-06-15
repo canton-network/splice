@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Daml script tests checking mixed V1 and V2 transfers using TesTokenV2.
-module Splice.Tests.TestTokenV2.TestTransfer_V1V2Mixed where
+module Splice.Testing.Tokens.TestTokenV2.TestTransfer_V1V2Mixed where
 
 import Daml.Script
 
@@ -22,7 +22,7 @@ import Splice.TokenStandard.Utils qualified as TSU
 import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
 
 import Splice.Testing.Utils
-import Splice.Testing.Tokens.TestTokenV2.AccountConfig qualified as TestTokenV2
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenV2_RegistryV2
 import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
 import Splice.Testing.TokenStandard.WalletClient qualified as WalletClientV1

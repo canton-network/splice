@@ -1,6 +1,6 @@
 # Token Standard V2 DevNet
 
-Splice version: `0.6.8-snapshot.20260610.3066.0.v1faf0033`
+Splice version: `0.6.9-snapshot.20260615.3096.0.v27548d88`
 
 Container image repository (compose `IMAGE_REPO`/ helm `imageRepo`): `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker`
 So the docker pull command should look like `docker pull ghcr.io/digital-asset/decentralized-canton-sync-dev/docker/SOME_IMAGE:THE_VERSION_ABOVE`

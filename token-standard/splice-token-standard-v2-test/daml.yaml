@@ -36,7 +36,6 @@ data-dependencies:
   - ../splice-api-token-allocation-request-v2/.daml/dist/splice-api-token-allocation-request-v2-current.dar
   - ../splice-api-token-allocation-instruction-v2/.daml/dist/splice-api-token-allocation-instruction-v2-current.dar
 
-  # TODO(#4878): rename splice-token-standard-util to splice-util-token-standard-core to better align with the existing 'splice-util-token-standard-wallet'
   - ../splice-token-standard-utils/.daml/dist/splice-token-standard-utils-current.dar
   - ../../daml/splice-util-token-standard-wallet/.daml/dist/splice-util-token-standard-wallet-current.dar
 

@@ -4,25 +4,128 @@
 -- | Unit tests for Splice.TokenStandard.Utils.Internal.Allocations
 module Splice.Tests.UnitTest_Allocations where
 
-import DA.Action (unless)
 import DA.Assert
 import DA.List (sort, dedupSort)
 import DA.Map qualified as Map
+import DA.Optional (fromSome)
 import DA.Time
-import DA.Text qualified as T
 import DA.TextMap qualified as TextMap
 
 import Daml.Script
 
 import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as V1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.AllocationRequestV1 qualified as V1
+import Splice.Api.Token.AllocationRequestV2 qualified as V2
 
 import Splice.TokenStandard.Utils qualified as TSU
 
--- TODO(#4517): add the missing unit tests for the non-trivial functions in Allocations utils
+import Splice.Tests.TokenStandard.UnitTestUtils
+import Splice.Api.Token.Test.DummyHolding (DummyHolding(..))
+
+
+test_netAllocationCreditAmounts : Script ()
+test_netAllocationCreditAmounts = do
+  TestEnv {..} <- setupTest
+  let test authorizer sides amounts =
+        (TSU.netAllocationCreditAmounts authorizer sides, TextMap.fromList amounts)
+
+  let burnAccount = V2.Account with
+        owner = None
+        id = "cip-112/burn"
+        provider = None
+  let mintAccount = V2.Account with
+        owner = None
+        id = "cip-112/mint"
+        provider = None
+
+  checkEq' "netAllocationCreditAmounts"
+    [ test aliceAccount [TSU.senderSide aliceBobLegV2] [(instrId.id, -10.0)]
+    , test bobAccount [TSU.receiverSide aliceBobLegV2] [(instrId.id, 10.0)]
+
+    -- Note: the sides of the legs do not store the authorizer, so the net amounts are the same regardless of the authorizer
+    , test aliceAccount [TSU.receiverSide aliceBobLegV2] [(instrId.id, 10.0)]
+
+    -- Multiple legs are properly aggregated
+    , test bobAccount [TSU.receiverSide aliceBobLegV2, TSU.senderSide bobCharlieLeg] [(instrId.id, 5.0)]
+    , let bobCharlieLeg' = bobCharlieLeg with
+            instrumentId = "Y"
+      in test bobAccount [TSU.receiverSide aliceBobLegV2, TSU.senderSide bobCharlieLeg'] [(instrId.id, 10.0), ("Y", -5.0)]
+
+    -- Only the receiver side of burns is treated specially
+    , test burnAccount [TSU.receiverSide aliceBurnLeg] [(instrId.id, 0.0)]
+    , test burnAccount [TSU.senderSide aliceBurnLeg] [(instrId.id, -7.0)]
+
+    -- Only the sender side of mints is treated specially
+    , test mintAccount [TSU.receiverSide aliceMintLeg] [(instrId.id, 3.0)]
+    , test mintAccount [TSU.senderSide aliceMintLeg] [(instrId.id, 0.0)]
+    ]
+
+test_allocation_validity : Script ()
+test_allocation_validity = do
+  TestEnv {..} <- setupTest
+  checkEq' "isValidSettlementInfoV1"
+    [ (TSU.isValidSettlementInfoV1 settlementV1, True)
+    , (TSU.isValidSettlementInfoV1 (settlementV1 with allocateBefore = now `addRelTime` microseconds (-1)), False)
+    , (TSU.isValidSettlementInfoV1 (settlementV1 with settleBefore = settlementV1.allocateBefore), True)
+    ]
+
+  checkEq' "isValidSettlementInfoV2"
+    [ (TSU.isValidSettlementInfoV2 settlementV2, True)
+    , (TSU.isValidSettlementInfoV2 (settlementV2 with executors = []), False)
+    , (TSU.isValidSettlementInfoV2 (settlementV2 with meta = mkMeta [("cip-112/extra-executors", "XYZ")]), False)
+    ]
+
+  checkEq' "isValidAllocationSpecificationV1"
+    [ (TSU.isValidAllocationSpecificationV1 allocationV1, True)
+    , (TSU.isValidAllocationSpecificationV1 (allocationV1 with transferLeg = allocationV1.transferLeg with amount = -10.0), False)
+    ]
+
+  let testSpecV2 expected alloc = (TSU.isValidAllocationSpecificationV2 (== "X") alloc, expected)
+  checkEq' "isValidAllocationSpecificationV2"
+    [ testSpecV2 True allocationV2
+
+    -- only allow empty legs with iterated settlement
+    , testSpecV2 True allocationV2 with
+        transferLegSides = []
+        nextIterationFunding = Some mempty
+    , testSpecV2 False allocationV2 with
+        transferLegSides = []
+        nextIterationFunding = None
+
+    -- self-transfers are OK, but no other duplicate leg ids are allowed
+    , testSpecV2 True allocationV2 with
+        transferLegSides = [TSU.senderSide aliceBobLegV2, TSU.receiverSide aliceBobLegV2]
+    , testSpecV2 False allocationV2 with
+        transferLegSides = [TSU.senderSide aliceBobLegV2, TSU.senderSide aliceBobLegV2]
+    , testSpecV2 False allocationV2 with
+        transferLegSides = [TSU.senderSide aliceBobLegV2, TSU.senderSide bobCharlieLeg with transferLegId = "leg1"]
+
+    -- legs are checked
+    , testSpecV2 False allocationV2 with
+        transferLegSides = pure $ TSU.senderSide $ aliceBobLegV2 with
+          amount = -10.0
+    , testSpecV2 False allocationV2 with
+        transferLegSides = pure $ TSU.senderSide $ aliceBobLegV2 with
+          instrumentId = "Y"
+    , testSpecV2 False allocationV2 with
+        transferLegSides = pure $ TSU.senderSide $ aliceBobLegV2 with
+          meta = mkMeta [("cip-112/sender.id", "unexpected")]
+    , testSpecV2 False allocationV2 with
+        transferLegSides = pure $ TSU.senderSide $ aliceBobLegV2 with
+          meta = mkMeta [("cip-112/receiver.id", "unexpected")]
+
+    -- next iteration funding is checked
+    , testSpecV2 False allocationV2 with
+        nextIterationFunding = Some (TextMap.fromList [("X", -10.0)])
+    , testSpecV2 False allocationV2 with
+        nextIterationFunding = Some (TextMap.fromList [("Y", 10.0)])
+    ]
 
 test_executorsFromSettlementInfoV1 : Script ()
 test_executorsFromSettlementInfoV1 = do
@@ -41,10 +144,7 @@ test_executorsFromSettlementInfoV1 = do
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
         settleBefore = now `addRelTime` days 2
-
   TSU.executorsFromSettlementInfoV1 settlementV2 === [executor1, executor2]
-
-  pure ()
 
 test_allocationV1_availableActionsDefault : Script ()
 test_allocationV1_availableActionsDefault = do
@@ -53,28 +153,28 @@ test_allocationV1_availableActionsDefault = do
         holdingCids = []
         meta = emptyMetadata
         allocation = allocationV1
-  let expectedActions = Map.fromList
+  checkEq "allocationV1_availableActionsDefault"
+    (TSU.allocationV1_availableActionsDefault allocationViewV1) $
+    Map.fromList
         [ (V2.AA_Settle, [[admin, executor1, executor2]])
         , (V2.AA_Cancel, [[executor1, executor2]])
         , (V2.AA_Withdraw, [[alice]])
           -- Note: the default actions do consider the account provider as an observer only,
           -- which is why they do not get the Withdraw action.
         ]
-  checkEq "allocationV1_availableActionsDefault" expectedActions $
-    TSU.allocationV1_availableActionsDefault allocationViewV1
 
 test_allocationV2_availableActionsDefault : Script ()
 test_allocationV2_availableActionsDefault = do
   TestEnv {..} <- setupTest
-  let expectedActions = Map.fromList
+  checkEq "allocationV2_availableActionsDefault"
+    (TSU.allocationV2_availableActionsDefault settlementV2.executors allocationV2) $
+    Map.fromList
         [ (V2.AA_Settle, [[admin, executor1, executor2]])
         , (V2.AA_Cancel, [[executor1, executor2]])
         , (V2.AA_Withdraw, [[alice]])
           -- Note: the default actions do consider the account provider as an observer only,
           -- which is why they do not get the Withdraw action.
         ]
-  checkEq "allocationV2_availableActionsDefault" expectedActions $
-    TSU.allocationV2_availableActionsDefault settlementV2.executors allocationV2
 
 test_settlementFactoryV2_settleBatchExtraObserversDefaultImpl : Script ()
 test_settlementFactoryV2_settleBatchExtraObserversDefaultImpl = do
@@ -86,13 +186,13 @@ test_settlementFactoryV2_settleBatchExtraObserversDefaultImpl = do
         actors = settlementV2.executors
         extraArgs = emptyExtraArgs
 
-  let expectedPublicObservers = sort [alice, bob, charlie, accountProvider]
-  checkEq "settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl" expectedPublicObservers $
-    dedupSort $ TSU.settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin choiceArg
+  checkEq "settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl"
+    (dedupSort $ TSU.settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl admin choiceArg)
+    (sort [alice, bob, charlie, accountProvider])
 
-  let expectedPrivateObservers = []
-  checkEq "settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl" expectedPrivateObservers $
-    dedupSort $ TSU.settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl choiceArg
+  checkEq "settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl"
+    (dedupSort $ TSU.settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl choiceArg)
+    []
 
 
 test_allocationFactoryV2_allocateExtraObserversDefaultImpl  : Script ()
@@ -107,31 +207,264 @@ test_allocationFactoryV2_allocateExtraObserversDefaultImpl = do
         extraArgs = emptyExtraArgs
 
   let expectedPublicObservers = sort [executor1, executor2, accountProvider, alice]
-  checkEq "allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl" expectedPublicObservers $
-    dedupSort $ TSU.allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl choiceArg
+  checkEq "allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl"
+    (dedupSort $ TSU.allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl choiceArg)
+    expectedPublicObservers
 
   -- funding is required for the allocation leg ==> do not show the allocation step itself to the executors
   let expectedPrivateObservers = sort [accountProvider, alice]
-  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (leg input)" expectedPrivateObservers $
-    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArg
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (leg input)"
+    (dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArg)
+    expectedPrivateObservers
 
   -- funding is required for the next iteration ==> do not show the allocation step itself to the executors
   let choiceArgIterationInput = choiceArg with
         allocation = allocationV2 with
           transferLegSides = []
           nextIterationFunding = Some $ TextMap.fromList [("X", 10.0)]
-  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (iteration input)" expectedPrivateObservers $
-    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgIterationInput
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (iteration input)"
+    (dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgIterationInput)
+    expectedPrivateObservers
 
   -- no funding is required ==> show the allocation step to the executors
   let choiceArgNoInput = choiceArg with
         allocation = allocationV2 with
           authorizer = bobAccount
-          transferLegSides = [TSU.receiverSide aliceBobLeg]
+          transferLegSides = [TSU.receiverSide aliceBobLegV2]
           nextIterationFunding = Some $ TextMap.fromList [("X", 0.0)]
   let expectedPrivateObservers = sort [executor1, executor2, accountProvider, bob]
-  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (no input)" expectedPrivateObservers $
-    dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgNoInput
+  checkEq "allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl (no input)"
+    (dedupSort $ TSU.allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl choiceArgNoInput)
+    expectedPrivateObservers
+
+test_allocation_conversions : Script ()
+test_allocation_conversions = do
+  TestEnv {..} <- setupTest
+
+  let testTransferLegV1 legV1 =
+        ( TSU.downcast_v2_v1_TransferLeg admin (TSU.upcast_v1_v2_TransferLeg "leg0" legV1), legV1 )
+  checkEq' "allocation leg up/downcast roundtrip - v1"
+    [ testTransferLegV1 allocationV1.transferLeg
+    , testTransferLegV1 allocationV1.transferLeg with
+        meta = TSU.accountToMeta "sender" aliceAccount (TSU.reasonToMeta "dummy reason" emptyMetadata)
+    ]
+
+  let testTransferLegV2 legV2 =
+        ( TSU.upcast_v1_v2_TransferLeg legV2.transferLegId (TSU.downcast_v2_v1_TransferLeg admin legV2), legV2 )
+  checkEq' "allocation leg up/downcast roundtrip - v2"
+    [ testTransferLegV2 aliceBobLegV2
+    , testTransferLegV2 aliceBurnLeg
+    , testTransferLegV2 aliceMintLeg
+    , testTransferLegV2 bobCharlieLeg
+    ]
+
+  let testSettlementInfoV1 infoV1 =
+        let infoV2 = TSU.upcast infoV1 in
+        ( TSU.downcast_v2_v1_SettlementInfo infoV1.requestedAt (Some infoV1.allocateBefore) (Some infoV1.settleBefore) infoV2, infoV1 )
+  checkEq' "settlement info up/downcast roundtrip - v1"
+    [ testSettlementInfoV1 allocationV1.settlement
+    , testSettlementInfoV1 allocationV1.settlement with
+        allocateBefore = TSU.maxTime
+        settleBefore = TSU.maxTime
+    ]
+
+  let testSettlementInfoV2 infoV2 allocateBefore settleBefore =
+        ( TSU.upcast (TSU.downcast_v2_v1_SettlementInfo now allocateBefore settleBefore infoV2), infoV2 )
+  checkEq' "settlement info up/downcast roundtrip - v2"
+    [ testSettlementInfoV2 settlementV2 None None
+    , testSettlementInfoV2 settlementV2 None (Some testSettlementDeadline)
+    , testSettlementInfoV2 settlementV2 (Some testAllocateBefore) (Some testSettlementDeadline)
+    , testSettlementInfoV2 (settlementV2 with executors = [alice, bob]) None None
+    ]
+
+  checkEq "upcast AllocationSpecificationV1"
+    (TSU.upcast allocationV1 with)
+    allocationV2
+
+  test_v1_roundtrips @V2.AllocationInstructionResult_Output "AllocationInstructionResult_Output v1"
+    [ V1.AllocationInstructionResult_Pending (coerceContractId dummyCid)
+    , V1.AllocationInstructionResult_Completed (coerceContractId dummyCid)
+    , V1.AllocationInstructionResult_Failed
+    ]
+
+  test_v2_roundtrips @V1.AllocationInstructionResult_Output "AllocationInstructionResult_Output v2"
+    [ V2.AllocationInstructionResult_Pending (coerceContractId dummyCid)
+    , V2.AllocationInstructionResult_Completed (coerceContractId dummyCid)
+    , V2.AllocationInstructionResult_Failed
+    ]
+
+  checkEq "downcast V2.AllocationInstructionResult"
+    (TSU.downcast V2.AllocationInstructionResult with
+        authorizerChangeCids = TextMap.fromList
+          [("X", [coerceContractId dummyCid, coerceContractId dummyCid1]), ("Y", [coerceContractId dummyCid])]
+        output = V2.AllocationInstructionResult_Pending (coerceContractId dummyCid)
+        meta = mkMeta dummyMeta
+    )
+    (V1.AllocationInstructionResult with
+        senderChangeCids = [coerceContractId dummyCid, coerceContractId dummyCid1, coerceContractId dummyCid]
+        output = V1.AllocationInstructionResult_Pending (coerceContractId dummyCid)
+        meta = mkMeta dummyMeta
+    )
+
+  -- allocation view conversion testing
+  checkEq "upcast_v1_v2_AllocationView"
+    (TSU.upcast_v1_v2_AllocationView None (Some testExpiresAt) testAllocActions allocViewV1)
+    allocViewV2
+
+  checkEq "tryDowncast_v2_v1_AllocationView - success 1"
+    (TSU.tryDowncast_v2_v1_AllocationView (Some testAllocateBefore) allocViewV2 )
+    (Some allocViewV1)
+
+  checkEq "tryDowncast_v2_v1_AllocationView - success 2"
+    (TSU.tryDowncast_v2_v1_AllocationView None allocViewV2 )
+    (Some allocViewV1 with
+      allocation = allocViewV1.allocation with
+        settlement = allocViewV1.allocation.settlement with
+          allocateBefore = fromSome $ allocationV2.settlementDeadline
+    )
+
+  let mkAllocView legs = allocViewV2 with
+        allocation = allocViewV2.allocation with
+          transferLegSides = legs
+  let testDowncastAllocFailure allocView =
+        (TSU.tryDowncast_v2_v1_AllocationView None allocView, None)
+  let aliceBobView = mkAllocView [TSU.senderSide aliceBobLegV2]
+  checkEq' "tryDowncast_v2_v1_AllocationView - failure"
+    [ testDowncastAllocFailure $ mkAllocView []
+    , testDowncastAllocFailure $ mkAllocView [TSU.receiverSide aliceBobLegV2]
+    , testDowncastAllocFailure $ mkAllocView [TSU.senderSide aliceBobLegV2, TSU.senderSide aliceBurnLeg]
+    , testDowncastAllocFailure $ mkAllocView [TSU.senderSide aliceBobLegV2, TSU.senderSide aliceBurnLeg]
+    , testDowncastAllocFailure aliceBobView with
+        allocation = aliceBobView.allocation with
+          committed = True
+    , testDowncastAllocFailure aliceBobView with
+        allocation = aliceBobView.allocation with
+          nextIterationFunding = Some $ TextMap.fromList [("X", 10.0)]
+    ]
+
+  -- allocation instruction view conversion testing
+  checkEq "upcast_v1_v2_AllocationInstructionView"
+    (TSU.upcast_v1_v2_AllocationInstructionView (Some testExpiresAt) testAllocInstrActions allocInstrViewV1)
+    allocInstrViewV2
+
+  checkEq "tryDowncast_v2_v1_AllocationInstructionView - success 1"
+    (TSU.tryDowncast_v2_v1_AllocationInstructionView (Some testAllocateBefore) allocInstrViewV2 )
+    (Some allocInstrViewV1)
+
+  checkEq "tryDowncast_v2_v1_AllocationInstructionView - success 2"
+    (TSU.tryDowncast_v2_v1_AllocationInstructionView None allocInstrViewV2 )
+    (Some allocInstrViewV1 with
+      allocation = allocInstrViewV1.allocation with
+        settlement = allocInstrViewV1.allocation.settlement with
+          allocateBefore = fromSome $ allocationV2.settlementDeadline
+    )
+
+  let mkAllocInstrView legs = allocInstrViewV2 with
+        allocation = allocInstrViewV2.allocation with
+          transferLegSides = legs
+  let testDowncastAllocInstrFailure allocView =
+        (TSU.tryDowncast_v2_v1_AllocationInstructionView None allocView, None)
+  let aliceBobView = mkAllocInstrView [TSU.senderSide aliceBobLegV2]
+  checkEq' "tryDowncast_v2_v1_AllocInstrationView - failure"
+    [ testDowncastAllocInstrFailure $ mkAllocInstrView []
+    , testDowncastAllocInstrFailure $ mkAllocInstrView [TSU.receiverSide aliceBobLegV2]
+    , testDowncastAllocInstrFailure $ mkAllocInstrView [TSU.senderSide aliceBobLegV2, TSU.senderSide aliceBurnLeg]
+    , testDowncastAllocInstrFailure $ mkAllocInstrView [TSU.senderSide aliceBobLegV2, TSU.senderSide aliceBurnLeg]
+    , testDowncastAllocInstrFailure aliceBobView with
+        allocation = aliceBobView.allocation with
+          committed = True
+    , testDowncastAllocInstrFailure aliceBobView with
+        allocation = aliceBobView.allocation with
+          nextIterationFunding = Some $ TextMap.fromList [("X", 10.0)]
+    ]
+
+  -- allocation request conversion
+  let allocReqV2 = V2.AllocationRequestView with
+        originalRequestCid = Some (coerceContractId dummyCid)
+        requestedAt = now
+        settleAt = Some testAllocateBefore
+        allocations = [ allocationV2 ]
+        settlement = settlementV2
+        availableActions = Map.fromList
+          [ (V2.ARA_Accept, [[alice], [accountProvider]])
+          , (V2.ARA_Reject, [[alice, accountProvider]])
+          ]
+        meta = mkMeta dummyMeta
+  let allocReqV1 = V1.AllocationRequestView with
+        settlement = allocationV1.settlement
+        transferLegs = TextMap.fromList [("leg1", allocationV1.transferLeg)]
+        meta = mkMeta dummyMeta
+  checkEq "downcast_v2_v1_AllocationRequestView - with settleAt, with settlementDeadline"
+    (TSU.downcast_v2_v1_AllocationRequestView  (Some testSettlementDeadline) allocReqV2)
+    allocReqV1
+  checkEq "downcast_v2_v1_AllocationRequestView - no settleAt, with settlementDeadline"
+    (TSU.downcast_v2_v1_AllocationRequestView (Some testSettlementDeadline) allocReqV2 with
+      settleAt = None
+    )
+    allocReqV1 with
+      settlement = allocReqV1.settlement with
+        allocateBefore = fromSome $ allocationV2.settlementDeadline
+  checkEq "downcast_v2_v1_AllocationRequestView - no settleAt, no settlement deadline"
+    (TSU.downcast_v2_v1_AllocationRequestView None allocReqV2 with
+      settleAt = None
+      allocations = [allocationV2 with settlementDeadline = None]
+    )
+    allocReqV1 with
+      settlement = allocReqV1.settlement with
+        allocateBefore = TSU.maxTime
+        settleBefore = TSU.maxTime
+
+  let testReqLegs allocsV2 legsV1 =
+        ( TSU.downcast_v2_v1_AllocationRequestView (Some testSettlementDeadline)
+            allocReqV2 with allocations = allocsV2
+        , allocReqV1 with transferLegs = TextMap.fromList legsV1
+        )
+
+  checkEq' "downcast_v2_v1_AllocationRequestView - with allocateBefore, with settleAt"
+    [ testReqLegs [allocationV2] [("leg1", allocationV1.transferLeg)]
+    , -- the exact same allocation being duplicated accidentally works as the legs are deduped based on their ids
+      testReqLegs [allocationV2, allocationV2] [("leg1", allocationV1.transferLeg)]
+      -- this fails as expected with "downcast_v2_v1_AllocationRequestView: non-matching duplicate transfer legs:",
+      -- but that's a bit tricky to test for, which is why it is commented out
+    {-
+    , testReqLegs
+        [ allocationV2
+        , allocationV2 with
+            authorizer = bobAccount
+            transferLegSides = [TSU.senderSide bobCharlieLeg with transferLegId = "leg1"]
+        ]
+        [ ("leg1", allocationV1.transferLeg)
+        , ("leg2", TSU.downcast_v2_v1_TransferLeg admin bobCharlieLeg)
+        ]
+    -}
+    , testReqLegs -- legs from two allocations are properly combined
+        [ allocationV2
+        , allocationV2 with
+            authorizer = bobAccount
+            transferLegSides =
+              [ TSU.senderSide bobCharlieLeg
+              , V2.TransferLegSide with
+                  transferLegId = "self-transfer1"
+                  side = V2.ReceiverSide
+                  otherside = bobAccount
+                  amount = 100.0
+                  instrumentId = "Y"
+                  meta = emptyMetadata
+              ]
+        ]
+        [ ("leg1", allocationV1.transferLeg)
+        , ("leg2", TSU.downcast_v2_v1_TransferLeg admin bobCharlieLeg)
+        , ("self-transfer1", V1.TransferLeg with
+            sender = bob
+            receiver = bob
+            amount = 100.0
+            instrumentId = V1.InstrumentId with
+              admin
+              id = "Y"
+            meta = TSU.accountToMeta "sender" bobAccount $ TSU.accountToMeta "receiver" bobAccount emptyMetadata
+          )
+        ]
+    ]
 
 
 -- Shared test infra
@@ -150,12 +483,34 @@ data TestEnv = TestEnv with
   executor2 : Party
   instrId : V2.InstrumentId
   now : Time
+
+  testAllocateBefore : Time
+  testSettlementDeadline : Time
+  testExpiresAt : Time
+
+
   settlementV1 : V1.SettlementInfo
   allocationV1 : V1.AllocationSpecification
+
   settlementV2 : V2.SettlementInfo
   allocationV2 : V2.AllocationSpecification
-  aliceBobLeg : V2.TransferLeg
+  aliceBobLegV2 : V2.TransferLeg
+  aliceBurnLeg : V2.TransferLeg
+  aliceMintLeg : V2.TransferLeg
+  bobCharlieLeg : V2.TransferLeg
   legsV2 : [V2.TransferLeg]
+
+  allocViewV1 : V1.AllocationView
+  allocViewV2 : V2.AllocationView
+  testAllocActions : Map.Map V2.AllocationAction [[Party]]
+
+  allocInstrViewV1 : V1.AllocationInstructionView
+  allocInstrViewV2 : V2.AllocationInstructionView
+  testAllocInstrActions : Map.Map V2.AllocationInstructionAction [[Party]]
+
+  dummyCid : ContractId ()
+  dummyCid1 : ContractId ()
+
 
 setupTest : Script TestEnv
 setupTest = do
@@ -167,6 +522,10 @@ setupTest = do
   charlie <- allocateParty "charlie"
   executor1 <- allocateParty "executor1"
   executor2 <- allocateParty "executor2"
+  let testAllocateBefore = now `addRelTime` days 1
+  let testSettlementDeadline = now `addRelTime` days 10
+  let testExpiresAt = now `addRelTime` days 90
+  let testExpiresAtMicros = 90 * 24 * 60 * 60 * 1000 * 1000
   let settlementV1 = V1.SettlementInfo with
         executor = executor1
         settlementRef = V1.Reference with
@@ -178,7 +537,7 @@ setupTest = do
             ]
         requestedAt = now
         allocateBefore = now `addRelTime` days 1
-        settleBefore = now `addRelTime` days 2
+        settleBefore = testSettlementDeadline
   let aliceAccount = V2.Account with
         owner = Some alice
         provider = Some accountProvider
@@ -191,25 +550,41 @@ setupTest = do
   let instrId = V2.InstrumentId with
         admin
         id = "X"
+
+  let aliceBobLegV1 = V1.TransferLeg with
+        sender = alice
+        receiver = bob
+        amount = 10.0
+        instrumentId = TSU.downcast instrId
+        meta = TSU.accountToMeta "sender" aliceAccount $ TSU.accountToMeta "receiver" bobAccount emptyMetadata
   let allocationV1 = V1.AllocationSpecification with
         settlement = settlementV1
         transferLegId = "leg1"
-        transferLeg = V1.TransferLeg with
-          sender = alice
-          receiver = bob
-          amount = 10.0
-          instrumentId = TSU.downcast instrId
-          meta = TSU.accountToMeta "sender" aliceAccount emptyMetadata
+        transferLeg = aliceBobLegV1
   let settlementV2 = V2.SettlementInfo with
         executors = [executor1, executor2]
         id = "settlement1"
         cid = None
         meta = emptyMetadata
-  let aliceBobLeg = V2.TransferLeg with
+  let aliceBobLegV2 = V2.TransferLeg with
         transferLegId = "leg1"
         sender = aliceAccount
         receiver = bobAccount
         amount = 10.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  let aliceBurnLeg = V2.TransferLeg with
+        transferLegId = "legBurn"
+        sender = aliceAccount
+        receiver = TSU.burnAccount
+        amount = 7.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  let aliceMintLeg = V2.TransferLeg with
+        transferLegId = "legMint"
+        sender = TSU.mintAccount
+        receiver = aliceAccount
+        amount = 3.0
         instrumentId = instrId.id
         meta = emptyMetadata
   let bobCharlieLeg = V2.TransferLeg with
@@ -219,27 +594,63 @@ setupTest = do
         amount = 5.0
         instrumentId = instrId.id
         meta = emptyMetadata
-  let legsV2 = [aliceBobLeg, bobCharlieLeg]
+  let legsV2 = [aliceBobLegV2, bobCharlieLeg]
   let allocationV2 = V2.AllocationSpecification with
         admin = instrId.admin
         authorizer = aliceAccount
-        transferLegSides = [TSU.senderSide aliceBobLeg]
+        transferLegSides = [TSU.senderSide aliceBobLegV2]
         committed = False
         nextIterationFunding = None
-        settlementDeadline = None
+        settlementDeadline = Some testSettlementDeadline
         meta = emptyMetadata
+
+  dummyCid0 <- submit alice $
+    createCmd DummyHolding with owner = alice, issuer = alice, amount = 100.0
+  dummyCid1' <- submit alice $
+    createCmd DummyHolding with owner = alice, issuer = alice, amount = 100.0
+  let dummyCid = coerceContractId dummyCid0
+  let dummyCid1 = coerceContractId dummyCid1'
+
+  let allocViewV1 = V1.AllocationView with
+        holdingCids = [coerceContractId dummyCid]
+        meta = mkMeta $ ("cip-112/expiresAt", show testExpiresAtMicros) :: dummyMeta
+        allocation = allocationV1
+  let testAllocActions = Map.singleton V2.AA_Settle [[admin, executor1, executor2]]
+  let allocViewV2 = V2.AllocationView with
+        originalAllocationCid = None
+        settlement = settlementV2
+        allocation = allocationV2
+        holdingCids = [coerceContractId dummyCid]
+        createdAt = now
+        numIterations = 0
+        expiresAt = Some testExpiresAt
+        availableActions = testAllocActions
+        meta = mkMeta dummyMeta
+
+  let allocInstrViewV1 = V1.AllocationInstructionView with
+        originalInstructionCid = None
+        inputHoldingCids = [coerceContractId dummyCid]
+        meta = mkMeta $ ("cip-112/expiresAt", show testExpiresAtMicros) :: dummyMeta
+        allocation = allocationV1
+        requestedAt = now
+        pendingActions = Map.fromList $
+          [ (alice, "joint-accept")
+          , (accountProvider, "accept or joint-accept or withdraw")
+          , (admin, "expire")
+          ]
+  let testAllocInstrActions = Map.fromList
+        [ (V2.AIA_Accept, [[accountProvider], [alice, accountProvider]])
+        , (V2.AIA_Withdraw, [[accountProvider]])
+        , (V2.AIA_Custom "expire", [[admin]])
+        ]
+  let allocInstrViewV2 = V2.AllocationInstructionView with
+        originalInstructionCid = None
+        settlement = settlementV2
+        allocation = allocationV2
+        requestedAt = now
+        inputHoldingCids = [coerceContractId dummyCid]
+        expiresAt = Some testExpiresAt
+        availableActions = testAllocInstrActions
+        meta = mkMeta dummyMeta
+
   pure TestEnv with ..
-
-emptyExtraArgs : ExtraArgs
-emptyExtraArgs = ExtraArgs with
-  context = emptyChoiceContext
-  meta = emptyMetadata
-
-checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
-checkEq prefix expected actual =
-  unless (actual == expected) $
-    fail $ T.unlines
-      [ prefix <> ": actual values do not match expected values."
-      , "  actual:   " <> show actual
-      , "  expected: " <> show expected
-      ]

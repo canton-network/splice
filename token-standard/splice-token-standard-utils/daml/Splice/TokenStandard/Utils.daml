@@ -57,6 +57,8 @@ module Splice.TokenStandard.Utils (
   -- * Metadata utilities
 
   -- ** Extra metadata fields
+  extraExecutorsMetaKey,
+  expiresAtMetaKey,
   expiresAtToMeta,
 
   -- ** Transfer metadata
@@ -82,7 +84,6 @@ module Splice.TokenStandard.Utils (
   textMapValues,
   textMapKeys,
   textMapZip,
-  textMapZipWithDefault,
   textMapTraverseWithKey,
 
   -- * API type conversions
@@ -138,7 +139,6 @@ module Splice.TokenStandard.Utils (
   upcast_v1_v2_AllocationView,
   tryDowncast_v2_v1_AllocationView,
 
-  extraExecutorsMetaKey,
   executorsFromSettlementInfoV1,
 
   -- *** Choices
@@ -172,6 +172,7 @@ module Splice.TokenStandard.Utils (
   -- * Allocation instruction template implementations
 
   -- ** Non-standard conversions
+  upcast_v1_v2_AllocationInstructionView,
   tryDowncast_v2_v1_AllocationInstructionView,
 
   -- ** V1 defaults using V2 implementations
@@ -184,6 +185,9 @@ module Splice.TokenStandard.Utils (
 
   -- * Allocation request implementation
 
+  -- ** Non-standard conversions
+  downcast_v2_v1_AllocationRequestView,
+
   -- ** V1 defaults
   allocationRequestV1_rejectDefaultImpl,
   allocationRequestV1_withdrawDefaultImpl,
@@ -194,11 +198,6 @@ module Splice.TokenStandard.Utils (
   -- ** V2 for dual version templates
   allocationRequestV2_rejectDefaultImplUsingV1,
   allocationRequestV2_withdrawDefaultImplUsingV1,
-
-  -- ** V2 for V2-only templates
-  allocationRequestV2_rejectDefaultImplV2Only,
-  allocationRequestV2_withdrawDefaultImplV2Only,
-  -- TODO(#4517): ensure these functions are tested
 
   -- * Allocation factory implementations
 

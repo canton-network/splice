@@ -36,7 +36,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: validator-app
-        image: "{{ .Values.imageRepo }}/validator-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).validator_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).validator_app) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -397,7 +397,7 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:

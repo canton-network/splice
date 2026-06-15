@@ -1219,16 +1219,19 @@ class TreasuryService(
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(Round, BigDecimal, InputRewardCouponV2)])] =
     for {
-      rewardCouponV2Inputs <- userStore.listSortedMintableRewardCouponV2s(
+      rewardCouponV2Results <- userStore.listRewardCouponsV2(
         includeUnassigned = mintUnassignedRewardCouponsV2,
-        PageLimit.tryCreate(maxNumInputs),
+        includeAssigned = true,
+        limit = PageLimit.tryCreate(maxNumInputs),
       )
-      rewardCouponV2AmuletQuantity = rewardCouponV2Inputs.map(_._2).sum
-      inputs = rewardCouponV2Inputs.map(rw =>
+      rewardCouponV2AmuletQuantity = rewardCouponV2Results
+        .map(rw => BigDecimal(rw.payload.amount))
+        .sum
+      inputs = rewardCouponV2Results.map(rw =>
         (
-          rw._1.payload.round,
-          rw._2,
-          new InputRewardCouponV2(rw._1.contractId),
+          rw.payload.round,
+          BigDecimal(rw.payload.amount),
+          new InputRewardCouponV2(rw.contractId),
         )
       )
     } yield (rewardCouponV2AmuletQuantity, inputs)

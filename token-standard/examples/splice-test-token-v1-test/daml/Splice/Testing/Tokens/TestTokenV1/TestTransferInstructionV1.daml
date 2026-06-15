@@ -1,0 +1,192 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Happy path and negative test cases for V1 transfer instruction API calls.
+module Splice.Testing.Tokens.TestTokenV1.TestTransferInstructionV1 where
+
+import DA.Assert
+import DA.Map qualified as Map
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.TokenStandard.RegistryApi qualified as V1
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.Utils
+
+import Splice.Testing.Tokens.TestTokenV1.TokenStandardTestEnv (TestEnv(..), setupTest, createLockedHoldings)
+
+
+-- Happy-path test cases
+------------------------
+
+test_transfer_singleStep_generic : (TestEnv -> Script (V1.TransferFactory_Transfer, Decimal, Decimal)) -> Script ()
+test_transfer_singleStep_generic mkArg = do
+  env@(TestEnv {..}) <- setupTest
+  (choiceArg, aliceAmount, bobAmount) <- mkArg env
+  enrichedChoice <- V1.getTransferFactory registryV1 choiceArg
+  (result, _) <-
+    WalletClientV2.extractAndCheckTxHistory (Map.keys env.registriesEnv.registries) $
+    submitResultAndTree (actAs choiceArg.transfer.sender <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  WalletClientV2.checkUnlockedBalance alice instrId aliceAmount
+  WalletClientV2.checkUnlockedBalance bob instrId bobAmount
+  debug result
+  case result.output of
+    V1.TransferInstructionResult_Completed _ -> pure ()
+    out -> fail $ "Expected transfer to complete, but got: " <> show out
+
+test_transfer_singleStep_selfTransfer : Script ()
+test_transfer_singleStep_selfTransfer = test_transfer_singleStep_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          receiver = alice
+  pure (choiceArg, 1000.0, 0.0)
+
+test_happy_instr_generic : (TestEnv -> ContractId V1.TransferInstruction -> Script ()) -> Script ()
+test_happy_instr_generic mkTest = do
+  env@(TestEnv {..}) <- setupTest
+  WalletClientV2.transferV1 registries alice transferArgV1
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  [(instrCid, _)] <- WalletClientV2.listTransferInstructionsV1V2 bob instrId
+  mkTest env (coerceContractId instrCid)
+
+test_transfer_AcceptV1 : Script ()
+test_transfer_AcceptV1 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.acceptTransferInstructionV1 registries bob instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 10.0
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+
+test_transfer_RejectV1 : Script ()
+test_transfer_RejectV1 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.rejectTransferInstructionV1 registries bob instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
+test_transfer_WithdrawV1 : Script ()
+test_transfer_WithdrawV1 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.withdrawTransferInstructionV1 registries alice instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
+test_transferFactory_PublicFetchV1 : Script ()
+test_transferFactory_PublicFetchV1  = do
+  -- we use the factory context to get access to the factory
+  (TestEnv {..}) <- setupTest
+  registryV1 <- MultiRegistry.getRegistryApiV1 registries instrId.admin
+  enrichedChoice <- V1.getTransferFactory registryV1 transferArgV1
+
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid V1.TransferFactory_PublicFetch with
+      expectedAdmin = instrId.admin
+      actor = alice
+  view === V1.TransferFactoryView instrId.admin emptyMetadata
+
+
+-- Negative test cases for V1.TransferFactory_Transfer
+------------------------------------------------------
+
+test_transfer_negative_generic : (TestEnv -> Script (V1.TransferFactory_Transfer, FailureStatusCheck)) -> Script ()
+test_transfer_negative_generic mkTest = do
+  env@(TestEnv {..}) <- setupTest
+
+  (choiceArg, check) <- mkTest env
+  enrichedChoice <- V1.getTransferFactory registryV1 choiceArg
+  submitMustFail'' check
+    -- We grant readAs instr.admin to be able to test using holdings with the wrong owner
+    (actAs choiceArg.transfer.sender <> discloseMany' enrichedChoice.disclosures <> readAs instrId.admin) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+test_transfer_TransferV1_cannotUseLockedHoldings : Script ()
+test_transfer_TransferV1_cannotUseLockedHoldings = test_transfer_negative_generic $ \env@(TestEnv {..}) -> do
+  lockedCids <- createLockedHoldings env.instrId alice 100.0 (now `addRelTime` days 365)
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          inputHoldingCids = map coerceContractId lockedCids
+  pure $ (,) choiceArg $
+    expectMessageContains "'holding.lock' is not equal to 'expected value'"
+
+test_transfer_TransferV1_wrongInstrumentId : Script ()
+test_transfer_TransferV1_wrongInstrumentId = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let wrongInstrId = V1.InstrumentId with
+        admin = instrId.admin
+        id = "BAD_INSTRUMENT_ID"
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          instrumentId = wrongInstrId
+  pure $ (,) choiceArg $
+    expectMessageContains "'holding.instrumentId' is not equal to 'expected value'" <>
+    expectMessageContains ("expected value: " <> show wrongInstrId)
+
+test_transfer_TransferV1_inputHoldingCids_noneGiven : Script ()
+test_transfer_TransferV1_inputHoldingCids_noneGiven = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          inputHoldingCids = []
+  pure $ (,) choiceArg $
+    expectMessageContains "'input amount' is less than 'transfer.amount'"
+
+test_transfer_TransferV1_inputHoldingCids_insufficientFunds : Script ()
+test_transfer_TransferV1_inputHoldingCids_insufficientFunds = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          amount = 10000000.0
+  pure $ (,) choiceArg $
+    expectMessageContains "'input amount' is less than 'transfer.amount'"
+
+test_transfer_TransferV1_inputHoldingCids_wrongAdmin : Script ()
+test_transfer_TransferV1_inputHoldingCids_wrongAdmin = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let wrongInstrId = V2.InstrumentId with
+        admin = charlie
+        id = instrId.id
+  inputHoldingCids <- createLockedHoldings wrongInstrId alice 500.0 (now `addRelTime` days (-365))
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          inputHoldingCids
+  pure $ (,) choiceArg $
+    expectMessageContains "'holding.instrumentId' is not equal to 'expected value'" <>
+    expectMessageContains ("expected value: " <> show instrId)
+
+test_transfer_TransferV1_inputHoldingCids_wrongOwner : Script ()
+test_transfer_TransferV1_inputHoldingCids_wrongOwner = test_transfer_negative_generic $ \TestEnv {..} -> do
+  createLockedHoldings instrId bob 500.0 (now `addRelTime` days (-365))
+  bobHoldingCids <- WalletClientV2.listHoldingCids bob instrId
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          inputHoldingCids = map TSU.downcast bobHoldingCids
+  pure $ (,) choiceArg $
+    expectMessageContains "'holding owner' is not equal to 'expected value'." <>
+    expectMessageContains ("expected value: " <> show alice)
+
+
+test_transfer_amount_negative : Script ()
+test_transfer_amount_negative = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          amount = -10.0
+  pure $ (,) choiceArg $
+    expectUnmetRequirement "Amount must be positive"
+
+test_transfer_requestedAt : Script ()
+test_transfer_requestedAt = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          requestedAt = now `addRelTime` microseconds 1
+  pure $ (,) choiceArg $ expectErrorId  "stdlib.daml.com/deadline-not-exceeded"
+
+test_transfer_executeBefore : Script ()
+test_transfer_executeBefore = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV1 with
+        transfer = transferV1 with
+          executeBefore = now `addRelTime` microseconds (-1)
+  pure $ (,) choiceArg $ expectErrorId  "stdlib.daml.com/deadline-exceeded"
+

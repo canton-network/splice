@@ -6,7 +6,9 @@ module Splice.AmuletAllocationV2 (
   AmuletAllocationV2(..),
   netAmuletCreditAmount,
   validateAmuletNextIterationFunding,
+  validateAmuletTransferLegSides,
   computeAllocationExpiry,
+  computeAllocationExpiryInternal,
 ) where
 
 import DA.Action
@@ -101,7 +103,7 @@ template AmuletAllocationV2
         unless (isSome allocation.nextIterationFunding) $ do
           require "no extra transfer legs allowed when iterated settlement is disabled" (null arg.extraTransferLegSides)
           require "no next iteration funding allowed when iterated settlement is disabled" (isNone arg.nextIterationFunding)
-        validateAmuletTransferLegs actualTransferLegSides
+        validateAmuletTransferLegSides actualTransferLegSides
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 
         -- archive the locked tokens
@@ -202,20 +204,37 @@ validateAmuletNextIterationFunding (Some nextIterationFunding) = do
     pure amount
   pure (sum amounts)
 
-validateAmuletTransferLegs : [V2.TransferLegSide] -> Update ()
-validateAmuletTransferLegs transferLegs = do
-  requireUnique "transferLegSides" (map (\leg -> (leg.transferLegId, leg.side)) transferLegs)
+validateAmuletTransferLegSides : [V2.TransferLegSide] -> Update ()
+validateAmuletTransferLegSides transferLegs = do
+  requireUnique "transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegs)
   forA_ transferLegs $ \leg -> do
-    requireMatchExpected ("transferLeg.instrumentId", leg.instrumentId) amuletInstrumentIdName
-    require' ("transferLeg.amount", leg.amount) isGreaterOrEqualR ("zero", 0.0)
+      -- transferLegId: no check
+      -- transferLeg.side: no check
+      -- transferLeg.otherside: sending to burn is allowed, otherwise must be a basic account
+      unless (leg.side == V2.SenderSide && leg.otherside == burnAccount) $
+        ensureBasicAccount "transferLeg.otherside" leg.otherside
+      -- transferLeg.amount
+      require' ("transferLeg.amount", leg.amount) isGreaterR ("zero", 0.0)
+      -- transferLeg.instrumentId
+      requireMatchExpected ("transferLeg.instrumentId", leg.instrumentId) amuletInstrumentIdName
+      -- transferLeg.meta: check no redundant account information
+      ensureNoAccountMeta "transferLeg" "sender" leg.meta
+      ensureNoAccountMeta "transferLeg" "receiver" leg.meta
+
+computeAllocationExpiryInternal : TransferConfigV2 Amulet -> Time -> Optional Time -> Time
+computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline = do
+    optional identity min settlementDeadline candidateExpiresAt
+  where
+    maxTTL = getTokenStandardMaxTTL transferConfig
+    candidateExpiresAt
+      | maxTime `subTime` oldExpiresAt <= maxTTL = maxTime
+      | otherwise = oldExpiresAt `addRelTime` maxTTL
 
 computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
-computeAllocationExpiry transferConfig now settlementDeadline = do
-  let expiresAt = optional identity min settlementDeadline $
-        now `addRelTime` getTokenStandardMaxTTL transferConfig
+computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline = do
+  let expiresAt = computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline
   assertWithinDeadline "allocation.expiresAt" expiresAt
   pure expiresAt
-
 
 
 -- instances

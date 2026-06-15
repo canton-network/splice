@@ -4,6 +4,7 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
+import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
@@ -19,6 +20,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.GetRewardAccountingBatchResponse
 import definitions.GetRewardAccountingRootHashResponse
@@ -107,7 +109,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(5)
-      doTransfer(bobParty)
 
       // oldest=5: rounds 5,6,7 open. R8 will have
       // both dryRunVersion and mintingVersion set.
@@ -131,7 +132,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(7)
-        doTransfer(bobParty)
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(8)
@@ -139,7 +139,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(9)
-        doTransfer(bobParty)
 
         clue("CalculateRewardsV2 are created for rounds, 6 and 8") {
           eventually() {
@@ -230,8 +229,9 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       ) {
         val round = oldestOpenRound
         doTransfer(bobParty)
+        // Need to advance by two rounds, see note below about last_archived_round
         advanceRoundsToNextRoundOpening
-        doTransfer(bobParty)
+        advanceRoundsToNextRoundOpening
 
         val (calculateRewardsCid, rootHash) =
           clue(
@@ -274,9 +274,16 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               case other => fail(s"Expected DbStorage")
             }
             implicit val closeContext: CloseContext = CloseContext(sv2Db)
+            // Here the last_archived_round must reach earliest_ingested_round + 1 for the scan
+            // to confirm that it CannotProvide for a round.
+            // In practice it would mean that SV2 would wait for its scan to
+            // ingest verdicts for one full round after the version bump,
+            // and only then get to know that its own scan does not have the data.
             sv2Db
               .update_(
-                sqlu"update app_activity_record_meta set earliest_ingested_round = $round",
+                sqlu"""update app_activity_record_meta
+                       set earliest_ingested_round = $round,
+                           last_archived_round = ${round + 1}""",
                 "test.increaseAppActivityMeta_EarliestIngestedRound",
               )
               .futureValueUS
@@ -321,6 +328,23 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             .listProcessRewardsV2()
             .futureValue
             .map(_.payload.round.number) should not contain round
+        }
+      }
+
+      clue(
+        "sv2's BFT-read counters incremented, as it obtained both root-hash and batch via BFT read"
+      ) {
+        // metrics.get can throw before the meter is first marked, so retry.
+        eventually(retryOnTestFailuresOnly = false) {
+          def bftReads(name: String): Long =
+            sv2Backend.metrics
+              .get(s"$MetricsPrefix.$name", Map("dryRun" -> "false"))
+              .select[MetricValue.LongPoint]
+              .value
+              .value
+
+          bftReads("calculate_rewards_v2.root_hash_bft_reads") should be >= 1L
+          bftReads("process_rewards_v2.batch_bft_reads") should be >= 1L
         }
       }
     } finally {

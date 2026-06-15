@@ -133,7 +133,6 @@ abortTwoStepTransfer lockExpiresAt lockedAmuletCid extraArgs = do
   optExpireLockedAmulet <- lookupFromContextU @Bool extraArgs.context expireLockKey
   -- if the key is not set, then we are likely chaining within a Daml transaction, which means
   -- the amulet is still locked and should be unlocked.
-  -- TODO(#4517): add a test for this
   let expireLockedAmulet = fromOptional True optExpireLockedAmulet
   if expireLockedAmulet
     then do

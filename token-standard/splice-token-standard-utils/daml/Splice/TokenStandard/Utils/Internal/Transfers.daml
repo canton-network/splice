@@ -20,9 +20,6 @@ module Splice.TokenStandard.Utils.Internal.Transfers (
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
   transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
 
-  -- ** Available actions
-  transferInstructionV2_availableActionsDefault,
-
   -- * Default implementations for V1
   transferFactoryV1_transferDefaultImplUsingV2,
   transferInstructionV1_acceptDefaultImplUsingV2,
@@ -106,17 +103,13 @@ instance ForwardCompatible TransferInstructionV1.TransferInstructionView Transfe
       status = case Map.lookup TransferInstructionV2.TIA_Accept (v2.availableActions) of
         Some possibleActors | [v1Transfer.receiver] `elem` possibleActors -> TransferInstructionV1.TransferPendingReceiverAcceptance
         _ -> TransferInstructionV1.TransferPendingInternalWorkflow with
-          pendingActions = Map.fromList $ do
-            (action, possibleActors) <- Map.toList v2.availableActions
-            [actor] <- possibleActors
-            actionName <- case action of
-              TransferInstructionV2.TIA_Accept -> pure "accept"
-              TransferInstructionV2.TIA_Reject -> pure "reject"
-              TransferInstructionV2.TIA_Withdraw -> pure "withdraw"
-              TransferInstructionV2.TIA_Custom name -> pure name
-            pure (actor, actionName)
-        -- TODO(#4517): add unit tests for this conversion function, and in particular the action conversion
-
+          pendingActions =
+            let actionName a = case a of
+                  TransferInstructionV2.TIA_Accept -> "accept"
+                  TransferInstructionV2.TIA_Reject -> "reject"
+                  TransferInstructionV2.TIA_Withdraw -> "withdraw"
+                  TransferInstructionV2.TIA_Custom name -> name
+            in availableToPendingActions actionName $ v2.availableActions
 
 instance ForwardCompatible TransferInstructionV1.TransferInstructionResult_Output TransferInstructionV2.TransferInstructionResult_Output where
   downcast tio = case tio of
@@ -195,14 +188,10 @@ transferInstructionV2_senderActor_withdrawDefaultImplUsingV1 sender self arg = d
 ------------------
 
 instance ForwardCompatible TransferInstructionV1.TransferFactoryView TransferInstructionV2.TransferFactoryView where
-  downcast v2 = TransferInstructionV1.TransferFactoryView with
-    admin = v2.admin
-    meta = v2.meta
+  downcast (TransferInstructionV2.TransferFactoryView with ..) = TransferInstructionV1.TransferFactoryView with ..
 
 instance BackwardCompatible TransferInstructionV1.TransferFactoryView TransferInstructionV2.TransferFactoryView where
-  upcast v1 = TransferInstructionV2.TransferFactoryView with
-    admin = v1.admin
-    meta = v1.meta
+  upcast (TransferInstructionV1.TransferFactoryView with ..) = TransferInstructionV2.TransferFactoryView with ..
 
 instance ForwardCompatible (ContractId TransferInstructionV1.TransferFactory) (ContractId TransferInstructionV2.TransferFactory) where
   downcast = coerceInterfaceContractId
@@ -249,15 +238,6 @@ transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl arg =
     accountParties admin arg.transfer.sender
   where
     admin = arg.transfer.instrumentId.admin
-
--- | Available actions for a V2 transfer that uses the default controllers for its actions.
-transferInstructionV2_availableActionsDefault : TransferInstructionV2.Transfer -> Map.Map [Party] [TransferInstructionV2.TransferInstructionAction]
-transferInstructionV2_availableActionsDefault transfer = Map.fromList
-  [ ([accountPrincipal admin transfer.sender], [TransferInstructionV2.TIA_Withdraw])
-  , ([accountPrincipal admin transfer.receiver], [TransferInstructionV2.TIA_Accept, TransferInstructionV2.TIA_Reject])
-  ]
-  where
-    admin = transfer.instrumentId.admin
 
 
 -- V1 implementations based on V2

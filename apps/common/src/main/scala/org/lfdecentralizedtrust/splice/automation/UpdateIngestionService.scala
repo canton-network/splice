@@ -18,11 +18,15 @@ import org.lfdecentralizedtrust.splice.environment.{
   RetryProvider,
   ServiceWithGuaranteedShutdown,
   SpliceLedgerConnection,
+  SpliceMetrics,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart
 
 import scala.concurrent.{ExecutionContext, Future}
+import com.daml.metrics.InstrumentedGraph.*
+import com.daml.metrics.api.MetricHandle.{Counter, LabeledMetricsFactory}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricQualification}
 
 /** Ingestion for ACS and transfer stores.
   * We ingest them independently but we ensure that the acs store
@@ -44,6 +48,8 @@ class UpdateIngestionService(
     mat: Materializer,
     tracer: Tracer,
 ) extends RetryingService(config, backoffClock, "update ingestion") {
+
+  private val metrics = new UpdateIngestionServiceMetrics(retryProvider.metricsFactory)
 
   private val filter = ingestionSink.ingestionFilter
 
@@ -117,17 +123,30 @@ class UpdateIngestionService(
   )(implicit traceContext: TraceContext): Future[Unit] = {
     ingestionSink.ingestAcsStreamInBatches(
       batchSource(
-        connection.activeContracts(
-          filter,
-          offset,
-          RestartSettings(
-            config.ingestion.activeContractsMinBackoff.underlying,
-            config.ingestion.activeContractsMaxBackoff.underlying,
-            config.ingestion.activeContractsRandomFactor,
-          ),
-          clock,
-          packageVersionSupport,
-        )
+        connection
+          .activeContracts(
+            filter,
+            offset,
+            RestartSettings(
+              config.ingestion.activeContractsMinBackoff.underlying,
+              config.ingestion.activeContractsMaxBackoff.underlying,
+              config.ingestion.activeContractsRandomFactor,
+            ),
+            clock,
+            packageVersionSupport,
+          )
+          .map { item =>
+            logger.trace(s"Received active contract ${item.contractId} from participant")
+            item
+          }
+          .buffered(
+            metrics.activeContractsBufferSize,
+            config.ingestion.activeContractsBufferSize,
+          )
+          .map { item =>
+            logger.trace(s"Emitting active contract ${item.contractId} to Store")
+            item
+          }
       ),
       offset,
     )
@@ -138,4 +157,16 @@ class UpdateIngestionService(
 
   // Kick-off the ingestion
   start()
+}
+
+class UpdateIngestionServiceMetrics(metricsFactory: LabeledMetricsFactory) {
+  val prefix: MetricName = SpliceMetrics.MetricsPrefix :+ "update-ingestion-service"
+  val activeContractsBufferSize: Counter =
+    metricsFactory.counter(
+      MetricInfo(
+        prefix :+ "active-contracts-buffer-size",
+        summary = "The buffer size for streaming ACS requests.",
+        qualification = MetricQualification.Debug,
+      )
+    )
 }

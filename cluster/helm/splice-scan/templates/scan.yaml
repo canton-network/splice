@@ -32,7 +32,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: scan-app
-        image: "{{ .Values.imageRepo }}/scan-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_app) }}
         env:
         - name: JAVA_TOOL_OPTIONS
           value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
@@ -252,7 +252,7 @@ spec:
             mountPath: /app/logback
       initContainers:
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:
@@ -351,7 +351,7 @@ spec:
           value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
         - name: SPLICE_APP_UI_POLL_INTERVAL
           value: {{ .Values.uiPollInterval | default 90000 | quote }}
-        image: "{{ .Values.imageRepo }}/scan-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_web_ui) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.ui.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
