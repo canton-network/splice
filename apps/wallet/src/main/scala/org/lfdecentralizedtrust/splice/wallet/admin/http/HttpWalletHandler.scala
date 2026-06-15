@@ -746,7 +746,7 @@ class HttpWalletHandler(
                 s"Created TransferPreapprovalProposal with contract ID $proposalCid. Now waiting for automation to create the TransferPreapproval."
               )
               preapproval <- retryProvider.retry(
-                RetryFor.InitializingClientCalls,
+                RetryFor.ClientCalls,
                 "getTransferPreapproval",
                 "wait for validator automation to create TransferPreapproval",
                 store.getTransferPreapproval(store.key.endUserParty),

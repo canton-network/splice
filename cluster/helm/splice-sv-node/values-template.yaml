@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "sv-app"
+ui:
+  imageName: "sv-web-ui"
 
 # Custom annotations and labels for deployed resources
 pod:
@@ -18,7 +21,7 @@ resources:
     memory: 8Gi
   requests:
     cpu: 2
-    memory: 3Gi
+    memory: 6Gi
 
 metrics:
   enable: false
@@ -32,6 +35,7 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
+  initImageName: "postgres:14"
 
 migration:
   attachPvc: true

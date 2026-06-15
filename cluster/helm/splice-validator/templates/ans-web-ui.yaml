@@ -32,7 +32,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: ans-web-ui
-        image: "{{ .Values.imageRepo }}/ans-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).ans_web_ui) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.ansWebUi.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).ans_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}

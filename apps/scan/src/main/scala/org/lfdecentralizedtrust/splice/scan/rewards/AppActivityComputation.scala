@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.rewards
 
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
@@ -29,6 +30,14 @@ class AppActivityComputation(
     extends NamedLogging {
 
   def waitUntilInitialized: Future[Unit] = rewardsReferenceStore.waitUntilInitialized
+
+  /** The highest OpenMiningRound round number archived at or before asOf.
+    * See [[org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore.lookupLatestArchivedOpenMiningRound]].
+    */
+  def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    rewardsReferenceStore.lookupLatestArchivedOpenMiningRound(asOf)
 
   /** Compute app activity records for a batch of verdicts.
     *

@@ -1,9 +1,12 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
-  "required": ["db", "persistence"],
+  "required": ["db", "persistence", "imageName"],
   "properties": {
     "imageRepo": {
+      "type": "string"
+    },
+    "imageName": {
       "type": "string"
     },
     "imagePullPolicy": {

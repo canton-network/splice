@@ -46,7 +46,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: mediator
-        image: "{{ .Values.imageRepo }}/canton-mediator:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_mediator) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.mediator.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_mediator) }}
         env:
         - name: JAVA_TOOL_OPTIONS
           value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
@@ -113,7 +113,7 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
-          image: postgres:14
+          image: {{ .Values.mediator.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:

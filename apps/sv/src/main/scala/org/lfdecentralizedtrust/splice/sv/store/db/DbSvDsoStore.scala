@@ -51,7 +51,12 @@ import org.lfdecentralizedtrust.splice.store.{
   LimitHelpers,
   MultiDomainAcsStore,
 }
-import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore, SvStore}
+import org.lfdecentralizedtrust.splice.sv.store.{
+  AppRewardCouponsSum,
+  IgnoredPartiesStore,
+  SvDsoStore,
+  SvStore,
+}
 import SvDsoStore.RoundBatch
 import com.digitalasset.canton.config.CantonRequireTypes.String2066
 import org.lfdecentralizedtrust.splice.util.*
@@ -1075,8 +1080,9 @@ class DbSvDsoStore(
     }
 
   override def listExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause: SQLActionBuilder = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
     } else {
@@ -1086,8 +1092,9 @@ class DbSvDsoStore(
   }
 
   override def listLockedExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
         sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
@@ -1100,12 +1107,13 @@ class DbSvDsoStore(
   }
 
   override def listExpiredAmuletAllocations(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amuletallocation.AmuletAllocation.ContractId,
     splice.amuletallocation.AmuletAllocation,
   ] = (now, limit) =>
     implicit tc => {
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
       val _ = tc
       val filterClause = if (ignoredParties.nonEmpty) {
         (sql" and " ++ notInClause(
@@ -1145,13 +1153,14 @@ class DbSvDsoStore(
     }
 
   override def listExpiredAmuletTransferInstructions(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amulettransferinstruction.AmuletTransferInstruction.ContractId,
     splice.amulettransferinstruction.AmuletTransferInstruction,
   ] = (now, limit) =>
     implicit tc => {
       val _ = tc
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
       val filterClause = if (ignoredParties.nonEmpty) {
         (sql" and " ++ notInClause(
           "create_arguments->'transfer'->>'sender'",
@@ -1888,10 +1897,11 @@ class DbSvDsoStore(
 
   override def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
   )(implicit
       tc: TraceContext
   ): Future[Boolean] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause: SQLActionBuilder = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
         sql" and " ++ notInClause(
@@ -1931,11 +1941,12 @@ class DbSvDsoStore(
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,
   ]]] = {
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     val filterClause = if (ignoredParties.nonEmpty) {
       (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
         sql" and " ++ notInClause(

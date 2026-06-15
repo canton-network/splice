@@ -73,7 +73,7 @@ spec:
               name: splice-app-wallet-ui-auth
               optional: false
         {{- end }}
-        image: "{{ .Values.imageRepo }}/wallet-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).wallet_web_ui) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.wallet.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).wallet_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}

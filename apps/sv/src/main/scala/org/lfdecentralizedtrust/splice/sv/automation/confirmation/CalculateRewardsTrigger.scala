@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -54,7 +55,9 @@ abstract class CalculateRewardsTriggerBase(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
+    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+  )
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     // These are ordered by round, so we process the oldest first
@@ -107,9 +110,7 @@ abstract class CalculateRewardsTriggerBase(
               task.calculateRewards.payload.roundClosedAt,
               context.clock.now.toInstant,
             )
-            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)
           } yield TaskSuccess(
             s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
           )
@@ -154,6 +155,7 @@ abstract class CalculateRewardsTriggerBase(
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
+      rewardMetrics.calculateRewardsRootHashBftReads.mark()
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)

@@ -49,3 +49,16 @@ tests:
       - equal:
           path: spec.template.spec.volumes[4].persistentVolumeClaim.claimName
           value: custom-pvc-name
+
+  - it: "allows overriding imageName"
+    template: deployment.yaml
+    set:
+      imageRepo: "secure-registry.com"
+      imageName: "approved-cometbft"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='cometbft')].image
+          pattern: "^secure-registry.com/approved-cometbft:"

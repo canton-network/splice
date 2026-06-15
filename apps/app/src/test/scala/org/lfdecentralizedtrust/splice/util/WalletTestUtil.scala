@@ -1444,6 +1444,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
   def createRewardCouponsV2(
       coupons: Seq[(PartyId, BigDecimal, Option[PartyId])],
       round: Option[splice.types.Round] = None,
+      ttl: java.time.Duration = java.time.Duration.ofDays(1),
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val now = env.environment.clock.now
     val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
@@ -1455,7 +1456,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
           provider.toProtoPrimitive,
           couponRound,
           amount.bigDecimal,
-          now.plus(java.time.Duration.ofDays(1)).toInstant,
+          now.plus(ttl).toInstant,
           true,
           beneficiaryO.map(_.toProtoPrimitive).toJava,
         ).create.commands.asScala

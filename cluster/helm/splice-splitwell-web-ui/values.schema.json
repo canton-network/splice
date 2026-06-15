@@ -1,7 +1,11 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": ["imageName"],
   "properties": {
+    "imageName": {
+      "type": "string"
+    },
     "auth": {
       "type": "object",
       "description": "The authentication configuration for the application"
