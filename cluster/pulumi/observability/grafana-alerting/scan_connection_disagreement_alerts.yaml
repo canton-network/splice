@@ -1,0 +1,140 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: scan connection consensus
+    folder: canton-network
+    interval: 1m
+    rules:
+      - uid: aescandisagree1
+        title: Scan connection disagreeing with BFT consensus
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: |-
+                sum by (namespace, job, node_name, scan_connection) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree"}[10m]))
+                /
+                sum by (namespace, job, node_name, scan_connection) (increase(splice_validator_scan_bft_per_connection_consensus_total[10m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: '{{namespace}}:{{job}}:{{node_name}}:{{scan_connection}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.05
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+                  unloadEvaluator:
+                    params:
+                      - 0.05
+                      - 0
+                    type: lt
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: cnndx7p
+        panelId: 6
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        annotations:
+          __dashboardUid__: cnndx7p
+          __panelId__: "6"
+          description: More than 5% of the BFT consensus comparisons on this scan connection disagreed with the consensus result over the last 10 minutes. This can indicate the scan node is serving stale or incorrect data.
+          severity: warning
+          summary: Scan connection {{ $labels.scan_connection }} of job {{ $labels.job }} (node {{ $labels.node_name }}) in namespace {{ $labels.namespace }} disagreed with BFT consensus on {{ index $values "A" }} of requests in the last 10m (threshold 5%).
+        labels: {}
+        isPaused: false
+      - uid: aescandisagreeok1
+        title: Scan connection returning successful responses that disagree with BFT consensus
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum by (namespace, job, node_name, scan_connection) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree", success="true"}[10m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: '{{namespace}}:{{job}}:{{node_name}}:{{scan_connection}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+                  unloadEvaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: lte
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: cnndx7p
+        panelId: 6
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        annotations:
+          __dashboardUid__: cnndx7p
+          __panelId__: "6"
+          description: A scan connection returned a successful (2xx) response that disagreed with the BFT consensus result in the last 10 minutes. A successful but divergent response indicates the scan node is serving incorrect or stale data and should be investigated.
+          severity: critical
+          summary: Scan connection {{ $labels.scan_connection }} of job {{ $labels.job }} (node {{ $labels.node_name }}) in namespace {{ $labels.namespace }} returned {{ index $values "A" }} successful response(s) that disagreed with BFT consensus in the last 10m.
+        labels: {}
+        isPaused: false

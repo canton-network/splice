@@ -927,6 +927,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
             ),
+            'scan_connection_disagreement_alerts.yaml': readGrafanaAlertingFile(
+              'scan_connection_disagreement_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'

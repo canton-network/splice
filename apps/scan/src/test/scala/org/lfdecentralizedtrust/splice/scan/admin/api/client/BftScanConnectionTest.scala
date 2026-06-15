@@ -2,7 +2,9 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import com.daml.ledger.api.v2.{CommandsOuterClass, TraceContextOuterClass}
 import com.daml.ledger.javaapi.data as javaApi
+import com.daml.metrics.api.MetricsContext
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.testing.{InMemoryMetricsFactory, MetricValues}
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -46,6 +48,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
   DsoScan,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -72,7 +75,8 @@ class BftScanConnectionTest
     extends AsyncWordSpec
     with BaseTest
     with HasExecutionContext
-    with HasActorSystem {
+    with HasActorSystem
+    with MetricValues {
 
   val retryProvider =
     RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
@@ -1030,6 +1034,147 @@ class BftScanConnectionTest
           .executeCall(call, connections, nTargetSuccess = 1, logger)
           .failed
       } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+    }
+  }
+
+  "BftScanConnection.executeCall consensus outcome reporting" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "record per-connection agreement and disagreement with the consensus result" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockReturn(connections(2), partyIdB)
+
+      def recordedLabels: Seq[(Map[String, String], Long)] =
+        metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+          context.labels -> value
+        }
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          recordedLabels should contain allOf (
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "0.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "1.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            // The disagreeing connection returned a successful (2xx) response.
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "disagree",
+              "success" -> "true",
+            ) -> 1L
+          )
+        }
+      }
+    }
+
+    "record the http status and success=false for a disagreeing error response" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      // notFoundFailure is an UnexpectedHttpJsonResponse(404), i.e. a non-successful response.
+      makeMockFail(connections(2), notFoundFailure)
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+            context.labels -> value
+          } should contain(
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "disagree",
+              "success" -> "false",
+              "http_status" -> "404",
+            ) -> 1L
+          )
+        }
+      }
+    }
+
+    "record agreements for every connection when all return the same successful response" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+        makeMockReturn(c, partyIdA)
+      }
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          // All three connections agreed; no disagreement (and thus no success/http_status
+          // labels) should be recorded.
+          metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+            context.labels -> value
+          } should contain theSameElementsAs Seq(
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "0.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "1.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+          )
+        }
+      }
     }
   }
 
