@@ -451,7 +451,7 @@ class DbAppActivityRecordStoreTest
         }
       }
 
-      "not override when earliest_ingested_round > 0" in {
+      "return earliest_ingested_round + 1 when earliest_ingested_round > 0" in {
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
@@ -473,7 +473,7 @@ class DbAppActivityRecordStoreTest
 
     "on first SV after version bump" should {
 
-      "respect meta table" in {
+      "return version 2 earliest round after version bump" in {
         for {
           (store, historyId) <- newStore(
             versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
@@ -501,7 +501,7 @@ class DbAppActivityRecordStoreTest
         }
       }
 
-      "not override after version bump" in {
+      "return version 2 earliest round when version bump via ensureMeta" in {
         for {
           (store, historyId) <- newStore(
             versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
@@ -734,29 +734,32 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "set earliest_ingested_round to -1 on fresh network when isFirstSv" in {
-      for {
-        (store, _) <- newStore(isFirstSv = true)
-        r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
-        meta <- store.lookupActivityRecordMeta(1, 0)
-      } yield {
-        r1 shouldBe Checked(InsertMeta)
-        meta.value.earliestIngestedRound shouldBe -1L
-      }
-    }
+    "on first SV" should {
 
-    "not override earliest_ingested_round on version bump when isFirstSv" in {
-      for {
-        (store, _) <- newStore(
-          versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
-          isFirstSv = true,
-        )
-        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
-        r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
-        meta <- store.lookupActivityRecordMeta(2, 0)
-      } yield {
-        r1 shouldBe Checked(InsertMeta)
-        meta.value.earliestIngestedRound shouldBe 10L
+      "set earliest_ingested_round to -1 on fresh network" in {
+        for {
+          (store, _) <- newStore(isFirstSv = true)
+          r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
+          meta <- store.lookupActivityRecordMeta(1, 0)
+        } yield {
+          r1 shouldBe Checked(InsertMeta)
+          meta.value.earliestIngestedRound shouldBe -1L
+        }
+      }
+
+      "use actual earliest_ingested_round on version bump" in {
+        for {
+          (store, _) <- newStore(
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
+            isFirstSv = true,
+          )
+          _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
+          r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
+          meta <- store.lookupActivityRecordMeta(2, 0)
+        } yield {
+          r1 shouldBe Checked(InsertMeta)
+          meta.value.earliestIngestedRound shouldBe 10L
+        }
       }
     }
   }
