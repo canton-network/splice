@@ -29,4 +29,15 @@
 
         See [CIP 119](https://github.com/canton-foundation/cips/blob/main/cip-0119/cip-0119.md) for more details.
 
-        This requires a Daml upgrade to FIXME: Add the right versions.
+        This requires a Daml upgrade to the following versions:
+
+          ================== =======
+          name               version
+          ================== =======
+          amulet             0.1.20
+          amuletNameService  0.1.21
+          dsoGovernance      0.1.29
+          validatorLifecycle 0.1.7
+          wallet             0.1.21
+          walletPayments     0.1.20
+          ================== =======
