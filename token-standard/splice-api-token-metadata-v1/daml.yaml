@@ -9,7 +9,7 @@ dependencies:
 - daml-prim
 - daml-stdlib
 build-options:
-  - --target=2.1
+  - --target=2.2
 codegen:
   java:
     package-prefix: org.lfdecentralizedtrust.splice.codegen.java

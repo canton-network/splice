@@ -28,7 +28,7 @@ data-dependencies:
   - ../../splice-token-standard-v2-test/.daml/dist/splice-token-standard-v2-test-current.dar
 
 build-options:
-  - --target=2.1
+  - --target=2.2
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
 codegen:

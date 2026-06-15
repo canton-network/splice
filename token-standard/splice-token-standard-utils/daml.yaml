@@ -23,7 +23,7 @@ data-dependencies:
 - ../splice-api-token-transfer-instruction-v2/.daml/dist/splice-api-token-transfer-instruction-v2-current.dar
 
 build-options:
-  - --target=2.1
+  - --target=2.2
 
   - --force-utility-package=yes
   # Use ^^^ to disallow template and interface definitions and make all types

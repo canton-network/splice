@@ -38,4 +38,4 @@ build-options:
   - --ghc-option=-Wunused-matches
   - -Wno-template-interface-depends-on-daml-script
   - -Wno-deprecated-exceptions
-  - --target=2.1
+  - --target=2.2
