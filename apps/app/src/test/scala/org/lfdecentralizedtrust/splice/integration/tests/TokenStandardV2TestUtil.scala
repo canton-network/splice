@@ -228,7 +228,13 @@ trait TokenStandardV2TestUtil extends TestCommon {
       Optional.empty,
       new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
     )
-  def mkAllocationSpecV2(admin: PartyId, sender: PartyId, receiver: PartyId, legId: String, settlementDeadline: Instant) =
+  def mkAllocationSpecV2(
+      admin: PartyId,
+      sender: PartyId,
+      receiver: PartyId,
+      legId: String,
+      settlementDeadline: Instant,
+  ) =
     new allocationv2.AllocationSpecification(
       admin.toProtoPrimitive,
       basicAccount(sender),
