@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Daml script testing delivery versus burn/mint.
-module Splice.Tests.TestDeliveryVersusBurnMint where
+module Splice.Testing.Tokens.TestTokenV2.TestDeliveryVersusBurnMint where
 
 import Daml.Script
 

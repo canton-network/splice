@@ -377,6 +377,15 @@ class SvDsoAutomationService(
     )
 
     registerTrigger(
+      new ReconcileSequencingParametersTrigger(
+        triggerContext,
+        participantAdminConnection,
+        config.bftSequencingParameters,
+        config.domains.global.alias,
+      )
+    )
+
+    registerTrigger(
       new LsuAnnouncementTrigger(
         triggerContext,
         dsoStore,
@@ -745,5 +754,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuAnnouncementTrigger],
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
+      aTrigger[ReconcileSequencingParametersTrigger],
     )
 }

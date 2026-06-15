@@ -500,21 +500,9 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- allocation.authorizer: checked above as part of actors
   -- allocation.transferLegSides:
   let transferLegSides = allocation.transferLegSides
-  requireUnique "allocation.transferLegSides (id + side)" (map (\leg -> (leg.transferLegId, leg.side)) transferLegSides)
   unless (isSome allocation.nextIterationFunding) $
     require' ("transferLegSides", transferLegSides) (notR isEqualR) ("empty list", [])
-  forA_ transferLegSides $ \transferLeg -> do
-      -- transferLegId: no check
-      -- transferLeg.side: no check
-      -- transferLeg.otherside:
-      ensureBasicAccount "transferLeg.otherside" transferLeg.otherside
-      -- transferLeg.amount
-      require "Transfer amount must be positive" (transferLeg.amount > 0.0)
-      -- transferLeg.instrumentId
-      requireMatchExpected ("transferLeg.instrumentId", transferLeg.instrumentId) amuletInstrumentIdName
-      -- transferLeg.meta: check no redundant account information
-      ensureNoAccountMeta "transferLeg" "sender" transferLeg.meta
-      ensureNoAccountMeta "transferLeg" "receiver" transferLeg.meta
+  AmuletAllocationV2.validateAmuletTransferLegSides transferLegSides
 
   -- allocation.nextIterationFunding: validated `amulet_allocationFactoryV2_allocateImpl`
   -- allocation.committed: nothing to validate
@@ -567,9 +555,12 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
   requireExpectedAdminMatch arg.expectedAdmin dso
 
   -- validate allocateBefore
+  -- Note: we allow `allocateBefore == settleBefore` as this simplifies defaulting when downcasting
+  -- from V2, and is not less practical than requiring allocateBefore < settleBefore, which in the worst case
+  -- only gives an extra microsecond for the settlement to complete.
   let settlement = arg.allocation.settlement
   assertWithinDeadline "allocation.settlement.allocateBefore" settlement.allocateBefore
-  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessR
+  require' ("allocation.settlement.allocateBefore", settlement.allocateBefore) isLessOrEqualR
     ("allocation.settlement.settleBefore", settlement.settleBefore)
 
   -- call V2 body with explicitly computed funding amount, which matters

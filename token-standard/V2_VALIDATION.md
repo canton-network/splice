@@ -210,6 +210,9 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Clarify that `V2.Allocation_Cancel` can be called by the `admin` to cancel expired allocations
 - Call out the requirement that `V2.TransferFactory_Transfer` SHOULD complete in a single step
   if its actors include all parties required to authorize the transfer
+- Remove `V2.AllocationRequest.settleAt` field, as it is redundant with the
+  `settlementDeadline` of the requested allocations
+
 
 ### Utility and test library changes
 
@@ -232,3 +235,27 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   that can also be used for multi-actor choices (e.g., sender and receiver jointly authorizing a transfer)
 - Removed superfluous `admin` argument from `burnAccount`, `mintAccount`, and `netAllocationCreditAmounts`. That
   argument is no longer required since we introduced special "owner-less" accounts for mint and burn
+- Removed the `transferInstructionV2_availableActionsDefault` function, as inlining it into the implementations
+  is trivial and invites the required thinking for registry implementors whether really only owners can act or not.
+- Add `downcast_v2_v1_AllocationRequestView` for cases where the default computation of the `settlementDeadline` field
+  used by `downcast V2.AllocationRequestView` is not suitable
+- Fix the missing removal of metadata when upcasting from V1 to V2 datatypes.
+- Adjust the pending action computations for `V1.TransferInstruction` and `V1.AllocationInstruction` to report
+  all available actions of the V2 types.
+- Use consistent naming for all metadata keys: `providerMetaKey`, `accountIdMetaKey`, `expiresAtMetaKey`, and `extraExecutorsMetaKey`
+- Fix a namespacing mistake in the computation of the `expiresAtMetaKey`
+- Remove redundant `textMapZipWithDefault`. Use `textMapMergeWithDefault` instead
+- Removed the trivial `allocationRequestV2_withdrawImplV2Only` and `allocationRequestV2_rejectImplV2Only` functions,
+  as inlining their logic makes the code more readable
+- Fix `ensureIsReceiptAllocation` so that it does not allow creating an iterated allocation (and add tests for that)
+- Reintroduce the `downcast V2.AllocationRequestView` function that automatically determines the settlement deadline
+  based on the maximum of the ones of the allocations in the request, which is usually what one wants. This makes
+  it more convenient to implement dual version allocation request templates.
+- Change `OTCTrade_RequestAllocations` to not create requests for the trading venue itself, as the venue's allocations
+  are created as part of the settlement transaction itself.
+- Change `TestTokenV2` to allow using expired locked holdings as inputs; and fix a bug that allowed locked tokens to
+  be used as inputs for allocations and transfers.
+- Fix bug in `TestTokenV2` that allowed setting `requestedAt` in the future for both transfer and allocation instruction
+- Fix bug in `allocationFactoryV1_allocateDefaultImplUsingV2` that copied the `settlement.requestedAt` instead of the
+  `arg.requestedAt` into the V2 allocation factory argument
+- Allow creating Amulet allocations with the burn account as their target.

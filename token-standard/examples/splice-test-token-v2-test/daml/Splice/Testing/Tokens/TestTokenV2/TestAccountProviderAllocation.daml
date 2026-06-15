@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Daml script tests about transfers that invlove account providers, and their various authorization schemes.
-module Splice.Tests.TestAccountProviderAllocation where
+module Splice.Testing.Tokens.TestTokenV2.TestAccountProviderAllocation where
 
 import Daml.Script
 
@@ -24,7 +24,7 @@ import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Apps.TradingAppV2 qualified as TradingAppV2
 import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 
-import Splice.Tests.TestTokenV2.UnitTest_AccountConfig
+import Splice.Testing.Tokens.TestTokenV2.UnitTest_AccountConfig
 import Splice.Testing.Tokens.TestTokenV2.AccountConfig (AccountConfig)
 import DA.Action (foldlA, when)
 import DA.Functor (void)

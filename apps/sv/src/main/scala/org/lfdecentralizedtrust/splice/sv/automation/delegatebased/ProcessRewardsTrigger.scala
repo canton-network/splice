@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
@@ -62,7 +63,9 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     with SvTaskBasedTrigger[ProcessRewardsV2Contract] {
 
   private val store = svTaskContext.dsoStore
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
+    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
+  )
 
   override protected def source(implicit
       traceContext: TraceContext
@@ -104,9 +107,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         .yieldUnit()
       delay = java.time.Duration
         .between(task.payload.roundClosedAt, context.clock.now.toInstant)
-      _ = rewardMetrics.processRewardsProcessingDelay.update(delay)(
-        MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-      )
+      _ = rewardMetrics.processRewardsProcessingDelay.update(delay)
     } yield TaskSuccess(
       s"Processed round $round, processingDelay=$delay, batchType=${batchTypeOf(batch)}"
     )
@@ -141,7 +142,8 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
   ): Future[GetRewardAccountingBatchResponse] = {
-    def bftReadBatch: Future[GetRewardAccountingBatchResponse] =
+    def bftReadBatch: Future[GetRewardAccountingBatchResponse] = {
+      rewardMetrics.processRewardsBatchBftReads.mark()
       for {
         bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingBatch(round, batchHash)
@@ -156,6 +158,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
             )
             .asRuntimeException()
       }
+    }
 
     for {
       ownScan <- getOwnScanConnection()

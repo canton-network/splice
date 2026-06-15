@@ -225,6 +225,36 @@ class DbScanRewardsReferenceStore(
     } yield result.headOption.map(contractFromRow(OpenMiningRound.COMPANION)(_))
   }
 
+  override def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    tcsStore.getEarliestArchivedAt().flatMap {
+      case Some(earliestArchivedAt) if asOf >= earliestArchivedAt =>
+        multiDomainAcsStore.waitUntilRecordTimeReached(key.synchronizerId, asOf).flatMap { _ =>
+          val storeId = multiDomainAcsStore.acsStoreId
+          val migrationId = multiDomainAcsStore.domainMigrationId
+          val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+          // Note: Ordering by archived_at (instead of max(round)) lets us use the
+          // existing archived_temporal index
+          futureUnlessShutdownToFuture(
+            storage.query(
+              sql"""select acs.round
+                from #${ScanRewardsReferenceTables.archiveTableName} acs
+                where acs.store_id = $storeId
+                  and acs.migration_id = $migrationId
+                  and acs.package_name = ${pqn.packageName}
+                  and acs.template_id_qualified_name = ${pqn.qualifiedName}
+                  and acs.archived_at <= $asOf
+                order by acs.archived_at desc
+                limit 1
+           """.as[Option[Long]].headOption.map(_.flatten),
+              "lookupLatestArchivedOpenMiningRound",
+            )
+          )
+        }
+      case _ => Future.successful(None)
+    }
+
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =

@@ -1,0 +1,307 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Happy path and negative test cases for V2 API calls of amulet transfer instructions.
+--
+-- We don't test the V1 API, as that one already has decent test coverage from the initial
+-- implementation of the V1 API.
+module Splice.Scripts.TokenStandard.TestAmuletTransferInstructionV2 where
+
+import DA.Assert
+import DA.Foldable (foldMap)
+import DA.List (sort)
+import DA.Map qualified as Map
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+
+import Splice.AmuletTransferInstruction
+import Splice.Amulet.TokenApiUtils
+import Splice.ExternalPartyAmuletRules
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.Utils
+
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv (TestEnv(..), setupTest, createLockedHoldings, checkEq)
+import qualified Splice.Scripts.Util
+
+
+-- Happy-path test cases
+------------------------
+
+test_transfer_singleStep_generic : TxKind -> (TestEnv -> Script (V2.TransferFactory_Transfer, Decimal, Decimal)) -> Script ()
+test_transfer_singleStep_generic txKind mkArg = do
+  env@(TestEnv {..}) <- setupTest
+  (choiceArg, aliceAmount, bobAmount) <- mkArg env
+  enrichedChoice <- V2.getTransferFactory registryV2 choiceArg
+  app <- Splice.Scripts.Util.registryToApp registriesEnv.amuletV1
+  (result, _) <-
+    Splice.Scripts.Util.checkTxMetadata' app txKind alice $
+    submitResultAndTree (foldMap actAs choiceArg.actors <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  WalletClientV2.checkUnlockedBalance alice instrId aliceAmount
+  WalletClientV2.checkUnlockedBalance bob instrId bobAmount
+  debug result
+  case result.output of
+    V2.TransferInstructionResult_Completed _ -> pure ()
+    out -> fail $ "Expected transfer to complete, but got: " <> show out
+
+test_transfer_singleStep_selfTransfer : Script ()
+test_transfer_singleStep_selfTransfer = test_transfer_singleStep_generic TxKind_MergeSplit $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          receiver = aliceAccount
+  pure (choiceArg, 1000.0, 0.0)
+
+test_transfer_singleStep_senderReceiverAuthz : Script ()
+test_transfer_singleStep_senderReceiverAuthz = test_transfer_singleStep_generic TxKind_Transfer $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        actors = [alice, bob]
+  pure (choiceArg, 990.0, 10.0)
+
+test_transfer_singleStep_preapproval : Script ()
+test_transfer_singleStep_preapproval = test_transfer_singleStep_generic TxKind_Transfer $ \TestEnv {..} -> do
+   AmuletRegistryV2.createTransferPreapproval registriesEnv.amuletV2 bob bob (now `addRelTime` days 100)
+   pure (transferArgV2, 990.0, 10.0)
+
+test_happy_instr_generic : (TestEnv -> ContractId V2.TransferInstruction -> Script ()) -> Script ()
+test_happy_instr_generic mkTest = do
+  env@(TestEnv {..}) <- setupTest
+  WalletClientV2.transferV2 registries alice transferArgV2
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  [(instrCid, _)] <- WalletClientV2.listTransferInstructionsV2 bob instrId
+  mkTest env instrCid
+
+test_availableActionsAndObservers : Script ()
+test_availableActionsAndObservers = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  Some instr0 <- queryContractId @AmuletTransferInstruction alice (coerceContractId instrCid)
+  let instr = toInterface @V2.TransferInstruction instr0
+  let expectedActions = Map.fromList
+        [ (V2.TIA_Accept, [[bob]])
+        , (V2.TIA_Reject, [[bob]])
+        , (V2.TIA_Withdraw, [[alice]])
+        ]
+  checkEq "availableActions" expectedActions (map sort <$> (view instr).availableActions)
+
+  -- We always require the provider as an extra observer to never have extra
+  -- views, independent of actors.
+  checkEq  "acceptExtraObservers" [bob] $
+    V2.transferInstruction_acceptExtraObservers instr V2.TransferInstruction_Accept with
+      actors = [bob]
+      extraArgs = emptyExtraArgs
+  checkEq "rejectExtraObservers" [bob] $
+    V2.transferInstruction_rejectExtraObservers instr V2.TransferInstruction_Reject with
+      actors = [bob]
+      extraArgs = emptyExtraArgs
+  checkEq "withdrawExtraObservers" [bob] $
+    V2.transferInstruction_withdrawExtraObservers instr V2.TransferInstruction_Withdraw with
+      actors = [alice]
+      extraArgs = emptyExtraArgs
+
+
+test_transfer_AcceptV2 : Script ()
+test_transfer_AcceptV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.acceptTransferInstructionV2 registries bob instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 10.0
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+
+test_transfer_RejectV2 : Script ()
+test_transfer_RejectV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.rejectTransferInstructionV2 registries bob instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
+test_transfer_WithdrawV2 : Script ()
+test_transfer_WithdrawV2 = test_happy_instr_generic $ \TestEnv {..} instrCid -> do
+  WalletClientV2.withdrawTransferInstructionV2 registries alice instrCid
+  WalletClientV2.checkUnlockedBalance bob instrId 0.0
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
+test_transferFactory_TransferV2_extraObservers : Script ()
+test_transferFactory_TransferV2_extraObservers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @ExternalPartyAmuletRules instrId.admin
+  let transferFactory = toInterface @V2.TransferFactory extRules
+  -- Note: alice being an extra observer is not strictly required, but doesn't hurt.
+  checkEq "transferFactory.allocateExtraObservers" [alice, bob] $
+    V2.transferFactory_transferExtraObservers transferFactory transferArgV2
+
+test_transferFactory_PublicFetchV2 : Script ()
+test_transferFactory_PublicFetchV2  = do
+  -- we use the factory context to get access to the factory
+  (TestEnv {..}) <- setupTest
+  registryV2 <- MultiRegistry.getRegistryApiV2 registries instrId.admin
+  enrichedChoice <- V2.getTransferFactory registryV2 transferArgV2
+
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid V2.TransferFactory_PublicFetch with
+      actors = [alice]
+  view === V2.TransferFactoryView instrId.admin emptyMetadata
+
+
+-- Negative test cases for V2.TransferFactory_Transfer
+------------------------------------------------------
+
+test_transfer_negative_generic : (TestEnv -> Script (V2.TransferFactory_Transfer, FailureStatusCheck)) -> Script ()
+test_transfer_negative_generic mkTest = do
+  env@(TestEnv {..}) <- setupTest
+
+  (choiceArg, check) <- mkTest env
+  enrichedChoice <- V2.getTransferFactory registryV2 choiceArg
+  let actors = enrichedChoice.arg.actors
+  submitMustFail'' check
+    -- We grant readAs instr.admin to be able to test using holdings with the wrong owner
+    (foldMap actAs actors <> discloseMany' enrichedChoice.disclosures <> readAs instrId.admin) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+test_transfer_TransferV2_cannotUseLockedHoldings : Script ()
+test_transfer_TransferV2_cannotUseLockedHoldings = test_transfer_negative_generic $ \env@(TestEnv {..}) -> do
+  lockedCids <- createLockedHoldings env alice 100.0 (now `addRelTime` days 365)
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          inputHoldingCids = map coerceContractId lockedCids
+  pure $ (,) choiceArg $
+    expectErrorId "stdlib.daml.com/deadline-not-exceeded" <>
+    expectMessageContains "Ledger time is strictly before deadline 'Lock.expiresAt' at 2023-01-01T00:00:00Z"
+
+test_transfer_TransferV2_wrongActor_single : Script ()
+test_transfer_TransferV2_wrongActor_single = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        actors = [bob]
+  pure $ (,) choiceArg $
+    expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
+    expectMessageContains "allowed actors: [['alice'],['alice','bob']]"
+
+test_transfer_TransferV2_wrongActor_multi : Script ()
+test_transfer_TransferV2_wrongActor_multi = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        actors = [alice, charlie]
+  pure $ (,) choiceArg $
+    expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
+    expectMessageContains "allowed actors: [['alice'],['alice','bob']]"
+
+test_transfer_TransferV2_wrongInstrumentId : Script ()
+test_transfer_TransferV2_wrongInstrumentId = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          instrumentId = instrId with id = "BAD_INSTRUMENT_ID"
+  pure $ (,) choiceArg $
+    expectMessageContains "matches actual instrumentId InstrumentId" <>
+    expectMessageContains "BAD_INSTRUMENT_ID"
+
+test_transfer_TransferV2_inputHoldingCids_noneGiven : Script ()
+test_transfer_TransferV2_inputHoldingCids_noneGiven = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          inputHoldingCids = []
+  pure $ (,) choiceArg $
+    expectUnmetRequirement "At least one holding must be provided"
+
+test_transfer_TransferV2_inputHoldingCids_insufficientFunds : Script ()
+test_transfer_TransferV2_inputHoldingCids_insufficientFunds = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          amount = 10000000.0
+  pure $ (,) choiceArg $
+    expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds" <>
+    expectMessageContains "Insufficient funds: you are missing 9999000.0 to complete this transfer"
+
+test_transfer_TransferV2_inputHoldingCids_wrongAdmin : Script ()
+test_transfer_TransferV2_inputHoldingCids_wrongAdmin = test_transfer_negative_generic $ \TestEnv {..} -> do
+  anotherAmuletV2 <- AmuletRegistryV2.initialize AmuletRegistryV2.defaultAmuletRegistryConfig
+  AmuletRegistryV2.tapFaucet anotherAmuletV2 alice 500.0
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice anotherAmuletV2.instrumentId
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          inputHoldingCids = inputHoldingCids
+  pure $ (,) choiceArg $
+    expectMessageContains "Contract group identifier mismatch" -- Due to using fetchAndArchive with `ForOwner`
+
+test_transfer_TransferV2_inputHoldingCids_wrongOwner : Script ()
+test_transfer_TransferV2_inputHoldingCids_wrongOwner = test_transfer_negative_generic $ \TestEnv {..} -> do
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 500.0
+  bobHoldingCids <- WalletClientV2.listHoldingCids bob instrId
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          inputHoldingCids = bobHoldingCids
+  pure $ (,) choiceArg $
+    expectMessageContains "Contract group identifier mismatch" -- Due to using fetchAndArchive with `ForOwner`
+
+test_transfer_sender_nonBasic : Script ()
+test_transfer_sender_nonBasic = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let senderAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "BAD_ACCOUNT_ID"
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          sender = senderAccount
+  pure $ (,) choiceArg $ expectMessageContains
+    "Unexpected account information in metadata of 'transfer' in metadata key 'cip-112/sender.id': \"BAD_ACCOUNT_ID\""
+
+test_transfer_receiver_nonBasic : Script ()
+test_transfer_receiver_nonBasic = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let receiverAccount = V2.Account with
+        owner = Some bob
+        provider = None
+        id = "BAD_ACCOUNT_ID"
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          receiver = receiverAccount
+  pure $ (,) choiceArg $ expectMessageContains
+    "Unexpected account information in metadata of 'transfer' in metadata key 'cip-112/receiver.id': \"BAD_ACCOUNT_ID\""
+
+test_transfer_sender_extraMeta : Script ()
+test_transfer_sender_extraMeta = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let senderAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "BAD_ACCOUNT_ID"
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          meta = TSU.accountToMeta "sender" senderAccount emptyMetadata
+  pure $ (,) choiceArg $ expectMessageContains
+    "Unexpected account information in metadata of 'transfer' in metadata key 'cip-112/sender.id': \"BAD_ACCOUNT_ID\""
+
+test_transfer_receiver_extraMeta : Script ()
+test_transfer_receiver_extraMeta = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let receiverAccount = V2.Account with
+        owner = Some bob
+        provider = None
+        id = "BAD_ACCOUNT_ID"
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          meta = TSU.accountToMeta "receiver" receiverAccount emptyMetadata
+  pure $ (,) choiceArg $ expectMessageContains
+    "Unexpected account information in metadata of 'transfer' in metadata key 'cip-112/receiver.id': \"BAD_ACCOUNT_ID\""
+
+test_transfer_amount_negative : Script ()
+test_transfer_amount_negative = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          amount = -10.0
+  pure $ (,) choiceArg $ expectMessageContains
+    "The requirement 'Amount must be positive' was not met."
+
+test_transfer_requestedAt : Script ()
+test_transfer_requestedAt = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          requestedAt = now `addRelTime` microseconds 1
+  pure $ (,) choiceArg $ expectErrorId  "stdlib.daml.com/deadline-not-exceeded"
+
+test_transfer_executeBefore : Script ()
+test_transfer_executeBefore = test_transfer_negative_generic $ \TestEnv {..} -> do
+  let choiceArg = transferArgV2 with
+        transfer = transferV2 with
+          executeBefore = now `addRelTime` microseconds (-1)
+  pure $ (,) choiceArg $ expectErrorId  "stdlib.daml.com/deadline-exceeded"

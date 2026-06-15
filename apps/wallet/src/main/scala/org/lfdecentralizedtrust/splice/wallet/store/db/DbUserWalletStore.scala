@@ -30,7 +30,12 @@ import org.lfdecentralizedtrust.splice.store.{
   ResultsPage,
   TxLogStore,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, QualifiedName, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  ContractWithState,
+  QualifiedName,
+  TemplateJsonDecoder,
+}
 import org.lfdecentralizedtrust.splice.wallet.store
 import org.lfdecentralizedtrust.splice.wallet.store.{
   BuyTrafficRequestTxLogEntry,
@@ -205,6 +210,17 @@ class DbUserWalletStore(
       limit,
       ccValue = sql"rti.issuance * acs.reward_coupon_weight",
     )
+
+  override def listRewardCouponsV2(
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
+  ]] =
+    waitUntilAcsIngested {
+      queryRewardCouponsV2(includeUnassigned, includeAssigned, limit)
+    }
 
   override def listTransactions(
       beginAfterEventIdO: Option[String],

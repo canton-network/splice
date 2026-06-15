@@ -17,8 +17,11 @@ services:
       - POSTGRES_PASSWORD=${SPLICE_DB_PASSWORD}
       - POSTGRES_DB=postgres # not used by splice
       # Any env vars starting with CREATE_DATABASE_ will be used to create a database
-      - CREATE_DATABASE_participant=participant-${MIGRATION_ID}
+      - CREATE_DATABASE_participant=${PARTICIPANT_DB_NAME}
       - CREATE_DATABASE_validator=validator
+      # When enabled, refuse to create a new participant database if another participant
+      # database already exists. Set to false (via start.sh '-d') to disable this check.
+      - ENABLE_PARTICIPANT_DB_CONFLICT_CHECK=${ENABLE_PARTICIPANT_DB_CONFLICT_CHECK:-true}
     volumes:
       - postgres-splice:/var/lib/postgresql/data
       - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
@@ -55,7 +58,7 @@ services:
       - CANTON_PARTICIPANT_POSTGRES_SCHEMA=participant
       - CANTON_PARTICIPANT_POSTGRES_USER=${SPLICE_DB_USER}
       - CANTON_PARTICIPANT_POSTGRES_PASSWORD=${SPLICE_DB_PASSWORD}
-      - CANTON_PARTICIPANT_POSTGRES_DB=participant-${MIGRATION_ID}
+      - CANTON_PARTICIPANT_POSTGRES_DB=${PARTICIPANT_DB_NAME}
       - CANTON_PARTICIPANT_POSTGRES_PORT=${SPLICE_DB_PORT}
     depends_on:
       postgres-splice:

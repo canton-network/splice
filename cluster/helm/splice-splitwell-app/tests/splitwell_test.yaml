@@ -35,3 +35,23 @@ tests:
           content:
             name: ADDITIONAL_CONFIG_MAX_DAR_VERSION
             value: canton.splitwell-apps.splitwell_backend.required-dar-version = "1.0.0"
+
+  - it: "allows overriding splitwell image and initImage"
+    set:
+      imageRepo: "secure-registry.example.com"
+      imageName: "custom-splitwell"
+      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      scanAddress: "dummy"
+      participantHost: "dummy"
+      persistence.host: "dummy"
+      persistence.schema: "dummy"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].image
+          pattern: "^secure-registry\\.example\\.com/custom-splitwell:"
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "secure-registry.example.com/postgres:14-custom"

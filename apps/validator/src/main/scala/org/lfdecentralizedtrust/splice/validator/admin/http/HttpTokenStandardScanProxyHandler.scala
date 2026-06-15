@@ -25,10 +25,11 @@ class HttpTokenStandardScanProxyHandler(
     tracer: Tracer,
 ) extends allocation.v1.Handler[AuthenticatedRequest]
     with allocation.v2.Handler[AuthenticatedRequest]
-    // TODO (#5326): implement remaining v2 endpoints
     with allocationinstruction.v1.Handler[AuthenticatedRequest]
+    with allocationinstruction.v2.Handler[AuthenticatedRequest]
     with metadata.v1.Handler[AuthenticatedRequest]
     with transferinstruction.v1.Handler[AuthenticatedRequest]
+    with transferinstruction.v2.Handler[AuthenticatedRequest]
     with Spanning
     with NamedLogging {
 
@@ -113,15 +114,29 @@ class HttpTokenStandardScanProxyHandler(
       respond: allocation.v2.Resource.GetSettlementFactoryResponse.type
   )(
       body: allocation.v2.definitions.GetFactoryRequest
-  )(extracted: AuthenticatedRequest): Future[allocation.v2.Resource.GetSettlementFactoryResponse] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5326").asRuntimeException())
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocation.v2.Resource.GetSettlementFactoryResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationCancelContext") { implicit tc => _ =>
+      scanConnection
+        .getSettlementFactoryRaw(body)
+        .map(allocation.v2.Resource.GetSettlementFactoryResponse.OK(_))
+    }
+  }
 
   override def getAllocationWithdrawContext(
       respond: allocation.v2.Resource.GetAllocationWithdrawContextResponse.type
   )(allocationId: String, body: allocation.v2.definitions.GetChoiceContextRequest)(
       extracted: AuthenticatedRequest
-  ): Future[allocation.v2.Resource.GetAllocationWithdrawContextResponse] =
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #5326").asRuntimeException())
+  ): Future[allocation.v2.Resource.GetAllocationWithdrawContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationWithdrawContext") { implicit tc => _ =>
+      scanConnection
+        .getAllocationV2WithdrawContextRaw(allocationId, body)
+        .map(allocation.v2.Resource.GetAllocationWithdrawContextResponse.OK(_))
+    }
+  }
 
   override def getAllocationCancelContext(
       respond: allocation.v2.Resource.GetAllocationCancelContextResponse.type
@@ -240,6 +255,133 @@ class HttpTokenStandardScanProxyHandler(
           body,
         )
         .map(transferinstruction.v1.Resource.GetTransferInstructionWithdrawContextResponse.OK(_))
+    }
+  }
+
+  override def getAllocationFactory(
+      respond: allocationinstruction.v2.Resource.GetAllocationFactoryResponse.type
+  )(body: allocationinstruction.v2.definitions.GetFactoryRequest)(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationFactoryResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationFactory") { implicit tc => _ =>
+      scanConnection
+        .getAllocationFactoryV2Raw(body)
+        .map(allocationinstruction.v2.Resource.GetAllocationFactoryResponse.OK(_))
+    }
+  }
+
+  override def getAllocationInstructionAcceptContext(
+      respond: allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationInstructionAcceptContext") { implicit tc => _ =>
+      scanConnection
+        .getAllocationInstructionAcceptContextRaw(
+          allocationInstructionId,
+          body,
+        )
+        .map(allocationinstruction.v2.Resource.GetAllocationInstructionAcceptContextResponse.OK(_))
+    }
+  }
+
+  override def getAllocationInstructionWithdrawContext(
+      respond: allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse.type
+  )(
+      allocationInstructionId: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getAllocationInstructionWithdrawContext") { implicit tc => _ =>
+      scanConnection
+        .getAllocationInstructionWithdrawContext(
+          allocationInstructionId,
+          body,
+        )
+        .map(
+          allocationinstruction.v2.Resource.GetAllocationInstructionWithdrawContextResponse.OK(_)
+        )
+    }
+  }
+
+  override def getTransferFactory(
+      respond: transferinstruction.v2.Resource.GetTransferFactoryResponse.type
+  )(
+      body: transferinstruction.v2.definitions.GetFactoryRequest
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferFactoryResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getTransferFactoryV2") { implicit tc => _ =>
+      scanConnection
+        .getTransferFactoryV2Raw(
+          body
+        )
+        .map(transferinstruction.v2.Resource.GetTransferFactoryResponse.OK(_))
+    }
+  }
+
+  override def getTransferInstructionAcceptContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionAcceptContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionAcceptContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getTransferInstructionAcceptContextV2") { implicit tc => _ =>
+      scanConnection
+        .getTransferInstructionAcceptContextV2Raw(
+          transferInstructionId,
+          body,
+        )
+        .map(transferinstruction.v2.Resource.GetTransferInstructionAcceptContextResponse.OK(_))
+    }
+  }
+
+  override def getTransferInstructionRejectContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getTransferInstructionRejectContextV2") { implicit tc => _ =>
+      scanConnection
+        .getTransferInstructionRejectContextV2Raw(
+          transferInstructionId,
+          body,
+        )
+        .map(transferinstruction.v2.Resource.GetTransferInstructionRejectContextResponse.OK(_))
+    }
+  }
+
+  override def getTransferInstructionWithdrawContext(
+      respond: transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse.type
+  )(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(
+      extracted: AuthenticatedRequest
+  ): Future[transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse] = {
+    implicit val AuthenticatedRequest(_, tc) = extracted
+    withSpan(s"$workflowId.getTransferInstructionRejectContextV2") { implicit tc => _ =>
+      scanConnection
+        .getTransferInstructionWithdrawContextV2Raw(
+          transferInstructionId,
+          body,
+        )
+        .map(transferinstruction.v2.Resource.GetTransferInstructionWithdrawContextResponse.OK(_))
     }
   }
 }

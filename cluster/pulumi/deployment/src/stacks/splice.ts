@@ -8,7 +8,6 @@ import {
   CnChartVersion,
   config,
 } from '@canton-network/splice-pulumi-common';
-import { configForSv } from '@canton-network/splice-pulumi-common-sv';
 import {
   allSvNamesToDeploy,
   svRunbookNodeName,
@@ -148,19 +147,9 @@ function installSvStacks(
     for (const sv of allSvNamesToDeploy) {
       const isRunbookReset =
         sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
-      const isCatchupTestSv = configForSv(sv)?.testing?.catchup?.enabled ?? false;
-      createStackCR(
-        `sv.${sv}`,
-        'sv',
-        namespace,
-        isRunbookReset || isCatchupTestSv,
-        reference,
-        envRefs,
-        gcpSecret,
-        {
-          SPLICE_SV: sv,
-        }
-      );
+      createStackCR(`sv.${sv}`, 'sv', namespace, isRunbookReset, reference, envRefs, gcpSecret, {
+        SPLICE_SV: sv,
+      });
     }
   }
 }

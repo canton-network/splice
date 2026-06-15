@@ -145,7 +145,7 @@ transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Auth
 
 transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TIS_Authorized = do
     let admin = this.transfer.instrumentId.admin
-    senderChangeCids <- debitHoldings this
+    senderChangeCids <- debitHoldings fetchAndArchiveUnlockedToken this
     inputHoldingCids <- createLockedInputs this.transfer
     -- log the tx history v2 event
     eventLogCid <- getEventLogFromContext extraArgs.context
@@ -187,7 +187,7 @@ transferInstructionTransition this oSelf actors accountMap extraArgs TIS_Init TI
       _ -> abort $ "Unexpected state after authorizing transfer instruction: " <> show state
 
 transferInstructionTransition this _oSelf _actors _accountMap extraArgs TIS_Authorized TIS_Accepted = do
-  senderChangeCids <- debitHoldings this
+  senderChangeCids <- debitHoldings fetchAndArchiveLockedToken this
   tokenCid <- create Token with
     holding = (senderHoldingFromTransfer this.transfer) with
       account = this.transfer.receiver
@@ -253,24 +253,19 @@ applyTransferInstructionTransitions callSource this@TokenTransferOffer{..} oSelf
 
 
 -- | Sum up and archive input holdings
-sumAndArchiveHoldings : V2.Transfer -> Update Decimal
-sumAndArchiveHoldings transfer = do
+sumAndArchiveHoldings : (V2.InstrumentId -> V2.Account -> ContractId Token -> Update Token) -> V2.Transfer -> Update Decimal
+sumAndArchiveHoldings fetchAndArchiveToken transfer = do
   -- consume all inputs
-  inputAmounts <- forA transfer.inputHoldingCids (\cid -> do
-    let tokenCid = coerceContractId cid : ContractId Token
-    token <- fetch tokenCid
-    archive tokenCid
-    require' ("inputHolding.account", token.holding.account) isEqualR ("transfer.sender", transfer.sender)
-    require' ("inputHolding.instrumentId", token.holding.instrumentId) isEqualR ("transfer.instrumentId", transfer.instrumentId)
+  inputAmounts <- forA transfer.inputHoldingCids $ \cid -> do
+    token <- fetchAndArchiveToken transfer.instrumentId transfer.sender (coerceContractId cid : ContractId Token)
     pure token.holding.amount
-    )
-  return (sum inputAmounts)
+  pure (sum inputAmounts)
 
 -- | Debit an amount from holdings
-debitHoldings : TokenTransferOffer -> Update [ContractId V2.Holding]
-debitHoldings offer = do
+debitHoldings : (V2.InstrumentId -> V2.Account -> ContractId Token -> Update Token) -> TokenTransferOffer -> Update [ContractId V2.Holding]
+debitHoldings fetchAndArchiveToken offer = do
   -- consume all inputs
-  inputAmount <- sumAndArchiveHoldings offer.transfer
+  inputAmount <- sumAndArchiveHoldings fetchAndArchiveToken offer.transfer
   require' ("inputAmount + mintAmount for " <> show offer.transfer.instrumentId, inputAmount + offer.mintAmount) isGreaterOrEqualR
     ("transfer.amount", offer.transfer.amount)
 
@@ -303,7 +298,11 @@ createLockedInputs transfer = do
 unlockTokenTransferOffer : Text -> TokenTransferOffer -> ExtraArgs -> Update [ContractId V2.Holding]
 unlockTokenTransferOffer reason offer extraArgs = do
     let transfer = offer.transfer
-    sumAndArchiveHoldings transfer
+    -- Note: in production we might want to follow the pattern used by Amulet here
+    -- to pass in the tokens to unlock as arguments, so that we can also deal with
+    -- the case where the unlock happens after the lock has expired and (some) of
+    -- the locked tokens have already been consumed.
+    sumAndArchiveHoldings fetchAndArchiveLockedToken transfer
     tokenCid <- toInterfaceContractId <$> create Token with
       holding = senderHoldingFromTransfer transfer
     -- log v2 history event

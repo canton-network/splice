@@ -122,4 +122,5 @@ case class IngestionConfig(
     activeContractsMinBackoff: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(1),
     activeContractsMaxBackoff: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     activeContractsRandomFactor: Double = 0.2,
+    activeContractsBufferSize: Int = 1000,
 )

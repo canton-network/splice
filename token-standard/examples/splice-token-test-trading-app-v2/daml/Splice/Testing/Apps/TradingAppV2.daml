@@ -10,7 +10,7 @@ module Splice.Testing.Apps.TradingAppV2 where
 import DA.Assert
 import DA.Either (partitionEithers)
 import DA.Foldable (forA_)
-import DA.Optional (fromSomeNote)
+import DA.Optional
 import DA.Map qualified as Map
 import DA.TextMap qualified as TextMap
 
@@ -130,21 +130,24 @@ template OTCTrade with
       controller venue
       do
         let settlement = mkOtcTradeSettlementInfoV2 self this
-        forA (Map.toList $ splitTradeLegsByAuthorizer tradeLegs) $ \(authorizer, authorizerLegs) -> do
-          create OTCTradeAllocationRequest with
-            settlement
-            settleAt = settleAt
-            requestedAt = createdAt
-            allocations = do
-              (admin, legs) <- Map.toList $ splitLegsBy (._1) authorizerLegs
-              pure V2.AllocationSpecification with
-                admin
-                authorizer
-                transferLegSides = map (._2) legs
-                settlementDeadline
-                nextIterationFunding = None -- Note: this trading app does not make use of iterated settlement
-                committed = False
-                meta = emptyMetadata
+        results <- forA (Map.toList $ splitTradeLegsByAuthorizer tradeLegs) $ \(authorizer, authorizerLegs) -> do
+          if (authorizer == basicAccount venue)
+            then pure None
+            else Some <$> create OTCTradeAllocationRequest with
+              settlement
+              settleAt = settleAt
+              requestedAt = createdAt
+              allocations = do
+                (admin, legs) <- Map.toList $ splitLegsBy (._1) authorizerLegs
+                pure V2.AllocationSpecification with
+                  admin
+                  authorizer
+                  transferLegSides = map (._2) legs
+                  settlementDeadline
+                  nextIterationFunding = None -- Note: this trading app does not make use of iterated settlement
+                  committed = False
+                  meta = emptyMetadata
+        pure $ catOptionals results
 
     choice OTCTrade_Settle : OTCTrade_SettleResult
       with

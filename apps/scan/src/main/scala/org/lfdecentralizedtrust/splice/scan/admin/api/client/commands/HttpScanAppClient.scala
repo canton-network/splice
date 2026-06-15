@@ -1836,6 +1836,27 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)
+      extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferFactoryResponse,
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferFactoryResponse] = {
+      client.getTransferFactory(arg, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferFactoryResponse.OK(response) =>
+      Right(response)
+    }
+  }
+
   case class GetTransferInstructionAcceptContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ) extends TokenStandardTransferInstructionBaseCommand[
@@ -1932,6 +1953,34 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferInstructionTransferContextV2Raw(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionAcceptContextResponse,
+        transferinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionAcceptContextResponse] = {
+      client.getTransferInstructionAcceptContext(
+        transferInstructionId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferInstructionAcceptContextResponse.OK(context) =>
+      Right(context)
+    }
+  }
+
   case class GetTransferInstructionRejectContextRaw(
       transferInstructionId: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
@@ -1956,6 +2005,34 @@ object HttpScanAppClient {
     override protected def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case transferinstruction.v1.GetTransferInstructionRejectContextResponse.OK(context) =>
+      Right(context)
+    }
+  }
+
+  case class GetTransferInstructionRejectContextV2Raw(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionRejectContextResponse,
+        transferinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionRejectContextResponse] = {
+      client.getTransferInstructionRejectContext(
+        transferInstructionId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferInstructionRejectContextResponse.OK(context) =>
       Right(context)
     }
   }
@@ -2056,6 +2133,34 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetTransferInstructionWithdrawContextV2Raw(
+      transferInstructionId: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardTransferInstructionV2BaseCommand[
+        transferinstruction.v2.GetTransferInstructionWithdrawContextResponse,
+        transferinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: TV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], transferinstruction.v2.GetTransferInstructionWithdrawContextResponse] = {
+      client.getTransferInstructionWithdrawContext(
+        transferInstructionId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case transferinstruction.v2.GetTransferInstructionWithdrawContextResponse.OK(context) =>
+      Right(context)
+    }
+  }
+
   case class GetTransferInstructionWithdrawContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ) extends TokenStandardTransferInstructionBaseCommand[
@@ -2142,6 +2247,75 @@ object HttpScanAppClient {
         decoder: TemplateJsonDecoder
     ) = { case allocationinstruction.v1.GetAllocationFactoryResponse.OK(response) =>
       Right(response)
+    }
+  }
+
+  case class GetAllocationFactoryV2Raw(arg: allocationinstruction.v2.definitions.GetFactoryRequest)
+      extends TokenStandardAllocationInstructionV2BaseCommand[
+        allocationinstruction.v2.GetAllocationFactoryResponse,
+        allocationinstruction.v2.definitions.FactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: IV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocationinstruction.v2.GetAllocationFactoryResponse] = {
+      client.getAllocationFactory(arg, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case allocationinstruction.v2.GetAllocationFactoryResponse.OK(response) =>
+      Right(response)
+    }
+  }
+
+  case class GetAllocationInstructionAcceptContextRaw(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardAllocationInstructionV2BaseCommand[
+        allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse,
+        allocationinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: IV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse] = {
+      client.getAllocationInstructionAcceptContext(allocationInstructionCid, body, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = {
+      case allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse.OK(response) =>
+        Right(response)
+    }
+  }
+
+  case class GetAllocationInstructionWithdrawContextRaw(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardAllocationInstructionV2BaseCommand[
+        allocationinstruction.v2.GetAllocationInstructionWithdrawContextResponse,
+        allocationinstruction.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: IV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocationinstruction.v2.GetAllocationInstructionWithdrawContextResponse] = {
+      client.getAllocationInstructionWithdrawContext(allocationInstructionCid, body, headers)
+    }
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = {
+      case allocationinstruction.v2.GetAllocationInstructionWithdrawContextResponse.OK(response) =>
+        Right(response)
     }
   }
 
@@ -2398,6 +2572,34 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetSettlementFactoryV2Raw(body: allocation.v2.definitions.GetFactoryRequest)
+      extends TokenStandardAllocationV2BaseCommand[
+        allocation.v2.GetSettlementFactoryResponse,
+        allocation.v2.definitions.FactoryWithChoiceContext,
+      ] {
+    override def submitRequest(
+        client: AV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocation.v2.GetSettlementFactoryResponse] = {
+      client.getSettlementFactory(
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      allocation.v2.GetSettlementFactoryResponse,
+      Either[String, allocation.v2.definitions.FactoryWithChoiceContext],
+    ] = { case allocation.v2.GetSettlementFactoryResponse.OK(factory) =>
+      Right(factory)
+    }
+  }
+
   case class GetAllocationCancelContextRaw(
       allocationId: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,
@@ -2454,6 +2656,35 @@ object HttpScanAppClient {
       allocation.v2.GetAllocationCancelContextResponse,
       Either[String, allocation.v2.definitions.ChoiceContext],
     ] = { case allocation.v2.GetAllocationCancelContextResponse.OK(context) => Right(context) }
+  }
+
+  case class GetAllocationV2WithdrawContextRaw(
+      allocationId: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  ) extends TokenStandardAllocationV2BaseCommand[
+        allocation.v2.GetAllocationWithdrawContextResponse,
+        allocation.v2.definitions.ChoiceContext,
+      ] {
+    override def submitRequest(
+        client: AV2Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], allocation.v2.GetAllocationWithdrawContextResponse] = {
+      client.getAllocationWithdrawContext(
+        allocationId,
+        body = body,
+        headers = headers,
+      )
+    }
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[
+      allocation.v2.GetAllocationWithdrawContextResponse,
+      Either[String, allocation.v2.definitions.ChoiceContext],
+    ] = { case allocation.v2.GetAllocationWithdrawContextResponse.OK(context) => Right(context) }
   }
 
   case class GetAllocationCancelContext(allocationId: allocationv1.Allocation.ContractId)

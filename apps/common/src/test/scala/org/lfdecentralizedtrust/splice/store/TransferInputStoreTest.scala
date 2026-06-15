@@ -102,8 +102,8 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
-  "listSortedMintableRewardCouponV2s" should {
-    "return correct results" in {
+  "listRewardCouponsV2" should {
+    "filter by assignment status and sort correctly" in {
       for {
         store <- mkTransferInputStore(user)
         // for each round i, create 2 assigned coupons with amount i and 2i
@@ -131,33 +131,83 @@ abstract class TransferInputStoreTest extends StoreTestBase {
             )(store.multiDomainAcsStore)
           } yield ()
         )
-        // unassigned coupon in round 2 — should be excluded when includeUnassigned is false
+        // unassigned coupon in round 2
         _ <- dummyDomain.create(
           rewardCouponV2(round = 2, provider = user, amount = numeric(20), beneficiary = None),
           createdEventSignatories = Seq(dsoParty),
           createdEventObservers = Seq(user),
         )(store.multiDomainAcsStore)
       } yield {
-        // assigned coupons listed in ascending round order, descending amount per round;
-        // the unassigned coupon (amount=20) in round 2 is excluded
+        // AssignedOnly: unassigned coupon excluded
         store
-          .listSortedMintableRewardCouponV2s(includeUnassigned = false)
+          .listRewardCouponsV2(includeUnassigned = false, includeAssigned = true)
           .futureValue
-          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
-          2.0, 1.0, // round 1
-          4.0, 2.0, // round 2 (unassigned 20.0 excluded)
-          6.0, 3.0, // round 3
-          8.0, 4.0, // round 4
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          1.0, 2.0, 2.0, 4.0, 3.0, 6.0, 4.0, 8.0,
         )
-        // with includeUnassigned, the unassigned coupon (20.0) appears in round 2
+        // All: unassigned coupon included
         store
-          .listSortedMintableRewardCouponV2s(includeUnassigned = true)
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = true)
           .futureValue
-          .map(_._1.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
-          2.0, 1.0, // round 1
-          20.0, 4.0, 2.0, // round 2 (unassigned 20.0 included)
-          6.0, 3.0, // round 3
-          8.0, 4.0, // round 4
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          1.0, 2.0, 2.0, 4.0, 3.0, 6.0, 4.0, 8.0, 20.0,
+        )
+        // UnassignedOnly: only the unassigned coupon
+        store
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+          .futureValue
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          20.0
+        )
+      }
+    }
+
+    "sort by expiresAt when requested" in {
+      val now = java.time.Instant.now()
+      for {
+        store <- mkTransferInputStore(user)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 1,
+            provider = user,
+            amount = numeric(5),
+            beneficiary = Some(user),
+            expiresAt = now.plusSeconds(100),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 2,
+            provider = user,
+            amount = numeric(10),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(300),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 3,
+            provider = user,
+            amount = numeric(20),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(200),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        val results = store
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+          .futureValue
+        results should have size 2
+        // ordered by expiresAt ascending: 200s before 300s
+        results.map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          20.0,
+          10.0,
         )
       }
     }

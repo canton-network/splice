@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "canton-domain"
+initImageName: "postgres:14"
 
 # Custom annotations and labels for deployed resources
 pod:
