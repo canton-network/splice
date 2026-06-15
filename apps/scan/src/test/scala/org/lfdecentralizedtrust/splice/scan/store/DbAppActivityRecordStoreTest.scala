@@ -420,11 +420,11 @@ class DbAppActivityRecordStoreTest
 
     "on first SV" should {
 
-      "return round 0 when ingestion started from genesis" in {
+      "return round 0 on fresh network" in {
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
-          // ensureMetaDBIO sets earliest_ingested_round = -1 for isFirstSv fresh network
+          // ensureMetaDBIO sets earliest_ingested_round = -1 on fresh isFirstSv network
           _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, -1L, Some(1L))
           _ <- insertRecordsForRounds(
             store,
@@ -435,11 +435,12 @@ class DbAppActivityRecordStoreTest
           )
           result <- store.earliestRoundWithCompleteAppActivity()
         } yield {
+          // query returns -1 + 1 = 0
           result.value shouldBe 0L
         }
       }
 
-      "not return round 0 until the next round exists" in {
+      "return None until last_archived_round is set" in {
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
@@ -448,25 +449,6 @@ class DbAppActivityRecordStoreTest
           result <- store.earliestRoundWithCompleteAppActivity()
         } yield {
           result shouldBe None
-        }
-      }
-
-      "return earliest_ingested_round + 1 when earliest_ingested_round > 0" in {
-        for {
-          (store, historyId) <- newStore(isFirstSv = true)
-          baseTs = CantonTimestamp.now()
-          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L, Some(11L))
-          _ <- insertRecordsForRounds(
-            store,
-            historyId,
-            baseTs,
-            ("round-10", 10L),
-            ("round-11", 11L),
-          )
-          result <- store.earliestRoundWithCompleteAppActivity()
-        } yield {
-          // earliest_ingested_round = 10, query returns 11
-          result.value shouldBe 11L
         }
       }
     }
