@@ -258,11 +258,10 @@ class SV1Initializer(
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      synchronizerId <- participantAdminConnection.getPhysicalSynchronizerId(
-        config.domains.global.alias
-      )
+      psid <- participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias)
+      synchronizerId = psid.logical
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        synchronizerId.logical,
+        synchronizerId,
         initConnection,
         loggerFactory,
       )
@@ -333,7 +332,7 @@ class SV1Initializer(
       _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
       withDsoStore = new WithDsoStore(
         dsoAutomation,
-        synchronizerId,
+        psid,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -586,9 +585,10 @@ class SV1Initializer(
     */
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
-      synchronizerId: PhysicalSynchronizerId,
+      psid: PhysicalSynchronizerId,
   ) {
 
+    private val synchronizerId = psid.logical
     private val dsoStore = dsoStoreWithIngestion.store
     private val dsoParty = dsoStore.key.dsoParty
     private val svParty = dsoStore.key.svParty
@@ -619,7 +619,7 @@ class SV1Initializer(
     ): Future[Unit] = {
       synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
         synchronizerNodeService.nodes,
-        synchronizerId.logical,
+        synchronizerId,
         SynchronizerNodeState.OnboardedImmediately,
       )
     }
@@ -629,7 +629,7 @@ class SV1Initializer(
         tc: TraceContext
     ): Future[Unit] = {
       val dsoRulesConfig = SvUtil.defaultDsoRulesConfig(
-        synchronizerId.logical,
+        synchronizerId,
         sv1Config.voteCooldownTime,
         sv1Config.acsCommitmentReconciliationInterval,
       )
@@ -656,7 +656,7 @@ class SV1Initializer(
                 val amuletConfig = defaultAmuletConfig(
                   sv1Config.initialTickDuration,
                   sv1Config.initialMaxNumInputs,
-                  synchronizerId.logical,
+                  synchronizerId,
                   sv1Config.initialSynchronizerFeesConfig.extraTrafficPrice.value,
                   sv1Config.initialSynchronizerFeesConfig.minTopupAmount.value,
                   sv1Config.initialSynchronizerFeesConfig.baseRateBurstAmount.value,
@@ -680,6 +680,7 @@ class SV1Initializer(
                     config.scan,
                     synchronizerId,
                     clock,
+                    domainMigrationId,
                   )
                   _ = logger
                     .info(
@@ -733,7 +734,7 @@ class SV1Initializer(
                         ),
                       deduplicationOffset = offset,
                     )
-                    .withSynchronizerId(synchronizerId.logical)
+                    .withSynchronizerId(synchronizerId)
                     .yieldUnit()
                 } yield ()
             }
