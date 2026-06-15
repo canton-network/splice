@@ -445,6 +445,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       Optional.of(newDfm.toProtoPrimitive),
       existingConfig.externalPartyConfigStateTickDuration,
       existingConfig.rewardConfig,
+      existingConfig.transferPreapprovalBaseDuration,
     )
 
     val action = new ARC_AmuletRules(

@@ -178,6 +178,7 @@ export function amuletRules(zeroTransferFees: boolean): any {
         optDevelopmentFundManager: null,
         externalPartyConfigStateTickDuration: null,
         rewardConfig: null,
+        transferPreapprovalBaseDuration: null,
       },
       futureValues: [],
     },

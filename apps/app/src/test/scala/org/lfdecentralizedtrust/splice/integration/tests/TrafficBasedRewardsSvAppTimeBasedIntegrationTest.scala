@@ -433,6 +433,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       existing.optDevelopmentFundManager,
       existing.externalPartyConfigStateTickDuration,
       Optional.of(newRc),
+      existing.transferPreapprovalBaseDuration,
     )
     setAmuletConfig(Seq((None, newConfig, existing)))
     eventually() {
