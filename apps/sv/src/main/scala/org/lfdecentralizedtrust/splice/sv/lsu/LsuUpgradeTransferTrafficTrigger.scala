@@ -3,12 +3,15 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
+import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.synchronizer.sequencer.errors.SequencerError
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.topology.transaction.LsuAnnouncement
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.StatusRuntimeException
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
@@ -61,7 +64,7 @@ class LsuTransferTrafficTrigger(
   protected def completeTask(task: ScheduledTaskTrigger.ReadyTask[TrafficTransferTask])(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    for {
+    (for {
       trafficState <-
         currentSynchronizerNode.sequencerAdminConnection.getLsuTrafficControlState(ts = None)
       _ = logger.info(
@@ -76,7 +79,17 @@ class LsuTransferTrafficTrigger(
       }
     } yield TaskSuccess(
       "Transferred LSU traffic control state to successor sequencer"
-    )
+    )).recover {
+      case ex: StatusRuntimeException
+          if ErrorDetails.matches(ex, SequencerError.LsuTrafficAlreadyInitialized) =>
+        logger.info(
+          "Successor sequencer has already been initialized with the LSU traffic control state, marking as transferred"
+        )
+        transferred.set(true)
+        TaskSuccess(
+          "Successor sequencer was already initialized with the LSU traffic control state"
+        )
+    }
   }
 
   protected def isStaleTask(task: ScheduledTaskTrigger.ReadyTask[TrafficTransferTask])(implicit
