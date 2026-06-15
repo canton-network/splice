@@ -134,21 +134,17 @@ class SynchronizerNodeReconciler(
           }
 
           val sequencerIdentityConfig: java.util.Optional[SequencerIdentityConfig] =
-            if (localPhysicalSynchronizers.isDefined) {
-              localSequencerConfig
-                .map(c =>
-                  new SequencerIdentityConfig(
-                    c.sequencerId,
-                    existingSequencerIdentityConfig
-                      .flatMap(_.availableAfter.toScala)
-                      .orElse(sequencerAvailableAfter)
-                      .toJava,
-                  )
+            localSequencerConfig
+              .map(c =>
+                new SequencerIdentityConfig(
+                  c.sequencerId,
+                  existingSequencerIdentityConfig
+                    .flatMap(_.availableAfter.toScala)
+                    .orElse(sequencerAvailableAfter)
+                    .toJava,
                 )
-                .toJava
-            } else {
-              synchronizerNodeConfig.flatMap(_.sequencerIdentity.toScala).toJava
-            }
+              )
+              .toJava
 
           val nodeConfig = new SynchronizerNodeConfig(
             synchronizerNodeConfig.map(_.cometBft).getOrElse(SvUtil.emptyCometBftConfig),
