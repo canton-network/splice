@@ -1152,13 +1152,15 @@ class DbSvDsoStore(
   ] = (now, limit) =>
     implicit tc => {
       val _ = tc
-      // && is the array overlap operator in postgres
-      // so `not (array1 && array2)` means "arrays do not overlap"
+      // `not (json_array ?| string_array)` means "arrays do not overlap"
+      // the first ? is to escape the second
       val filterClause = if (ignoredParties.nonEmpty) {
         (sql" and " ++ notInClause(
           "create_arguments->'allocation'->'authorizer'->>'owner'",
           ignoredParties,
-        ) ++ sql" and not (create_arguments->'settlement'->>'executors' && ${ignoredParties.toArray[PartyId]}").toActionBuilder
+        ) ++ sql" and not (create_arguments->'settlement'->'executors' ??| ${ignoredParties
+            .map(p => lengthLimited(p.toProtoPrimitive))
+            .toArray[String2066]})").toActionBuilder
       } else {
         sql""
       }
