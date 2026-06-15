@@ -11,7 +11,6 @@ trait ValidatorLicensesFrontendTestUtil { self: FrontendIntegrationTest =>
 
   def checkValidatorLicenseRow(
       previousSize: Long,
-      expectedSponsor: PartyId,
       expectedValidator: PartyId,
   )(implicit webDriver: WebDriverType): Assertion = {
     val newLicenseRows = getLicensesTableRows
@@ -22,7 +21,7 @@ trait ValidatorLicensesFrontendTestUtil { self: FrontendIntegrationTest =>
       val sponsor =
         seleniumText(row.childElement(className("validator-licenses-sponsor")))
       validator shouldBe expectedValidator.toProtoPrimitive
-      sponsor shouldBe expectedSponsor.toProtoPrimitive
+      sponsor shouldBe expectedValidator.toProtoPrimitive
     }
   }
 }
