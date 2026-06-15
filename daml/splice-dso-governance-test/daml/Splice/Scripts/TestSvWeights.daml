@@ -19,6 +19,7 @@ import Splice.CometBft
 import Splice.DsoRules
 import Splice.DSO.SvState
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.HostedSv
 import Splice.SvOnboarding
 
 import Splice.Scripts.DsoTestUtils

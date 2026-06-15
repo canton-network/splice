@@ -22,6 +22,7 @@ import Splice.AmuletRules
 import Splice.ExternalPartyAmuletRules
 
 import Splice.ExternalPartyConfigState
+import Splice.HostedSv
 import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
@@ -181,15 +182,6 @@ data HostedSvMigrationData = HostedSvMigrationData with
 -- then be extended in future versions.
 
 data Confirmation_ExpireResult = Confirmation_ExpireResult
-
-data HostedSv_UpdateRewardWeightResult = HostedSv_UpdateRewardWeightResult with
-    hostedSvCid : ContractId HostedSv
-
-data HostedSv_UpdateBeneficiariesResult = HostedSv_UpdateBeneficiariesResult with
-    hostedSvCid : ContractId HostedSv
-
-data HostedSv_UpdateSvOperatorResult = HostedSv_UpdateSvOperatorResult with
-    hostedSvCid : ContractId HostedSv
 
 data DsoRules_AddSvResult = DsoRules_AddSvResult with
     newDsoRules : ContractId DsoRules
@@ -570,76 +562,6 @@ data TrafficState = TrafficState with
     consumedTraffic: Int -- ^ Bytes of extra traffic consumed before the decentralized synchronizer was bootstrapped.
   deriving (Eq, Show)
 
-
--- | Records the on-ledger reward configuration for a hosted SV.
---
--- This contract links a hosted SV to the SV node operator responsible for
--- creating its reward coupons. It also stores the hosted SV's reward weight and
--- the optional beneficiary distribution used to split that reward weight.
---
--- The hosted SV itself must not be listed as a beneficiary. Any reward weight not
--- assigned to beneficiaries is issued to the hosted SV itself. If the beneficiary
--- list is empty, all reward coupons for this hosted SV are issued to the hosted
--- SV itself.
---
--- The total beneficiary percentage must be less than or equal to 1.0.
-template HostedSv
-  with
-    dso : Party
-      -- ^ The DSO party.
-    hostedSv : Party
-      -- ^ The hosted SV party whose reward coupons are created by the SV operator.
-    svOperator : Party
-      -- ^ The SV node operator party responsible for creating reward coupons for
-      -- 'hostedSv'.
-    rewardWeight : Int
-      -- ^ The hosted SV reward weight. Must be strictly greater than 0.
-    hostedSvName : Text
-      -- ^ Human-readable name of the hosted SV.
-    beneficiaries : Map Party Decimal
-      -- ^ Beneficiary parties, excluding 'hostedSv', and their corresponding positive
-      -- reward weight percentages.
-  where
-    ensure
-      rewardWeight > 0
-        && all (> 0.0) (Map.values beneficiaries)
-        && sum (Map.values beneficiaries) <= 1.0
-        && not (Map.member hostedSv beneficiaries)
-
-    signatory dso
-    observer hostedSv
-
-    choice HostedSv_UpdateRewardWeight : HostedSv_UpdateRewardWeightResult
-      with
-        newRewardWeight : Int
-      controller dso
-      do
-        hostedSvCid <- create this with rewardWeight = newRewardWeight
-        pure HostedSv_UpdateRewardWeightResult with hostedSvCid
-
-    choice HostedSv_UpdateBeneficiaries : HostedSv_UpdateBeneficiariesResult
-      with
-        newBeneficiaries : Map Party Decimal
-      controller hostedSv
-      do
-        -- Sanity checks
-        require "New beneficiaries must differ from the existing beneficiaries" $
-          newBeneficiaries /= beneficiaries
-
-        hostedSvCid <- create this with beneficiaries = newBeneficiaries
-        pure HostedSv_UpdateBeneficiariesResult with hostedSvCid
-
-    choice HostedSv_UpdateSvOperator : HostedSv_UpdateSvOperatorResult
-      with
-        newSvOperator : Party
-      controller dso
-      do
-        -- Sanity checks
-        require "New SV operator must differ from the existing SV operator" $
-          newSvOperator /= svOperator
-
-        hostedSvCid <- create this with svOperator = newSvOperator
-        pure HostedSv_UpdateSvOperatorResult with hostedSvCid
 
 -- | Instruction created by the DSO to authorize updating the reward weight of a
 -- hosted SV.
@@ -2615,5 +2537,3 @@ instance Patchable LogicalSynchronizerUpgradeSchedule where
         newPhysicalSynchronizerSerial = patch new.newPhysicalSynchronizerSerial base.newPhysicalSynchronizerSerial current.newPhysicalSynchronizerSerial
         newPhysicalSynchronizerProtocolVersion = patch new.newPhysicalSynchronizerProtocolVersion base.newPhysicalSynchronizerProtocolVersion current.newPhysicalSynchronizerProtocolVersion
 
-instance HasCheckedFetch HostedSv ForDso where
-  contractGroupId HostedSv {..} = ForDso with dso
