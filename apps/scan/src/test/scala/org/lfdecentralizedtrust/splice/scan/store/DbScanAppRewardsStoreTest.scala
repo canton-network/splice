@@ -457,9 +457,8 @@ class DbScanAppRewardsStoreTest
     "aggregateActivityTotals — succeeds for round 0 when isFirstSv" in {
       for {
         (store, historyId) <- newStore(isFirstSv = true)
-        _ <- insertActivityRecordMeta(historyId, 0L)
+        _ <- markRoundComplete(historyId, 0L)
         _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))
-        // Next-round sentinel only — no prior round needed for isFirstSv
         _ <- insertActivityRecord(historyId, 1L, Seq("sentinel::provider"), Seq(1L))
         _ <- store.aggregateActivityTotals(0L)
         totals <- store.getAppActivityPartyTotalsByRound(0L)
@@ -1120,20 +1119,6 @@ class DbScanAppRewardsStoreTest
       )
     }.map(_ => ())
   }
-
-  private def insertActivityRecordMeta(
-      historyId: Long,
-      earliestIngestedRound: Long,
-  ): Future[Unit] =
-    futureUnlessShutdownToFuture(
-      storage.underlying.queryAndUpdate(
-        sqlu"""insert into app_activity_record_meta
-               (history_id, activity_ingestion_code_version, activity_ingestion_user_version,
-                started_ingesting_at, earliest_ingested_round)
-               values ($historyId, 1, 0, 0, $earliestIngestedRound)""".map(_ => ()),
-        "test.insertActivityRecordMeta",
-      )
-    )
 
   /** Insert a meta row marking `round` as complete
     * satisfying the completeness precondition in aggregateActivityTotals.
