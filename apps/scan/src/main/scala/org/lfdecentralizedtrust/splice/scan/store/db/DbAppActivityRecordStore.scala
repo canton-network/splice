@@ -171,12 +171,7 @@ class DbAppActivityRecordStore(
               and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
-    ).map {
-      // Some(1) means earliest_ingested_round = 0 (query returns 0 + 1).
-      // First SV has complete history, so round 0 is complete.
-      case Some(1L) if isFirstSv => Some(0L)
-      case other => other
-    }
+    )
   }
 
   /** Find the latest round with complete app activity.
@@ -461,10 +456,11 @@ class DbAppActivityRecordStore(
               case None =>
                 DBIO.successful(NotReady: EnsureResult)
               case Some((firstRecordTimeMicros, earliestRound)) =>
-                // First SV on fresh network: earliest complete round is
-                // always 0, so override the given value.
+                // First SV on fresh network: set earliest_ingested_round to -1
+                // so that round 0 passes assertCompleteActivity (0 > -1)
+                // and earliestRoundWithCompleteAppActivity returns -1 + 1 = 0.
                 val adjustedEarliestRound =
-                  if (isFirstSv && maxVersions.isEmpty) 0L else earliestRound
+                  if (isFirstSv && maxVersions.isEmpty) -1L else earliestRound
                 insertActivityRecordMetaDBIO(
                   codeVersion,
                   userVersion,

@@ -424,7 +424,8 @@ class DbAppActivityRecordStoreTest
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
-          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, Some(1L))
+          // ensureMetaDBIO sets earliest_ingested_round = -1 for isFirstSv fresh network
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, -1L, Some(1L))
           _ <- insertRecordsForRounds(
             store,
             historyId,
@@ -442,7 +443,7 @@ class DbAppActivityRecordStoreTest
         for {
           (store, historyId) <- newStore(isFirstSv = true)
           baseTs = CantonTimestamp.now()
-          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, None)
+          _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, -1L, None)
           _ <- insertRecordsForRounds(store, historyId, baseTs, ("round-0", 0L))
           result <- store.earliestRoundWithCompleteAppActivity()
         } yield {
@@ -464,7 +465,7 @@ class DbAppActivityRecordStoreTest
           )
           result <- store.earliestRoundWithCompleteAppActivity()
         } yield {
-          // earliest_ingested_round = 10, query returns 11 — not 1, so isFirstSv override doesn't fire
+          // earliest_ingested_round = 10, query returns 11
           result.value shouldBe 11L
         }
       }
@@ -521,7 +522,7 @@ class DbAppActivityRecordStoreTest
           result <- store.earliestRoundWithCompleteAppActivity()
         } yield {
           // Query reads version 2 meta (earliest_ingested_round = 10),
-          // returns Some(11) — the case Some(1L) override does not fire.
+          // returns Some(11).
           result.value shouldBe 11L
         }
       }
@@ -733,14 +734,14 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "set earliest_ingested_round to 0 on fresh network when isFirstSv" in {
+    "set earliest_ingested_round to -1 on fresh network when isFirstSv" in {
       for {
         (store, _) <- newStore(isFirstSv = true)
         r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
         r1 shouldBe Checked(InsertMeta)
-        meta.value.earliestIngestedRound shouldBe 0L
+        meta.value.earliestIngestedRound shouldBe -1L
       }
     }
 
