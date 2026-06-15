@@ -18,10 +18,7 @@ trait ValidatorLicensesFrontendTestUtil { self: FrontendIntegrationTest =>
     forExactly(1, newLicenseRows) { row =>
       val validator =
         seleniumText(row.childElement(className("validator-licenses-validator")))
-      val sponsor =
-        seleniumText(row.childElement(className("validator-licenses-sponsor")))
       validator shouldBe expectedValidator.toProtoPrimitive
-      sponsor shouldBe expectedValidator.toProtoPrimitive
     }
   }
 }

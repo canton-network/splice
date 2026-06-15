@@ -47,3 +47,8 @@
           wallet             0.1.21
           walletPayments     0.1.20
           ================== =======
+
+
+    - Scan and SV UI
+
+          - Remove the ``sponsor`` field from the validator license list as it is redundant with the Daml change to set ``sponsor = validator``.
