@@ -48,6 +48,8 @@ object DbAppActivityRecordStore {
     * @param startedIngestingAt record time (microseconds since epoch) of the first
     *                           verdict in the first batch with activity records
     * @param earliestIngestedRound the earliest round number in the first batch with activity records
+    * @param lastArchivedRound the highest round number which has been archived as of
+    *                          the max record_time of the ingested verdicts
     */
   final case class AppActivityRecordMetaT(
       historyId: Long,
@@ -55,6 +57,7 @@ object DbAppActivityRecordStore {
       userVersion: Int,
       startedIngestingAt: Long,
       earliestIngestedRound: Long,
+      lastArchivedRound: Option[Long],
   )
 
   final case class IngestionVersions(code: Int, user: Int)
@@ -150,7 +153,7 @@ class DbAppActivityRecordStore(
   /** Find the earliest round with complete app activity.
     * The first ingested round may be partial, so the earliest complete round
     * is `earliest_ingested_round + 1`.
-    * Returns None if no meta row exists or if that round hasn't been ingested yet.
+    * Returns None if no meta row exists or if archival of the earliest round has not happened yet.
     */
   def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
@@ -164,84 +167,65 @@ class DbAppActivityRecordStore(
             where m.history_id = $historyId
               and m.activity_ingestion_code_version = $codeVersion
               and m.activity_ingestion_user_version = $userVersion
-              and exists (
-                select 1
-                from #${Tables.appActivityRecords} a
-                where a.history_id = $historyId
-                  and a.round_number > m.earliest_ingested_round
-              )
+              and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
     )
   }
 
   /** Find the latest round with complete app activity.
-    * A round is complete when ingestion has moved past it, i.e., a later
-    * round also has records. The most recent round may still be receiving
-    * records, so the latest complete round is `max_round - 1`.
-    * Returns None if no meta row exists or if fewer than two rounds have been ingested.
+    * A round is complete once the verdict ingestion has moved passed its archival.
+    * Returns None if no meta row exists or archival of a round has not happened yet.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
-    startedIngestingAt.flatMap {
-      case None => Future.successful(None)
-      case Some(_) =>
-        // `order by ... limit 1` is used instead of min/max to force the query planner
-        // to use the (history_id, round_number) index.
-        runQuerySingle(
-          sql"""select max_round - 1
-                from (
-                  select a.round_number as max_round
-                  from #${Tables.appActivityRecords} a
-                  where a.history_id = $historyId
-                  order by a.round_number desc
-                  limit 1
-                ) sub
-                where exists (
-                  select 1
-                  from #${Tables.appActivityRecords} a
-                  where a.history_id = $historyId
-                    and a.round_number < sub.max_round
-                )
-          """.as[Option[Long]].headOption.map(_.flatten),
-          "appActivity.latestRoundWithCompleteAppActivity",
-        )
-    }
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    runQuerySingle(
+      sql"""select m.last_archived_round
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
+      """.as[Option[Long]].headOption.map(_.flatten),
+      "appActivity.latestRoundWithCompleteAppActivity",
+    )
   }
 
-  /** Assert that activity records exist for a round before and a round after
-    * roundNumber, proving ingestion completeness for roundNumber.
-    * A prior round proves ingestion was running before N; a later round proves
-    * ingestion has moved past N, so all of N's records have been ingested.
+  /** Assert that all activity records for roundNumber have been ingested.
+    * The round must be greater than the earliest_ingested_round,
+    * and less than or equal to last_archived_round.
     */
   def assertCompleteActivity(roundNumber: Long)(implicit
       tc: TraceContext
-  ): Future[Unit] =
-    futureUnlessShutdownToFuture(
-      storage.queryAndUpdate(
-        for {
-          hasPrev <- sql"""select exists(
-                             select 1 from #${Tables.appActivityRecords} a
-                             where a.history_id = $historyId
-                               and a.round_number < $roundNumber
-                           )""".as[Boolean].head
-          hasNext <- sql"""select exists(
-                             select 1 from #${Tables.appActivityRecords} a
-                             where a.history_id = $historyId
-                               and a.round_number > $roundNumber
-                           )""".as[Boolean].head
-          _ = if (!hasPrev || !hasNext)
-            throw Status.FAILED_PRECONDITION
-              .withDescription(
-                s"Incomplete app activity for round $roundNumber: " +
-                  s"prior round exists=$hasPrev, later round exists=$hasNext"
-              )
-              .asRuntimeException()
-        } yield (),
-        "appActivity.assertCompleteActivity",
-      )
-    )
+  ): Future[Unit] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    runQuerySingle(
+      sql"""select m.earliest_ingested_round, m.last_archived_round
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
+      """.as[(Long, Option[Long])].headOption,
+      "appActivity.assertCompleteActivity",
+    ).map {
+      case Some((earliest, Some(lastArchived)))
+          if roundNumber > earliest && roundNumber <= lastArchived =>
+        ()
+      case metaO =>
+        val (earliestO, lastArchivedO) =
+          metaO.fold((Option.empty[Long], Option.empty[Long])) { case (e, l) => (Some(e), l) }
+        throw Status.FAILED_PRECONDITION
+          .withDescription(
+            s"Incomplete app activity for round $roundNumber: we require " +
+              s"earliest_ingested_round < round <= last_archived_round, but " +
+              s"earliest_ingested_round=$earliestO, last_archived_round=$lastArchivedO"
+          )
+          .asRuntimeException()
+    }
+  }
 
   @VisibleForTesting
   def getRecordByVerdictRowId(verdictRowId: Long)(implicit
@@ -304,10 +288,13 @@ class DbAppActivityRecordStore(
     * @param items activity records to insert
     * @param firstRecordTimeMicros record time of the first verdict in the batch,
     *                              or `None` to skip the meta check
+    * @param lastArchivedRound the highest round number which has been archived as of
+    *                          the max record_time of the ingested verdicts
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Option[Long] = None,
+      lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
     val ingestionStart = firstRecordTimeMicros.flatMap { ts =>
       if (items.nonEmpty) {
@@ -324,7 +311,12 @@ class DbAppActivityRecordStore(
           batchInsertAppActivityRecords(items).map { _ =>
             logger.info(s"Inserted ${items.size} app activity records.")
           }
-      ensureResult <- ensureMetaDBIO(ingestionStart)
+      ensureResult <- ensureMetaDBIO(ingestionStart, lastArchivedRoundO)
+      _ <- (ensureResult, lastArchivedRoundO) match {
+        // We already have meta row, so do the update in place.
+        case (Checked(Resume), Some(round)) => updateLastArchivedRoundDBIO(round)
+        case _ => DBIO.successful(0)
+      }
     } yield ensureResult match {
       case Checked(d: DowngradeDetected) =>
         logger.error(s"${d.message} Shutting down to prevent data corruption.")
@@ -363,6 +355,7 @@ class DbAppActivityRecordStore(
         userVersion = prs.<<[Int],
         startedIngestingAt = prs.<<[Long],
         earliestIngestedRound = prs.<<[Long],
+        lastArchivedRound = prs.<<[Option[Long]],
       )
     }
 
@@ -373,7 +366,7 @@ class DbAppActivityRecordStore(
     runQuerySingle(
       sql"""select history_id, activity_ingestion_code_version,
                    activity_ingestion_user_version, started_ingesting_at,
-                   earliest_ingested_round
+                   earliest_ingested_round, last_archived_round
             from #${Tables.activityRecordMeta}
             where history_id = $historyId
               and activity_ingestion_code_version = $codeVersion
@@ -387,13 +380,23 @@ class DbAppActivityRecordStore(
       userVersion: Int,
       startedIngestingAt: Long,
       earliestIngestedRound: Long,
+      lastArchivedRound: Option[Long],
   ) =
     sql"""insert into #${Tables.activityRecordMeta}
             (history_id, activity_ingestion_code_version,
              activity_ingestion_user_version, started_ingesting_at,
-             earliest_ingested_round)
+             earliest_ingested_round, last_archived_round)
           values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
-                  $earliestIngestedRound)
+                  $earliestIngestedRound, $lastArchivedRound)
+    """.asUpdate
+
+  private def updateLastArchivedRoundDBIO(round: Long) =
+    sql"""update #${Tables.activityRecordMeta}
+          set last_archived_round = $round,
+              last_updated_at = now()
+          where history_id = $historyId
+            and activity_ingestion_code_version = ${ingestionVersions.code}
+            and activity_ingestion_user_version = ${ingestionVersions.user}
     """.asUpdate
 
   @VisibleForTesting
@@ -402,6 +405,7 @@ class DbAppActivityRecordStore(
       userVersion: Int,
       startedIngestingAt: Long,
       earliestIngestedRound: Long,
+      lastArchivedRound: Option[Long],
   )(implicit tc: TraceContext): Future[Unit] =
     futureUnlessShutdownToFuture(
       storage.update_(
@@ -410,6 +414,7 @@ class DbAppActivityRecordStore(
           userVersion,
           startedIngestingAt,
           earliestIngestedRound,
+          lastArchivedRound,
         ),
         "appActivity.insertActivityRecordMeta",
       )
@@ -421,9 +426,12 @@ class DbAppActivityRecordStore(
     *
     * @param ingestionStart `Some((firstRecordTimeMicros, earliestRound))` when
     *                       the batch has activity records, `None` otherwise.
+    * @param lastArchivedRoundO the last archived round to store when inserting
+    *                           a new meta row
     */
   def ensureMetaDBIO(
-      ingestionStart: Option[(Long, Long)]
+      ingestionStart: Option[(Long, Long)],
+      lastArchivedRoundO: Option[Long] = None,
   ): DBIO[EnsureResult] = {
     val codeVersion = ingestionVersions.code
     val userVersion = ingestionVersions.user
@@ -452,6 +460,7 @@ class DbAppActivityRecordStore(
                   userVersion,
                   firstRecordTimeMicros,
                   earliestRound,
+                  lastArchivedRoundO,
                 ).map { _ =>
                   metaChecked.set(true)
                   Checked(InsertMeta): EnsureResult

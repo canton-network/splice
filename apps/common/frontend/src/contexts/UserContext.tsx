@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { onAuthExpired } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { onAuthExpired } from '@canton-network/splice-common-frontend-utils';
 import { User } from 'oidc-client-ts';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthState, useAuth } from 'react-oidc-context';

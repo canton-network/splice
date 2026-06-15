@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
   title: JSON Ledger API HTTP endpoints
-  version: 3.5.0-SNAPSHOT
+  version: 3.5.1-SNAPSHOT
   description: |-
     This specification version fixes the API inconsistencies where certain fields marked as required in the spec are in fact optional.
     If you use code generation tool based on this file, you might need to adjust the existing application code to handle those fields as optional.
     If you do not want to change your client code, continue using the OpenAPI specification for the latest Canton 3.4 patch release.
-    MINIMUM_CANTON_VERSION=3.5.0
+    MINIMUM_CANTON_VERSION=3.5.1
 paths:
   /v2/commands/submit-and-wait:
     post:
@@ -807,10 +807,6 @@ paths:
   /v2/parties/external/allocate:
     post:
       description: |-
-        Alpha 3.3: Endpoint to allocate a new external party on a synchronizer
-
-        Expected to be stable in 3.5
-
         The external party must be hosted (at least) on this node with either confirmation or observation permissions
         It can optionally be hosted on other nodes (then called a multi-hosted party).
         If hosted on additional nodes, explicit authorization of the hosting relationship must be performed on those nodes
@@ -968,10 +964,6 @@ paths:
   /v2/parties/external/generate-topology:
     post:
       description: |-
-        Alpha 3.3: Convenience endpoint to generate topology transactions for external signing
-
-        Expected to be stable in 3.5
-
         You may use this endpoint to generate the common external topology transactions
         which can be signed externally and uploaded as part of the allocate party process
 
@@ -1063,6 +1055,43 @@ paths:
         '400':
           description: 'Invalid value, Invalid value for: body, Invalid value for:
             query parameter limit, Invalid value for: query parameter stream_idle_timeout_ms'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/state/active-contracts-page:
+    get:
+      description: |-
+        Returns a page of the snapshot of the active contracts and incomplete (un)assignments at a ledger offset.
+        Once all pages are fetched by repeated calls to ``GetActiveContractsPage``,
+        the client SHOULD begin retrieving updates from the update service,
+        starting at the ``GetActiveContractsPageResponse``.``active_at_offset`` specified in this request.
+        Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
+      operationId: getV2StateActive-contracts-page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetActiveContractsPageRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsGetActiveContractsPageResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
           content:
             text/plain:
               schema:
@@ -1575,6 +1604,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsCantonError'
       deprecated: true
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/updates/get-updates-page:
+    post:
+      description: |-
+        Read a page of ledger's filtered updates. It returns the event types in accordance with
+        the specified contents and filters.
+        Additionally, the selection criteria for individual events depends on the transaction shape chosen.
+
+        - ACS delta: an event is included only if the requesting party is a stakeholder.
+        - ledger effects: an event is included if the requesting party is a witness.
+      operationId: postV2UpdatesGet-updates-page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetUpdatesPageRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsGetUpdatesPageResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
       security:
       - httpAuth: []
       - apiKeyAuth: []
@@ -2136,6 +2203,7 @@ paths:
     post:
       description: |-
         Execute a prepared submission _asynchronously_ on the ledger.
+        Requires `actAs` or `executeAs` scope for the submitting party when LAPI User authorization is enabled
         Requires a signature of the transaction from the submitting external party.
       operationId: postV2Interactive-submissionExecute
       requestBody:
@@ -2168,10 +2236,8 @@ paths:
       - apiKeyAuth: []
   /v2/interactive-submission/executeAndWait:
     post:
-      description: |-
-        Similar to ExecuteSubmission but _synchronously_ wait for the completion of the transaction
-        IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-        A malicious node could make a successfully committed request appeared failed and vice versa
+      description: Similar to ExecuteSubmission but _synchronously_ wait for the completion
+        of the transaction
       operationId: postV2Interactive-submissionExecuteandwait
       requestBody:
         content:
@@ -2203,10 +2269,8 @@ paths:
       - apiKeyAuth: []
   /v2/interactive-submission/executeAndWaitForTransaction:
     post:
-      description: |-
-        Similar to ExecuteSubmissionAndWait but additionally returns the transaction
-        IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-        A malicious node could make a successfully committed request appear as failed and vice versa
+      description: Similar to ExecuteSubmissionAndWait but additionally returns the
+        transaction
       operationId: postV2Interactive-submissionExecuteandwaitfortransaction
       requestBody:
         content:
@@ -4220,6 +4284,54 @@ components:
 
             Required: must be non-empty
           type: string
+    GetActiveContractsPageRequest:
+      title: GetActiveContractsPageRequest
+      type: object
+      required:
+      - eventFormat
+      properties:
+        activeAtOffset:
+          description: |-
+            The offset at which the snapshot of the active contracts will be computed.
+            Must be no greater than the current ledger end offset.
+            Must be greater than or equal to the last pruning offset.
+            Optional, if defined, it must be a valid absolute offset (positive integer) or ledger begin offset (zero).
+            If zero, the empty set will be returned.
+            If not defined, the current ledger end will be used and it will be populated in the response.
+
+            Optional
+          type: integer
+          format: int64
+        eventFormat:
+          $ref: '#/components/schemas/EventFormat'
+          description: |-
+            Format of the contract_entries in the result. In case of CreatedEvent the presentation will be of
+            TRANSACTION_SHAPE_ACS_DELTA.
+
+            Required
+        maxPageSize:
+          description: |-
+            The result page will contain at most max_page_size entries of the respective active contract snapshot.
+            The server might reject max_page_size breaching the server-specified limit.
+            Optional, if not defined, the default will be determined by the server.
+
+            Optional
+          type: integer
+          format: int32
+        pageToken:
+          description: |-
+            To get the next page of the active contracts snapshot, the ``page_token`` should be set to the
+            ``next_page_token`` of the last ``GetActiveContractsPageResponse``.
+            The page token only works if subsequent requests:
+
+            - are executed on the same participant,
+            - use the same active_at_offset and event_format,
+            - and the participant's store was not pruned to after the active_at_offset.
+
+            If not specified, the first page of the active contracts snapshot will be returned.
+
+            Optional: can be empty
+          type: string
     GetActiveContractsRequest:
       title: GetActiveContractsRequest
       description: |-
@@ -4653,6 +4765,66 @@ components:
             The format for the update.
 
             Required
+    GetUpdatesPageRequest:
+      title: GetUpdatesPageRequest
+      type: object
+      required:
+      - updateFormat
+      properties:
+        beginOffsetExclusive:
+          description: |-
+            Exclusive lower bound offset of the requested ledger section (non-negative integer).
+            The response page will only contain updates whose offset is strictly greater than this.
+            If set to zero or not defined, the lower bound is set to the actual pruning offset or to the beginning of the
+            ledger if the participant was not pruned yet.
+            If set to positive and the ledger has been pruned, this parameter must be greater or equal than the pruning offset.
+
+            Optional
+          type: integer
+          format: int64
+        endOffsetInclusive:
+          description: |-
+            Inclusive upper bound offset of the requested ledger section.
+            If specified the response will only contain updates whose offset is less than or equal to this.
+            If not specified response will only contain updates whose offset is less than the current ledger-end.
+
+            Optional
+          type: integer
+          format: int64
+        maxPageSize:
+          description: |-
+            The result page will contain the first max_page_size Updates of all matching updates.
+            The server may reject queries with max_page_size above server specified limits.
+            If not specified, the default max_page_size is determined by the server.
+
+            Optional
+          type: integer
+          format: int32
+        updateFormat:
+          $ref: '#/components/schemas/UpdateFormat'
+          description: Required
+        descendingOrder:
+          description: |-
+            If set, the page will populate the elements in descending order starting from the end_offset_inclusive.
+
+             Optional
+          type: boolean
+        pageToken:
+          description: |-
+            To get the next page of updates, the ``page_token`` should be set to the
+            ``next_page_token`` of the last ``GetUpdatesPageResponse``.
+            To achieve correct paging: subsequent requests must
+
+            - be executed on the same participant with the same version of canton,
+            - have the same begin_offset_exclusive,
+            - have the same end_offset_inclusive,
+            - have the same update_format and
+            - have the same descending_order.
+
+            If not specified, the first page of updates will be returned.
+
+            Optional: can be empty
+          type: string
     GetUpdatesRequest:
       title: GetUpdatesRequest
       type: object
@@ -5200,8 +5372,10 @@ components:
         prefetchContractKeys:
           description: |-
             Fetches the contract keys into the caches to speed up the command processing.
-            Should only contain contract keys that are expected to be resolved during interpretation of the commands.
-            Keys of disclosed contracts do not need prefetching.
+            Each entry specifies a key and a limit on how many contracts to prefetch for that key.
+            The limit does not count disclosed contracts, and should reflect the number of
+            additional contracts expected to be resolved during interpretation of the commands.
+            If a key appears multiple times, the last entry's limit wins.
 
             Optional: can be empty
           type: array
@@ -5479,6 +5653,35 @@ components:
             should be scheduled to executed within the window allowed by synchronizer.
 
             Optional
+    JsGetActiveContractsPageResponse:
+      title: JsGetActiveContractsPageResponse
+      type: object
+      required:
+      - activeAtOffset
+      - activeContracts
+      properties:
+        activeContracts:
+          description: |-
+            The collection of active contracts for this page response.
+
+            Required: must be non-empty
+          type: array
+          items:
+            $ref: '#/components/schemas/JsGetActiveContractsResponse'
+        activeAtOffset:
+          description: |-
+            The active_at_offset which was specified in the request, or the calculated active_at_offset from the actual
+            ledger end from at the evaluation of the request.
+
+            Required
+          type: integer
+          format: int64
+        nextPageToken:
+          description: |-
+            If not present this is the last page. If present, this token must be used to get the next page.
+
+            Optional: can be empty
+          type: string
     JsGetActiveContractsResponse:
       title: JsGetActiveContractsResponse
       type: object
@@ -5555,6 +5758,46 @@ components:
       properties:
         update:
           $ref: '#/components/schemas/Update1'
+    JsGetUpdatesPageResponse:
+      title: JsGetUpdatesPageResponse
+      type: object
+      required:
+      - lowestPageOffsetExclusive
+      - highestPageOffsetInclusive
+      properties:
+        updates:
+          description: |-
+            The first max_page_size updates that match the filter in the request.
+            In case descending_order was selected, the order of the updates is in reversed offset order.
+
+            Optional: can be empty
+          type: array
+          items:
+            $ref: '#/components/schemas/JsGetUpdateResponse'
+        lowestPageOffsetExclusive:
+          description: |-
+            Represents the lower bound of this page.
+
+            Required
+          type: integer
+          format: int64
+        highestPageOffsetInclusive:
+          description: |-
+            Represents the upper bound of the page.
+
+            Required
+          type: integer
+          format: int64
+        nextPageToken:
+          description: |-
+            If the value is not populated, this is the last page.
+            If the value is populated, this token can be used to get the next page.
+            If the original ``GetFirstUpdatePageRequest`` end_offset_inclusive was not specified and the request uses
+            ascending order, then this token will always be populated, so you can use it to "tail" the ledger by
+            repeatedly polling with the new page token returned.
+
+            Optional: can be empty
+          type: string
     JsGetUpdatesResponse:
       title: JsGetUpdatesResponse
       type: object
@@ -6992,6 +7235,17 @@ components:
             The key of the contract the client wants to prefetch.
 
             Required
+        limit:
+          description: |-
+            The number of contracts to prefetch for this key, if available.
+            This is in addition to disclosed contracts.
+            - for backward compatibility reason, absence is interpreted as 1
+            - 0 is forbidden
+            - capped at 2^31 - 1. The system may impose further limits.
+
+            Optional
+          type: integer
+          format: int32
     Prior:
       title: Prior
       type: object
@@ -8199,6 +8453,14 @@ components:
 
             Optional
           type: string
+        primaryPartyAuthentication:
+          description: |-
+            If set to true, the user may authenticate against the Ledger API by signing
+            a Party JWT using the primary party's signing key.
+            Modifiable
+
+            Optional
+          type: boolean
     UserManagementFeature:
       title: UserManagementFeature
       type: object

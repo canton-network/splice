@@ -37,7 +37,7 @@ class ExpiredAmuletTransferInstructionTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletTransferInstructionBatchSize,
-      svTaskContext.dsoStore.listExpiredAmuletTransferInstructions(ignoredPartiesStore.getAll),
+      svTaskContext.dsoStore.listExpiredAmuletTransferInstructions(Some(ignoredPartiesStore)),
       splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
@@ -64,6 +64,7 @@ class ExpiredAmuletTransferInstructionTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
       informees,
+      enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 

@@ -3,21 +3,20 @@
 import {
   validatorLicensesHandler,
   dsoInfoHandler,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
 import { http, HttpHandler, HttpResponse } from 'msw';
 import {
   ErrorResponse,
   GetAmuletRulesResponse,
   GetDsoPartyIdResponse,
-  ListActivityResponse,
   LookupEntryByPartyResponse,
   GetOpenAndIssuingMiningRoundsResponse,
   FeatureSupportResponse,
-} from '@lfdecentralizedtrust/scan-openapi';
+} from '@canton-network/scan-openapi';
 
 import { config } from '../../setup/config';
 import { getAmuletRulesResponse } from '../data';
-import { Instrument } from '@lfdecentralizedtrust/token-metadata-openapi';
+import { Instrument } from '@canton-network/token-metadata-openapi';
 
 const amuletNameServiceAcronym = config.spliceInstanceNames.nameServiceNameAcronym;
 
@@ -351,44 +350,6 @@ export const buildScanMock = (baseScanUrl: string): HttpHandler[] => {
       });
     }),
 
-    http.post(`${scanUrl}/v0/activities`, () => {
-      return HttpResponse.json<ListActivityResponse>({
-        activities: [
-          {
-            activity_type: 'transfer',
-            event_id: '#1220beadd2f791e69719e8ee03a6dd6e3b9c2b9196b8b679a190d203fc2c8a6a4bff:5',
-            offset: '00000000000000002f',
-            date: new Date(),
-            domain_id:
-              'global-domain::1220af85fa0c58e7f551de289be22793993ce7672cb0751afa2f2de397ce4a695677',
-            round: 1,
-            transfer: {
-              sender: {
-                party:
-                  'charlie__wallet__user::12200d3c885d2cb51226911f828da25f7f0fc0d06b8c6bf00c714266729033f138f7',
-                input_amulet_amount: '5.0000000000',
-                input_app_reward_amount: '0.0000000000',
-                input_validator_reward_amount: '0.0000000000',
-                input_sv_reward_amount: '0.0000000000',
-                sender_change_fee: '0.0300000000',
-                sender_change_amount: '3.8950000000',
-                sender_fee: '0.0000000000',
-                holding_fees: '0.0000000000',
-              },
-              balance_changes: [
-                {
-                  party:
-                    'charlie__wallet__user::12200d3c885d2cb51226911f828da25f7f0fc0d06b8c6bf00c714266729033f138f7',
-                  change_to_holding_fees_rate: '0.0000000000',
-                  change_to_initial_amount_as_of_round_zero: '1.1050000000',
-                },
-              ],
-              receivers: [],
-            },
-          },
-        ],
-      });
-    }),
     http.post(`${scanUrl}/v0/amulet-rules`, () => {
       return HttpResponse.json<GetAmuletRulesResponse>(getAmuletRulesResponse(true));
     }),

@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "validator-app"
+wallet:
+  imageName: "wallet-web-ui"
 
 fixedTokens: false
 
@@ -31,10 +34,9 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   enablePgInitContainer: true
+  initImageName: "postgres:14"
 
 migration:
-  id: 0
-  migrating: false
   attachPvc: true
 # pvc used for migrations
 pvc:
@@ -78,7 +80,7 @@ extraInitContainers: []
 # set if ans-web-ui should be deployed
 ansWebUi:
   enabled: true
-
+  imageName: "ans-web-ui"
 # set if validator-web-ui should be deployed
 validatorWebUi:
   enabled: true
@@ -89,4 +91,3 @@ logLevel: DEBUG
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
-

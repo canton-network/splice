@@ -566,7 +566,8 @@ trait ConsoleMacros extends NamedLogging with NoTracing {
           DecentralizedNamespaceDefinition,
         ]]((txA, txB) => txA.addSignatures(txB.signatures))
 
-      val ownerNSDs = owners.flatMap(_.topology.transactions.identity_transactions())
+      val ownerNSDs =
+        owners.flatMap(_.topology.transactions.identity_transactions())
       val foundingTransactions = ownerNSDs :+ decentralizedNamespaceDefinition
 
       owners.foreach(
@@ -607,7 +608,7 @@ trait ConsoleMacros extends NamedLogging with NoTracing {
               true,
               s"${instance.id.member} has already been initialized for synchronizer ${status.synchronizerId} instead of $synchronizerId",
             )
-          case NodeStatus.NotInitialized(true, _) =>
+          case NodeStatus.NotInitialized(true, _, _) =>
             // the node is not yet initialized for this synchronizer
             Right(false)
           case NodeStatus.Failure(msg) =>

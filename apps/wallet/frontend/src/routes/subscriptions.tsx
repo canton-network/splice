@@ -8,7 +8,7 @@ import {
   IntervalDisplay,
   Loading,
   unitToCurrency,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
 import differenceInMilliseconds from 'date-fns/differenceInMilliseconds';
 import intlFormat from 'date-fns/intlFormat';

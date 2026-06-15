@@ -10,12 +10,14 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   EpochLength,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.OrderingTopology.NodeTopologyInfo
+import com.digitalasset.canton.version.ProtocolVersion
 import com.google.common.annotations.VisibleForTesting
 
 final case class Membership(
     myId: BftNodeId,
     orderingTopology: OrderingTopology,
     leaders: Seq[BftNodeId],
+    blacklistedNodes: Seq[BftNodeId],
 ) extends PrettyPrinting {
   val otherNodes: Set[BftNodeId] = orderingTopology.nodes - myId
   lazy val sortedNodes: Seq[BftNodeId] = orderingTopology.sortedNodes
@@ -36,11 +38,12 @@ object Membership {
   private[bftordering] def forTesting(
       myId: BftNodeId,
       otherNodes: Set[BftNodeId] = Set.empty,
-      sequencingParameters: SequencingParameters = SequencingParameters.Default,
+      sequencingParameters: Option[SequencingParameters] = None,
       leaders: Option[Seq[BftNodeId]] = None,
       nodesTopologyInfos: Map[BftNodeId, NodeTopologyInfo] = Map.empty,
       epochLength: EpochLength = DefaultEpochLength,
-  ): Membership = {
+      blacklistedNodes: Option[Seq[BftNodeId]] = None,
+  )(implicit synchronizerProtocolVersion: ProtocolVersion): Membership = {
     val orderingTopology = OrderingTopology.forTesting(
       otherNodes + myId,
       sequencingParameters,
@@ -48,7 +51,12 @@ object Membership {
       epochLength = epochLength,
     )
     val nodes = orderingTopology.sortedNodes
-    Membership(myId, orderingTopology, leaders.getOrElse(nodes))
+    Membership(
+      myId,
+      orderingTopology,
+      leaders.getOrElse(nodes),
+      blacklistedNodes.getOrElse(Seq.empty),
+    )
   }
 
   @VisibleForTesting
@@ -56,5 +64,5 @@ object Membership {
       myId: BftNodeId,
       orderingTopology: OrderingTopology,
   ): Membership =
-    Membership(myId, orderingTopology, orderingTopology.sortedNodes)
+    Membership(myId, orderingTopology, orderingTopology.sortedNodes, Seq.empty)
 }

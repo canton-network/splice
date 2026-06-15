@@ -39,9 +39,9 @@ spec:
       containers:
         - name: sequencer
         {{- if eq .Values.sequencer.driver.type "cometbft"}}
-          image: "{{ .Values.imageRepo }}/canton-cometbft-sequencer:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_cometbft_sequencer) }}"
+          image: {{ .Values.imageRepo }}/{{ .Values.sequencer.cometbft.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_cometbft_sequencer) }}
         {{- else}}
-          image: "{{ .Values.imageRepo }}/canton-sequencer:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_sequencer) }}"
+          image: {{ .Values.imageRepo }}/{{ .Values.sequencer.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_sequencer) }}
         {{- end}}
           env:
             - name: JAVA_TOOL_OPTIONS
@@ -177,7 +177,7 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
-          image: postgres:14
+          image: {{ .Values.sequencer.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:
@@ -199,7 +199,7 @@ spec:
               done
       {{- if and (eq .Values.sequencer.driver.type "cantonbft") ((.Values.sequencer.driver).persistence) }}
         - name: pg-init-bft-driver
-          image: postgres:14
+          image: {{ .Values.sequencer.driver.persistence.initImageName | default "postgres:14" }}
           env:
             - name: PGPASSWORD
               valueFrom:

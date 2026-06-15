@@ -3,7 +3,6 @@
 
 package com.digitalasset.canton.integration.tests.ledgerapi
 
-import com.digitalasset.canton.annotations.{NuckTest, RollbackTest}
 import com.digitalasset.canton.config
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
@@ -23,14 +22,16 @@ import com.digitalasset.canton.integration.{
   TestConsoleEnvironment,
 }
 import com.digitalasset.canton.logging.{LogEntry, SuppressionRule}
+import com.digitalasset.canton.participant.admin.ResourceLimits
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.daml.lf.language.LanguageVersion
 import monocle.macros.syntax.lens.*
 import org.slf4j.event
 
 trait SingleVersionLedgerApiConformanceBase extends LedgerApiConformanceBase {
-  protected def lfVersion: UseLedgerApiTestTool.LfVersion = UseLedgerApiTestTool.LfVersion.Stable
+  protected def lfVersion: LanguageVersion = LanguageVersion.v2_2
 
-  protected def lapittVersion: LAPITTVersion = LAPITTVersion.LocalJar
+  protected def lapittVersion: LAPITTVersion = LAPITTVersion.Local
 
   protected val ledgerApiTestToolPlugin =
     new UseLedgerApiTestTool(
@@ -43,11 +44,12 @@ trait SingleVersionLedgerApiConformanceBase extends LedgerApiConformanceBase {
 
   def runShardedTests(shard: Int, numShards: Int)(
       env: TestConsoleEnvironment
-  ): String =
+  ): Unit =
     ledgerApiTestToolPlugin.runShardedSuites(
       shard,
       numShards,
       exclude = excludedTests,
+      useJson = false,
     )(env)
 }
 
@@ -66,7 +68,10 @@ trait LedgerApiConformanceBase extends CommunityIntegrationTest with IsolatedEnv
   ): Unit = {
     import env.*
 
-    require(env.environment.config.sequencers.sizeIs == connectedSynchronizersCount)
+    require(
+      (env.environment.config.sequencers.size + env.environment.config.remoteSequencers.size)
+        == connectedSynchronizersCount
+    )
 
     implicit val e: TestConsoleEnvironment = env
 
@@ -84,6 +89,8 @@ trait LedgerApiConformanceBase extends CommunityIntegrationTest with IsolatedEnv
     )
 
     participants.all.synchronizers.connect_local(sequencer1_, alias = daName)
+
+    participants.all.foreach(_.resources.set_resource_limits(ResourceLimits.noLimit))
   }
 
   def shutdownLedgerApiConformanceEnvironment(env: TestConsoleEnvironment): Unit = {
@@ -102,7 +109,7 @@ class LedgerApiConformanceMultiSynchronizerTest
 
   override lazy val environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition.P2_S1M1_S1M1
-      .addConfigTransforms(ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag)
+      .addConfigTransforms(ConfigTransforms.enableAlphaMultiSynchronizerTopologyFeatureFlag)
       .withSetup(setupLedgerApiConformanceEnvironment)
 
   // ensure ledger api conformance tests have less noisy neighbours
@@ -122,8 +129,8 @@ class LedgerApiConformanceMultiSynchronizerTest
     new UseLedgerApiTestTool(
       loggerFactory,
       connectedSynchronizersCount = connectedSynchronizersCount,
-      lfVersion = UseLedgerApiTestTool.LfVersion.Stable,
-      version = LAPITTVersion.LocalJar,
+      lfVersion = LanguageVersion.v2_2,
+      version = LAPITTVersion.Local,
     )
   registerPlugin(new UsePostgres(loggerFactory))
   registerPlugin(ledgerApiTestToolPlugin)
@@ -170,6 +177,12 @@ object LedgerApiConformanceBase {
     "ActiveContractsServiceIT:AcsAtPruningOffsetIsAllowed",
     "ActiveContractsServiceIT:AcsBeforePruningOffsetIsDisallowed",
     "CommandDeduplicationPeriodValidationIT:OffsetPruned",
+    "UpdateServiceStreamsIT:TXPagedDynamicPruningStartEndDescending",
+    "UpdateServiceStreamsIT:TXPagedDynamicPruningInJustAfterThePageDescending",
+    "UpdateServiceStreamsIT:TXPagedDynamicPruningStartEndInPageBoundaryDescending",
+    "UpdateServiceStreamsIT:TXPagedDynamicStartAscendingPruning",
+    "UpdateServiceStreamsIT:TXPagedAscendingPruningCatchesUp",
+    "UpdateServiceStreamsIT:TXPagedAscendingPruningBehindEnd",
     // Exclude ContractIdIT tests except: RejectNonSuffixedV1Cid, AcceptSuffixedV1Cid
     "ContractIdIT:AcceptNonSuffixedV1Cid",
     "ContractIdIT:AcceptSuffixedV1CidExerciseTarget", // Racy with: ABORTED: CONTRACT_NOT_FOUND(14,0): Contract could not be found with id
@@ -178,6 +191,8 @@ object LedgerApiConformanceBase {
     "UserManagementServiceIT:RaceConditionCreateUsers", // See LedgerApiConformanceSuppressedLogs
     // Following value normalisation (https://github.com/digital-asset/daml/pull/19912), this throws a different, equally correct, error
     "CommandServiceIT:CSRefuseBadParameter",
+    // TODO(i31186): enable this once the issue is fixed
+    "TransactionServiceVisibilityIT:TXLedgerEffectsHideCommandIdToNonSubmittingStakeholders",
   )
 }
 
@@ -207,17 +222,11 @@ abstract class LedgerApiShardedConformanceBase(shard: Int)
   }
 }
 
-@RollbackTest
 class LedgerApiShard0ConformanceTestPostgres extends LedgerApiShardedConformanceBase(0)
-@RollbackTest
 class LedgerApiShard1ConformanceTestPostgres extends LedgerApiShardedConformanceBase(1)
-@RollbackTest
 class LedgerApiShard2ConformanceTestPostgres extends LedgerApiShardedConformanceBase(2)
-@RollbackTest
 class LedgerApiShard3ConformanceTestPostgres extends LedgerApiShardedConformanceBase(3)
-@RollbackTest
 class LedgerApiShard4ConformanceTestPostgres extends LedgerApiShardedConformanceBase(4)
-@RollbackTest
 class LedgerApiShard5ConformanceTestPostgres extends LedgerApiShardedConformanceBase(5)
 
 // Conformance test that need a suppressing rule on canton side
@@ -281,9 +290,8 @@ class LedgerApiConformanceSuppressedLogsPostgres extends LedgerApiConformanceSup
   registerPlugin(new UseBftSequencer(loggerFactory))
 }
 
-trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConformanceBase {
-
-  override def lfVersion = UseLedgerApiTestTool.LfVersion.Dev
+trait LedgerApiKeysConformanceTest extends SingleVersionLedgerApiConformanceBase {
+  override def lfVersion = LanguageVersion.v2_3
 
   override def connectedSynchronizersCount = 1
 
@@ -292,21 +300,14 @@ trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConform
       .withSetup(setupLedgerApiConformanceEnvironment)
 
   "Ledger Api Test Tool" can {
-    "pass experimental tests for 2.dev lf version" onlyRunWithOrGreaterThan ProtocolVersion.dev in {
+    "pass keys tests for 2.3 lf version" onlyRunWithOrGreaterThan ProtocolVersion.v35 in {
       implicit env =>
         ledgerApiTestToolPlugin.runSuites(
           suites =
             "ContractKeysCommandDeduplicationIT,ContractKeysContractIdIT,ContractKeysDeeplyNestedValueIT," +
               "ContractKeysDivulgenceIT,ContractKeysExplicitDisclosureIT,ContractKeysMultiPartySubmissionIT," +
-              "ContractKeysWronglyTypedContractIdIT,ContractKeysIT,RaceConditionIT,ExceptionsIT,ExceptionRaceConditionIT," +
-              "EventsDescendantsIT,PrefetchContractKeysIT",
+              "ContractKeysWronglyTypedContractIdIT,ContractKeysIT,RaceConditionIT,PrefetchContractKeysIT",
           exclude = Seq(
-            // TODO(#16065)
-            "ExceptionRaceConditionIT:RWRollbackCreateVsNonTransientCreate",
-            "ExceptionRaceConditionIT:RWArchiveVsRollbackFailedLookupByKey",
-            "ExceptionsIT:ExRollbackDuplicateKeyArchived",
-            "ExceptionsIT:ExRollbackDuplicateKeyCreated",
-            "ExceptionsIT:ExRollbackExerciseCreateLookup",
             // tests with divulged/disclosed contracts fail on Canton as does scoping by maintainer unless we're on a UCK synchronizer (see below)
             "ContractKeysIT:CKFetchOrLookup",
             "ContractKeysIT:CKMaintainerScoped",
@@ -322,7 +323,43 @@ trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConform
             "PrefetchContractKeysIT:CSprefetchContractKeysPrepareEndpointBasic",
             "PrefetchContractKeysIT:CSprefetchContractKeysPrepareWronglyTyped",
             "PrefetchContractKeysIT:CSprefetchContractPrepareKeysMany",
-            // TODO(#30398): Exclude tests that roll back effects on dev for now, should assert failure instead.
+          ),
+          concurrency = 4,
+        )
+    }
+  }
+}
+
+class LedgerApiKeysConformanceTest_Postgres extends LedgerApiKeysConformanceTest {
+  registerPlugin(new UsePostgres(loggerFactory))
+  // On registerPlugin(new UseBftSequencer(loggerFactory)) PrefetchContractKeysIT fails with
+  // ABORTED: SEQUENCER_BACKPRESSURE(2,54fe840c): The sequencer is overloaded.
+  registerPlugin(new UseReferenceBlockSequencer[DbConfig.Postgres](loggerFactory))
+}
+
+trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConformanceBase {
+
+  override def lfVersion = LanguageVersion.devLfVersion
+
+  override def connectedSynchronizersCount = 1
+
+  override def environmentDefinition: EnvironmentDefinition =
+    EnvironmentDefinition.P3_S1M1
+      .withSetup(setupLedgerApiConformanceEnvironment)
+
+  "Ledger Api Test Tool" can {
+    "pass experimental tests for 2.dev lf version" onlyRunWithOrGreaterThan ProtocolVersion.dev in {
+      implicit env =>
+        ledgerApiTestToolPlugin.runSuites(
+          suites = "ExceptionsIT,ExceptionRaceConditionIT,EventsDescendantsIT",
+          exclude = Seq(
+            // TODO(#16065)
+            "ExceptionRaceConditionIT:RWRollbackCreateVsNonTransientCreate",
+            "ExceptionRaceConditionIT:RWArchiveVsRollbackFailedLookupByKey",
+            "ExceptionsIT:ExRollbackDuplicateKeyArchived",
+            "ExceptionsIT:ExRollbackDuplicateKeyCreated",
+            "ExceptionsIT:ExRollbackExerciseCreateLookup",
+            // TODO(#31855): Exclude tests that roll back effects on dev for now, should assert failure instead.
             "EventsDescendantsIT:DescendantsRollbackCreate",
             "EventsDescendantsIT:DescendantsRollbackExercise",
             "ExceptionsIT:ExRollbackActiveExerciseConsuming",
@@ -333,9 +370,6 @@ trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConform
             "ExceptionsIT:ExRollbackProjectionNormalization",
             "ExceptionsIT:ExRollbackProjectionNesting",
             "ExceptionsIT:ExRollbackCreate",
-            // TODO(#30398): Exclude tests that fail because of the temporary inconsistency between the CSM used by
-            //    the engine, and the CSM used during view decomposition.
-            "ContractKeysIT:CKLocalLookupByKeyVisibility",
           ),
           concurrency = 4,
         )
@@ -345,8 +379,6 @@ trait LedgerApiExperimentalConformanceTest extends SingleVersionLedgerApiConform
 
 // not testing in-memory/H2, as we have observed flaky h2 persistence problems in the indexer
 
-@NuckTest
-@RollbackTest
 class LedgerApiExperimentalConformanceTest_Postgres extends LedgerApiExperimentalConformanceTest {
   registerPlugin(new UsePostgres(loggerFactory))
   // On registerPlugin(new UseBftSequencer(loggerFactory)) PrefetchContractKeysIT fails with
@@ -377,6 +409,12 @@ trait LedgerApiParticipantPruningConformanceTest extends SingleVersionLedgerApiC
         "CommandDeduplicationPeriodValidationIT:OffsetPruned",
         "ActiveContractsServiceIT:AcsAtPruningOffsetIsAllowed",
         "ActiveContractsServiceIT:AcsBeforePruningOffsetIsDisallowed",
+        "UpdateServiceStreamsIT:TXPagedDynamicPruningStartEndDescending",
+        "UpdateServiceStreamsIT:TXPagedDynamicPruningInJustAfterThePageDescending",
+        "UpdateServiceStreamsIT:TXPagedDynamicPruningStartEndInPageBoundaryDescending",
+        "UpdateServiceStreamsIT:TXPagedDynamicStartAscendingPruning",
+        "UpdateServiceStreamsIT:TXPagedAscendingPruningCatchesUp",
+        "UpdateServiceStreamsIT:TXPagedAscendingPruningBehindEnd",
       )
 
       ledgerApiTestToolPlugin.runSuitesSerially(

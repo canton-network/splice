@@ -467,8 +467,13 @@ object ScanStore {
               Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
           )
         },
-        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
-          co.payload.dso == dso
+        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport
+                .supports24hSubmissionDelay(Seq(key.dsoParty), Seq(key.dsoParty), now)(tc)
+          },
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract

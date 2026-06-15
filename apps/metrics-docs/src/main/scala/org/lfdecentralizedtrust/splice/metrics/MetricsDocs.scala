@@ -103,7 +103,7 @@ object MetricsDocs {
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
-    new RewardProcessingMetrics(generator)
+    new RewardProcessingMetrics(generator)(MetricsContext.Empty)
     val svMetrics = generator.getAll()
     generator.reset()
     // scan

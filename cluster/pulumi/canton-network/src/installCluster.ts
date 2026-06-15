@@ -8,16 +8,16 @@ import {
   isDevNet,
   svOnboardingPollingInterval,
   svValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { readBackupConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/backup';
+} from '@canton-network/splice-pulumi-common';
+import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
 import {
   mustInstallSplitwell,
   mustInstallValidator1,
   splitwellOnboarding,
   standaloneValidatorOnboarding,
   validator1Onboarding,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validators';
-import { SplitPostgresInstances } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configs';
+} from '@canton-network/splice-pulumi-common-validator/src/validators';
+import { SplitPostgresInstances } from '@canton-network/splice-pulumi-common/src/config/configs';
 import { Resource } from '@pulumi/pulumi';
 
 import { activeVersion } from '../../common';

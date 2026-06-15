@@ -7,7 +7,7 @@ import {
   EnvVarConfigSchema,
   K8sResourceSchema,
   spliceConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 export const CloudSqlWithOverrideConfigSchema = CloudSqlConfigSchema.partial()

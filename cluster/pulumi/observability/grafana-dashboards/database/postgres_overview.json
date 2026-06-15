@@ -24,29 +24,20 @@
   "description": "Performance metrics for Postgres",
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "gnetId": 455,
   "graphTooltip": 0,
-  "id": 38,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
-      "collapse": false,
       "collapsed": false,
       "gridPos": {
-        "h": 2,
-        "w": 8,
+        "h": 1,
+        "w": 24,
         "x": 0,
         "y": 0
       },
+      "id": 14,
       "panels": [],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "span": 4,
       "title": "PostgreSQL overview",
-      "titleSize": "h6",
       "type": "row"
     },
     {
@@ -76,7 +67,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -88,16 +79,16 @@
         "h": 7,
         "w": 4,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 11,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "none",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "mean"
@@ -105,16 +96,19 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_xact_commit{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) + sum(irate(pg_stat_database_xact_rollback{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_xact_commit{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) + sum(irate(pg_stat_database_xact_rollback{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -133,6 +127,7 @@
           "intervalFactor": 2,
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "A",
           "resultFormat": "time_series",
           "select": [
@@ -178,11 +173,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -191,6 +188,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -198,6 +196,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -213,7 +212,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -229,10 +228,9 @@
         "h": 7,
         "w": 20,
         "x": 4,
-        "y": 0
+        "y": 1
       },
       "id": 1,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -245,11 +243,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "alias": "fetched",
@@ -257,7 +256,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_tup_fetched{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_tup_fetched{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -277,6 +277,7 @@
           "legendFormat": "fetched",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "A",
           "resultFormat": "time_series",
           "select": [
@@ -314,7 +315,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_tup_returned{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_tup_returned{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -334,6 +336,7 @@
           "legendFormat": "returned",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "B",
           "resultFormat": "time_series",
           "select": [
@@ -371,7 +374,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_tup_inserted{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_tup_inserted{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -391,6 +395,7 @@
           "legendFormat": "inserted",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "C",
           "resultFormat": "time_series",
           "select": [
@@ -428,7 +433,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_tup_updated{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_tup_updated{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -448,6 +454,7 @@
           "legendFormat": "updated",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "D",
           "resultFormat": "time_series",
           "select": [
@@ -485,7 +492,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(irate(pg_stat_database_tup_deleted{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pg_stat_database_tup_deleted{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "groupBy": [
             {
@@ -505,6 +513,7 @@
           "legendFormat": "deleted",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "E",
           "resultFormat": "time_series",
           "select": [
@@ -550,11 +559,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -563,6 +574,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -570,6 +582,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -586,7 +599,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -602,10 +615,9 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 7
+        "y": 8
       },
       "id": 2,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -618,11 +630,12 @@
           "showLegend": false
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "alias": "Buffers Allocated",
@@ -630,7 +643,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "irate(pg_stat_bgwriter_buffers_alloc_total{job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "irate(pg_stat_bgwriter_buffers_alloc_total{namespace=~\"$namespace\", job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
           "format": "time_series",
           "groupBy": [
             {
@@ -650,6 +664,7 @@
           "legendFormat": "buffers_alloc",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "A",
           "resultFormat": "time_series",
           "select": [
@@ -685,7 +700,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "irate(pg_stat_bgwriter_buffers_backend_fsync_total{job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "irate(pg_stat_bgwriter_buffers_backend_fsync_total{namespace=~\"$namespace\", job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
           "format": "time_series",
           "groupBy": [
             {
@@ -705,6 +721,7 @@
           "legendFormat": "buffers_backend_fsync",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "B",
           "resultFormat": "time_series",
           "select": [
@@ -740,7 +757,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "irate(pg_stat_bgwriter_buffers_backend_total{job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "irate(pg_stat_bgwriter_buffers_backend_total{namespace=~\"$namespace\", job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
           "format": "time_series",
           "groupBy": [
             {
@@ -760,6 +778,7 @@
           "legendFormat": "buffers_backend",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "C",
           "resultFormat": "time_series",
           "select": [
@@ -795,7 +814,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "irate(pg_stat_bgwriter_buffers_clean_total{job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "irate(pg_stat_bgwriter_buffers_clean_total{namespace=~\"$namespace\", job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
           "format": "time_series",
           "groupBy": [
             {
@@ -815,6 +835,7 @@
           "legendFormat": "buffers_clean",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "D",
           "resultFormat": "time_series",
           "select": [
@@ -850,7 +871,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "irate(pg_stat_bgwriter_buffers_checkpoint_total{job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "irate(pg_stat_bgwriter_buffers_checkpoint_total{namespace=~\"$namespace\", job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])",
           "format": "time_series",
           "groupBy": [
             {
@@ -870,6 +892,7 @@
           "legendFormat": "buffers_checkpoint",
           "measurement": "postgresql",
           "policy": "default",
+          "range": true,
           "refId": "E",
           "resultFormat": "time_series",
           "select": [
@@ -914,11 +937,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -927,6 +952,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -934,6 +960,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -950,7 +977,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -982,10 +1009,9 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 7
+        "y": 8
       },
       "id": 3,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [],
@@ -994,11 +1020,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "alias": "conflicts",
@@ -1006,7 +1033,8 @@
             "uid": "$datasource"
           },
           "dsType": "prometheus",
-          "expr": "sum(pg_stat_database_deadlocks{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"})",
+          "editorMode": "code",
+          "expr": "sum(pg_stat_database_deadlocks{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"})",
           "format": "time_series",
           "groupBy": [
             {
@@ -1063,7 +1091,7 @@
           },
           "dsType": "prometheus",
           "editorMode": "code",
-          "expr": "sum(pg_stat_database_conflicts{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"})",
+          "expr": "sum(pg_stat_database_conflicts{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"})",
           "format": "time_series",
           "groupBy": [
             {
@@ -1127,11 +1155,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -1140,6 +1170,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -1147,6 +1178,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1164,7 +1196,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1180,10 +1212,9 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 15
       },
       "id": 12,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [],
@@ -1192,19 +1223,22 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
             "uid": "$datasource"
           },
-          "expr": "round(sum by (datname) (rate(pg_stat_database_blks_hit{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) / (sum by (datname)(rate(pg_stat_database_blks_hit{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) + sum by (datname)(rate(pg_stat_database_blks_read{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])))*100,0.001)",
+          "editorMode": "code",
+          "expr": "round(sum by (datname) (rate(pg_stat_database_blks_hit{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) / (sum by (datname)(rate(pg_stat_database_blks_hit{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])) + sum by (datname)(rate(pg_stat_database_blks_read{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}[$__rate_interval])))*100,0.001)",
           "format": "time_series",
           "legendFormat": "{{datname}} - cache hit rate",
+          "range": true,
           "refId": "A",
           "step": 240
         }
@@ -1222,11 +1256,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -1235,6 +1271,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -1242,6 +1279,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1257,7 +1295,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1273,10 +1311,9 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 15
       },
       "id": 13,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [],
@@ -1285,54 +1322,185 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.3",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
             "uid": "$datasource"
           },
-          "expr": "pg_stat_database_numbackends{datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}",
+          "editorMode": "code",
+          "expr": "pg_stat_database_numbackends{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{datname}} - {{__name__}}",
+          "range": true,
           "refId": "A",
           "step": 240
         }
       ],
       "title": "Number of active connections",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "max by (namespace, datname, job) (pg_database_size_bytes{namespace=~\"$namespace\", datname=~\"$db\",job=~\"$job\",instance=~\"$instance\"})",
+          "format": "time_series",
+          "legendFormat": "{{datname}} - {{job}} ",
+          "range": true,
+          "refId": "A",
+          "step": 240
+        }
+      ],
+      "title": "Size",
+      "type": "timeseries"
     }
   ],
-  "refresh": false,
-  "revision": 1,
-  "schemaVersion": 38,
-  "style": "dark",
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
   "tags": [
     "postgres"
   ],
   "templating": {
     "list": [
       {
-        "hide": 0,
+        "current": {
+          "text": "Prometheus",
+          "value": "prometheus"
+        },
         "includeAll": false,
         "label": "Data Source",
-        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
         "allValue": ".+",
         "current": {
-          "selected": true,
+          "text": [
+            "sv-1"
+          ],
+          "value": [
+            "sv-1"
+          ]
+        },
+        "datasource": {
+          "uid": "$datasource"
+        },
+        "definition": "label_values(pg_up,namespace)",
+        "includeAll": true,
+        "label": "Namespace",
+        "multi": true,
+        "name": "namespace",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pg_up,namespace)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
           "text": [
             "All"
           ],
@@ -1343,33 +1511,26 @@
         "datasource": {
           "uid": "$datasource"
         },
-        "definition": "label_values(pg_up, job)",
-        "hide": 0,
+        "definition": "label_values(pg_up{namespace=~\"$namespace\"},job)",
         "includeAll": true,
         "label": "Job",
         "multi": true,
         "name": "job",
         "options": [],
         "query": {
-          "query": "label_values(pg_up, job)",
-          "refId": "StandardVariableQuery"
+          "qryType": 1,
+          "query": "label_values(pg_up{namespace=~\"$namespace\"},job)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
+        "regexApplyTo": "value",
+        "type": "query"
       },
       {
         "allValue": ".+",
         "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
+          "text": "All",
           "value": [
             "$__all"
           ]
@@ -1377,85 +1538,56 @@
         "datasource": {
           "uid": "$datasource"
         },
-        "definition": "label_values(pg_up{job=~\"$job\"},instance)",
-        "hide": 0,
+        "definition": "label_values(pg_up{job=~\"$job\", namespace=~\"$namespace\"},instance)",
         "includeAll": true,
         "label": "Instance",
         "multi": true,
         "name": "instance",
         "options": [],
         "query": {
-          "query": "label_values(pg_up{job=~\"$job\"},instance)",
-          "refId": "StandardVariableQuery"
+          "qryType": 1,
+          "query": "label_values(pg_up{job=~\"$job\", namespace=~\"$namespace\"},instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
+        "regexApplyTo": "value",
+        "type": "query"
       },
       {
         "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "uid": "$datasource"
         },
-        "definition": "label_values(pg_stat_database_tup_fetched{job=~\"$job\",instance=~\"$instance\",datname!~\"template.*|postgres\"},datname)",
-        "hide": 0,
+        "definition": "label_values(pg_stat_database_tup_fetched{job=~\"$job\", instance=~\"$instance\", datname!~\"template.*|postgres|cantonnet|cloudsqladmin\", namespace=~\"$namespace\"},datname)",
         "includeAll": true,
         "label": "Database",
-        "multi": false,
         "name": "db",
         "options": [],
         "query": {
-          "query": "label_values(pg_stat_database_tup_fetched{job=~\"$job\",instance=~\"$instance\",datname!~\"template.*|postgres\"},datname)",
-          "refId": "StandardVariableQuery"
+          "qryType": 1,
+          "query": "label_values(pg_stat_database_tup_fetched{job=~\"$job\", instance=~\"$instance\", datname!~\"template.*|postgres|cantonnet|cloudsqladmin\", namespace=~\"$namespace\"},datname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
+        "regexApplyTo": "value",
+        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-3h",
     "to": "now"
   },
-  "timepicker": {
-    "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
-      "1m",
-      "5m",
-      "15m",
-      "30m",
-      "1h",
-      "2h",
-      "1d"
-    ],
-    "time_options": [
-      "5m",
-      "15m",
-      "1h",
-      "6h",
-      "12h",
-      "24h",
-      "2d",
-      "7d",
-      "30d"
-    ]
-  },
+  "timepicker": {},
   "timezone": "",
   "title": "Postgres Overview",
   "uid": "wGgaPlciz",
-  "version": 39,
+  "version": 2,
   "weekStart": ""
 }

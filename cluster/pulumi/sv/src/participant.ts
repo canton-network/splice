@@ -18,9 +18,9 @@ import {
   spliceConfig,
   SpliceCustomResourceOptions,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { SingleSvConfiguration } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { installPostgres, Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common';
+import { SingleSvConfiguration } from '@canton-network/splice-pulumi-common-sv';
+import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installParticipant(
   args: ParticipantArgs,

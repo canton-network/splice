@@ -67,7 +67,7 @@ class FeaturedAppActivityMarkerTrigger(
     store
       .featuredAppActivityMarkerCountAboveOrEqualTo(
         activityMarkerCatchupModeThreshold,
-        ignoredPartiesStore.getAll,
+        Some(ignoredPartiesStore),
       )
       .flatMap {
         case false =>
@@ -182,7 +182,7 @@ class FeaturedAppActivityMarkerTrigger(
         hashMinBoundIncl,
         hashMaxBoundIncl,
         numMarkers,
-        ignoredPartiesStore.getAll,
+        Some(ignoredPartiesStore),
       )
       .map(markers =>
         markers
@@ -202,6 +202,8 @@ class FeaturedAppActivityMarkerTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      // ignoring a party would mean their featured app activity markers do not get converted into rewards
+      enableUnresponsivePartiesAutoIgnore = false,
     )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 

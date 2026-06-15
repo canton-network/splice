@@ -105,6 +105,8 @@ class TransactionProcessor(
           contractValidator,
           participantId,
           packageResolver,
+          ephemeral.contractStore,
+          participantNodeParameters,
           crypto.pureCrypto,
           loggerFactory,
         ),
@@ -115,8 +117,10 @@ class TransactionProcessor(
         damle.enrichTransaction,
         damle.enrichContract,
         new AuthorizationValidator(participantId),
-        new InternalConsistencyChecker(
-          loggerFactory
+        InternalConsistencyChecker(
+          participantId,
+          staticSynchronizerParameters.protocolVersion,
+          loggerFactory,
         ),
         commandProgressTracker,
         loggerFactory,
@@ -145,7 +149,7 @@ class TransactionProcessor(
   def submit(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       transaction: WellFormedTransaction[WithoutSuffixes],
       disclosedContracts: Map[LfContractId, ContractInstance],
       topologySnapshot: TopologySnapshot,
@@ -506,6 +510,27 @@ object TransactionProcessor {
             cause = "internal error during transaction submission",
             throwableO = Some(throwable),
           )
+    }
+
+    @Explanation(
+      """This error occurs when a transaction is submitted on behalf of a party that is currently onboarding on the participant. Onboarding parties cannot initiate ledger changes until their onboarding is complete."""
+    )
+    @Resolution(
+      """Wait for the party's onboarding to complete before submitting commands on their behalf."""
+    )
+    object PartyCurrentlyOnboarding
+        extends ErrorCode(
+          id = "PARTY_CURRENTLY_ONBOARDING",
+          ErrorCategory.InvalidGivenCurrentSystemStateOther,
+        ) {
+      final case class Rejection(parties: Seq[LfPartyId])
+          extends TransactionErrorImpl(
+            cause =
+              s"The following submitting parties are currently onboarding: ${parties.mkString(", ")}",
+            // Reported synchronously during Phase 1 validation
+            definiteAnswer = true,
+          )
+          with TransactionSubmissionError
     }
   }
 

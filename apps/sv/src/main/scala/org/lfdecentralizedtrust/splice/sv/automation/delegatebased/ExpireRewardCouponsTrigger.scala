@@ -59,7 +59,7 @@ class ExpireRewardCouponsTrigger(
       .getExpiredCouponsInBatchesPerRoundAndCouponType(
         dsoRules.domain,
         context.config.enableExpireValidatorFaucet,
-        ignoredPartiesStore.getAll,
+        Some(ignoredPartiesStore),
         batchSize =
           PageLimit.tryCreate(svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize),
         numBatches =
@@ -169,6 +169,7 @@ class ExpireRewardCouponsTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

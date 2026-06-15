@@ -11,9 +11,9 @@ import userEvent from '@testing-library/user-event';
 import { Wrapper } from '../helpers';
 import { createProposalActions } from '../../utils/governance';
 import { http, HttpResponse } from 'msw';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 import { server, svUrl } from '../setup/setup';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 
 const TestWrapper: React.FC<React.PropsWithChildren> = ({ children }) => {

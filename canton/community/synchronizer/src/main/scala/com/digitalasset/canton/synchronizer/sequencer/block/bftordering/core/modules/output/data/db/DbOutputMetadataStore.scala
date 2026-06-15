@@ -286,31 +286,24 @@ class DbOutputMetadataStore(
           limit 1
           """.as[OutputBlockMetadata].headOption
 
-  override def getLastBlockInLatestCompletedEpoch(implicit
+  override def getLastNonSequentialBlockMetadataStored(implicit
       traceContext: TraceContext
   ): PekkoFutureUnlessShutdown[Option[OutputBlockMetadata]] = {
     val query = for {
-      latestStartedEpoch <-
+      lastBlockStored <-
         sql"""
-            select epoch_number, could_alter_ordering_topology
-            from ord_metadata_output_epochs
-            order by epoch_number desc
+            select
+              epoch_number,
+              block_number,
+              bft_ts
+            from ord_metadata_output_blocks
+            order by block_number desc
             limit 1
-        """.as[OutputEpochMetadata].headOption
-      result <- latestStartedEpoch match {
-        case Some(epochMetadata) =>
-          getSingleBlockDBIO(
-            EpochNumber(
-              epochMetadata.epochNumber - 1L
-            ), // we do the previous of the latest started to get last completed
-            order = "desc",
-          )
-        case None => DBIO.unit.map(_ => None)
-      }
-    } yield result
+        """.as[OutputBlockMetadata].headOption
+    } yield lastBlockStored
     val future = () => storage.query(query, functionFullName)
     PekkoFutureUnlessShutdown(
-      lastBlockInLatestCompletedEpochName,
+      lastNonSequentialBlockMetadataStoredName,
       future,
       orderingStage = Some(functionFullName),
     )
@@ -378,38 +371,40 @@ class DbOutputMetadataStore(
   ): PekkoFutureUnlessShutdown[Either[String, Unit]] = PekkoFutureUnlessShutdown(
     saveLowerBoundName(epoch),
     () =>
-      storage.queryAndUpdate(
-        ((for {
-          existingLowerBoundEpoch <- dbEitherT[String](
-            sql"select epoch_number from ord_output_lower_bound".as[Long].headOption
-          ).map(_.map(EpochNumber(_)))
-          _ <- EitherT.fromEither[DBIO](
-            existingLowerBoundEpoch
-              .filter(_ > epoch)
-              .map(existing => s"Cannot save lower bound $epoch earlier than existing $existing")
-              .toLeft(())
-          )
-          block <-
-            dbEitherT(
-              getSingleBlockDBIO(epoch, "asc")
-                .map {
-                  case None =>
-                    Left(
-                      s"Cannot save lower bound at epoch $epoch because there are no blocks saved at this epoch"
-                    )
-                  case Some(blockNumber) => Right(blockNumber)
-                }
+      storage
+        .queryAndUpdate(
+          ((for {
+            existingLowerBoundEpoch <- dbEitherT[String](
+              sql"select epoch_number from ord_output_lower_bound".as[Long].headOption
+            ).map(_.map(EpochNumber(_)))
+            _ <- EitherT.fromEither[DBIO](
+              existingLowerBoundEpoch
+                .filter(_ > epoch)
+                .map(existing => s"Cannot save lower bound $epoch earlier than existing $existing")
+                .toLeft(())
             )
-          _ <- dbEitherT[String](
-            existingLowerBoundEpoch.fold(
-              sqlu"insert into ord_output_lower_bound (epoch_number, block_number) values ($epoch, ${block.blockNumber})"
-            )(_ =>
-              sqlu"update ord_output_lower_bound set epoch_number = $epoch, block_number = ${block.blockNumber}"
+            block <-
+              dbEitherT(
+                getSingleBlockDBIO(epoch, "asc")
+                  .map {
+                    case None =>
+                      Left(
+                        s"Cannot save lower bound at epoch $epoch because there are no blocks saved at this epoch"
+                      )
+                    case Some(blockNumber) => Right(blockNumber)
+                  }
+              )
+            count <- dbEitherT[String](
+              existingLowerBoundEpoch.fold(
+                sqlu"insert into ord_output_lower_bound (epoch_number, block_number) values ($epoch, ${block.blockNumber})"
+              )(_ =>
+                sqlu"update ord_output_lower_bound set epoch_number = $epoch, block_number = ${block.blockNumber}"
+              )
             )
-          )
-        } yield ()).value),
-        functionFullName,
-      ),
+          } yield count).value),
+          functionFullName,
+        )
+        .map(_.map(_ => ())),
     orderingStage = Some(functionFullName),
   )
 

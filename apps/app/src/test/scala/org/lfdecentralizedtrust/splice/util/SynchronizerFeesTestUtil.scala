@@ -78,7 +78,7 @@ trait SynchronizerFeesTestUtil extends TestCommon {
           validatorParty.toProtoPrimitive,
           memberId.toProtoPrimitive,
           synchronizerId.toProtoPrimitive,
-          validatorApp.config.domainMigrationId,
+          sv1ScanBackend.getMigrationId(),
           Instant.ofEpochSecond(0),
         )
         val topupStateCid =
@@ -143,7 +143,7 @@ trait SynchronizerFeesTestUtil extends TestCommon {
           trafficAmount,
           memberId.toProtoPrimitive,
           synchronizerId.toProtoPrimitive,
-          validatorApp.config.domainMigrationId,
+          sv1ScanBackend.getMigrationId(),
           new RelTime(1),
           Optional.of(topupStateCid),
         )
@@ -197,7 +197,7 @@ trait SynchronizerFeesTestUtil extends TestCommon {
     val cmd = walletInstall.id.exerciseWalletAppInstall_CreateBuyTrafficRequest(
       memberId,
       synchronizerId.toProtoPrimitive,
-      validatorApp.config.domainMigrationId,
+      sv1ScanBackend.getMigrationId(),
       trafficAmount,
       now.plus(java.time.Duration.ofMinutes(1)).toInstant,
       trackingId,

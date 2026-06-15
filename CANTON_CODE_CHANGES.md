@@ -50,6 +50,7 @@ to know which and/or what changes we'll need to upstream before the switch.
 * LogReporter logs location, message and throwable on TestFailed event.
 * CommunityStorageFactory matches last branch on `CommunityDbConfig` instead of `DbConfig`
 * Added an optional `darFile` parameter to `ParticipantAdminCommands.UploadDar` so we can more conveniently upload DARs from weird locations (like JARs).
+* `ParticipantAdminCommands.ImportPartyAcs` now takes an InputStream instead of a file for greater versatility.
 * Decreases the `maxPollInterval` to 100ms from 5s, in the `eventually` methods in `BaseTest`
 * Compute the minimum poll interval used in `eventually` to 10% of the `maxPollInterval`
 * Added `suppressFailedClues` to `BaseTest` trait.
@@ -63,7 +64,9 @@ to know which and/or what changes we'll need to upstream before the switch.
 * Changed `metrics.filterByNodeAndAttribute` in `InstanceReference ` to filter by `node_name` instead of `node` to match the Splice metrics
 * Split `CommandFailure` into `InteractiveCommandFailure` and `CommandFailureWithDetails`.
 * `Cli.logLastErrors` default changed from `true` to `false`.
-* Added better logging of setup and cleanup failures in `DbTest`
+* Added better logging of setup and cleanup failures in `DbTest`.
+* Removed `HasTrailingNoneUtils`, `HasCycleUtils`, `UseLedgerApiTestTool` and all their dependants (tests).
+* Worked around `BaseIntegrationTest.assertThrowsAndLogsCommandFailures` only supporting Canton's `EnvironmentDefinition` (and thus not Splice's).
 ## Build system
 * Added refs to GH issues in project/DamlPlugin.sbt for two bugs
 * Added support for `damlDependencies` in SBT DamlPlugin

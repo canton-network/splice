@@ -8,7 +8,7 @@ import {
   MigrationInfo,
   pvcSuffix,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { SingleSvConfiguration } from './singleSvConfig';
 import {

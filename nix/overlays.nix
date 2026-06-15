@@ -1,10 +1,5 @@
-{ use_enterprise, pkgs-for-gcloud }:
+{ use_enterprise }:
 [(self: super: {
-  # Use an older google-cloud-sdk that still ships with bundled Python 3.12.
-  # The current nixpkgs-unstable has 570.0.0 with bundled Python 3.14 which
-  # fails auto-patchelf (missing libpython3.14.so.1.0 / libtcl9.0.so / libtk).
-  # Remove this override once the upstream issue is resolved.
-  google-cloud-sdk = pkgs-for-gcloud.google-cloud-sdk;
   # We need the old version as our code is not compatible with the new one.
   # Just overwriting the version does not work as they changed the build code to be
   # incompatible with the new one.
@@ -33,22 +28,6 @@
     });
   });
   git-search-replace = super.callPackage ./git-search-replace.nix {};
-  # helm-unittest v1.1.0 switched plugin.yaml to use platformCommand with platform-specific
-  # binary names (e.g. untt-linux-amd64) instead of a generic `command: untt`.
-  # The nix derivation only installs a single `untt` binary, so we create symlinks
-  # for all platform variants referenced in plugin.yaml.
-  kubernetes-helmPlugins = super.kubernetes-helmPlugins // {
-    helm-unittest = super.kubernetes-helmPlugins.helm-unittest.overrideAttrs (old: {
-      postInstall = old.postInstall + ''
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-amd64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-arm64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-ppc64le
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-s390x
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-macos-amd64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-macos-arm64
-      '';
-    });
-  };
   sphinx-lint = super.callPackage ./sphinx-lint.nix {};
   pulumi-bin = super.pulumi-bin.overrideAttrs (_: previousAttrs:
     let

@@ -1607,10 +1607,6 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
-          "type": "unlimited"
-        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
@@ -1836,10 +1832,6 @@
         },
         "/api/scan/v0/active-synchronizer-serial": {
           "name": "activeSynchronizerSerial",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/activities": {
-          "name": "activities",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -2115,7 +2107,7 @@
           "__pulumiResource": true,
           "__pulumiType": "kubernetes:core/v1:Namespace",
           "__transformations": [],
-          "__version": "4.31.1",
+          "__version": "4.28.0",
           "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
@@ -2333,19 +2325,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -2356,8 +2351,8 @@
           "host": "info.sv-2.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-1:5012"
+          "scanUrl": "http://scan-app.sv-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -2807,9 +2802,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_1",
@@ -3023,9 +3015,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
           "onboardingName": "Digital-Asset-2",
@@ -3237,9 +3226,6 @@
           "metrics": {
             "enable": true
           },
-          "migration": {
-            "id": 2
-          },
           "nodeIdentifier": "Digital-Asset-2",
           "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
@@ -3405,7 +3391,7 @@
           "__pulumiResource": true,
           "__pulumiType": "kubernetes:core/v1:Namespace",
           "__transformations": [],
-          "__version": "4.31.1",
+          "__version": "4.28.0",
           "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
           "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
@@ -3592,19 +3578,22 @@
             "version": "0.3.20"
           },
           "synchronizer": {
-            "active": {
+            "current": {
               "chainIdSuffix": "4",
-              "migrationId": 9,
+              "migrationId": 2,
+              "synchronizerSerialId": 9,
               "version": "0.3.20"
             },
             "legacy": {
               "chainIdSuffix": "4",
-              "migrationId": 8,
+              "migrationId": 2,
+              "synchronizerSerialId": 8,
               "version": "0.3.20"
             },
-            "staging": {
+            "successor": {
               "chainIdSuffix": "4",
-              "migrationId": 10,
+              "migrationId": 2,
+              "synchronizerSerialId": 10,
               "version": "0.3.21"
             }
           }
@@ -3615,8 +3604,8 @@
           "host": "info.sv-1.mock.global.canton.network.digitalasset.com"
         },
         "runtimeDetails": {
-          "migrationId": 9,
-          "scanUrl": "http://scan-app.sv-da-1:5012"
+          "scanUrl": "http://scan-app.sv-da-1:5012",
+          "synchronizerSerialId": 9
         },
         "tolerations": [
           {
@@ -3926,9 +3915,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
@@ -3956,6 +3942,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",
@@ -4119,9 +4106,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
@@ -4312,9 +4296,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "participantAddress": "participant",

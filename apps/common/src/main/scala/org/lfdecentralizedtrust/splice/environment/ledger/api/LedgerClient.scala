@@ -779,7 +779,7 @@ object LedgerClient {
       filter: IngestionFilter,
   ) {
     private[LedgerClient] def toProto: lapi.update_service.GetUpdatesRequest = {
-      val eventFormat = filter.toEventFormat
+      val eventFormat = filter.toUpdatesEventFormat
       lapi.update_service.GetUpdatesRequest(
         beginExclusive = begin,
         endInclusive = end,

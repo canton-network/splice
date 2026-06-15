@@ -78,6 +78,14 @@ trait ScanRewardsReferenceStore extends AppStore {
       tc: TraceContext
   ): Future[Option[Contract[OpenMiningRound.ContractId, OpenMiningRound]]]
 
+  /** The highest OpenMiningRound round number archived at or before asOf.
+    * Returns None without waiting when asOf is before the earliest observed
+    * archival, otherwise waits until the store's ingestion has reached asOf.
+    */
+  def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]]
+
   /** List active CalculateRewardsV2 contracts, sorted by round number ascending.
     */
   def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
@@ -168,8 +176,11 @@ object ScanRewardsReferenceStore {
         mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanRewardsReferenceStoreRowData(contract = contract)
         },
-        mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
-          co.payload.dso == dso
+        mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
+          },
         ) { contract =>
           ScanRewardsReferenceStoreRowData(
             contract = contract,

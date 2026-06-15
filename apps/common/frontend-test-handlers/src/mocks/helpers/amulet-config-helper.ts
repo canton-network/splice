@@ -1,4 +1,4 @@
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 
 import { AmuletConfig, USD } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import {

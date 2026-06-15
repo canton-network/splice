@@ -43,6 +43,7 @@ import com.digitalasset.canton.participant.ledger.api.client.JavaDecodeUtil
 import com.digitalasset.canton.participant.sync.SyncServiceError.SyncServiceAlarm
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.messages.*
+import com.digitalasset.canton.protocol.messages.EncryptedViewMessageUtils.Optics.signatureLens
 import com.digitalasset.canton.sequencing.protocol.*
 import com.digitalasset.canton.synchronizer.sequencer.HasProgrammableSequencer
 import com.digitalasset.canton.topology.PartyId
@@ -575,7 +576,7 @@ trait LedgerAuthorizationIntegrationTest
           sequencer1,
           mediator1,
           // Approve with invalid signature (i.e., using participant1's private key).
-          withMediatorVerdict(mediatorApprove, participant1),
+          withMediatorVerdict(mediatorApprove, participant1, dropAggregationRule = true),
           // Approve with the correct signature
           withMediatorVerdict(mediatorApprove),
         ) {
@@ -656,14 +657,24 @@ trait LedgerAuthorizationIntegrationTest
         // Reject with a valid signature
         withLocalVerdict(localReject),
       ) {
-        loggerFactory.assertThrowsAndLogsUnordered[CommandFailure](
+        loggerFactory.assertThrowsAndLogsUnorderedOptional[CommandFailure](
           submitSimpleP1Cmd(),
-          _.warningMessage should include("Unexpected message from MED"),
-          _.shouldBeCantonError(
-            MediatorError.MalformedMessage,
-            _ should include("invalid signature"),
+          (
+            // the malicious message will be picked up by the throughput cap logic on the write path
+            // and once on the read path.
+            // NOTE: the test should be reworked, and we should just plainly reject messages that
+            // fail the categorization check.
+            LogEntryOptionality.OptionalMany,
+            _.warningMessage should include("Unexpected message from MED"),
           ),
-          _.shouldBeCommandFailure(localReject.code),
+          (
+            LogEntryOptionality.Required,
+            _.shouldBeCantonError(
+              MediatorError.MalformedMessage,
+              _ should include("invalid signature"),
+            ),
+          ),
+          (LogEntryOptionality.Required, _.shouldBeCommandFailure(localReject.code)),
         )
       }
     }
@@ -1481,7 +1492,7 @@ trait LedgerAuthorizationIntegrationTest
       ),
       (
         ExampleTransactionFactory
-          .lookupByKeyNode(
+          .queryByKeyNode(
             ExampleTransactionFactory.defaultGlobalKey,
             maintainers = Set(party1.toLf),
           ),
@@ -1703,12 +1714,8 @@ trait LedgerAuthorizationIntegrationTest
       val removeSubmitterSignature = GenLens[TransactionConfirmationRequest](_.viewEnvelopes)
         .andThen(Traversal.fromTraverse[Seq, OpenEnvelope[TransactionViewMessage]])
         .andThen(GenLens[OpenEnvelope[TransactionViewMessage]](_.protocolMessage))
-        .modify(transactionViewMessage =>
-          transactionViewMessage
-            .asInstanceOf[EncryptedViewMessage[TransactionViewType]]
-            .focus(_.submittingParticipantSignature)
-            .replace(badSignature)
-        )
+        .andThen(signatureLens[TransactionViewType])
+        .replace(badSignature)
 
       val (_, maliciousCaseEvents) =
         loggerFactory.assertLoggedWarningsAndErrorsSeq(
@@ -2115,7 +2122,11 @@ trait LedgerAuthorizationIntegrationTest
 
 class LedgerAuthorizationReferenceIntegrationTestDefault
     extends LedgerAuthorizationIntegrationTest {
-  registerPlugin(new UseReferenceBlockSequencer[DbConfig.H2](loggerFactory))
+  registerPlugin(
+    new UseReferenceBlockSequencer[DbConfig.H2](
+      loggerFactory
+    )
+  )
   registerPlugin(new UseProgrammableSequencer(this.getClass.toString, loggerFactory))
 }
 

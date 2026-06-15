@@ -6,7 +6,6 @@
 set -euo pipefail
 
 SV_METRICS_URL="${SV_METRICS_URL:-http://sv-app:10013/metrics}"
-SEQUENCER_METRICS_URL="${SEQUENCER_METRICS_URL:-http://global-domain-$MIGRATION_ID-sequencer:10013/metrics}"
 SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
 SV_THRESHOLD="${SV_THRESHOLD:-600}"
@@ -193,32 +192,53 @@ scan_get_status() {
   [[ $exit_code -eq 0 ]] && echo "$scan_status" || echo '{}'
 }
 
-sv_status=$(sv_get_status)
+update_serial_id() {
+  local fetched_serial_id; fetched_serial_id=$("${CURL_CMD[@]}" -m 1 "$SCAN_URL/api/scan/v0/active-synchronizer-serial" | jq -r '.serial') || true
 
-sequencer_metric_name=daml_sequencer_block_acknowledgments_micros
-sequencer_metric_data=$(get_sequencer_metric_data "$sequencer_metric_name")
+  if [[ -n "$fetched_serial_id" ]]; then
+    SERIAL_ID=$fetched_serial_id
+  fi
+}
 
-mediator_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" MED "$MEDIATOR_THRESHOLD")
-scan_status=$(scan_get_status)
-sequencer_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" SEQ "$SEQUENCER_THRESHOLD")
+generate_sequencer_metrics_url() {
+  echo "http://global-domain-$SERIAL_ID-sequencer:10013/metrics"
+}
 
-jq -n \
-  --argjson sv "$sv_status" \
-  --argjson sv_threshold "$SV_THRESHOLD" \
-  --argjson mediator "$mediator_status" \
-  --argjson mediator_threshold "$MEDIATOR_THRESHOLD" \
-  --argjson scan "$scan_status" \
-  --argjson scan_threshold "$SCAN_THRESHOLD" \
-  --argjson sequencer "$sequencer_status" \
-  --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
-  '
-    {
-      status: {
-        sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
-        mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
-        scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold) seconds"},
-        sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
-      },
-      generatedAt: (now | todate),
-    }
-  '
+main() {
+  if [[ -z "${SEQUENCER_METRICS_URL:-}" ]]; then
+    update_serial_id
+    SEQUENCER_METRICS_URL=$(generate_sequencer_metrics_url)
+  fi
+
+  sv_status=$(sv_get_status)
+
+  sequencer_metric_name=daml_sequencer_block_acknowledgments_micros
+  sequencer_metric_data=$(get_sequencer_metric_data "$sequencer_metric_name")
+
+  mediator_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" MED "$MEDIATOR_THRESHOLD")
+  scan_status=$(scan_get_status)
+  sequencer_status=$(get_status_from_sequencer_metric_data "$sequencer_metric_data" "$sequencer_metric_name" SEQ "$SEQUENCER_THRESHOLD")
+
+  jq -n \
+    --argjson sv "$sv_status" \
+    --argjson sv_threshold "$SV_THRESHOLD" \
+    --argjson mediator "$mediator_status" \
+    --argjson mediator_threshold "$MEDIATOR_THRESHOLD" \
+    --argjson scan "$scan_status" \
+    --argjson scan_threshold "$SCAN_THRESHOLD" \
+    --argjson sequencer "$sequencer_status" \
+    --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
+    '
+      {
+        status: {
+          sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
+          mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
+          scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold) seconds"},
+          sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
+        },
+        generatedAt: (now | todate),
+      }
+    '
+}
+
+main "$@"

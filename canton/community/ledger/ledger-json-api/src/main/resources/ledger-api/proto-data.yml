@@ -1018,10 +1018,6 @@ fileComments:
           colon, minus and underscore limited to 255 chars
       - name: AllocateExternalParty
         comments: |-
-          Alpha 3.3: Endpoint to allocate a new external party on a synchronizer
-
-          Expected to be stable in 3.5
-
           The external party must be hosted (at least) on this node with either confirmation or observation permissions
           It can optionally be hosted on other nodes (then called a multi-hosted party).
           If hosted on additional nodes, explicit authorization of the hosting relationship must be performed on those nodes
@@ -1039,10 +1035,6 @@ fileComments:
         comments: Update the assignment of a party from one IDP to another.
       - name: GenerateExternalPartyTopology
         comments: |-
-          Alpha 3.3: Convenience endpoint to generate topology transactions for external signing
-
-          Expected to be stable in 3.5
-
           You may use this endpoint to generate the common external topology transactions
           which can be signed externally and uploaded as part of the allocate party process
 
@@ -1371,6 +1363,12 @@ fileComments:
               Modifiable
 
               Optional
+            primary_party_authentication: |-
+              If set to true, the user may authenticate against the Ledger API by signing
+              a Party JWT using the primary party's signing key.
+              Modifiable
+
+              Optional
             id: |-
               The user identifier, which must be a non-empty string of at most 128
               characters that are either alphanumeric ASCII characters or one of the symbols "@^$.!`-#+'~_|:()".
@@ -1674,8 +1672,10 @@ fileComments:
               Optional
             prefetch_contract_keys: |-
               Fetches the contract keys into the caches to speed up the command processing.
-              Should only contain contract keys that are expected to be resolved during interpretation of the commands.
-              Keys of disclosed contracts do not need prefetching.
+              Each entry specifies a key and a limit on how many contracts to prefetch for that key.
+              The limit does not count disclosed contracts, and should reflect the number of
+              additional contracts expected to be resolved during interpretation of the commands.
+              If a key appears multiple times, the last entry's limit wins.
 
               Optional: can be empty
             min_ledger_time_abs: |-
@@ -1866,6 +1866,14 @@ fileComments:
               The key of the contract the client wants to prefetch.
 
               Required
+            limit: |-
+              The number of contracts to prefetch for this key, if available.
+              This is in addition to disclosed contracts.
+              - for backward compatibility reason, absence is interpreted as 1
+              - 0 is forbidden
+              - capped at 2^31 - 1. The system may impose further limits.
+
+              Optional
     oneOfs:
       Command:
         command:
@@ -2555,8 +2563,21 @@ fileComments:
             package_name: Required
             key: Required
             hash: 'Required: must be non-empty'
+      GlobalKeyWithMaintainers:
+        message:
+          comments: null
+          fieldComments:
+            key: |-
+              The key
+
+              Required
+            maintainers: |-
+              Key maintainers
+
+              Required: must be non-empty
     oneOfs:
       GlobalKey: {}
+      GlobalKeyWithMaintainers: {}
     services: {}
   interactive/interactive_submission_service.proto:
     messages:
@@ -2865,7 +2886,7 @@ fileComments:
               Required
       GlobalKeyMappingEntry:
         message:
-          comments: null
+          comments: This message is deprecated and may be removed in future releases
           fieldComments:
             key: Required
             value: Optional
@@ -2888,8 +2909,6 @@ fileComments:
               Maximum timestamp at which the transaction can be recorded onto the ledger via the synchronizer `synchronizer_id`.
               If submitted after it will be rejected even if otherwise valid, in which case it needs to be prepared and signed again
               with a new valid max_record_time.
-              Unsigned in 3.3 to avoid a breaking protocol change
-              Will be signed in 3.4+
               Set max_record_time in the PreparedTransactionRequest to get this field set accordingly
 
               Optional
@@ -2899,8 +2918,8 @@ fileComments:
             mediator_group: Required
             submitter_info: Required
             global_key_mapping: |-
-              Contextual information needed to process the transaction but not signed, either because it's already indirectly
-              signed by signing the transaction, or because it doesn't impact the ledger state
+              This fields is deprecated and will always be empty.
+              Keys and associated contracts are already present and signed within the transaction nodes where they're used
 
               Optional: can be empty
             input_contracts: |-
@@ -3239,17 +3258,14 @@ fileComments:
       - name: ExecuteSubmission
         comments: |-
           Execute a prepared submission _asynchronously_ on the ledger.
+          Requires `actAs` or `executeAs` scope for the submitting party when LAPI User authorization is enabled
           Requires a signature of the transaction from the submitting external party.
       - name: ExecuteSubmissionAndWait
-        comments: |-
-          Similar to ExecuteSubmission but _synchronously_ wait for the completion of the transaction
-          IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-          A malicious node could make a successfully committed request appeared failed and vice versa
+        comments: Similar to ExecuteSubmission but _synchronously_ wait for the completion
+          of the transaction
       - name: ExecuteSubmissionAndWaitForTransaction
-        comments: |-
-          Similar to ExecuteSubmissionAndWait but additionally returns the transaction
-          IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-          A malicious node could make a successfully committed request appear as failed and vice versa
+        comments: Similar to ExecuteSubmissionAndWait but additionally returns the
+          transaction
       - name: GetPreferredPackageVersion
         comments: |-
           A preferred package is the highest-versioned package for a provided package-name
@@ -3289,11 +3305,15 @@ fileComments:
           comments: Create Node
           fieldComments:
             signatories: 'Required: must be non-empty'
+            key: |-
+              Only populated from lf_version >= 2
+
+              Optional
             package_name: Required
             argument: Required
             stakeholders: 'Required: must be non-empty'
             lf_version: |-
-              Specific LF version of the node
+              Specific LF serialization version of the node
 
               Required
             template_id: |-
@@ -3312,6 +3332,10 @@ fileComments:
               Optional
             signatories: 'Required: must be non-empty'
             consuming: Required
+            key: |-
+              Can only be populated from lf_version >= 2
+
+              Optional
             acting_parties: 'Required: must be non-empty'
             package_name: Required
             exercise_result: Optional
@@ -3319,8 +3343,12 @@ fileComments:
             choice_id: Required
             choice_observers: 'Optional: can be empty'
             stakeholders: 'Required: must be non-empty'
+            by_key: |-
+              Can only be true from lf_version >= 2
+
+              Required
             lf_version: |-
-              Specific LF version of the node
+              Specific LF serialization version of the node
 
               Required
             template_id: |-
@@ -3334,11 +3362,19 @@ fileComments:
           fieldComments:
             interface_id: Optional
             signatories: 'Required: must be non-empty'
+            key: |-
+              Can only be populated from lf_version >= 2
+
+              Optional
             acting_parties: 'Required: must be non-empty'
             package_name: Required
             stakeholders: 'Required: must be non-empty'
+            by_key: |-
+              Can only be true from lf_version >= 2
+
+              Required
             lf_version: |-
-              Specific LF version of the node
+              Specific LF serialization version of the node
 
               Required
             template_id: |-
@@ -3351,9 +3387,32 @@ fileComments:
           comments: null
           fieldComments:
             create: ''
-            fetch: ''
-            exercise: ''
             rollback: ''
+            exercise: ''
+            fetch: ''
+            query_by_key: Only from PV 35
+      QueryByKey:
+        message:
+          comments: null
+          fieldComments:
+            result: |-
+              Result of the query: list of contract Ids matching the query
+
+              Optional: can be empty
+            key: |-
+              key to query for
+
+              Required
+            exhaustive: Required
+            package_name: Required
+            lf_version: |-
+              Specific LF serialization version of the node
+
+              Required
+            template_id: |-
+              The identifier uses the package-id reference format.
+
+              Required
       Rollback:
         message:
           comments: Rollback Node
@@ -3369,9 +3428,11 @@ fileComments:
             comments: Required
             fieldComments:
               create: ''
-              fetch: ''
-              exercise: ''
               rollback: ''
+              exercise: ''
+              fetch: ''
+              query_by_key: Only from PV 35
+      QueryByKey: {}
       Rollback: {}
     services: {}
   offset_checkpoint.proto:
@@ -4009,6 +4070,59 @@ fileComments:
               Set if a party was used in the request, otherwise unspecified.
 
               Optional
+      GetActiveContractsPageRequest:
+        message:
+          comments: null
+          fieldComments:
+            active_at_offset: |-
+              The offset at which the snapshot of the active contracts will be computed.
+              Must be no greater than the current ledger end offset.
+              Must be greater than or equal to the last pruning offset.
+              Optional, if defined, it must be a valid absolute offset (positive integer) or ledger begin offset (zero).
+              If zero, the empty set will be returned.
+              If not defined, the current ledger end will be used and it will be populated in the response.
+
+              Optional
+            event_format: |-
+              Format of the contract_entries in the result. In case of CreatedEvent the presentation will be of
+              TRANSACTION_SHAPE_ACS_DELTA.
+
+              Required
+            max_page_size: |-
+              The result page will contain at most max_page_size entries of the respective active contract snapshot.
+              The server might reject max_page_size breaching the server-specified limit.
+              Optional, if not defined, the default will be determined by the server.
+
+              Optional
+            page_token: |-
+              To get the next page of the active contracts snapshot, the ``page_token`` should be set to the
+              ``next_page_token`` of the last ``GetActiveContractsPageResponse``.
+              The page token only works if subsequent requests:
+
+              - are executed on the same participant,
+              - use the same active_at_offset and event_format,
+              - and the participant's store was not pruned to after the active_at_offset.
+
+              If not specified, the first page of the active contracts snapshot will be returned.
+
+              Optional: can be empty
+      GetActiveContractsPageResponse:
+        message:
+          comments: null
+          fieldComments:
+            active_contracts: |-
+              The collection of active contracts for this page response.
+
+              Required: must be non-empty
+            active_at_offset: |-
+              The active_at_offset which was specified in the request, or the calculated active_at_offset from the actual
+              ledger end from at the evaluation of the request.
+
+              Required
+            next_page_token: |-
+              If not present this is the last page. If present, this token must be used to get the next page.
+
+              Optional: can be empty
       GetActiveContractsRequest:
         message:
           comments: |-
@@ -4159,6 +4273,8 @@ fileComments:
             unassigned_event: Required
     oneOfs:
       ActiveContract: {}
+      GetActiveContractsPageRequest: {}
+      GetActiveContractsPageResponse: {}
       GetActiveContractsRequest: {}
       GetActiveContractsResponse:
         contract_entry:
@@ -4202,6 +4318,13 @@ fileComments:
           Once the stream of GetActiveContractsResponses completes,
           the client SHOULD begin streaming updates from the update service,
           starting at the GetActiveContractsRequest.active_at_offset specified in this request.
+          Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
+      - name: GetActiveContractsPage
+        comments: |-
+          Returns a page of the snapshot of the active contracts and incomplete (un)assignments at a ledger offset.
+          Once all pages are fetched by repeated calls to ``GetActiveContractsPage``,
+          the client SHOULD begin retrieving updates from the update service,
+          starting at the ``GetActiveContractsPageResponse``.``active_at_offset`` specified in this request.
           Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
       - name: GetConnectedSynchronizers
         comments: Get the list of connected synchronizers at the time of the query.
@@ -4682,6 +4805,74 @@ fileComments:
             transaction: ''
             reassignment: ''
             topology_transaction: ''
+      GetUpdatesPageRequest:
+        message:
+          comments: null
+          fieldComments:
+            descending_order: |-
+              If set, the page will populate the elements in descending order starting from the end_offset_inclusive.
+
+               Optional
+            page_token: |-
+              To get the next page of updates, the ``page_token`` should be set to the
+              ``next_page_token`` of the last ``GetUpdatesPageResponse``.
+              To achieve correct paging: subsequent requests must
+
+              - be executed on the same participant with the same version of canton,
+              - have the same begin_offset_exclusive,
+              - have the same end_offset_inclusive,
+              - have the same update_format and
+              - have the same descending_order.
+
+              If not specified, the first page of updates will be returned.
+
+              Optional: can be empty
+            end_offset_inclusive: |-
+              Inclusive upper bound offset of the requested ledger section.
+              If specified the response will only contain updates whose offset is less than or equal to this.
+              If not specified response will only contain updates whose offset is less than the current ledger-end.
+
+              Optional
+            begin_offset_exclusive: |-
+              Exclusive lower bound offset of the requested ledger section (non-negative integer).
+              The response page will only contain updates whose offset is strictly greater than this.
+              If set to zero or not defined, the lower bound is set to the actual pruning offset or to the beginning of the
+              ledger if the participant was not pruned yet.
+              If set to positive and the ledger has been pruned, this parameter must be greater or equal than the pruning offset.
+
+              Optional
+            max_page_size: |-
+              The result page will contain the first max_page_size Updates of all matching updates.
+              The server may reject queries with max_page_size above server specified limits.
+              If not specified, the default max_page_size is determined by the server.
+
+              Optional
+            update_format: Required
+      GetUpdatesPageResponse:
+        message:
+          comments: null
+          fieldComments:
+            updates: |-
+              The first max_page_size updates that match the filter in the request.
+              In case descending_order was selected, the order of the updates is in reversed offset order.
+
+              Optional: can be empty
+            lowest_page_offset_exclusive: |-
+              Represents the lower bound of this page.
+
+              Required
+            highest_page_offset_inclusive: |-
+              Represents the upper bound of the page.
+
+              Required
+            next_page_token: |-
+              If the value is not populated, this is the last page.
+              If the value is populated, this token can be used to get the next page.
+              If the original ``GetFirstUpdatePageRequest`` end_offset_inclusive was not specified and the request uses
+              ascending order, then this token will always be populated, so you can use it to "tail" the ledger by
+              repeatedly polling with the new page token returned.
+
+              Optional: can be empty
       GetUpdatesRequest:
         message:
           comments: null
@@ -4731,6 +4922,8 @@ fileComments:
               transaction: ''
               reassignment: ''
               topology_transaction: ''
+      GetUpdatesPageRequest: {}
+      GetUpdatesPageResponse: {}
       GetUpdatesRequest: {}
       GetUpdatesResponse:
         update:
@@ -4762,6 +4955,14 @@ fileComments:
         comments: |-
           Lookup an update by its ID.
           If there is no update with this ID, or all the events are filtered, an UPDATE_NOT_FOUND error will be raised.
+      - name: GetUpdatesPage
+        comments: |-
+          Read a page of ledger's filtered updates. It returns the event types in accordance with
+          the specified contents and filters.
+          Additionally, the selection criteria for individual events depends on the transaction shape chosen.
+
+          - ACS delta: an event is included only if the requesting party is a stakeholder.
+          - ledger effects: an event is included if the requesting party is a witness.
   version_service.proto:
     messages:
       FeaturesDescriptor:

@@ -313,7 +313,7 @@ class DbScanAppRewardsStoreTest
     "aggregateActivityTotals — single round, single party" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- markRoundComplete(historyId, roundNumber)
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(500L))
         _ <- store.aggregateActivityTotals(roundNumber)
         partyTotals <- store.getAppActivityPartyTotalsByRound(roundNumber)
@@ -333,7 +333,7 @@ class DbScanAppRewardsStoreTest
     "aggregateActivityTotals — multiple parties with correct GROUP BY and seq_nums" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- markRoundComplete(historyId, roundNumber)
         // Two records in the same round with overlapping parties
         _ <- insertActivityRecord(
           historyId,
@@ -374,8 +374,8 @@ class DbScanAppRewardsStoreTest
     "aggregateActivityTotals — empty round produces zero totals" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
-        // No activity records for this round itself, but sentinels prove completeness
+        _ <- markRoundComplete(historyId, roundNumber)
+        // No activity records for this round itself, but the meta row proves completeness
         _ <- store.aggregateActivityTotals(roundNumber)
         partyTotals <- store.getAppActivityPartyTotalsByRound(roundNumber)
         roundTotal <- store.getAppActivityRoundTotalByRound(roundNumber)
@@ -391,7 +391,7 @@ class DbScanAppRewardsStoreTest
       for {
         (store1, historyId1) <- newStore()
         (_, historyId2) <- newStore()
-        _ <- insertSentinelRecords(historyId1, roundNumber)
+        _ <- markRoundComplete(historyId1, roundNumber)
         // Insert activity records for the same round under both historyIds
         _ <- insertActivityRecord(historyId1, roundNumber, Seq("alice::provider"), Seq(100L))
         _ <- insertActivityRecord(historyId2, roundNumber, Seq("alice::provider"), Seq(900L))
@@ -412,7 +412,7 @@ class DbScanAppRewardsStoreTest
     "aggregateActivityTotals — re-run for same round raises error" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- markRoundComplete(historyId, roundNumber)
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(500L))
         _ <- store.aggregateActivityTotals(roundNumber)
         result <- store.aggregateActivityTotals(roundNumber).failed
@@ -421,29 +421,36 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "aggregateActivityTotals — rejects round with incomplete activity (missing previous)" in {
+    "aggregateActivityTotals — rejects the first ingested round (possibly partial)" in {
       for {
         (store, historyId) <- newStore()
-        // Only insert next-round sentinel, not previous
-        _ <- insertActivityRecord(historyId, roundNumber + 1, Seq("sentinel::provider"), Seq(1L))
+        // roundNumber is the first ingested round, which may be partial
+        _ <- insertActivityMeta(
+          historyId,
+          earliestIngestedRound = roundNumber,
+          lastArchivedRound = roundNumber + 1,
+        )
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(500L))
         result <- store.aggregateActivityTotals(roundNumber).failed
       } yield {
         result.getMessage should include("Incomplete app activity")
-        result.getMessage should include("prior round exists=false")
+        result.getMessage should include(s"earliest_ingested_round=Some($roundNumber)")
       }
     }
 
-    "aggregateActivityTotals — rejects round with incomplete activity (missing next)" in {
+    "aggregateActivityTotals — rejects round whose OpenMiningRound is not yet archived" in {
       for {
         (store, historyId) <- newStore()
-        // Only insert previous-round sentinel, not next
-        _ <- insertActivityRecord(historyId, roundNumber - 1, Seq("sentinel::provider"), Seq(1L))
+        _ <- insertActivityMeta(
+          historyId,
+          earliestIngestedRound = roundNumber - 1,
+          lastArchivedRound = roundNumber - 1,
+        )
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(500L))
         result <- store.aggregateActivityTotals(roundNumber).failed
       } yield {
         result.getMessage should include("Incomplete app activity")
-        result.getMessage should include("later round exists=false")
+        result.getMessage should include(s"last_archived_round=Some(${roundNumber - 1})")
       }
     }
 
@@ -495,7 +502,7 @@ class DbScanAppRewardsStoreTest
       "returns correct summary counts" in {
         for {
           (store, historyId) <- newStore()
-          _ <- insertSentinelRecords(historyId, roundNumber)
+          _ <- markRoundComplete(historyId, roundNumber)
           // 3 activity records, 2 parties (alice in 2 records, bob in 2)
           _ <- insertActivityRecord(
             historyId,
@@ -531,7 +538,7 @@ class DbScanAppRewardsStoreTest
       "non-zero threshold excludes low-activity parties from rewards" in {
         for {
           (store, historyId) <- newStore()
-          _ <- insertSentinelRecords(historyId, roundNumber)
+          _ <- markRoundComplete(historyId, roundNumber)
           // alice has high activity, bob has low activity
           _ <- insertActivityRecord(
             historyId,
@@ -560,7 +567,7 @@ class DbScanAppRewardsStoreTest
       "empty round returns zero counts" in {
         for {
           (store, historyId) <- newStore()
-          _ <- insertSentinelRecords(historyId, roundNumber)
+          _ <- markRoundComplete(historyId, roundNumber)
           summary <- store.computeAndStoreRewards(
             roundNumber,
             batchSize = 100,
@@ -574,6 +581,81 @@ class DbScanAppRewardsStoreTest
         }
       }
 
+    }
+
+    // -- assertMintingAllowanceWithinMintingCurve tests --------------------------------
+    // Tested directly with fake round totals because normal computation
+    // cannot trigger the assertion — the tranche formula guarantees
+    // totalReward <= totalIssuance. This check is a safety net for bugs.
+
+    "assertMintingAllowanceWithinMintingCurve" should {
+
+      def mkParams(totalIssuance: BigDecimal): RewardIssuanceParams =
+        RewardIssuanceParams(
+          issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
+          threshold_CC = BigDecimal(0),
+          totalIssuanceForFeaturedAppRewards = totalIssuance,
+          unclaimedAppRewardAmount = BigDecimal(0),
+        )
+
+      def insertRoundTotal(historyId: Long, round: Long, amount: BigDecimal): Future[Unit] =
+        futureUnlessShutdownToFuture(
+          storage.underlying.queryAndUpdate(
+            sqlu"""insert into app_reward_round_totals
+                   (history_id, round_number, total_app_reward_minting_allowance,
+                    total_app_reward_thresholded, total_app_reward_unclaimed,
+                    rewarded_app_provider_parties_count)
+                   values ($historyId, $round, $amount, 0, 0, 1)""".map(_ => ()),
+            "test.insertRoundTotal",
+          )
+        )
+
+      "pass when reward amount is within issuance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          )
+        } yield succeed
+      }
+
+      "fail when reward amount exceeds issuance by more than tolerance" in {
+        for {
+          (store, historyId) <- newStore()
+          // Reward exceeds issuance by 2x tolerance (0.002 > 0.001)
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.002))
+          result <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store.assertMintingAllowanceWithinMintingCurve(
+                roundNumber,
+                mkParams(BigDecimal(10.0)),
+              ),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          ).failed
+        } yield {
+          result.getMessage should include("exceeds minting curve allowance")
+        }
+      }
+
+      "pass when reward amount exceeds issuance within tolerance" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0005))
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              store
+                .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
+              "test.assertMintingAllowanceWithinMintingCurve",
+            )
+          )
+        } yield succeed
+      }
     }
 
     // -- computeRewardTotals tests -------------------------------------------
@@ -711,7 +793,7 @@ class DbScanAppRewardsStoreTest
     "computeAndStoreRewards — rejects incomplete activity" in {
       for {
         (store, historyId) <- newStore()
-        // Activity in roundNumber but no sentinel records in adjacent rounds
+        // Activity in roundNumber but no meta row marking the round complete
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(500L))
         result <- store
           .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
@@ -724,7 +806,7 @@ class DbScanAppRewardsStoreTest
     "computeAndStoreRewards — produces root hash for complete round" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- markRoundComplete(historyId, roundNumber)
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
         _ <- store.computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
         rootHash <- store.getAppRewardRootHashByRound(roundNumber)
@@ -741,7 +823,7 @@ class DbScanAppRewardsStoreTest
     "computeAndStoreRewards — re-run for same round raises error" in {
       for {
         (store, historyId) <- newStore()
-        _ <- insertSentinelRecords(historyId, roundNumber)
+        _ <- markRoundComplete(historyId, roundNumber)
         _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
         _ <- store.computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
         result <- store
@@ -749,6 +831,20 @@ class DbScanAppRewardsStoreTest
           .failed
       } yield {
         result shouldBe a[Exception]
+      }
+    }
+
+    "computeAndStoreRewards — rolls back when reward exceeds issuance" in {
+      for {
+        // Use a negative tolerance so any positive reward triggers the assertion
+        (store, historyId) <- newStore(rewardMintingAllowanceTolerance = BigDecimal(-1.0))
+        _ <- markRoundComplete(historyId, roundNumber)
+        _ <- insertActivityRecord(historyId, roundNumber, Seq("alice::provider"), Seq(5000000L))
+        result <- store
+          .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
+          .failed
+      } yield {
+        result.getMessage should include("exceeds minting curve allowance")
       }
     }
 
@@ -999,14 +1095,26 @@ class DbScanAppRewardsStoreTest
     }.map(_ => ())
   }
 
-  /** Insert sentinel activity records for rounds adjacent to `round`, satisfying
-    * the completeness precondition in aggregateActivityTotals.
+  /** Insert a meta row marking `round` as complete
+    * satisfying the completeness precondition in aggregateActivityTotals.
     */
-  private def insertSentinelRecords(historyId: Long, round: Long): Future[Unit] =
-    for {
-      _ <- insertActivityRecord(historyId, round - 1, Seq("sentinel::provider"), Seq(1L))
-      _ <- insertActivityRecord(historyId, round + 1, Seq("sentinel::provider"), Seq(1L))
-    } yield ()
+  private def markRoundComplete(historyId: Long, round: Long): Future[Unit] =
+    insertActivityMeta(historyId, earliestIngestedRound = round - 1, lastArchivedRound = round)
+
+  private def insertActivityMeta(
+      historyId: Long,
+      earliestIngestedRound: Long,
+      lastArchivedRound: Long,
+  ): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        sqlu"""insert into app_activity_record_meta
+               (history_id, activity_ingestion_code_version, activity_ingestion_user_version,
+                started_ingesting_at, earliest_ingested_round, last_archived_round)
+               values ($historyId, 1, 0, 0, $earliestIngestedRound, $lastArchivedRound)""",
+        "test.insertActivityMeta",
+      )
+    ).map(_ => ())
 
   /** Set up activity and reward party totals, compute hashes, and assert
     * root hash invariants. Returns the store, batch hashes, and root hash
@@ -1074,7 +1182,9 @@ class DbScanAppRewardsStoreTest
 
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
-  private def newStore(): Future[(DbScanAppRewardsStore, Long)] = {
+  private def newStore(
+      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001)
+  ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
@@ -1100,6 +1210,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         appActivityRecordStore,
+        rewardMintingAllowanceTolerance,
         loggerFactory,
       )
       (store, updateHistory.historyId)

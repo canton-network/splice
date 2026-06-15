@@ -8,7 +8,6 @@ kind: ServiceMonitor
 metadata:
   labels:
     release: {{ .Values.metrics.release }}
-    migration: {{ .Values.migration.id | quote }}
   name: "scan-sm"
   namespace: {{ .Release.Namespace }}
 spec:
@@ -25,7 +24,5 @@ spec:
     matchNames:
     - {{ .Release.Namespace }}
 
-  targetLabels:
-    - migration
 
 {{- end }}

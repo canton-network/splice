@@ -4,7 +4,7 @@
 import {
   dateTimeFormatISO,
   nextScheduledSynchronizerUpgradeFormat,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';

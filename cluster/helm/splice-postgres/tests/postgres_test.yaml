@@ -341,3 +341,15 @@ tests:
       - equal:
           path: spec.selector.app
           value: test-postgres
+
+  - it: "allows overriding postgres image"
+    set:
+      imageName: "secure-registry.example.com/postgres:14-custom"
+    documentIndex: 1
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "secure-registry.example.com/postgres:14-custom"

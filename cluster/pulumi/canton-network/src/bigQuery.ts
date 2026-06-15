@@ -8,19 +8,19 @@ import * as ip from 'ip';
 import {
   InstalledHelmChart,
   installPostgresPasswordSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { clusterProdLike, config } from '@lfdecentralizedtrust/splice-pulumi-common/src/config';
+} from '@canton-network/splice-pulumi-common';
+import { clusterProdLike, config } from '@canton-network/splice-pulumi-common/src/config';
 import {
   Postgres,
   CloudPostgres,
   generatePassword,
   privateNetworkId,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common/src/postgres';
 import {
   ExactNamespace,
   CLUSTER_BASENAME,
   commandScriptPath,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/utils';
+} from '@canton-network/splice-pulumi-common/src/utils';
 
 import { spliceConfig } from '../../common/src/config/config';
 

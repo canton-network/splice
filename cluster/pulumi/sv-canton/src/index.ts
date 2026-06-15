@@ -6,8 +6,8 @@ import {
   Auth0Fetch,
   config,
   getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { InstalledMigrationSpecificSv } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { InstalledMigrationSpecificSv } from '@canton-network/splice-pulumi-common-sv';
 
 import { installNode } from './installNode';
 

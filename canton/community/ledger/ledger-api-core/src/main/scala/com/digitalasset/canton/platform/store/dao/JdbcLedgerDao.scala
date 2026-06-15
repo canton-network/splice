@@ -3,10 +3,13 @@
 
 package com.digitalasset.canton.platform.store.dao
 
+import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.CantonRequireTypes.String185
 import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.health.{HealthStatus, ReportsHealth}
 import com.digitalasset.canton.ledger.api.ParticipantId
+import com.digitalasset.canton.ledger.error.LedgerApiErrors
+import com.digitalasset.canton.ledger.error.groups.RequestValidationErrors
 import com.digitalasset.canton.ledger.participant.state.index.IndexerPartyDetails
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.LoggingContextWithTrace.implicitExtractTraceContext
@@ -18,6 +21,7 @@ import com.digitalasset.canton.platform.config.{
   UpdatesStreamsConfig,
 }
 import com.digitalasset.canton.platform.store.*
+import com.digitalasset.canton.platform.store.backend.EventStorageBackend.PruningContractsBlockedException
 import com.digitalasset.canton.platform.store.backend.ParameterStorageBackend.LedgerEnd
 import com.digitalasset.canton.platform.store.backend.{ParameterStorageBackend, ReadStorageBackend}
 import com.digitalasset.canton.platform.store.cache.{AchsStateCache, LedgerEndCache}
@@ -27,7 +31,11 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Thereafter.syntax.*
 import com.digitalasset.daml.lf.data.Ref
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.actor.Scheduler
+import org.apache.pekko.pattern
 
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -55,10 +63,16 @@ private[platform] class JdbcLedgerDao(
     lfValueTranslation: LfValueTranslation,
     contractStore: LedgerApiContractStore,
     achsStateCache: AchsStateCache,
-    pruningOffsetService: PruningOffsetService,
+    contractPruningMaxRetries: Int,
+    contractPruningDelayBeforeRetry: FiniteDuration,
+    scheduler: Scheduler,
 )(implicit ec: ExecutionContext)
     extends LedgerReadDao
     with NamedLogging {
+
+  private val pruningInProgress: AtomicBoolean = new AtomicBoolean(false)
+
+  override def isPruningInProgress: Boolean = pruningInProgress.get()
 
   override def currentHealth(): HealthStatus = dbDispatcher.currentHealth()
 
@@ -70,7 +84,7 @@ private[platform] class JdbcLedgerDao(
         parameterStorageBackend.ledgerIdentity(_).map(_.participantId)
       )
 
-  /** Defaults to Offset.begin if ledger_end is unset
+  /** Defaults to None if ledger_end is unset
     */
   override def lookupLedgerEnd()(implicit
       loggingContext: LoggingContextWithTrace
@@ -103,6 +117,19 @@ private[platform] class JdbcLedgerDao(
         readStorageBackend.partyStorageBackend.knownParties(fromExcl, filterParty, maxResults)
       )
 
+  private def ensurePruningIsNotInProgress[T](
+      f: => Future[T]
+  )(implicit loggingContext: LoggingContextWithTrace): Future[T] =
+    if (!pruningInProgress.getAndSet(true)) {
+      f.thereafter(_ => pruningInProgress.set(false))
+    } else {
+      Future.failed(
+        RequestValidationErrors.ParticipantPruningInProgress
+          .Reject()(errorLoggingContext(loggingContext.traceContext))
+          .asGrpcError
+      )
+    }
+
   /** Prunes the events and command completions tables.
     *
     * @param pruneUpToInclusive
@@ -113,61 +140,116 @@ private[platform] class JdbcLedgerDao(
       previousIncompleteReassignmentOffsets: Vector[Offset],
       pruneUpToInclusive: Offset,
       incompleteReassignmentOffsets: Vector[Offset],
-  )(implicit loggingContext: LoggingContextWithTrace): Future[Unit] = {
-    logger.info(s"Pruning the ledger api server index db up to ${pruneUpToInclusive.unwrap}.")
+  )(implicit loggingContext: LoggingContextWithTrace): Future[Unit] =
+    // The pruning offset cache's disable/re-enable cycle requires that pruning requests
+    // do not run concurrently.
+    ensurePruningIsNotInProgress {
+      logger.info(s"Pruning the ledger api server index db up to ${pruneUpToInclusive.unwrap}.")
 
-    implicit val ec: ExecutionContext = commandExecutionContext
+      implicit val ec: ExecutionContext = commandExecutionContext
 
-    dbDispatcher
-      .executeSql(metrics.index.db.pruneDbMetrics) { conn =>
-        // verifying pruning is continuous
-        val prunedUpToInDb = parameterStorageBackend.prunedUpToInclusive(conn)
-        if (prunedUpToInDb != previousPruneUpToInclusive) {
-          throw new IllegalStateException(
-            s"Previous pruned up to ($previousPruneUpToInclusive) is different from the current pruning offset in DB ($prunedUpToInDb)"
+      dbDispatcher
+        .executeSql(metrics.index.db.pruneDbMetrics) { conn =>
+          // verifying pruning is continuous
+          val prunedUpToInDb = parameterStorageBackend.prunedUpToInclusive(conn)
+          if (prunedUpToInDb != previousPruneUpToInclusive) {
+            throw new IllegalStateException(
+              s"Previous pruned up to ($previousPruneUpToInclusive) is different from the current pruning offset in DB ($prunedUpToInDb)"
+            )
+          }
+
+          readStorageBackend.eventStorageBackend.pruneEvents(
+            previousPruneUpToInclusive = previousPruneUpToInclusive,
+            previousIncompleteReassignmentOffsets = previousIncompleteReassignmentOffsets,
+            pruneUpToInclusive = pruneUpToInclusive,
+            incompleteReassignmentOffsets = incompleteReassignmentOffsets,
+          )(
+            conn,
+            loggingContext.traceContext,
           )
+
+          readStorageBackend.completionStorageBackend.pruneCompletions(pruneUpToInclusive)(
+            conn,
+            loggingContext.traceContext,
+          )
+          parameterStorageBackend.updatePrunedUptoInclusive(
+            pruneUpToInclusive
+          )(conn)
+          // Disable the cache before the transaction is committed to avoid fetching stale values.
+          pruningOffsetService.disableCache()
         }
-
-        readStorageBackend.eventStorageBackend.pruneEvents(
-          previousPruneUpToInclusive = previousPruneUpToInclusive,
-          previousIncompleteReassignmentOffsets = previousIncompleteReassignmentOffsets,
-          pruneUpToInclusive = pruneUpToInclusive,
-          incompleteReassignmentOffsets = incompleteReassignmentOffsets,
-        )(
-          conn,
-          loggingContext.traceContext,
+        .thereafter { _ =>
+          pruningOffsetService.reEnableCache()
+        }
+        .thereafter {
+          case Success(_) =>
+            logger.info(
+              s"Completed pruning of the ledger api server index db"
+            )
+          case Failure(ex) =>
+            logger.warn("Pruning failed", ex)
+        }
+        .flatMap(_ =>
+          pattern.retry(
+            attempt = () => pruneContracts(),
+            shouldRetry = (_: Unit, t: Throwable) =>
+              t match {
+                case _: PruningContractsBlockedException => true
+                case _ => false
+              },
+            attempts = contractPruningMaxRetries + 1,
+            delayFunction = attempt => {
+              // tracking each attempt individually
+              metrics.services.pruning.contractPruningRetried
+                .mark(attempt.toLong)(MetricsContext.Empty)
+              // fix delay between retries
+              Some(contractPruningDelayBeforeRetry)
+            },
+          )(commandExecutionContext, scheduler)
         )
+        .transform {
+          case Success(()) =>
+            logger.info(s"Completed pruning of contracts")
+            Success(())
+          case Failure(_: PruningContractsBlockedException) =>
+            metrics.services.pruning.contractPruningBlocked.inc()
+            Failure(
+              LedgerApiErrors.ParticipantContractPruningBlocked
+                .Reject(
+                  retries = contractPruningMaxRetries,
+                  delay = contractPruningDelayBeforeRetry,
+                )
+                .asGrpcError
+            )
+          case Failure(t) =>
+            logger.warn("Pruning of contracts failed", t)
+            Failure(t)
+        }
+    }
 
-        readStorageBackend.completionStorageBackend.pruneCompletions(pruneUpToInclusive)(
-          conn,
-          loggingContext.traceContext,
-        )
-        parameterStorageBackend.updatePrunedUptoInclusive(
-          pruneUpToInclusive
-        )(conn)
-      }
-      .thereafter {
-        case Success(_) =>
-          logger.info(
-            s"Completed pruning of the ledger api server index db"
-          )
-        case Failure(ex) =>
-          logger.warn("Pruning failed", ex)
-      }
-  }
+  private def pruneContracts()(implicit loggingContext: LoggingContextWithTrace): Future[Unit] =
+    for {
+      _ <- dbDispatcher.executeSql(
+        metrics.index.db.cleanPruningCandidateContractsDbMetrics
+      )(implicit conn => readStorageBackend.eventStorageBackend.cleanPruningCandidates())
+      prunedInternalContractIds <- dbDispatcher.executeSql(
+        metrics.index.db.pruneContractsDbMetrics
+      )(implicit conn => readStorageBackend.eventStorageBackend.pruneContracts())
+    } yield contractStore.contractsPruned(prunedInternalContractIds)
 
-  def indexDbPrunedUpTo(implicit
-      loggingContext: LoggingContextWithTrace
-  ): Future[Option[Offset]] =
-    dbDispatcher
-      .executeSql(metrics.index.db.fetchPruningOffsetsMetrics)(
-        parameterStorageBackend.prunedUpToInclusive
-      )
-
-  override def pruningOffset(implicit
+  override def indexDbPrunedUpTo(implicit
       loggingContext: LoggingContextWithTrace
   ): Future[Option[Offset]] =
     pruningOffsetService.pruningOffset
+
+  private val pruningOffsetService: PruningOffsetServiceImpl = new PruningOffsetServiceImpl(
+    fetchFromDb = traceContext => {
+      dbDispatcher.executeSql(metrics.index.db.fetchPruningOffsetsMetrics)(
+        parameterStorageBackend.prunedUpToInclusive
+      )(LoggingContextWithTrace(loggerFactory)(traceContext))
+    },
+    loggerFactory = loggerFactory,
+  )
 
   private val queryValidRange = QueryValidRangeImpl(
     ledgerEndCache = ledgerEndCache,
@@ -223,6 +305,7 @@ private[platform] class JdbcLedgerDao(
     metrics = metrics,
     tracer = tracer,
     topologyTransactionsStreamReader = topologyTransactionsStreamReader,
+    pruningOffsetService = pruningOffsetService,
     loggerFactory = loggerFactory,
   )(queryExecutionContext)
 

@@ -243,18 +243,31 @@ class ScanVerdictIngestionService(
         // Compute app activity records (before DB transaction).
         // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
         // the store resolves actual row_ids during insertion.
-        appActivityRecords <- appActivityComputationO match {
+        (appActivityRecords, lastArchivedRoundO) <- appActivityComputationO match {
           case Some(appActivityComputation) =>
-            appActivityComputation.computeActivities(summariesWithVerdicts).map {
-              _.flatMap { case (summary, _, recordO) =>
-                recordO.map(summary.sequencingTime -> _)
+            for {
+              records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
+                _.flatMap { case (summary, _, recordO) =>
+                  recordO.map(summary.sequencingTime -> _)
+                }
               }
-            }
-          case None => Future.successful(Seq.empty)
+              lastArchivedRoundO <- verdicts
+                .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+                .maxOption match {
+                case Some(maxRecordTime) =>
+                  appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
+                case None => Future.successful(None)
+              }
+            } yield (records, lastArchivedRoundO)
+          case None => Future.successful((Seq.empty, None))
         }
 
         _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
-        _ <- store.insertVerdictsWithAppActivityRecords(items, appActivityRecords)
+        _ <- store.insertVerdictsWithAppActivityRecords(
+          items,
+          appActivityRecords,
+          lastArchivedRoundO,
+        )
       } yield {
         val lastRecordTime = verdicts.lastOption
           .flatMap(v => CantonTimestamp.fromProtoTimestamp(v.getRecordTime).toOption)

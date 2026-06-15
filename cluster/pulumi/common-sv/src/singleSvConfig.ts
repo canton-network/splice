@@ -7,11 +7,11 @@ import {
   KmsConfigSchema,
   LogLevelSchema,
   K8sResourceSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { ValidatorAppConfigSchema } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/config';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import { mergeConfigFragments } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configLoader';
-import { CnChartVersionSchema } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/versionSchema';
+} from '@canton-network/splice-pulumi-common';
+import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { mergeConfigFragments } from '@canton-network/splice-pulumi-common/src/config/configLoader';
+import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
 import util from 'node:util';
 import { z } from 'zod';
 
@@ -24,6 +24,7 @@ import {
   SvSequencerConfig,
   SvSequencerConfigSchema,
 } from './physicalSynchronizerConfig';
+import { CatchupTestSchema } from './testing';
 
 const SvCometbftConfigSchema = z
   .object({
@@ -172,6 +173,7 @@ const SingleSvConfigSchema = z
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
+    testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })
   .strict()
