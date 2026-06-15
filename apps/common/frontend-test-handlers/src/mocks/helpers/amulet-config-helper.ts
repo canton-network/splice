@@ -463,10 +463,11 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
         class="jsondiffpatch-value"><pre>null</pre></div></li><li
       class="jsondiffpatch-unchanged" data-key="rewardConfig"><div
         class="jsondiffpatch-property-name">rewardConfig</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
       class="jsondiffpatch-unchanged"
       data-key="transferPreapprovalBaseDuration"><div
         class="jsondiffpatch-property-name">transferPreapprovalBaseDuration</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
+      class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;
 }
