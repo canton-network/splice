@@ -258,9 +258,11 @@ class SV1Initializer(
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
+      synchronizerId <- participantAdminConnection.getPhysicalSynchronizerId(
+        config.domains.global.alias
+      )
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        synchronizerId,
+        synchronizerId.logical,
         initConnection,
         loggerFactory,
       )
@@ -321,11 +323,9 @@ class SV1Initializer(
         new SynchronizerNodeReconciler(
           dsoStore,
           connection,
-          packageVersionSupport,
           clock,
           retryProvider,
           loggerFactory,
-          domainMigrationId,
           config.scan,
         ),
       )
@@ -333,9 +333,7 @@ class SV1Initializer(
       _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
       withDsoStore = new WithDsoStore(
         dsoAutomation,
-        decentralizedSynchronizer,
-        packageVersionSupport,
-        domainMigrationId,
+        synchronizerId,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -588,9 +586,7 @@ class SV1Initializer(
     */
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
-      synchronizerId: SynchronizerId,
-      packageVersionSupport: PackageVersionSupport,
-      domainMigrationId: Long,
+      synchronizerId: PhysicalSynchronizerId,
   ) {
 
     private val dsoStore = dsoStoreWithIngestion.store
@@ -601,8 +597,6 @@ class SV1Initializer(
       dsoStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
       clock = clock,
       retryProvider = retryProvider,
-      versionSupport = packageVersionSupport,
-      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -625,7 +619,7 @@ class SV1Initializer(
     ): Future[Unit] = {
       synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
         synchronizerNodeService.nodes,
-        synchronizerId,
+        synchronizerId.logical,
         SynchronizerNodeState.OnboardedImmediately,
       )
     }
@@ -635,7 +629,7 @@ class SV1Initializer(
         tc: TraceContext
     ): Future[Unit] = {
       val dsoRulesConfig = SvUtil.defaultDsoRulesConfig(
-        synchronizerId,
+        synchronizerId.logical,
         sv1Config.voteCooldownTime,
         sv1Config.acsCommitmentReconciliationInterval,
       )
@@ -662,7 +656,7 @@ class SV1Initializer(
                 val amuletConfig = defaultAmuletConfig(
                   sv1Config.initialTickDuration,
                   sv1Config.initialMaxNumInputs,
-                  synchronizerId,
+                  synchronizerId.logical,
                   sv1Config.initialSynchronizerFeesConfig.extraTrafficPrice.value,
                   sv1Config.initialSynchronizerFeesConfig.minTopupAmount.value,
                   sv1Config.initialSynchronizerFeesConfig.baseRateBurstAmount.value,
@@ -686,7 +680,6 @@ class SV1Initializer(
                     config.scan,
                     synchronizerId,
                     clock,
-                    domainMigrationId,
                   )
                   _ = logger
                     .info(
@@ -740,7 +733,7 @@ class SV1Initializer(
                         ),
                       deduplicationOffset = offset,
                     )
-                    .withSynchronizerId(synchronizerId)
+                    .withSynchronizerId(synchronizerId.logical)
                     .yieldUnit()
                 } yield ()
             }

@@ -12,7 +12,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
-  LegacySequencerConfig,
   MediatorConfig,
   PhysicalSynchronizerNodeConfig,
   ScanConfig,
@@ -20,12 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   SequencerIdentityConfig,
   SynchronizerNodeConfig,
 }
-import org.lfdecentralizedtrust.splice.environment.{
-  PackageVersionSupport,
-  RetryFor,
-  RetryProvider,
-  SpliceLedgerConnection,
-}
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore.DsoRulesWithSvNodeState
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
@@ -33,7 +27,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
-import org.lfdecentralizedtrust.splice.sv.util.SvUtil.{LocalMediatorConfig, LocalSequencerConfig}
+import org.lfdecentralizedtrust.splice.sv.util.SvUtil.LocalMediatorConfig
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import java.lang
@@ -45,11 +39,9 @@ import scala.jdk.OptionConverters.{RichOption, RichOptional}
 class SynchronizerNodeReconciler(
     dsoStore: SvDsoStore,
     connection: SpliceLedgerConnection,
-    versionSupport: PackageVersionSupport,
     clock: Clock,
     retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
-    migrationId: Long,
     scanConfig: SvScanConfig,
 ) extends NamedLogging {
 
@@ -66,43 +58,26 @@ class SynchronizerNodeReconciler(
   ): Future[Unit] = {
     val currentNode = synchronizerNodes.current
     def setConfigIfRequired() = for {
-      localSequencerConfig <- SvUtil.getSequencerConfig(Some(currentNode), migrationId)
+      localSequencerConfig <- SvUtil.getSequencerConfig(Some(currentNode))
       localMediatorConfig <- SvUtil.getMediatorConfig(Some(currentNode))
       localScanConfig = java.util.Optional.of(new ScanConfig(scanConfig.publicUrl.toString()))
       rulesAndState <- dsoStore.getDsoRulesWithSvNodeState(svParty)
       nodeState = rulesAndState.svNodeState.payload
-      // TODO(DACH-NY/canton-network-node#4901): do not use default, but reconcile all configured domains
       synchronizerNodeConfig = nodeState.state.synchronizerNodes.asScala
         .get(synchronizerId.toProtoPrimitive)
-      sequencerConfig = synchronizerNodeConfig.flatMap(_.sequencer.toScala)
       existingSequencerIdentityConfig = synchronizerNodeConfig.flatMap(_.sequencerIdentity.toScala)
       mediatorConfig = synchronizerNodeConfig.flatMap(_.mediator.toScala)
       existingScanConfig = synchronizerNodeConfig.flatMap(_.scan.toScala).toJava
-      existingSequencerConfig = sequencerConfig.map(c =>
-        LocalSequencerConfig(c.sequencerId, c.url, c.migrationId)
-      )
       existingMediatorConfig = mediatorConfig.map(c => LocalMediatorConfig(c.mediatorId))
-      existingLegacySequencerConfig = synchronizerNodeConfig.flatMap(
-        _.legacySequencerConfig.toScala
-      )
       shouldMarkSequencerAsOnboarded = state match {
         case SynchronizerNodeState.OnboardedAfterDelay |
             SynchronizerNodeState.OnboardedImmediately =>
           existingSequencerIdentityConfig
             .flatMap(_.availableAfter.toScala)
-            .orElse(sequencerConfig.flatMap(_.availableAfter.toScala))
             .isEmpty
         case SynchronizerNodeState.Onboarding(_) =>
           false
       }
-      updatedSequencerConfigUpdate =
-        updateLegacySequencerConfig(
-          existingLegacySequencerConfig
-        )
-      _ = ensureSequencerUrlIsDifferentWhenSynchronizerUpgraded(
-        existingSequencerConfig,
-        localSequencerConfig,
-      )
       existingPhysicalSynchronizers = synchronizerNodeConfig.flatMap(
         _.physicalSynchronizers.toScala
       )
@@ -112,13 +87,17 @@ class SynchronizerNodeReconciler(
         scalaExistingPhysicalSynchronizers,
         state,
       )
+      sequencerIdentityChanged = existingSequencerIdentityConfig.map(
+        _.sequencerId
+      ) != localSequencerConfig.map(
+        _.sequencerId
+      )
       _ <-
         if (
-          existingSequencerConfig != localSequencerConfig ||
+          sequencerIdentityChanged ||
           existingMediatorConfig != localMediatorConfig ||
           existingScanConfig != localScanConfig ||
           shouldMarkSequencerAsOnboarded ||
-          updatedSequencerConfigUpdate.isRight ||
           scalaExistingPhysicalSynchronizers != localPhysicalSynchronizers
         ) {
           def setConfig(
@@ -154,8 +133,6 @@ class SynchronizerNodeReconciler(
             }
           }
 
-          // When physical synchronizers with sequencerIdentity is supported,
-          // prefer setting sequencerIdentity over the legacy sequencer field.
           val sequencerIdentityConfig: java.util.Optional[SequencerIdentityConfig] =
             if (localPhysicalSynchronizers.isDefined) {
               localSequencerConfig
@@ -217,71 +194,74 @@ class SynchronizerNodeReconciler(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[Map[lang.Long, PhysicalSynchronizerNodeConfig]]] = {
-    versionSupport
-      .supportsPhysicalSynchronizers(Seq(svParty, dsoParty), clock.now)
-      .map(_.supported)
-      .flatMap { hasSupport =>
-        if (hasSupport) {
-          val currentEntryFuture = {
-            val currentNode = synchronizerNodes.current
-            val serialOverride = state match {
-              case SynchronizerNodeState.OnboardedAfterDelay => None
-              case SynchronizerNodeState.OnboardedImmediately => None
-              case SynchronizerNodeState.Onboarding(serial) => Some(serial)
-            }
-            buildNodeConfig(currentNode, serialOverride)
-          }
+    val currentEntryFuture = {
+      val currentNode = synchronizerNodes.current
+      val serialOverride = state match {
+        case SynchronizerNodeState.OnboardedAfterDelay => None
+        case SynchronizerNodeState.OnboardedImmediately => None
+        case SynchronizerNodeState.Onboarding(serial) => Some(serial)
+      }
+      buildNodeConfig(currentNode, serialOverride)
+    }
 
-          val legacyEntryFuture =
-            synchronizerNodes.legacy.traverse { legacyNode =>
-              buildNodeConfig(legacyNode)
-            }
-
-          val additionalLegacyEntriesFuture =
-            MonadUtil.sequentialTraverse(synchronizerNodes.additionalLegacy.toList) { legacyNode =>
-              buildNodeConfig(legacyNode)
-            }
-
-          val successorEntryFuture =
-            synchronizerNodes.successor.flatTraverse { successorNode =>
-              successorNode.sequencerAdminConnection
-                .isNodeInitialized()
-                .attemptT
-                .foldF(
-                  failure =>
-                    currentEntryFuture.map { case (currentSyncSerial, _) =>
-                      val existingSuccessors =
-                        existingState.map(_.view.filterKeys(_ > currentSyncSerial).toSeq)
-                      logger.info(
-                        s"Failed to get successor status, will keep state with serial > than $currentSyncSerial: $existingSuccessors",
-                        failure,
-                      )
-                      existingSuccessors
-                    },
-                  {
-                    case true =>
-                      buildNodeConfig(successorNode).map(config => Some(Seq(config)))
-                    case false =>
-                      Future.successful(None)
-                  },
-                )
-            }
-
-          for {
-            currentEntry <- currentEntryFuture
-            legacyEntry <- legacyEntryFuture
-            successorEntry <- successorEntryFuture
-            additionalLegacyEntries <- additionalLegacyEntriesFuture
-          } yield {
-            Some(
-              (legacyEntry.toList ++ List(
-                currentEntry
-              ) ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
-            )
-          }
-        } else Future.successful(None)
+    val legacyEntryFuture =
+      synchronizerNodes.legacy.traverse { legacyNode =>
+        buildNodeConfig(legacyNode)
       }
 
+    val additionalLegacyEntriesFuture =
+      MonadUtil.sequentialTraverse(synchronizerNodes.additionalLegacy.toList) { legacyNode =>
+        buildNodeConfig(legacyNode)
+      }
+
+    val successorEntryFuture =
+      synchronizerNodes.successor.flatTraverse { successorNode =>
+        successorNode.sequencerAdminConnection
+          .isNodeInitialized()
+          .attemptT
+          .foldF(
+            failure =>
+              currentEntryFuture.map { case (currentSyncSerial, _) =>
+                val existingSuccessors =
+                  existingState.map(_.view.filterKeys(_ > currentSyncSerial).toSeq)
+                logger.info(
+                  s"Failed to get successor status, will keep state with serial > than $currentSyncSerial: $existingSuccessors",
+                  failure,
+                )
+                existingSuccessors
+              },
+            {
+              case true =>
+                buildNodeConfig(successorNode).map(config => Some(Seq(config)))
+              case false =>
+                Future.successful(None)
+            },
+          )
+      }
+
+    for {
+      currentEntry <- currentEntryFuture
+      legacyEntry <- legacyEntryFuture
+      successorEntry <- successorEntryFuture
+      additionalLegacyEntries <- additionalLegacyEntriesFuture
+    } yield {
+      val entries =
+        legacyEntry.toList ++ List(
+          currentEntry
+        ) ++ successorEntry.toList.flatten ++ additionalLegacyEntries
+      val urlToSerials = entries
+        .groupMap { case (_, config) =>
+          config.sequencer.toScala.map(_.url)
+        } { case (serial, _) => serial }
+      urlToSerials.foreach { case (url, serials) =>
+        if (serials.distinct.sizeIs > 1) {
+          sys.error(
+            s"Different serials ${serials.distinct} are configured with the same sequencer url $url"
+          )
+        }
+      }
+      Some(entries.toMap)
+    }
   }
 
   private def buildNodeConfig(
@@ -309,33 +289,6 @@ class SynchronizerNodeReconciler(
     }
   }
 
-  private def ensureSequencerUrlIsDifferentWhenSynchronizerUpgraded(
-      existingSequencerConfigOpt: Option[LocalSequencerConfig],
-      sequencerConfigOpt: Option[LocalSequencerConfig],
-  ): Unit = {
-    if (
-      existingSequencerConfigOpt.exists { existingSequencerConfig =>
-        sequencerConfigOpt.exists(sequencerConfig =>
-          existingSequencerConfig.migrationId != sequencerConfig.migrationId &&
-            existingSequencerConfig.url == sequencerConfig.url
-        )
-      }
-    )
-      sys.error("Sequencer URL must be different when domain is upgraded.")
-  }
-  private def updateLegacySequencerConfig(
-      existingLegacySequencerConfig: Option[LegacySequencerConfig]
-  )(implicit
-      tc: TraceContext
-  ): Either[Unit, Option[LegacySequencerConfig]] =
-    if (existingLegacySequencerConfig.isDefined) {
-      logger.info(
-        s"removing existing legacy sequencer config as there is no expected legacy migration id"
-      )
-      Right(None)
-    } else {
-      Left(())
-    }
 }
 
 object SynchronizerNodeReconciler {

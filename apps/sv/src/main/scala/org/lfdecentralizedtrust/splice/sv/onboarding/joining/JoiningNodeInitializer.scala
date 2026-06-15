@@ -277,11 +277,9 @@ class JoiningNodeInitializer(
             synchronizerNodeReconciler = new SynchronizerNodeReconciler(
               dsoStore,
               connection,
-              packageVersionSupport,
               clock,
               retryProvider,
               loggerFactory,
-              domainMigrationId,
               config.scan,
             )
             dsoAutomation =
@@ -884,15 +882,12 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
-                domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-                  packageVersionSupport,
                   clock,
                   retryProvider,
                   loggerFactory,
-                  domainMigrationId,
                   config.scan,
                 )
                 dsoAutomation = newSvDsoAutomationService(
