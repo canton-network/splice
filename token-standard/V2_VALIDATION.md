@@ -259,3 +259,8 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
 - Fix bug in `allocationFactoryV1_allocateDefaultImplUsingV2` that copied the `settlement.requestedAt` instead of the
   `arg.requestedAt` into the V2 allocation factory argument
 - Allow creating Amulet allocations with the burn account as their target.
+- Add the ability to filter the `ChoiceContext` of the `Allocation_Settle` calls to the
+  `settlementFactoryV2_settleBatchDefaultImpl`; and use it in `TestTokenV2` to filter the
+  account maps to only the one of the allocation authorizer to avoid leaking
+  information about unrelated counter-parties.
+

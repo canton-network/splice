@@ -366,12 +366,15 @@ settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl _arg = []
 -- validation and preparation logic in `validateAndPrepareAllocations`, but will
 -- have to reimplement the execution of the settlement choices.
 settlementFactoryV2_settleBatchDefaultImpl
-  : Party
+  : (AllocationV2.AllocationView -> AllocationV2.Allocation_Settle -> Update ExtraArgs)
+     -- ^ Function to compute the actual extra argument to use for settling an allocation.
+     -- Use this for example to redact unrelated choice-context data from the extra arguments.
+  -> Party
      -- ^ Admin of the allocations and the settlement factory
   -> ContractId AllocationV2.SettlementFactory
   -> AllocationV2.SettlementFactory_SettleBatch
   -> Update AllocationV2.SettlementFactory_SettleBatchResult
-settlementFactoryV2_settleBatchDefaultImpl admin self arg = do
+settlementFactoryV2_settleBatchDefaultImpl getFilteredExtraArgs admin self arg = do
   let AllocationV2.SettlementFactory_SettleBatch {..} = arg
   checkActors actors [settlement.executors]
 
@@ -380,12 +383,15 @@ settlementFactoryV2_settleBatchDefaultImpl admin self arg = do
 
   -- settle all allocations
   allocationSettleResults <- forA allocations $ \(finalizedAlloc, allocView) -> do
-    exercise finalizedAlloc.allocationCid AllocationV2.Allocation_Settle with
-      -- Use default controllers as the actors
-      actors = allocView.allocation.admin :: allocView.settlement.executors
-      extraTransferLegSides = finalizedAlloc.extraTransferLegSides
-      nextIterationFunding = finalizedAlloc.nextIterationFunding
-      extraArgs
+    let settleArg = AllocationV2.Allocation_Settle with
+          -- Use default controllers as the actors
+          actors = allocView.allocation.admin :: allocView.settlement.executors
+          extraTransferLegSides = finalizedAlloc.extraTransferLegSides
+          nextIterationFunding = finalizedAlloc.nextIterationFunding
+          extraArgs
+    filteredExtraArgs <- getFilteredExtraArgs allocView settleArg
+    exercise finalizedAlloc.allocationCid settleArg with
+      extraArgs = filteredExtraArgs
 
   -- return result
   pure AllocationV2.SettlementFactory_SettleBatchResult with

@@ -173,7 +173,10 @@ template ExternalPartyAmuletRules
         meta = emptyMetadata
 
       settlementFactory_settleBatchImpl self arg = do
-        settlementFactoryV2_settleBatchDefaultImpl dso self arg
+        -- No filtering required, as Amulet does not use any per-account information
+        -- for batch settlement. Preapprovals are only used for transfers.
+        let getFilteredExtraArgs _allocView settleArg = pure settleArg.extraArgs
+        settlementFactoryV2_settleBatchDefaultImpl getFilteredExtraArgs dso self arg
 
       settlementFactory_settleBatchExtraObservers =
         settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl dso
