@@ -900,7 +900,10 @@ lazy val `splice-api-reward-assignment-v1-daml` =
     .in(file("daml/splice-api-reward-assignment-v1"))
     .enablePlugins(DamlPlugin)
     .settings(
-      BuildCommon.damlSettings
+      BuildCommon.damlSettings,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-reward-assignment-v1-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-amulet-daml` =
