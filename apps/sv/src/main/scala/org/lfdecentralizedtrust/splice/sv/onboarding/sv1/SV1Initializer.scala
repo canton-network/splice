@@ -678,9 +678,8 @@ class SV1Initializer(
                     synchronizerNodeService.nodes.current.cometbftNode,
                     synchronizerNodeService.nodes.current,
                     config.scan,
-                    synchronizerId,
+                    psid,
                     clock,
-                    domainMigrationId,
                   )
                   _ = logger
                     .info(
