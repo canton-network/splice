@@ -583,7 +583,7 @@ testTransferPreapproval = script do
     exerciseCmd install WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet]
       operations =
-        -- create a short duration preapproval first to check batching logic handling unconsumed coin inputs
+        -- create a short duration preapproval first to check batching logic handling unconsumed amulet inputs
         [ CO_CreateExternalPartySetupProposal alice.primaryParty (now `addRelTime` days 90)
         , CO_CreateExternalPartySetupProposal alice.primaryParty (now `addRelTime` duration)
         ]
