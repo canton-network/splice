@@ -36,7 +36,7 @@
           ================== =======
           amulet             0.1.20
           amuletNameService  0.1.21
-          dsoGovernance      0.1.29
+          dsoGovernance      0.1.26
           validatorLifecycle 0.1.7
           wallet             0.1.21
           walletPayments     0.1.20
