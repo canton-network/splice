@@ -78,7 +78,7 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
       .withManualStart
 }
 
-/** This test verifies that an SV can unvet packages that still have vetted dependencies, but can unvet them if the dependencies are unvetted as well.
+/** This test verifies that an SV can unvet packages that still have vetted dependencies
   */
 class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
