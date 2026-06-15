@@ -12,9 +12,7 @@ import cats.implicits.toBifunctorOps
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
 
 class ScanKeyValueProvider(val store: KeyValueStore, val loggerFactory: NamedLoggerFactory)
-    extends NamedLogging {
-
-}
+    extends NamedLogging {}
 
 object ScanKeyValueProvider {
   private implicit val timestampCodec: Codec[CantonTimestamp] =
