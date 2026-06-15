@@ -29,9 +29,7 @@ trait UpdateHistoryBulkStorageWriter {
   /** The main Flow that processes a given segment of updates.
     * The Flow must emit back the same segment as its output once processing is complete.
     */
-  def processSegment(segment: UpdatesSegment)(implicit
-      tc: TraceContext
-  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
+  def processSegmentsFlow(implicit tc: TraceContext): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
 }
 
 class UpdateHistoryBulkStoragePersistentProgress(
@@ -193,7 +191,7 @@ class UpdateHistoryBulkStorage(
           }
         }
         .collect { case Some(segment) => segment }
-        .flatMapConcat(segment => Source.single(segment).via(writer.processSegment(segment)))
+        .via(writer.processSegmentsFlow)
         .mapAsync(1) { segment =>
           persistentProgress.persistLatestProcessedSegment(segment).map(_ => segment)
         }
