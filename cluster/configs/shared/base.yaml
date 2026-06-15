@@ -207,7 +207,13 @@ cloudArmor:
       pathPrefix: /api/scan
       throttleAcrossAllEndpointsAllIps:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0
+        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+#    tokenRegistry:
+#      hostname: scan.sv-2.scratcha.global.canton.network.digitalasset.com
+#      pathPrefix: /registry
+#      throttleAcrossAllEndpointsAllIps:
+#        withinIntervalSeconds: 60
+#        maxRequestsBeforeHttp429: 200
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
