@@ -2013,7 +2013,7 @@ template TransferPreapproval
     -- Renew the contract as the provider.
     --
     -- Renewal durations shorter than `AmuletConfig.transferPreapprovalBaseDuration` do not require
-    -- any CC inputs, as they are implicitly paid for by the traffic fees spent for the renewal transaction.
+    -- any amulet inputs, as they are implicitly paid for by the traffic fees spent for the renewal transaction.
     choice TransferPreapproval_Renew : TransferPreapproval_RenewResult
       with
         context : PaymentTransferContext
