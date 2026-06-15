@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequir
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_MiningRound_StartIssuing
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingActivityTotalsResponse.members.{
   RewardAccountingActivityTotalsCannotProvide,
   RewardAccountingActivityTotalsOk,
@@ -157,16 +158,13 @@ class SummarizingMiningRoundTrigger(
     for {
       appRewardCoupons <-
         if (useTrafficBasedAppRewards(payload)) {
-          val trafficPrice = payload.trafficPrice.toScala.getOrElse(
-            throw new IllegalStateException(
-              s"trafficPrice not set for round $round"
-            )
-          )
-          fetchActivityTotals(round).map { totalAppActivity =>
+          fetchRewardAccountingTotals(round).map { totals =>
+            // The total featured app rewards (in CC) is the sum of the minting
+            // allowance and the thresholded amount reported by Scan.
             val appRewardsInCc =
-              (BigDecimal(totalAppActivity) * BigDecimal(trafficPrice) / BigDecimal(
-                payload.amuletPrice
-              )).setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
+              (BigDecimal(totals.totalAppRewardMintingAllowance) +
+                BigDecimal(totals.totalAppRewardThresholded))
+                .setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
             AppRewardCouponsSum(featured = appRewardsInCc, unfeatured = BigDecimal(0))
           }
         } else {
@@ -223,36 +221,36 @@ class SummarizingMiningRoundTrigger(
       _.mintingVersion == RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
     )
 
-  private def fetchActivityTotals(
+  private def fetchRewardAccountingTotals(
       round: Long
-  )(implicit tc: TraceContext): Future[Long] = {
-    def activityTotalsUnavailable(reason: String): Nothing =
+  )(implicit tc: TraceContext): Future[definitions.RewardAccountingActivityTotalsOk] = {
+    def totalsUnavailable(reason: String): Nothing =
       throw Status.FAILED_PRECONDITION
         .withDescription(s"For round $round: $reason")
         .asRuntimeException()
 
-    def bftReadActivityTotals: Future[Long] =
+    def bftReadTotals: Future[definitions.RewardAccountingActivityTotalsOk] =
       for {
         bftScan <- bftScanConnectionF()
         response <- bftScan.getRewardAccountingActivityTotals(round)
       } yield response match {
         case RewardAccountingActivityTotalsOk(ok) =>
-          logger.info(s"Obtained the activity totals for round $round via BFT read.")
-          ok.totalAppActivityWeight
-        case _ => activityTotalsUnavailable("could not obtain activity totals via BFT read.")
+          logger.info(s"Obtained the reward accounting totals for round $round via BFT read.")
+          ok
+        case _ => totalsUnavailable("could not obtain reward accounting totals via BFT read.")
       }
 
     for {
       ownScan <- scanConnectionF()
       response <- ownScan.getRewardAccountingActivityTotals(round)
-      totalAppActivity <- response match {
+      totals <- response match {
         case RewardAccountingActivityTotalsOk(ok) =>
-          Future.successful(ok.totalAppActivityWeight)
+          Future.successful(ok)
         case RewardAccountingActivityTotalsUndetermined(_) =>
-          activityTotalsUnavailable("our own Scan has not yet computed the activity totals.")
-        case RewardAccountingActivityTotalsCannotProvide(_) => bftReadActivityTotals
+          totalsUnavailable("our own Scan has not yet computed the reward accounting totals.")
+        case RewardAccountingActivityTotalsCannotProvide(_) => bftReadTotals
       }
-    } yield totalAppActivity
+    } yield totals
   }
 }
 
