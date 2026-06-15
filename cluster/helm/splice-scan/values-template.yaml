@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "scan-app"
+ui:
+  imageName: "scan-web-ui"
 
 # -- Annotations and labels for the participant pod
 pod:
@@ -28,6 +31,7 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
+  initImageName: "postgres:14"
   # The user version of the ACS store (optional), a positive integer,
   # set to 1 if previously unset to re-ingest, increment by 1 to subsequently re-ingest, the ACS store
   # acsStoreDescriptorUserVersion:

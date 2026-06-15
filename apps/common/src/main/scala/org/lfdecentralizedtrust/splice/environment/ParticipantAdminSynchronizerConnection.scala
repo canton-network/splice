@@ -8,14 +8,10 @@ import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommand
 import com.digitalasset.canton.admin.api.client.data.ListConnectedSynchronizersResult
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.admin.api.client.data
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
-import com.digitalasset.canton.topology.{
-  ConfiguredPhysicalSynchronizerId,
-  KnownPhysicalSynchronizerId,
-  PhysicalSynchronizerId,
-  SynchronizerId,
-}
+import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.github.blemale.scaffeine.Scaffeine
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.HasParticipantId
@@ -68,17 +64,23 @@ trait ParticipantAdminSynchronizerConnection {
 
   def listRegisteredSynchronizers()(implicit
       tc: TraceContext
-  ): Future[Seq[(SynchronizerConnectionConfig, ConfiguredPhysicalSynchronizerId, Boolean)]] = {
+  ): Future[Seq[(SynchronizerConnectionConfig, data.ConfiguredPhysicalSynchronizerId, Boolean)]] = {
     runCmd(
-      ParticipantAdminCommands.SynchronizerConnectivity.ListRegisteredSynchronizers
-    )
+      ParticipantAdminCommands.SynchronizerConnectivity.ListActiveRegisteredSynchronizers
+    ).map(_.map { config =>
+      (
+        config._1.toInternal,
+        config._2,
+        config._3,
+      )
+    })
   }
 
   def getPhysicalSynchronizerId(synchronizerId: SynchronizerId)(implicit
       traceContext: TraceContext
   ): Future[PhysicalSynchronizerId] = listRegisteredSynchronizers().map(
     _.collectFirst {
-      case (_, KnownPhysicalSynchronizerId(psid), _) if psid.logical == synchronizerId => psid
+      case (_, data.KnownPhysicalSynchronizerId(psid), _) if psid.logical == synchronizerId => psid
     }.getOrElse(
       throw Status.NOT_FOUND
         .withDescription(

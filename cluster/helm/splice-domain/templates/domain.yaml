@@ -30,7 +30,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: {{ .Release.Name }}
-        image: "{{ .Values.imageRepo }}/canton-domain:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_domain) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_domain) }}
         env:
         - name: JAVA_TOOL_OPTIONS
           value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
@@ -89,7 +89,7 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: {{ .Release.Name }}-init-sequencer
-          image: postgres:14
+          image: {{ .Values.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:
@@ -110,7 +110,7 @@ spec:
                 sleep 2;
               done
         - name: {{ .Release.Name }}-init-mediator
-          image: postgres:14
+          image: {{ .Values.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:

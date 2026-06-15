@@ -12,6 +12,7 @@ import com.daml.ledger.javaapi.data.codegen.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.featuredapprightv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.featuredapprightv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
@@ -69,6 +70,7 @@ object ContractCompanions {
     allocationinstructionv1.AllocationFactory.INTERFACE,
     featuredapprightv1.FeaturedAppRight.INTERFACE,
     featuredapprightv2.FeaturedAppRight.INTERFACE,
+    rewardassignmentv1.RewardCoupon.INTERFACE,
   )
 
   private def templatesMatch(id: Identifier, qualifiedName: QualifiedName) =

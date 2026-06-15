@@ -7,44 +7,37 @@
 
 .. release-notes:: Upcoming
 
+
   - Deployment
 
-      - The ``migration.id`` value is no longer required by the SV (sv, validator, scan apps) and validator (validator app) helm charts and has been removed.
-        These apps now resolve the synchronizer migration id automatically at start-up. For the scan helm chart the
-        ``migration.id`` value is now optional and only needs to be set to bootstrap a scan that does not yet have any
-        migration id in its database (e.g. the network-founding or a freshly joining scan).
+      - Helm Charts
 
-      - SV
+          - All Helm charts now support overriding full image names.
+            It is possible to override the default image names using new Helm values.
+            This change helps deployments that require specific naming conventions for images.
 
-          - The ``migration.id`` value was removed from the SV helm charts (sv, validator, scan apps).
-            These apps now resolve the synchronizer migration id automatically at start-up from their database.
-            A freshly joining scan that does not yet have any migration id in its database bootstraps it from the
-            scan of the SV sponsoring the onboarding, configured via the new optional ``sponsorScanUrl`` value in the
-            scan helm chart.
+      - Docker Images
 
-      - Validator
+          - All Splice web UI Docker images have been updated to use the latest nginx-unprivileged base image,
+            and switched to the version based on alpine-slim, to improve security and reduce image size.
 
-          - The ``migration.id`` value was removed from the validator (validator app) helm chart and is no longer
-            supported for docker-compose deployments. The validator now resolves the synchronizer migration id
-            automatically at start-up from its database. The value must be removed from both the helm chart and
-            the docker-compose configuration.
+    - Daml
 
-      .. Important::
+      - Add a ``transferPreapprovalBaseDuration`` configuration parameter which defines the duration of a ``TransferPreapproval`` that can be requested or renewed for free
+        as the traffic costs already cover the costs sufficiently. This parameter defaults to 90 days. This allows creating a preapproval just using the free traffic rate
+        which allows bootstrapping a new validator by creating a preapproval and then purchasing CC from an exchange.
 
-          The migration id must still be kept for participant database naming for backwards compatibility (``persistance.databaseName`` helm value,
-          ``CANTON_PARTICIPANT_POSTGRES_DB`` docker compose env variable) to ensure the participant uses the currently configured database.
+        See [CIP 119](https://github.com/canton-foundation/cips/blob/main/cip-0119/cip-0119.md) for more details.
 
-  - Scan
+        This requires a Daml upgrade to the following versions:
 
-    - The following deprecated endpoints have been removed from the public API:
-
-        - ``/v0/activities``
-
-  - Bug fixes
-
-    - Validator
-
-        - Fixed a bug where validators using the ``bft-custom`` scan client configuration
-          would incorrectly attempt to establish scan connections with all scan nodes during
-          the validator startup. The scan client now strictly confines all scan connections to
-          configured, trusted SV endpoints.
+          ================== =======
+          name               version
+          ================== =======
+          amulet             0.1.20
+          amuletNameService  0.1.21
+          dsoGovernance      0.1.26
+          validatorLifecycle 0.1.7
+          wallet             0.1.21
+          walletPayments     0.1.20
+          ================== =======

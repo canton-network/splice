@@ -22,11 +22,26 @@
       "required": [
         "spliceInstanceNames",
         "persistence",
-        "participantAddress"
+        "participantAddress",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
           "type": "string"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "ui": {
+          "type": "object",
+          "required": [
+            "imageName"
+          ],
+          "properties": {
+            "imageName": {
+              "type": "string"
+            }
+          }
         },
         "imageDigests": {
           "type": "object"
@@ -90,7 +105,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -116,6 +132,9 @@
             },
             "txLogStoreDescriptorUserVersion": {
               "type": "integer"
+            },
+            "initImageName": {
+              "type": "string"
             }
           }
         },

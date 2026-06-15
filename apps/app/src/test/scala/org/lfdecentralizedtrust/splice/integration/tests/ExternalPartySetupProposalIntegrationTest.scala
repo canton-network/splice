@@ -69,6 +69,9 @@ class ExternalPartySetupProposalIntegrationTest
     amuletCodegen.ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
   )
 
+  // Set above transferPreapprovalLifetimeDuration to be able to test out of funds
+  val preapprovalLifetime = NonNegativeFiniteDuration.ofDays(100)
+
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -78,7 +81,12 @@ class ExternalPartySetupProposalIntegrationTest
         (_, config) =>
           ConfigTransforms.updateAllValidatorConfigs_(
             _.focus(_.transferPreapproval)
-              .modify(c => c.copy(renewalDuration = c.preapprovalLifetime))
+              .modify(c =>
+                c.copy(
+                  renewalDuration = preapprovalLifetime,
+                  preapprovalLifetime = preapprovalLifetime,
+                )
+              )
           )(config),
         // Disable renewal trigger till required in the test
         (_, config) =>

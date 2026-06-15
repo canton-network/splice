@@ -5,10 +5,14 @@
     "defaultJvmOptions",
     "imageRepo",
     "participantAdminUserNameFrom",
-    "persistence"
+    "persistence",
+    "imageName"
   ],
   "properties": {
     "imageRepo": {
+      "type": "string"
+    },
+    "imageName": {
       "type": "string"
     },
     "imageDigests": {
@@ -45,7 +49,7 @@
     },
     "persistence": {
       "type": "object",
-      "required": ["host", "schema", "secretName"],
+      "required": ["host", "schema", "secretName", "initImageName"],
       "properties": {
         "databaseName": {
           "type": "string"
@@ -63,6 +67,15 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "initImageName": {
+          "type": "string"
+        },
+        "enablePgInitContainer": {
+          "type": "boolean"
+        },
+        "enableParticipantDbConflictCheck": {
+          "type": "boolean"
         }
       }
     },
