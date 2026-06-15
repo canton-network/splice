@@ -154,7 +154,7 @@ pulumiProjectConfig:
         random_page_cost: '1.1'
         temp_file_limit: '2147483647'
         work_mem: '16384'
-      protected: true
+      protected: false
       tier: 'db-custom-2-7680'
     hasPublicInfo: false
     installDataOnly: false
@@ -164,6 +164,7 @@ pulumiProjectConfig:
   sv-runbook:
     cloudSql:
       enabled: false
+      protected: false
 pulumiStacks:
   canton-network:
     resources:
@@ -406,6 +407,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -496,6 +499,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -586,6 +591,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -676,6 +683,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -766,6 +775,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -856,6 +867,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -946,6 +959,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1036,6 +1051,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1126,6 +1143,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       resources:
         limits:
           memory: '10Gi'
@@ -1205,6 +1224,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1295,6 +1316,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1385,6 +1408,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1475,6 +1500,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1565,6 +1592,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1655,6 +1684,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1745,6 +1776,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1835,6 +1868,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
@@ -1928,6 +1963,8 @@ svs:
           value: "canton.sequencers.sequencer.sequencer.config {\n  consensus-empty-block-creation-timeout = 500.milliseconds\n  min-requests-in-batch = 16\n}\n"
         - name: 'ADDITIONAL_CONFIG_HIGH_THROUGHPUT_SETTINGS'
           value: "canton.sequencers.sequencer.sequencer.block.throughput-cap {\n  enabled = true\n  messages = {\n    confirmation-request = {\n      global-tps-cap = 100\n      per-client-tps-cap = 60\n      global-kbps-cap = 20000\n      per-client-kbps-cap = 12000\n    }\n    topology = {\n      global-tps-cap = 200\n      per-client-tps-cap = 10\n      global-kbps-cap = 2000\n      per-client-kbps-cap = 500\n    }\n  }\n  strict = false\n}\n"
+        - name: 'ADDITIONAL_CONFIG_STREAM_INSTRUMENTATION'
+          value: "canton.sequencers.sequencer.sequencer.block.stream-instrumentation.is-enabled = true\n"
       cloudSql:
         enterprisePlus: true
         flags:
