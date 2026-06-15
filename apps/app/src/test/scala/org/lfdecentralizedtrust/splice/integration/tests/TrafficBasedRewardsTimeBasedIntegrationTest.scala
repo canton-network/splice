@@ -71,7 +71,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
