@@ -83,7 +83,8 @@ case class ScanAppBackendConfig(
     txLogStoreDescriptorUserVersion: Option[Long] = None,
     activityIngestionUserVersion: Option[Long] = None,
     bulkStorage: BulkStorageConfig = BulkStorageConfig(),
-    tokenStandardSettlement: TokenStandardConfig.SettlementConfig = TokenStandardConfig.SettlementConfig(),
+    tokenStandardSettlement: TokenStandardConfig.SettlementConfig =
+      TokenStandardConfig.SettlementConfig(),
     publicUrl: Option[Uri] = None,
     // The thresholdDate from which external transaction hashes are included in the updates from internal ScanAPIs.
     // TODO(#4249): use on-ledger synchronization for switching record times
