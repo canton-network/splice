@@ -120,46 +120,37 @@ class ExpiredAmuletAllocationV2Trigger(
                 cancel,
               )
             }
-
-            res <-
-              if (cancellations.isEmpty) {
-                Future.successful(
-                  TaskSuccess("Nothing to expire")
-                )
-              } else {
-                val expireAllocations =
-                  new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
-                    cancellations.asJava,
-                    informees.map(_.toProtoPrimitive).toList.asJava,
-                  )
-
-                svTaskContext
-                  .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
-                  .submit(
-                    Seq(store.key.svParty),
-                    Seq(store.key.dsoParty),
-                    update = dsoRules
-                      .exercise(
-                        _.exerciseDsoRules_ExpireAmuletAllocationsV2(
-                          extAmuletRules.contract.contractId,
-                          expireAllocations,
-                          controller,
-                        )
-                      )
-                      .update
-                      .commands()
-                      .asScala
-                      .toSeq,
-                  )
-                  .noDedup
-                  .withSynchronizerId(dsoRules.domain)
-                  .yieldUnit()
-                  .map(_ =>
-                    TaskSuccess(
-                      s"archived batch of ${task.work.expiredContracts.size} expired Amulet Allocations"
+            expireAllocations =
+              new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
+                cancellations.asJava,
+                informees.map(_.toProtoPrimitive).toList.asJava,
+              )
+            res <- svTaskContext
+              .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
+              .submit(
+                Seq(store.key.svParty),
+                Seq(store.key.dsoParty),
+                update = dsoRules
+                  .exercise(
+                    _.exerciseDsoRules_ExpireAmuletAllocationsV2(
+                      extAmuletRules.contract.contractId,
+                      expireAllocations,
+                      controller,
                     )
                   )
-              }
+                  .update
+                  .commands()
+                  .asScala
+                  .toSeq,
+              )
+              .noDedup
+              .withSynchronizerId(dsoRules.domain)
+              .yieldUnit()
+              .map(_ =>
+                TaskSuccess(
+                  s"archived batch of ${task.work.expiredContracts.size} expired Amulet Allocations"
+                )
+              )
           } yield res
         }
     } yield res

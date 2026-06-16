@@ -1086,6 +1086,9 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(AmuletAllocation.COMPANION)(aliceParty) shouldBe empty
 
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .filterJava(AmuletAllocationV2.COMPANION)(aliceParty) shouldBe empty
+
       aliceWalletClient.list().lockedAmulets shouldBe empty
 
       aliceWalletClient.list().amulets should have length (amuletsBeforeExpiry + 4).toLong
