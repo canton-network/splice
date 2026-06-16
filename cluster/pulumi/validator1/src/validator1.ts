@@ -80,7 +80,6 @@ export async function installValidator1(
 
   const participant = await installParticipant(
     validator1Config,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     validator1Config?.disableAuth,
@@ -129,7 +128,7 @@ export async function installValidator1(
     disableAuth: validator1Config?.disableAuth,
     version: activeVersion,
   });
-  installIngress(xns, installSplitwell, decentralizedSynchronizerMigrationConfig);
+  installIngress(xns, installSplitwell);
 
   if (installSplitwell) {
     installSpliceHelmChart(
@@ -155,11 +154,7 @@ export async function installValidator1(
   return validator;
 }
 
-function installIngress(
-  xns: ExactNamespace,
-  splitwell: boolean,
-  decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig
-) {
+function installIngress(xns: ExactNamespace, splitwell: boolean) {
   installSpliceHelmChart(
     xns,
     `cluster-ingress-${xns.logicalName}`,
@@ -175,9 +170,7 @@ function installIngress(
       },
       ingress: {
         splitwell: splitwell,
-        decentralizedSynchronizer: {
-          activeMigrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
-        },
+        decentralizedSynchronizer: {},
       },
     }
   );

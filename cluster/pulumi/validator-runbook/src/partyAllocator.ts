@@ -5,7 +5,6 @@ import {
   activeVersion,
   CnInput,
   createVolumeSnapshot,
-  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   InstalledHelmChart,
   installSpliceHelmChart,
@@ -40,7 +39,7 @@ export function installPartyAllocator(
       config: {
         token: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_TOKEN}',
         userId: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME}',
-        jsonLedgerApiUrl: `http://participant-${DecentralizedSynchronizerUpgradeConfig.activeMigrationId}:7575`,
+        jsonLedgerApiUrl: `http://participant:7575`,
         scanApiUrl: 'http://scan-app.sv-1:5012',
         validatorApiUrl: 'http://validator-app:5003',
         maxParties: config.maxParties,

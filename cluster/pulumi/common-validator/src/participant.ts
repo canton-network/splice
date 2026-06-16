@@ -6,17 +6,16 @@ import {
   Auth0Config,
   auth0UserNameEnvVarSource,
   ChartValues,
-  DomainMigrationIndex,
   ExactNamespace,
   getAdditionalJvmOptions,
   getParticipantKmsHelmResources,
   installSpliceHelmChart,
   loadYamlFromFile,
-  sanitizedForPostgres,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
   spliceConfig,
   getLedgerApiAudience,
+  DecentralizedSynchronizerUpgradeConfig,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorNodeConfig } from '@canton-network/splice-pulumi-common-validator';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
@@ -24,7 +23,6 @@ import { Output } from '@pulumi/pulumi';
 
 export async function installParticipant(
   validatorConfig: ValidatorNodeConfig,
-  migrationId: DomainMigrationIndex,
   xns: ExactNamespace,
   auth0Config: Auth0Config,
   disableAuth?: boolean,
@@ -55,8 +53,7 @@ export async function installParticipant(
       }
     ),
     ...loadYamlFromFile(
-      `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/standalone-participant-values.yaml`,
-      { MIGRATION_ID: migrationId.toString() }
+      `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/standalone-participant-values.yaml`
     ),
     ...kmsValues,
     metrics: {
@@ -72,8 +69,8 @@ export async function installParticipant(
     },
   };
 
-  const name = `participant-${migrationId}`;
-  const pgName = sanitizedForPostgres(name);
+  const name = 'participant';
+  const pgName = `participant_${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`;
   const release = installSpliceHelmChart(
     xns,
     name,

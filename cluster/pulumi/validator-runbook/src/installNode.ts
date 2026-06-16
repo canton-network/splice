@@ -181,7 +181,6 @@ async function installValidator(
   const participantAddress = (
     await installParticipant(
       validatorConfig,
-      DecentralizedSynchronizerUpgradeConfig.activeMigrationId,
       xns,
       auth0Client.getCfg(),
       false, // We don't currently support non-auth for validator-runbook
