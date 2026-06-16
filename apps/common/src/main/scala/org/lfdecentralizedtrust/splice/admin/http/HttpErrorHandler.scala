@@ -108,7 +108,6 @@ final class HttpErrorHandler(
       case Status.Code.UNAVAILABLE => StatusCodes.ServiceUnavailable
       case Status.Code.INTERNAL => StatusCodes.InternalServerError
       case Status.Code.FAILED_PRECONDITION =>
-
         val grpcDesc = grpcStatus.getDescription
         val conflictErrorCodes = Seq(
           Interpreter.GenericInterpretationError,
