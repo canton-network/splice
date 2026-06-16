@@ -69,7 +69,7 @@ class SplitwellFrontendIntegrationTest
         requestGroupMembership(invite)
       }
 
-      withFrontEndStep("aliceSplitwell", "accept-bob-membership") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "click-add-user-link") { implicit webDriver =>
         eventuallyClickOn(className("add-user-link"))
       }
 
@@ -78,7 +78,7 @@ class SplitwellFrontendIntegrationTest
         requestGroupMembership(invite)
       }
 
-      withFrontEndStep("aliceSplitwell", "accept-charlie-and-add-lunch") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") { implicit webDriver =>
         eventuallyClickOn(className("add-user-link"))
         eventually() {
           findAll(className("balances-table-row")).toSeq should have length 2
@@ -95,7 +95,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("enter-payment-link"))
       }
 
-      withFrontEndStep("charlieSplitwell", "add-digestivs") { implicit webDriver =>
+      withFrontEndStep("charlieSplitwell", "enter-payment-info") { implicit webDriver =>
         inside(eventuallyFind(className("enter-payment-amount-field"))) { case Some(field) =>
           field.underlying.click()
           reactTextInput(field).value = "333.0"
@@ -210,17 +210,17 @@ class SplitwellFrontendIntegrationTest
       val bobAns = expectedAns(bobUserParty, bobEntryName)
       bobWalletClient.tap(walletAmuletToUsd(510))
 
-      val invite = withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      val invite = withFrontEndStep("aliceSplitwell", "create-invite") { implicit webDriver =>
         login(aliceSplitwellUIPort, aliceDamlUser)
         createGroupAndInviteLink(groupName)
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "request-membership") { implicit webDriver =>
         login(bobSplitwellUIPort, bobDamlUser)
         requestGroupMembership(invite)
       }
 
-      withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") { implicit webDriver =>
         eventuallyClickOn(className("add-user-link"))
         eventually() {
           findAll(className("balances-table-row")).toSeq should have length 1
@@ -228,7 +228,7 @@ class SplitwellFrontendIntegrationTest
         addTeamLunch(1000)
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "enter-payment-accept-verify") { implicit webDriver =>
         enterSplitwellPayment(aliceEntryName, aliceUserParty, 500)
 
         // Bob is redirected to wallet ..
@@ -276,7 +276,7 @@ class SplitwellFrontendIntegrationTest
         )
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "error-on-unknown-party") { implicit webDriver =>
         val errorMsg = "is not part of the group"
         loggerFactory.assertLoggedWarningsAndErrorsSeq(
           enterSplitwellPayment("unknown::abc", PartyId.tryFromProtoPrimitive("unknown::abc"), 42),
@@ -297,7 +297,7 @@ class SplitwellFrontendIntegrationTest
       onboardWalletUser(charlieWalletClient, charlieValidator)
 
       // Alice creates three groups - abc, ab, ac
-      val (invite1, invite2, invite3) = withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      val (invite1, invite2, invite3) = withFrontEndStep("aliceSplitwell", "create-three-groups") { implicit webDriver =>
         login(aliceSplitwellUIPort, aliceDamlUser)
 
         val invite1 = createGroupAndInviteLink("group-abc")
@@ -308,21 +308,21 @@ class SplitwellFrontendIntegrationTest
       }
 
       // Bob requests to join groups abc and ab
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "request-membership-abc-ab") { implicit webDriver =>
         login(bobSplitwellUIPort, bobDamlUser)
         requestGroupMembership(invite1)
         requestGroupMembership(invite2)
       }
 
       // Charlie requests to join groups abc and ac
-      withFrontEnd("charlieSplitwell") { implicit webDriver =>
+      withFrontEndStep("charlieSplitwell", "request-membership-abc-ac") { implicit webDriver =>
         login(charlieSplitwellUIPort, charlieDamlUser)
         requestGroupMembership(invite1)
         requestGroupMembership(invite3)
       }
 
       // Alice accepts all requests
-      withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "accept-all-membership-requests") { implicit webDriver =>
         eventually(timeUntilSuccess = 20.minute) {
           findAll(
             className("add-user-link")
@@ -347,7 +347,7 @@ class SplitwellFrontendIntegrationTest
         }
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "verify-bob-groups") { implicit webDriver =>
         eventually() {
           findAll(className("group-entry")) should have length 2
           val groups = findAll(className("group-entry")).toSeq
@@ -361,7 +361,7 @@ class SplitwellFrontendIntegrationTest
           )
         }
       }
-      withFrontEnd("charlieSplitwell") { implicit webDriver =>
+      withFrontEndStep("charlieSplitwell", "verify-charlie-groups") { implicit webDriver =>
         eventually() {
           findAll(className("group-entry")) should have length 2
           val groups = findAll(className("group-entry")).toSeq
