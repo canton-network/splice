@@ -73,7 +73,7 @@ trait ExternallySignedTxTest
         .party
 
       // Tap some amulets to pay for purchase of transfer pre-approval
-      aliceValidatorWalletClient.tap(1000.0)
+      aliceValidatorWalletClient.tap(10.0)
 
       runProcess(
         Seq(
