@@ -1305,7 +1305,7 @@ class DbSvDsoStore(
   }
 
   override def listNonObserverRewardCouponsV2ForProvider(
-      rewardParty: PartyId,
+      provider: PartyId,
       limit: Limit,
   )(implicit
       tc: TraceContext
@@ -1319,7 +1319,7 @@ class DbSvDsoStore(
             domainMigrationId,
             RewardCouponV2.COMPANION,
             where =
-              sql"reward_beneficiary_is_observer = false and reward_party = ${lengthLimited(rewardParty.toProtoPrimitive)}",
+              sql"reward_beneficiary_is_observer = false and reward_party = ${lengthLimited(provider.toProtoPrimitive)}",
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listNonObserverRewardCouponsV2ForProvider",

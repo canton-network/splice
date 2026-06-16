@@ -106,14 +106,11 @@ object ExpireRewardCouponV2Trigger {
   ): BatchedMultiDomainExpiredContractTrigger.ListExpiredContracts[CouponCid, Coupon] =
     (now, limit) =>
       implicit tc =>
-        svTaskContext.dsoStore
-          .listExpiredRewardCouponsV2(now, limit)(tc)
-          .flatMap { expired =>
-            val (observerCoupons, hiddenCoupons) =
-              expired.partition(_.payload.providerIsObserver)
-            filterCorrectlyVetted(svTaskContext, logger, observerCoupons, now)
-              .map(hiddenCoupons ++ _)
-          }
+        for {
+          expired <- svTaskContext.dsoStore.listExpiredRewardCouponsV2(now, limit)(tc)
+          (observerCoupons, hiddenCoupons) = expired.partition(_.payload.providerIsObserver)
+          vetted <- filterCorrectlyVetted(svTaskContext, logger, observerCoupons, now)
+        } yield hiddenCoupons ++ vetted
 
   private def filterCorrectlyVetted(
       svTaskContext: SvTaskBasedTrigger.Context,
