@@ -13,3 +13,5 @@ sequencer:
     flags:
       max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
       maintenance_work_mem: '2000000' # 2Gi, but GCP doesn't allow to write it that way and must be a number indicating KB
+participant:
+  bftSequencerConnection: false
