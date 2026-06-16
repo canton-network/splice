@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.{catsSyntaxOptionId, showInterpolator, toTraverseOps}
+import cats.implicits.{showInterpolator, toTraverseOps}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -170,7 +170,7 @@ class LsuTrigger(
           Future.unit
         }
       _ <- reconciler.reconcileSynchronizerNodeConfigIfRequired(
-        localSynchronizerNodes.some,
+        localSynchronizerNodes,
         currentPsid.logical,
         OnboardedImmediately,
       )

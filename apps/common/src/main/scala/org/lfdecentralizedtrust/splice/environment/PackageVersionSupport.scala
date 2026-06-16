@@ -130,19 +130,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // TODO(#564) - ensure the right version is used
-  def supportsPhysicalSynchronizers(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceDsoGovernance,
-      now,
-      DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_24,
-    )
-  }
-
   def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =

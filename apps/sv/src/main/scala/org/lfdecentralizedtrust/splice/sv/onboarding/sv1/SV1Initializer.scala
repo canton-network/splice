@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.onboarding.sv1
 
 import cats.implicits.{
-  catsSyntaxOptionId,
   catsSyntaxTuple2Semigroupal,
   catsSyntaxTuple3Semigroupal,
   catsSyntaxTuple4Semigroupal,
@@ -259,7 +258,8 @@ class SV1Initializer(
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
+      psid <- participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias)
+      synchronizerId = psid.logical
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         initConnection,
@@ -322,11 +322,9 @@ class SV1Initializer(
         new SynchronizerNodeReconciler(
           dsoStore,
           connection,
-          packageVersionSupport,
           clock,
           retryProvider,
           loggerFactory,
-          domainMigrationId,
           config.scan,
         ),
       )
@@ -334,9 +332,7 @@ class SV1Initializer(
       _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
       withDsoStore = new WithDsoStore(
         dsoAutomation,
-        decentralizedSynchronizer,
-        packageVersionSupport,
-        domainMigrationId,
+        psid,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -589,11 +585,10 @@ class SV1Initializer(
     */
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
-      synchronizerId: SynchronizerId,
-      packageVersionSupport: PackageVersionSupport,
-      domainMigrationId: Long,
+      psid: PhysicalSynchronizerId,
   ) {
 
+    private val synchronizerId = psid.logical
     private val dsoStore = dsoStoreWithIngestion.store
     private val dsoParty = dsoStore.key.dsoParty
     private val svParty = dsoStore.key.svParty
@@ -602,8 +597,6 @@ class SV1Initializer(
       dsoStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
       clock = clock,
       retryProvider = retryProvider,
-      versionSupport = packageVersionSupport,
-      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -625,7 +618,7 @@ class SV1Initializer(
         tc: TraceContext
     ): Future[Unit] = {
       synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-        synchronizerNodeService.nodes.some,
+        synchronizerNodeService.nodes,
         synchronizerId,
         SynchronizerNodeState.OnboardedImmediately,
       )
@@ -685,9 +678,8 @@ class SV1Initializer(
                     synchronizerNodeService.nodes.current.cometbftNode,
                     synchronizerNodeService.nodes.current,
                     config.scan,
-                    synchronizerId,
+                    psid,
                     clock,
-                    domainMigrationId,
                   )
                   _ = logger
                     .info(

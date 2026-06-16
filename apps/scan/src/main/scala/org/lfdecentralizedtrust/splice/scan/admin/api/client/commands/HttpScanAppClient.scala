@@ -784,15 +784,16 @@ object HttpScanAppClient {
           Codec.decode(Codec.SynchronizerId)(domain.domainId).flatMap { synchronizerId =>
             domain.sequencers
               .traverse { s =>
-                Codec.decode(Codec.Sequencer)(s.id).map { sequencerId =>
-                  DsoSequencer(
-                    s.migrationId,
-                    s.synchronizerSerial,
-                    sequencerId,
-                    s.url,
-                    s.svName,
-                    s.availableAfter.toInstant,
-                  )
+                Codec.decode(Codec.Sequencer)(s.id).flatMap { sequencerId =>
+                  s.synchronizerSerial.toRight("No serial provided").map { serial =>
+                    DsoSequencer(
+                      serial,
+                      sequencerId,
+                      s.url,
+                      s.svName,
+                      s.availableAfter.toInstant,
+                    )
+                  }
                 }
               }
               .map { sequencers =>
@@ -806,8 +807,7 @@ object HttpScanAppClient {
   final case class DomainSequencers(synchronizerId: SynchronizerId, sequencers: Seq[DsoSequencer])
 
   final case class DsoSequencer(
-      migrationId: Long,
-      serial: Option[Long],
+      serial: Long,
       id: SequencerId,
       url: String,
       svName: String,
