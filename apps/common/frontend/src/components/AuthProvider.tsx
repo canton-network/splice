@@ -38,7 +38,10 @@ const AuthProvider: React.FC<AuthProviderProps> = ({
 
   return (
     <OidcAuthProvider
-      automaticSilentRenew={false}
+      // Use refresh_token silent renew so users are not forced to re-login
+      // when the IdP returns a short-lived access token (Keycloak default
+      // is 5 minutes).
+      automaticSilentRenew
       userStore={new WebStorageStateStore({ store: window.localStorage })}
       onSigninCallback={user => {
         const redirectTo = extractRedirectToFromUser(user);

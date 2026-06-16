@@ -7,14 +7,15 @@ import { AuthConfig, isHs256UnsafeAuthConfig } from '../config/schema';
 
 export const oidcAuthToProviderProps = (config: AuthConfig): AuthProviderProps => {
   if (!isHs256UnsafeAuthConfig(config)) {
-    const { token_audience, token_scope, ...props } = config;
+    const { token_audience, token_scope, enable_offline_scope, ...props } = config;
 
     // We include the `openid` scope to comply with the OIDC spec, which requires this scope to be present:
     // see https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
     // TODO(DACH-NY/canton-network-node#16509): we don't do that for tokens that access the Ledger API server as the Ledger API server does not like the multiple audiences returned by Auth0 when also requesting the openid scope.
     const openid_scope = token_scope !== 'daml_ledger_api' ? 'openid' : null;
+    const offline_scope = enable_offline_scope ? 'offline_access' : null;
 
-    const scope = [token_scope, openid_scope].filter(s => !!s).join(' ');
+    const scope = [token_scope, openid_scope, offline_scope].filter(s => !!s).join(' ');
 
     const extraQueryParams = { audience: token_audience };
     const redirect_uri = window.location.origin;

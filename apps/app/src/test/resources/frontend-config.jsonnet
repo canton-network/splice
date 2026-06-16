@@ -16,6 +16,9 @@ local authRs(auth0Config) = {
   client_id: auth0Config.clientId,
   token_audience: auth0Config.audience,
   token_scope: authScope,
+  // Auth0 only issues a refresh token when the `offline_access` scope is
+  // requested; integration-test deployments target Auth0, so opt in here.
+  enable_offline_scope: true,
 };
 
 

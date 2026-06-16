@@ -58,6 +58,7 @@ const rs256Config: AuthConfig = {
   authority: 'https://example.auth0.com',
   client_id: 'test-client',
   token_audience: 'https://sv.example.com',
+  enable_offline_scope: false,
 };
 
 const Caller: React.FC = () => {
