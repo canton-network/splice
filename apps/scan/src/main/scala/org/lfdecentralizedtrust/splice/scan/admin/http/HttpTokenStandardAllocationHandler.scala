@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as a
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
+import org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.util
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
@@ -29,6 +30,7 @@ import scala.util.{Failure, Success, Try}
 class HttpTokenStandardAllocationHandler(
     store: ScanStore,
     contractFetcher: ChoiceContextContractFetcher,
+    tokenStandardSettlementConfig: TokenStandardConfig.SettlementConfig,
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
@@ -132,6 +134,7 @@ class HttpTokenStandardAllocationHandler(
                 .asRuntimeException()
             )
         }
+        _ <- Future(tokenStandardSettlementConfig.validateSettleBatch(settleBatch))
         choiceContextBuilder <- getExternalPartyTransferContext(
           body.excludeDebugFields.getOrElse(false)
         )
