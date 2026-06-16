@@ -398,12 +398,10 @@ class RollForwardLsuDRIntegrationTest
                   clue(s"check sequencers for $sv") {
                     sequencers.size shouldBe 2
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 0
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe 0
                     }
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   }
                 }

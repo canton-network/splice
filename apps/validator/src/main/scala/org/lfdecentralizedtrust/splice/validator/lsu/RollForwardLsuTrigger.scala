@@ -96,7 +96,7 @@ final case class RollForwardLsuTrigger(
             s.sequencers
           case _ => Seq.empty
         }
-        .filter(_.serial == Some(rollForward.successorPhysicalSynchronizerId.serial.unwrap.toLong))
+        .filter(_.serial == rollForward.successorPhysicalSynchronizerId.serial.unwrap.toLong)
       val oldSequencers =
         config.sequencerConnections.aliasToConnection.forgetNE.values.flatMap(_.sequencerId).toSet
       val usableNewSequencers = newSequencers.filter(s => oldSequencers.contains(s.id))

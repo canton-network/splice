@@ -165,7 +165,7 @@ class SynchronizerNodeReconciler(
               .map(_.asJava)
               .toJava,
           )
-          setConfig(synchronizerId, rulesAndState, nodeConfig)
+          setConfig(synchronizerId.logical, rulesAndState, nodeConfig)
         } else {
           logger.info(s"Not setting domain node config because it is the same as the existing one.")
           Future.unit

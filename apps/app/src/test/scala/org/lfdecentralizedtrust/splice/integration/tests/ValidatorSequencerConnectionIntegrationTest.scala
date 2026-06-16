@@ -83,7 +83,7 @@ class ValidatorSequencerConnectionIntegrationTest
           val now = env.environment.clock.now
           val availableSequencers = for {
             domain <- allSequencers
-            sequencer <- domain.sequencers.filter(_.serial.isDefined)
+            sequencer <- domain.sequencers
             if sequencer.url.nonEmpty && !now.toInstant.isBefore(sequencer.availableAfter)
           } yield sequencer
           availableSequencers.size shouldBe 4

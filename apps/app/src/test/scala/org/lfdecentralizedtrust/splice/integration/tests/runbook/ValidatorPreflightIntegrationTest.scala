@@ -464,9 +464,9 @@ abstract class ValidatorPreflightIntegrationTestBase
           env.environment.clock.now.toInstant.isAfter(connection.availableAfter.plusSeconds(60))
         }
 
-        val latestSerial = connections.flatMap(_.serial).max
+        val latestSerial = connections.map(_.serial).max
         val availableConnections = connections.filter(connection =>
-          connection.serial.contains(latestSerial) &&
+          connection.serial == latestSerial &&
             connection.url != "" &&
             isAvailable(connection)
         )

@@ -264,7 +264,7 @@ class DomainConnector(
         .map { sequencers =>
           val serialSequencers =
             sequencers.sequencers
-              .filter(_.serial.contains(synchronizerSerial.unwrap.toLong))
+              .filter(_.serial == synchronizerSerial.unwrap.toLong)
           val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
             case Some(config) =>
               val allowedNamesSet = config.svNames.toList.toSet
@@ -296,7 +296,7 @@ class DomainConnector(
     // sequencer connections will be ignore if they are with a invalid Alias, empty url or not yet available (`before availableAfter`)
     sequencers
       .collect {
-        case DsoSequencer(_, _, id, url, _, availableAfter)
+        case DsoSequencer(_, id, url, _, availableAfter)
             if url.nonEmpty && !domainTime.toInstant
               .isBefore(availableAfter) =>
           for {
