@@ -31,7 +31,7 @@ synchronizerMigration:
   frozenMigrationId: 0
   active:
     id: 0
-    version: 0.6.9-snapshot.20260615.3119.0.vee5e47c8
+    version: 0.6.9-snapshot.20260616.3121.0.v266e5d9e
     sequencer:
       enableBftSequencer: true
     releaseReference:
