@@ -17,6 +17,7 @@ import com.digitalasset.canton.sequencing.{
   SubmissionRequestAmplification,
 }
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import io.grpc.Status
@@ -32,7 +33,7 @@ import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfi
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class DomainConnector(
+class SynchronizerConnector(
     config: ValidatorAppBackendConfig,
     participantAdminConnection: ParticipantAdminConnection,
     scanConnection: BftScanConnection,
@@ -50,9 +51,9 @@ class DomainConnector(
       "ensure_decentralized_synchronizer_registered",
       "decentralized synchronizer is already registered",
       participantAdminConnection
-        .lookupSynchronizerConnectionConfig(config.domains.global.alias)
+        .isSynchronizerRegistered(config.domains.global.alias)
         .flatMap {
-          case Some(_) =>
+          case true =>
             participantAdminConnection
               .listConnectedSynchronizers()
               .map(
@@ -62,7 +63,7 @@ class DomainConnector(
                     .asRuntimeException()
                 )(_ => ())
               )
-          case None =>
+          case false =>
             throw Status.NOT_FOUND
               .withDescription("Global Synchronizer not registered in the participant")
               .asRuntimeException()
@@ -74,23 +75,25 @@ class DomainConnector(
   def ensureDecentralizedSynchronizerRegisteredAndConnectedWithCurrentConfig(clock: Clock)(implicit
       tc: TraceContext
   ): Future[Unit] = {
-    getDecentralizedSynchronizerSequencerConnections(clock).flatMap(x =>
-      MonadUtil.sequentialTraverse_(x.toList) { case (alias, connections) =>
-        ensureDomainRegistered(alias, connections)
-      }
-    )
+    getDecentralizedSynchronizerConfigs(clock).flatMap(config => ensureDomainRegistered(config))
   }
 
-  def getDecentralizedSynchronizerSequencerConnections(clock: Clock)(implicit
+  private def getDecentralizedSynchronizerConfigs(clock: Clock)(implicit
       tc: TraceContext
-  ): Future[Map[SynchronizerAlias, SequencerConnections]] = {
+  ): Future[SynchronizerConnectionConfig] = {
     config.domains.global.url match {
       case None =>
         participantAdminConnection
           .lookupPhysicalSynchronizerId(config.domains.global.alias)
           .flatMap {
-            case Some(serial) =>
-              waitForSequencerConnectionsFromScan(clock, serial.serial)
+            case Some(psid) =>
+              waitForSequencerConnectionsFromScan(clock, psid.serial).map(connections =>
+                buildSynchronizerConfig(
+                  config.domains.global.alias,
+                  Some(psid),
+                  connections,
+                )
+              )
             case None =>
               logger.info("No registered physical synchronizer id, using active id from scan")
               retryProvider
@@ -103,12 +106,20 @@ class DomainConnector(
                   logger,
                 )
                 .flatMap(
-                  waitForSequencerConnectionsFromScan(clock, _)
+                  waitForSequencerConnectionsFromScan(clock, _).map(connections =>
+                    buildSynchronizerConfig(
+                      config.domains.global.alias,
+                      None,
+                      connections,
+                    )
+                  )
                 )
           }
       case Some(url) =>
-        Map(
-          config.domains.global.alias -> SequencerConnections
+        buildSynchronizerConfig(
+          config.domains.global.alias,
+          None,
+          SequencerConnections
             .tryMany(
               connections = Seq(
                 GrpcSequencerConnection
@@ -128,7 +139,7 @@ class DomainConnector(
                 config.sequencerRequestAmplificationPatience.toInternal,
               ),
               sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
-            )
+            ),
         ).pure[Future]
     }
   }
@@ -136,38 +147,34 @@ class DomainConnector(
   def ensureExtraDomainsRegistered()(implicit tc: TraceContext): Future[Unit] =
     MonadUtil.sequentialTraverse_(config.domains.extra)(synchronizer =>
       ensureDomainRegistered(
-        synchronizer.alias,
-        SequencerConnections.single(
-          GrpcSequencerConnection
-            .create(synchronizer.url)
-            .fold(
-              error =>
-                throw Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"Invalid synchronizer url for synchronizer $synchronizer: $error"
-                  )
-                  .asRuntimeException(),
-              identity,
-            )
-        ),
+        buildSynchronizerConfig(
+          synchronizer.alias,
+          None,
+          SequencerConnections.single(
+            GrpcSequencerConnection
+              .create(synchronizer.url)
+              .fold(
+                error =>
+                  throw Status.INVALID_ARGUMENT
+                    .withDescription(
+                      s"Invalid synchronizer url for synchronizer $synchronizer: $error"
+                    )
+                    .asRuntimeException(),
+                identity,
+              )
+          ),
+        )
       )
     )
 
   private def ensureDomainRegistered(
-      alias: SynchronizerAlias,
-      sequencerConnections: SequencerConnections,
+      syncConfig: SynchronizerConnectionConfig
   )(implicit tc: TraceContext): Future[Unit] = {
-    val domainConfig = SynchronizerConnectionConfig(
-      alias,
-      sequencerConnections,
-      timeTracker = SynchronizerTimeTrackerConfig(
-        minObservationDuration = config.timeTrackerMinObservationDuration,
-        observationLatency = config.timeTrackerObservationLatency,
-      ),
+    logger.info(
+      s"Ensuring domain ${syncConfig.synchronizerAlias} registered with config $syncConfig"
     )
-    logger.info(s"Ensuring domain $alias registered with config $domainConfig")
     participantAdminConnection.ensureSynchronizerRegisteredAndConnected(
-      domainConfig,
+      syncConfig,
       overwriteExistingConnection = true,
       reconnectOnSynchronizerConfigurationChange =
         config.parameters.enabledFeatures.reconnectOnSynchronizerConfigurationChange,
@@ -175,9 +182,25 @@ class DomainConnector(
     )
   }
 
+  private def buildSynchronizerConfig(
+      alias: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId],
+      sequencerConnections: SequencerConnections,
+  ) = {
+    SynchronizerConnectionConfig(
+      alias,
+      sequencerConnections,
+      synchronizerId = psid,
+      timeTracker = SynchronizerTimeTrackerConfig(
+        minObservationDuration = config.timeTrackerMinObservationDuration,
+        observationLatency = config.timeTrackerObservationLatency,
+      ),
+    )
+  }
+
   private def waitForSequencerConnectionsFromScan(clock: Clock, synchronizerSerial: NonNegativeInt)(
       implicit tc: TraceContext
-  ): Future[Map[SynchronizerAlias, SequencerConnections]] = {
+  ): Future[SequencerConnections] = {
     retryProvider.getValueWithRetries(
       // Short retries since usually a failure here is just a misconfiguration error.
       // The only case where this can happen is during a domain migration and even then
@@ -187,7 +210,7 @@ class DomainConnector(
       "scan_sequencer_connections",
       "non-empty sequencer connections from scan",
       getSequencerConnectionsFromScan(Right(clock), synchronizerSerial)
-        .map { case (connections, time) =>
+        .map { case (_, connections, time) =>
           if (connections.isEmpty) {
             throw Status.NOT_FOUND
               .withDescription(
@@ -195,47 +218,45 @@ class DomainConnector(
               )
               .asRuntimeException()
           } else {
-            connections.view.mapValues {
-              NonEmpty.from(_) match {
-                case None =>
-                  throw Status.NOT_FOUND
-                    .withDescription(
-                      s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
-                    )
-                    .asRuntimeException()
-                case Some(nonEmptyConnections) =>
-                  val threshold: PositiveInt =
-                    config.domains.global.trustedSynchronizerConfig match {
-                      case Some(config) => PositiveInt.tryCreate(config.threshold)
-                      case None =>
-                        Thresholds.sequencerConnectionsSizeThreshold(nonEmptyConnections.size)
-                    }
-
-                  // max(threshold, sequencerConnectionsSizeThreshold) is used to ensure that even in small configurations
-                  // (e.g., N=3, f+1=1) we have enough retries to make sure that the request is eventually processed by a live sequencer.
-
-                  val amplificationFactor = PositiveInt.tryCreate(
-                    Math.max(
-                      threshold.unwrap,
-                      Thresholds
-                        .sequencerSubmissionRequestAmplification(nonEmptyConnections.size)
-                        .unwrap,
-                    )
+            NonEmpty.from(connections) match {
+              case None =>
+                throw Status.NOT_FOUND
+                  .withDescription(
+                    s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
                   )
+                  .asRuntimeException()
+              case Some(nonEmptyConnections) =>
+                val threshold: PositiveInt =
+                  config.domains.global.trustedSynchronizerConfig match {
+                    case Some(config) => PositiveInt.tryCreate(config.threshold)
+                    case None =>
+                      Thresholds.sequencerConnectionsSizeThreshold(nonEmptyConnections.size)
+                  }
 
-                  SequencerConnections.tryMany(
-                    nonEmptyConnections.forgetNE,
-                    threshold,
-                    submissionRequestAmplification = SubmissionRequestAmplification(
-                      amplificationFactor,
-                      config.sequencerRequestAmplificationPatience.toInternal,
-                    ),
-                    sequencerLivenessMargin =
-                      Thresholds.sequencerConnectionsLivenessMargin(nonEmptyConnections.size),
-                    sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
+                // max(threshold, sequencerConnectionsSizeThreshold) is used to ensure that even in small configurations
+                // (e.g., N=3, f+1=1) we have enough retries to make sure that the request is eventually processed by a live sequencer.
+
+                val amplificationFactor = PositiveInt.tryCreate(
+                  Math.max(
+                    threshold.unwrap,
+                    Thresholds
+                      .sequencerSubmissionRequestAmplification(nonEmptyConnections.size)
+                      .unwrap,
                   )
-              }
-            }.toMap
+                )
+
+                SequencerConnections.tryMany(
+                  nonEmptyConnections.forgetNE,
+                  threshold,
+                  submissionRequestAmplification = SubmissionRequestAmplification(
+                    amplificationFactor,
+                    config.sequencerRequestAmplificationPatience.toInternal,
+                  ),
+                  sequencerLivenessMargin =
+                    Thresholds.sequencerConnectionsLivenessMargin(nonEmptyConnections.size),
+                  sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
+                )
+            }
           }
         },
       logger,
@@ -247,7 +268,7 @@ class DomainConnector(
       synchronizerSerial: NonNegativeInt,
   )(implicit
       traceContext: TraceContext
-  ): Future[(Map[SynchronizerAlias, Seq[GrpcSequencerConnection]], CantonTimestamp)] = {
+  ): Future[(SynchronizerAlias, Seq[GrpcSequencerConnection], CantonTimestamp)] = {
     val domainTime = timeOrClock match {
       case Left(time) => time
       case Right(clock) => clock.now
@@ -256,54 +277,56 @@ class DomainConnector(
       domainSequencers <- scanConnection.listDsoSequencers()
       decentralizedSynchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
     } yield {
-      domainSequencers
-        .filter(sequencers =>
-          // This filter should be a noop since we only ever expect to have one synchronizer here
-          // so this is just an extra safeguard.
-          sequencers.synchronizerId == decentralizedSynchronizerId
-        )
-        .map { sequencers =>
-          val serialOrMigrationSequencers =
-            sequencers.sequencers
-              .groupBy(_.id)
-              .view
-              .mapValues { sequencersForId =>
-                val serialMatch =
-                  sequencersForId.find(_.serial.contains(synchronizerSerial.unwrap.toLong))
-                // it might be that some SV did not update the url for the latest serial
-                // in that case we don't want to fallback to the migration id one
-                // the migration id fallback is valid only if the SV did not sync the per serial urls yet for the first time
-                val sequencerHasAnyEntryWithSerial = sequencersForId.exists(_.serial.nonEmpty)
-                if (sequencerHasAnyEntryWithSerial) serialMatch
-                else
-                  serialMatch.orElse(
-                    sequencersForId.find(s => s.serial.isEmpty && s.migrationId == migrationId)
-                  )
-              }
-              .values
-              .flatten
-              .toSeq
-          val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
-            case Some(config) =>
-              val allowedNamesSet = config.svNames.toList.toSet
-              logger.debug(
-                s"Filtering sequencers to only include: ${allowedNamesSet.toList.mkString(", ")}"
-              )
-              serialOrMigrationSequencers.filter(s => allowedNamesSet.contains(s.svName))
-            case None =>
-              serialOrMigrationSequencers
-          }
-          val validConnections = extractValidConnections(
-            svFilteredSequencers,
-            domainTime,
+      (
+        config.domains.global.alias,
+        domainSequencers
+          .filter(sequencers =>
+            // This filter should be a noop since we only ever expect to have one synchronizer here
+            // so this is just an extra safeguard.
+            sequencers.synchronizerId == decentralizedSynchronizerId
           )
-          logger.debug(
-            s"For synchronizer ${config.domains.global.alias} at time $domainTime using $validConnections from scan"
-          )
-          config.domains.global.alias ->
+          .flatMap { sequencers =>
+            val serialOrMigrationSequencers =
+              sequencers.sequencers
+                .groupBy(_.id)
+                .view
+                .mapValues { sequencersForId =>
+                  val serialMatch =
+                    sequencersForId.find(_.serial.contains(synchronizerSerial.unwrap.toLong))
+                  // it might be that some SV did not update the url for the latest serial
+                  // in that case we don't want to fallback to the migration id one
+                  // the migration id fallback is valid only if the SV did not sync the per serial urls yet for the first time
+                  val sequencerHasAnyEntryWithSerial = sequencersForId.exists(_.serial.nonEmpty)
+                  if (sequencerHasAnyEntryWithSerial) serialMatch
+                  else
+                    serialMatch.orElse(
+                      sequencersForId.find(s => s.serial.isEmpty && s.migrationId == migrationId)
+                    )
+                }
+                .values
+                .flatten
+                .toSeq
+            val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
+              case Some(config) =>
+                val allowedNamesSet = config.svNames.toList.toSet
+                logger.debug(
+                  s"Filtering sequencers to only include: ${allowedNamesSet.toList.mkString(", ")}"
+                )
+                serialOrMigrationSequencers.filter(s => allowedNamesSet.contains(s.svName))
+              case None =>
+                serialOrMigrationSequencers
+            }
+            val validConnections = extractValidConnections(
+              svFilteredSequencers,
+              domainTime,
+            )
+            logger.debug(
+              s"For synchronizer ${config.domains.global.alias} at time $domainTime using $validConnections from scan"
+            )
             validConnections
-        }
-        .toMap -> domainTime
+          },
+        domainTime,
+      )
     }
   }
 

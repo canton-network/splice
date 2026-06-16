@@ -161,9 +161,11 @@ class HttpValidatorAdminHandler(
     implicit val AdminUserRequest(tracedContext) = tuser
     withSpan(s"$workflowId.getDecentralizedSynchronizerConnectionConfig") { _ => _ =>
       for {
-        connectionConfig <- participantAdminConnection.getSynchronizerConnectionConfig(
-          config.domains.global.alias
-        )
+        connectionConfig <- participantAdminConnection
+          .getRegisteredSynchronizer(
+            config.domains.global.alias
+          )
+          .map(_.config.toInternal)
       } yield v0.ValidatorAdminResource.GetDecentralizedSynchronizerConnectionConfigResponse.OK(
         definitions.GetDecentralizedSynchronizerConnectionConfigResponse(
           definitions.SequencerConnections(
