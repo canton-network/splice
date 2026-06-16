@@ -10,7 +10,8 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.admin.http.AdminRoutes
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.config.SpliceDbConfig.withConfiguredPostgresConnectionSettings
-import org.lfdecentralizedtrust.splice.environment.NodeBootstrapBase
+import org.lfdecentralizedtrust.splice.environment.{NodeBootstrapBase, SpliceStorageFactory}
+import org.lfdecentralizedtrust.splice.store.db.SpliceDbLockCounters
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
 import com.digitalasset.canton.concurrent.{
@@ -25,6 +26,7 @@ import com.digitalasset.canton.telemetry.ConfiguredOpenTelemetry
 import com.digitalasset.canton.time.*
 
 import java.util.concurrent.ScheduledExecutorService
+
 import scala.concurrent.Future
 
 /** Class used to orchester the starting/initialization of an SV app.
@@ -100,23 +102,31 @@ object SvAppBootstrap {
       actorSystem: ActorSystem,
       executionSequencerFactory: ExecutionSequencerFactory,
   ): Either[String, SvAppBootstrap] =
-    InstanceName
-      .create(name)
-      .map(
-        new SvAppBootstrap(
-          _,
-          svConfig,
-          svAppParameters,
-          testingConfigInternal,
-          clock,
-          svMetrics,
-          new StorageSingleFactory(
-            withConfiguredPostgresConnectionSettings(svConfig.storage, svConfig.postgres)
-          ),
-          loggerFactory,
-          futureSupervisor,
-          configuredOpenTelemetry,
-        )
-      )
-      .leftMap(_.toString)
+    SpliceStorageFactory.createWithDeferredClose(
+      storage = withConfiguredPostgresConnectionSettings(svConfig.storage, svConfig.postgres),
+      instanceLockEnabled = svConfig.instanceLockEnabled,
+      mainLockCounter = SpliceDbLockCounters.SV_WRITE,
+      poolLockCounter = SpliceDbLockCounters.SV_WRITERS,
+      exitOnFatalFailures = svAppParameters.exitOnFatalFailures,
+      futureSupervisor = futureSupervisor,
+      loggerFactory = loggerFactory,
+    ) { storageFactory =>
+      InstanceName
+        .create(name)
+        .map { instanceName =>
+          new SvAppBootstrap(
+            instanceName,
+            svConfig,
+            svAppParameters,
+            testingConfigInternal,
+            clock,
+            svMetrics,
+            storageFactory,
+            loggerFactory,
+            futureSupervisor,
+            configuredOpenTelemetry,
+          )
+        }
+        .leftMap(_.toString)
+    }
 }

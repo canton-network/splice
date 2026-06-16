@@ -10,7 +10,8 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.admin.http.AdminRoutes
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.config.SpliceDbConfig.withConfiguredPostgresConnectionSettings
-import org.lfdecentralizedtrust.splice.environment.NodeBootstrapBase
+import org.lfdecentralizedtrust.splice.environment.{NodeBootstrapBase, SpliceStorageFactory}
+import org.lfdecentralizedtrust.splice.store.db.SpliceDbLockCounters
 import org.lfdecentralizedtrust.splice.splitwell.config.SplitwellAppBackendConfig
 import org.lfdecentralizedtrust.splice.splitwell.metrics.SplitwellAppMetrics
 import com.digitalasset.canton.concurrent.{
@@ -25,6 +26,7 @@ import com.digitalasset.canton.telemetry.ConfiguredOpenTelemetry
 import com.digitalasset.canton.time.*
 
 import java.util.concurrent.ScheduledExecutorService
+
 import scala.concurrent.Future
 
 /** Class used to orchester the starting/initialization of Splitwell apps.
@@ -99,26 +101,34 @@ object SplitwellAppBootstrap {
       actorSystem: ActorSystem,
       executionSequencerFactory: ExecutionSequencerFactory,
   ): Either[String, SplitwellAppBootstrap] =
-    InstanceName
-      .create(name)
-      .map(
-        new SplitwellAppBootstrap(
-          _,
-          splitwellConfig,
-          amuletAppParameters,
-          testingConfigInternal,
-          clock,
-          splitwellMetrics,
-          new StorageSingleFactory(
-            withConfiguredPostgresConnectionSettings(
-              splitwellConfig.storage,
-              splitwellConfig.postgres,
-            )
-          ),
-          loggerFactory,
-          futureSupervisor,
-          configuredOpenTelemetry,
-        )
-      )
-      .leftMap(_.toString)
+    SpliceStorageFactory.createWithDeferredClose(
+      storage = withConfiguredPostgresConnectionSettings(
+        splitwellConfig.storage,
+        splitwellConfig.postgres,
+      ),
+      instanceLockEnabled = splitwellConfig.instanceLockEnabled,
+      mainLockCounter = SpliceDbLockCounters.SPLITWELL_WRITE,
+      poolLockCounter = SpliceDbLockCounters.SPLITWELL_WRITERS,
+      exitOnFatalFailures = amuletAppParameters.exitOnFatalFailures,
+      futureSupervisor = futureSupervisor,
+      loggerFactory = loggerFactory,
+    ) { storageFactory =>
+      InstanceName
+        .create(name)
+        .map { instanceName =>
+          new SplitwellAppBootstrap(
+            instanceName,
+            splitwellConfig,
+            amuletAppParameters,
+            testingConfigInternal,
+            clock,
+            splitwellMetrics,
+            storageFactory,
+            loggerFactory,
+            futureSupervisor,
+            configuredOpenTelemetry,
+          )
+        }
+        .leftMap(_.toString)
+    }
 }

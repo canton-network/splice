@@ -10,7 +10,8 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.admin.http.AdminRoutes
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.config.SpliceDbConfig.withConfiguredPostgresConnectionSettings
-import org.lfdecentralizedtrust.splice.environment.NodeBootstrapBase
+import org.lfdecentralizedtrust.splice.environment.{NodeBootstrapBase, SpliceStorageFactory}
+import org.lfdecentralizedtrust.splice.store.db.SpliceDbLockCounters
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfig
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 import com.digitalasset.canton.concurrent.{
@@ -100,26 +101,34 @@ object ValidatorAppBootstrap {
       actorSystem: ActorSystem,
       executionSequencerFactory: ExecutionSequencerFactory,
   ): Either[String, ValidatorAppBootstrap] =
-    InstanceName
-      .create(name)
-      .map(
-        new ValidatorAppBootstrap(
-          _,
-          validatorConfig,
-          validatorAppParameters,
-          testingConfigInternal,
-          clock,
-          validatorMetrics,
-          new StorageSingleFactory(
-            withConfiguredPostgresConnectionSettings(
-              validatorConfig.storage,
-              validatorConfig.postgres,
-            )
-          ),
-          loggerFactory,
-          futureSupervisor,
-          configuredOpenTelemetry,
-        )
-      )
-      .leftMap(_.toString)
+    SpliceStorageFactory.createWithDeferredClose(
+      storage = withConfiguredPostgresConnectionSettings(
+        validatorConfig.storage,
+        validatorConfig.postgres,
+      ),
+      instanceLockEnabled = validatorConfig.instanceLockEnabled,
+      mainLockCounter = SpliceDbLockCounters.VALIDATOR_WRITE,
+      poolLockCounter = SpliceDbLockCounters.VALIDATOR_WRITERS,
+      exitOnFatalFailures = validatorAppParameters.exitOnFatalFailures,
+      futureSupervisor = futureSupervisor,
+      loggerFactory = loggerFactory,
+    ) { storageFactory =>
+      InstanceName
+        .create(name)
+        .map { instanceName =>
+          new ValidatorAppBootstrap(
+            instanceName,
+            validatorConfig,
+            validatorAppParameters,
+            testingConfigInternal,
+            clock,
+            validatorMetrics,
+            storageFactory,
+            loggerFactory,
+            futureSupervisor,
+            configuredOpenTelemetry,
+          )
+        }
+        .leftMap(_.toString)
+    }
 }

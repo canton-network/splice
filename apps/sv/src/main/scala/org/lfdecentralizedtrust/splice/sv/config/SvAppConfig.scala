@@ -456,6 +456,10 @@ case class SvAppBackendConfig(
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
     bftSequencingParameters: Option[BftSequencingParameters],
+    // Set to false to disable the DB-level exclusive lock that prevents two SV instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
