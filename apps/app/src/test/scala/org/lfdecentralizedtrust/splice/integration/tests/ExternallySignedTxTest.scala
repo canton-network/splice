@@ -104,13 +104,13 @@ trait ExternallySignedTxTest
 
       aliceValidatorWalletClient.transferPreapprovalSend(
         partyId,
-        4.0,
+        24.0,
         UUID.randomUUID.toString,
       )
       eventually() {
         aliceValidatorBackend
           .getExternalPartyBalance(partyId)
-          .totalUnlockedCoin shouldBe "4.0000000000"
+          .totalUnlockedCoin shouldBe "24.0000000000"
       }
       val partyHint2 = UUID.randomUUID().toString
       val keyName2 = "party-key-2"
