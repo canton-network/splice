@@ -172,26 +172,26 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
           // 3 initial advances to get open rounds with staggered opensAt
           for (round <- 1 to 3) {
-            advanceRoundsToNextRoundOpening
+            advanceTimeAndWaitForRoundOpening
             assertOldestOpenRound(round.toLong)
           }
 
           val id0 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(splitwellWalletClient)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(4)
 
           val id1 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(aliceWalletClient)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(5)
 
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(6)
 
           val id3 = settleTrade(aliceParty, bobParty, venueParty)
@@ -199,7 +199,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(7)
 
           val id4 = settleTrade(aliceParty, bobParty, venueParty)
@@ -210,12 +210,12 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           val (aliceCreateId, svExpireId) =
             aliceCreateAndSvExpireInstruction(aliceParty, bobParty)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(8)
 
           // No activity for round 8
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(9)
 
           // Do only one DvP; this would not generate enough activity to reward the parties.
@@ -241,7 +241,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             _ => sv1ScanBackend.lookupFeaturedAppRight(venueParty) shouldBe None,
           )
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(10)
 
           // Do five in a round to check nested BatchOfBatches processing
@@ -251,7 +251,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
-          advanceRoundsToNextRoundOpening
+          advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(11)
 
           val id7 = settleTrade(aliceParty, bobParty, venueParty)
