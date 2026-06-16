@@ -200,6 +200,28 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         }
       }
 
+      clue("Activity totals return Ok with zeros for TBA rounds with no activity") {
+        val zeroActivityRounds = (1 to 3).map { _ =>
+          val round = oldestOpenRound
+          advanceRoundsToNextRoundOpening
+          round
+        }
+        zeroActivityRounds.foreach { round =>
+          clue(s"Round $round has zero activity totals") {
+            eventually() {
+              inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+                case definitions.GetRewardAccountingActivityTotalsResponse.members
+                      .RewardAccountingActivityTotalsOk(totals) =>
+                  totals.roundNumber shouldBe round
+                  totals.totalAppActivityWeight shouldBe 0L
+                  totals.activePartiesCount shouldBe 0L
+                  totals.activityRecordsCount shouldBe 0L
+              }
+            }
+          }
+        }
+      }
+
       confirmBftRead(bobParty)
   }
 

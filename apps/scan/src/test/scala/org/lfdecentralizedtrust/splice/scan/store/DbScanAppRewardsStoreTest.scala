@@ -606,6 +606,23 @@ class DbScanAppRewardsStoreTest
         }
       }
 
+      "empty round writes zero activity round totals" in {
+        for {
+          (store, historyId) <- newStore()
+          _ <- markRoundComplete(historyId, roundNumber)
+          _ <- store.computeAndStoreRewards(
+            roundNumber,
+            batchSize = 100,
+            testInputs,
+          )
+          roundTotal <- store.getAppActivityRoundTotalByRound(roundNumber)
+        } yield {
+          roundTotal.value.totalRoundAppActivityWeight shouldBe 0L
+          roundTotal.value.activeAppProviderPartiesCount shouldBe 0L
+          roundTotal.value.activityRecordsCount shouldBe 0L
+        }
+      }
+
     }
 
     // -- assertMintingAllowanceWithinMintingCurve tests --------------------------------
