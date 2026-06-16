@@ -220,7 +220,7 @@ object SvUtil {
       )
     } yield {
       Map(
-        synchronizerId.toProtoPrimitive -> new SynchronizerNodeConfig(
+        synchronizerId.logical.toProtoPrimitive -> new SynchronizerNodeConfig(
           cometBftConfig,
           Optional.empty(),
           mediatorConfig.toJava,
