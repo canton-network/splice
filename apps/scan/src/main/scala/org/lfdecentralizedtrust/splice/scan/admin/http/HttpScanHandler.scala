@@ -2709,20 +2709,37 @@ class HttpScanHandler(
       (appRewardsStoreO, appActivityStoreO) match {
         case (Some(appRewardsStore), Some(appActivityStore)) =>
           appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
-            case Some(roundTotal) =>
-              Future.successful(
-                ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                  definitions.GetRewardAccountingActivityTotalsResponse(
-                    definitions.RewardAccountingActivityTotalsOk(
-                      status = "Ok",
-                      roundNumber = roundTotal.roundNumber,
-                      totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
-                      activePartiesCount = roundTotal.activeAppProviderPartiesCount,
-                      activityRecordsCount = roundTotal.activityRecordsCount,
+            case Some(activityTotal) =>
+              appRewardsStore.getAppRewardRoundTotalByRound(roundNumber).map {
+                case Some(rewardTotal) =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsOk(
+                        status = "Ok",
+                        roundNumber = activityTotal.roundNumber,
+                        totalAppActivityWeight = activityTotal.totalRoundAppActivityWeight,
+                        activePartiesCount = activityTotal.activeAppProviderPartiesCount,
+                        activityRecordsCount = activityTotal.activityRecordsCount,
+                        totalAppRewardMintingAllowance =
+                          rewardTotal.totalAppRewardMintingAllowance.toString,
+                        totalAppRewardThresholded = rewardTotal.totalAppRewardThresholded.toString,
+                        totalAppRewardUnclaimed = rewardTotal.totalAppRewardUnclaimed.toString,
+                        rewardedAppProviderPartiesCount =
+                          rewardTotal.rewardedAppProviderPartiesCount,
+                      )
                     )
                   )
-                )
-              )
+                case None =>
+                  // We should never hit this, as both activity totals and round
+                  // totals are added in a single DB Tx
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsUndetermined(
+                        status = "Undetermined"
+                      )
+                    )
+                  )
+              }
             case None =>
               appActivityStore.earliestRoundWithCompleteAppActivity().map {
                 case Some(earliest) if roundNumber < earliest =>

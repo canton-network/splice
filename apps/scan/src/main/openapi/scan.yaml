@@ -4208,6 +4208,10 @@ components:
         - total_app_activity_weight
         - active_parties_count
         - activity_records_count
+        - total_app_reward_minting_allowance
+        - total_app_reward_thresholded
+        - total_app_reward_unclaimed
+        - rewarded_app_provider_parties_count
       properties:
         status:
           type: string
@@ -4221,6 +4225,15 @@ components:
           type: integer
           format: int64
         activity_records_count:
+          type: integer
+          format: int64
+        total_app_reward_minting_allowance:
+          type: string
+        total_app_reward_thresholded:
+          type: string
+        total_app_reward_unclaimed:
+          type: string
+        rewarded_app_provider_parties_count:
           type: integer
           format: int64
 
