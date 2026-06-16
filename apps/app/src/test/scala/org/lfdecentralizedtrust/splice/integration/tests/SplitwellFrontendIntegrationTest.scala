@@ -78,21 +78,22 @@ class SplitwellFrontendIntegrationTest
         requestGroupMembership(invite)
       }
 
-      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") { implicit webDriver =>
-        eventuallyClickOn(className("add-user-link"))
-        eventually() {
-          findAll(className("balances-table-row")).toSeq should have length 2
-        }
+      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") {
+        implicit webDriver =>
+          eventuallyClickOn(className("add-user-link"))
+          eventually() {
+            findAll(className("balances-table-row")).toSeq should have length 2
+          }
 
-        inside(eventuallyFind(className("enter-payment-amount-field"))) { case Some(field) =>
-          field.underlying.click()
-          reactTextInput(field).value = "1200.0"
-        }
-        inside(eventuallyFind(className("enter-payment-description-field"))) { case Some(field) =>
-          field.underlying.click()
-          reactTextInput(field).value = "Team lunch"
-        }
-        eventuallyClickOn(className("enter-payment-link"))
+          inside(eventuallyFind(className("enter-payment-amount-field"))) { case Some(field) =>
+            field.underlying.click()
+            reactTextInput(field).value = "1200.0"
+          }
+          inside(eventuallyFind(className("enter-payment-description-field"))) { case Some(field) =>
+            field.underlying.click()
+            reactTextInput(field).value = "Team lunch"
+          }
+          eventuallyClickOn(className("enter-payment-link"))
       }
 
       withFrontEndStep("charlieSplitwell", "enter-payment-info") { implicit webDriver =>
@@ -220,12 +221,13 @@ class SplitwellFrontendIntegrationTest
         requestGroupMembership(invite)
       }
 
-      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") { implicit webDriver =>
-        eventuallyClickOn(className("add-user-link"))
-        eventually() {
-          findAll(className("balances-table-row")).toSeq should have length 1
-        }
-        addTeamLunch(1000)
+      withFrontEndStep("aliceSplitwell", "click-add-user-link-and-check-balance-table-length") {
+        implicit webDriver =>
+          eventuallyClickOn(className("add-user-link"))
+          eventually() {
+            findAll(className("balances-table-row")).toSeq should have length 1
+          }
+          addTeamLunch(1000)
       }
 
       withFrontEndStep("bobSplitwell", "enter-payment-accept-verify") { implicit webDriver =>
@@ -297,14 +299,15 @@ class SplitwellFrontendIntegrationTest
       onboardWalletUser(charlieWalletClient, charlieValidator)
 
       // Alice creates three groups - abc, ab, ac
-      val (invite1, invite2, invite3) = withFrontEndStep("aliceSplitwell", "create-three-groups") { implicit webDriver =>
-        login(aliceSplitwellUIPort, aliceDamlUser)
+      val (invite1, invite2, invite3) = withFrontEndStep("aliceSplitwell", "create-three-groups") {
+        implicit webDriver =>
+          login(aliceSplitwellUIPort, aliceDamlUser)
 
-        val invite1 = createGroupAndInviteLink("group-abc")
-        val invite2 = createGroupAndInviteLink("group-ab")
-        val invite3 = createGroupAndInviteLink("group-ac")
+          val invite1 = createGroupAndInviteLink("group-abc")
+          val invite2 = createGroupAndInviteLink("group-ab")
+          val invite3 = createGroupAndInviteLink("group-ac")
 
-        (invite1, invite2, invite3)
+          (invite1, invite2, invite3)
       }
 
       // Bob requests to join groups abc and ab
