@@ -1,8 +1,12 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
+import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
@@ -11,14 +15,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
 class AcsSnapshotBulkStorageCommitFromStaging(
-    bulkReader: BulkStorageReader,
+    getBulkReader: => BulkStorageReader,
     val loggerFactory: NamedLoggerFactory,
-) extends AcsSnapshotBulkStorageWriter
+)(implicit ec: ExecutionContext)
+    extends AcsSnapshotBulkStorageWriter
     with NamedLogging {
   override def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
   )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]] = {
-    bulkReader
+    getBulkReader
       .getTimestampOfStagingAcsSnapshotAfter(last.timestamp)
       .map(
         _.map(ts => TimestampWithMigrationId(ts, -1L))
@@ -34,7 +39,9 @@ class AcsSnapshotBulkStorageCommitFromStaging(
   ): Future[Boolean] = ???
 
   private def waitForBftAgreement(implicit
-      ec: ExecutionContext
+      ec: ExecutionContext,
+      tc: TraceContext,
+      actorSystem: ActorSystem,
   ): Flow[AcsSnapshotObjects, AcsSnapshotObjects, NotUsed] = {
     Flow[AcsSnapshotObjects].mapAsync(parallelism = 1) { obj =>
       Source
@@ -69,12 +76,13 @@ class AcsSnapshotBulkStorageCommitFromStaging(
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed] = ???
   // Delete objects from staging (after they have been copied to committed)
 
-  override def processSnapshot(implicit
-      tc: TraceContext
+  override def processSnapshotsFlow(implicit
+      tc: TraceContext,
+      actorSystem: ActorSystem,
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed] = {
     Flow[TimestampWithMigrationId]
       .mapAsync(parallelism = 1) { ts =>
-        bulkReader.getStagingObjectsForAcsSnapshotAt(ts.timestamp)
+        getBulkReader.getStagingObjectsForAcsSnapshotAt(ts.timestamp)
       }
       .via(waitForBftAgreement)
       .via(copyToCommitted)

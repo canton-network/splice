@@ -23,7 +23,7 @@ class BulkStorageReader(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     override val loggerFactory: NamedLoggerFactory,
-)(implicit actorSystem: ActorSystem)
+)(implicit actorSystem: ActorSystem, tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
 
   private def getAcsSnapshotObjects(
@@ -106,9 +106,10 @@ class BulkStorageReader(
       }
   }
 
+  // TODO: improve consistency below on querying staging vs committed vs both
   def getStagingObjectsForAcsSnapshotAt(
       timestamp: CantonTimestamp
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
+  ): Future[AcsSnapshotObjects] = {
     getAcsSnapshotObjects(timestamp, stagingS3Connection, storageConfig)
   }
 
@@ -117,6 +118,21 @@ class BulkStorageReader(
       atOrBeforeRecordTime: CantonTimestamp,
       limit: PageLimit,
       nextPageTokenO: Option[String],
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] =
+    getUpdatesBetweenDatesFromBucket(
+      afterRecordTime,
+      atOrBeforeRecordTime,
+      limit,
+      nextPageTokenO,
+      stagingS3Connection,
+    )
+
+  private def getUpdatesBetweenDatesFromBucket(
+      afterRecordTime: CantonTimestamp,
+      atOrBeforeRecordTime: CantonTimestamp,
+      limit: PageLimit,
+      nextPageTokenO: Option[String],
+      s3Connection: S3BucketConnection,
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] = {
 
     def isFolderInRange(folder: String): Boolean = {

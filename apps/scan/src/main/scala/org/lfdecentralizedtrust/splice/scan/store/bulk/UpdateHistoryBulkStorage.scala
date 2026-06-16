@@ -13,7 +13,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.pattern.after
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
-import org.lfdecentralizedtrust.splice.PekkoRetryingService
+import org.lfdecentralizedtrust.splice.{PekkoRetryingService, RetryableService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
@@ -77,7 +77,8 @@ class UpdateHistoryBulkStorage(
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
-    with Spanning {
+    with Spanning
+    with RetryableService[UpdatesSegment] {
 
   private def getMigrationIdForAcsSnapshot(
       snapshotTimestamp: CantonTimestamp
@@ -198,7 +199,7 @@ class UpdateHistoryBulkStorage(
     }
   }
 
-  def asRetryableService(
+  override def asRetryableService(
       automationConfig: AutomationConfig,
       backoffClock: Clock,
       retryProvider: RetryProvider,

@@ -90,6 +90,7 @@ import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStand
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import cats.implicits.*
 
 import org.apache.pekko.stream.Materializer
 
@@ -253,7 +254,7 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = config.bulkStorage.s3.map(_ =>
+      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ =>
         BulkStorage(
           scanStorageConfigV1,
           config.bulkStorage,
@@ -415,7 +416,8 @@ class ScanApp(
         config.rollForwardLsu,
       )
       scanStreamHandler = new HttpScanStreamHandler(
-        config.bulkStorage.s3.map(S3BucketConnection(_, loggerFactory))
+        // FIXME: probably needs to be the reader instead, or at least take both buckets
+        config.bulkStorage.staging.map(S3BucketConnection(_, loggerFactory))
       )
       contractFetcher = ChoiceContextContractFetcher.createStoreWithLedgerFallback(
         config.parameters.contractFetchLedgerFallbackConfig,
