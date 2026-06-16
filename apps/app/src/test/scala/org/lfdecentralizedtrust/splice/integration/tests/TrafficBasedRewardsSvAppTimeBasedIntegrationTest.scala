@@ -114,7 +114,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       // oldest=5: rounds 5,6,7 open. R8 will have
       // both dryRunVersion and mintingVersion set.
       clue("vote to enable dryRunVersion + mintingVersion") {
-        changeRewardConfig(enableDryRun = true, enableMinting = true)
+        changeRewardConfig(
+          enableDryRun = true,
+          rewardVersion = RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS,
+        )
       }
 
       val svBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
@@ -409,14 +412,13 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
   private def changeRewardConfig(
       enableDryRun: Boolean,
-      enableMinting: Boolean = false,
+      rewardVersion: RewardVersion = RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val amuletRules = sv1Backend.getDsoInfo().amuletRules
     val existing = AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
     val rc = existing.rewardConfig.get()
     val newRc = new RewardConfig(
-      if (enableMinting) RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
-      else RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS,
+      rewardVersion,
       if (enableDryRun) Optional.of(RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS)
       else Optional.empty[RewardVersion](),
       rc.batchSize,
