@@ -154,7 +154,7 @@ pulumiProjectConfig:
         random_page_cost: '1.1'
         temp_file_limit: '2147483647'
         work_mem: '16384'
-      protected: false
+      protected: true
       tier: 'db-custom-2-7680'
     hasPublicInfo: false
     installDataOnly: false
@@ -164,7 +164,6 @@ pulumiProjectConfig:
   sv-runbook:
     cloudSql:
       enabled: false
-      protected: false
 pulumiStacks:
   canton-network:
     resources:
@@ -2019,7 +2018,7 @@ synchronizerMigration:
       spliceRoot: 'splice'
     sequencer:
       enableBftSequencer: true
-    version: '0.6.6-snapshot.20260527.2829.0.v72a921da'
+    version: '0.6.9-snapshot.20260615.3119.0.vee5e47c8'
   frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'
