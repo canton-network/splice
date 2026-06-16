@@ -435,6 +435,7 @@ class ScanApp(
         store,
         contractFetcher,
         clock,
+        config.tokenStandardSettlement,
         loggerFactory,
       )
 
@@ -448,6 +449,7 @@ class ScanApp(
       tokenStandardAllocationInstructionHandler = new HttpTokenStandardAllocationInstructionHandler(
         store,
         clock,
+        config.tokenStandardSettlement,
         loggerFactory,
       )
       httpRateLimiter = new HttpRateLimiter(

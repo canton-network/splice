@@ -30,8 +30,8 @@ import scala.util.{Failure, Success, Try}
 class HttpTokenStandardAllocationHandler(
     store: ScanStore,
     contractFetcher: ChoiceContextContractFetcher,
-    tokenStandardSettlementConfig: TokenStandardConfig.SettlementConfig,
     clock: Clock,
+    tokenStandardSettlementConfig: TokenStandardConfig.SettlementConfig,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -124,7 +124,11 @@ class HttpTokenStandardAllocationHandler(
         settleBatch <- Try(
           allocationv2.SettlementFactory_SettleBatch.fromJson(body.choiceArguments.noSpaces)
         ) match {
-          case Success(settleBatch) => Future.successful(settleBatch)
+          case Success(settleBatch) =>
+            Future {
+              tokenStandardSettlementConfig.validateSettleBatch(settleBatch)
+              settleBatch
+            }
           case Failure(err) =>
             Future.failed(
               io.grpc.Status.INVALID_ARGUMENT
@@ -134,7 +138,6 @@ class HttpTokenStandardAllocationHandler(
                 .asRuntimeException()
             )
         }
-        _ <- Future(tokenStandardSettlementConfig.validateSettleBatch(settleBatch))
         choiceContextBuilder <- getExternalPartyTransferContext(
           body.excludeDebugFields.getOrElse(false)
         )

@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanRollForwardLsuConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
 import org.lfdecentralizedtrust.splice.splitwell.config.{
@@ -474,6 +475,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigReader
         : ConfigReader[MediatorVerdictIngestionConfig] =
       deriveReader[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigReader
+        : ConfigReader[TokenStandardConfig.SettlementConfig] =
+      deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
@@ -981,6 +985,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigWriter
         : ConfigWriter[MediatorVerdictIngestionConfig] =
       deriveWriter[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigWriter
+        : ConfigWriter[TokenStandardConfig.SettlementConfig] =
+      deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =

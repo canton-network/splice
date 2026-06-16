@@ -1,6 +1,8 @@
 package org.lfdecentralizedtrust.splice.scan.config
 
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
+
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -12,6 +14,27 @@ object TokenStandardConfig {
   ) {
     def validateSettleBatch(settleBatch: allocationv2.SettlementFactory_SettleBatch): Unit = {
       val numTransferLegs = settleBatch.transferLegs.size()
+      validateNumLegs(numTransferLegs)
+
+      val numParties = settleBatch.transferLegs.asScala
+        .flatMap(leg => Seq(leg.sender, leg.receiver).flatMap(_.owner.toScala))
+        .distinct
+        .size
+      validateNumParties(numParties)
+    }
+
+    def validateAllocate(allocate: allocationinstructionv2.AllocationFactory_Allocate): Unit = {
+      val numTransferLegs = allocate.allocation.transferLegSides.size()
+      validateNumLegs(numTransferLegs)
+
+      val numParties = allocate.allocation.transferLegSides.asScala
+        .flatMap(side => side.otherside.owner.toScala)
+        .distinct
+        .size
+      validateNumParties(numParties)
+    }
+
+    private def validateNumLegs(numTransferLegs: Int) = {
       if (numTransferLegs > maxLegs) {
         throw io.grpc.Status.INVALID_ARGUMENT
           .withDescription(
@@ -19,15 +42,13 @@ object TokenStandardConfig {
           )
           .asRuntimeException()
       }
+    }
 
-      val numParties = settleBatch.transferLegs.asScala
-        .flatMap(leg => Seq(leg.sender, leg.receiver).flatMap(_.owner.toScala))
-        .distinct
-        .size
+    private def validateNumParties(numParties: Int) = {
       if (numParties > maxParties) {
         throw io.grpc.Status.INVALID_ARGUMENT
           .withDescription(
-            s"Too many parties in the settle batch: $numTransferLegs. Maximum allowed: $maxLegs"
+            s"Too many parties in the settle batch: $numParties. Maximum allowed: $maxParties"
           )
           .asRuntimeException()
       }
