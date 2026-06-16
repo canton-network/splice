@@ -506,6 +506,7 @@ groups:
         annotations:
           description: '{{ index $labels "namespace" }} had more than 5% non-local contention errors in the last 30 minutes.'
         isPaused: false
+      -
       - uid: df3t10f23cm68c
         title: 'Ingestion saturation'
         condition: C
@@ -570,7 +571,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: min by(namespace, node_type, service) (min_over_time((splice_automation_background_service_health == 1)[5m:]))
+              expr: min by(namespace, node_type, automation_service) (splice_automation_background_service_health)
               instant: true
               intervalMs: 1000
               legendFormat: __auto
@@ -610,8 +611,8 @@ groups:
         annotations:
           __dashboardUid__: a3e1385f-6f03-46d9-908c-34aca0f507a6
           __panelId__: "32"
-          description: The {{ index $labels "service" }} background service of the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace has been continuously reporting unhealthy for more than 5 minutes.
-          summary: '{{ index $labels "namespace" }} - {{ index $labels "node_type" }} - {{ index $labels "service" }} automation service is unhealthy'
+          description: The {{ index $labels "automation_service" }} background service of the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace has been continuously reporting unhealthy for more than 5 minutes.
+          summary: '{{ index $labels "namespace" }} - {{ index $labels "node_type" }} - {{ index $labels "automation_service" }} automation service is unhealthy'
         labels:
           gcloud_filter: 'resource.labels.namespace_name=%22{{ index $labels "namespace" }}%22'
         isPaused: false
