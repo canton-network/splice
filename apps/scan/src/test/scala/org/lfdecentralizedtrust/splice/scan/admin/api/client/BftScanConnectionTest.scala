@@ -294,6 +294,10 @@ class BftScanConnectionTest
         totalAppActivityWeight = totalAppActivityWeight,
         activePartiesCount = activePartiesCount,
         activityRecordsCount = activityRecordsCount,
+        totalAppRewardMintingAllowance = "0",
+        totalAppRewardThresholded = "0",
+        totalAppRewardUnclaimed = "0",
+        rewardedAppProviderPartiesCount = 0L,
       )
     )
   def makeMockReturnActivityTotalsOk(
