@@ -22,6 +22,11 @@ class SplitwellFrontendIntegrationTest
     with SplitwellFrontendTestUtil
     with FrontendLoginUtil {
 
+  private def withFrontEndStep[A](frontend: String, step: String)(body: WebDriverType => A): A =
+    withClue(s"[frontend=$frontend step=$step]") {
+      withFrontEnd(frontend)(body)
+    }
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -54,26 +59,26 @@ class SplitwellFrontendIntegrationTest
 
       bobWalletClient.tap(walletAmuletToUsd(550))
 
-      val invite = withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      val invite = withFrontEndStep("aliceSplitwell", "create-invite") { implicit webDriver =>
         login(aliceSplitwellUIPort, aliceDamlUser)
         createGroupAndInviteLink(groupName)
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "request-membership") { implicit webDriver =>
         login(bobSplitwellUIPort, bobDamlUser)
         requestGroupMembership(invite)
       }
 
-      withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "accept-bob-membership") { implicit webDriver =>
         eventuallyClickOn(className("add-user-link"))
       }
 
-      withFrontEnd("charlieSplitwell") { implicit webDriver =>
+      withFrontEndStep("charlieSplitwell", "request-membership") { implicit webDriver =>
         login(charlieSplitwellUIPort, charlieDamlUser)
         requestGroupMembership(invite)
       }
 
-      withFrontEnd("aliceSplitwell") { implicit webDriver =>
+      withFrontEndStep("aliceSplitwell", "accept-charlie-and-add-lunch") { implicit webDriver =>
         eventuallyClickOn(className("add-user-link"))
         eventually() {
           findAll(className("balances-table-row")).toSeq should have length 2
@@ -90,7 +95,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("enter-payment-link"))
       }
 
-      withFrontEnd("charlieSplitwell") { implicit webDriver =>
+      withFrontEndStep("charlieSplitwell", "add-digestivs") { implicit webDriver =>
         inside(eventuallyFind(className("enter-payment-amount-field"))) { case Some(field) =>
           field.underlying.click()
           reactTextInput(field).value = "333.0"
@@ -102,7 +107,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("enter-payment-link"))
       }
 
-      withFrontEnd("bobSplitwell") { implicit webDriver =>
+      withFrontEndStep("bobSplitwell", "settle-debts-and-verify") { implicit webDriver =>
         eventually() {
           inside(findAll(className("balances-table-row")).toSeq) {
             case Seq(r1, r2) => // Need to sync here on the actual values (size not enough)
