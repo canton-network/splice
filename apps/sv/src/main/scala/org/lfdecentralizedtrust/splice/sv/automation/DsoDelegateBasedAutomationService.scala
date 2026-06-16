@@ -215,6 +215,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredLockedAmuletTrigger],
     aTrigger[ExpiredAmuletTransferInstructionTrigger],
     aTrigger[ExpiredAmuletAllocationTrigger],
+    aTrigger[ExpiredAmuletAllocationV2Trigger],
     aTrigger[ExpiredSvOnboardingRequestTrigger],
     aTrigger[CloseVoteRequestTrigger],
     aTrigger[ExpiredSvOnboardingConfirmedTrigger],
