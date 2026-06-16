@@ -54,10 +54,11 @@ export const VoteRequestDetails: React.FC = () => {
       : undefined;
   const currentEffectiveAt =
     voteResult?.outcome.tag === 'VRO_Accepted' ? voteResult.outcome.value.effectiveAt : undefined;
-  const { weight: previousRewardWeight } = usePreviousSvRewardWeight(
-    rewardWeightAction?.svParty,
-    currentEffectiveAt
-  );
+  const { weight: previousRewardWeight, isPending: isPreviousRewardWeightPending } =
+    usePreviousSvRewardWeight(
+      currentEffectiveAt ? rewardWeightAction?.svParty : undefined,
+      currentEffectiveAt
+    );
 
   if (dsoInfosQuery.isPending && isPending) {
     return <Loading />;
@@ -101,9 +102,13 @@ export const VoteRequestDetails: React.FC = () => {
     proposal: buildProposal(request.action, dsoInfosQuery.data),
   } as ProposalDetails;
 
-  if (action === 'SRARC_UpdateSvRewardWeight' && previousRewardWeight !== undefined) {
+  if (
+    action === 'SRARC_UpdateSvRewardWeight' &&
+    currentEffectiveAt &&
+    !isPreviousRewardWeightPending
+  ) {
     (proposalDetails.proposal as UpdateSvRewardWeightProposal).currentWeight =
-      formatBasisPoints(previousRewardWeight);
+      previousRewardWeight !== undefined ? formatBasisPoints(previousRewardWeight) : '';
   }
 
   const votingInformation: ProposalVotingInformation = {
