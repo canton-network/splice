@@ -506,7 +506,6 @@ groups:
         annotations:
           description: '{{ index $labels "namespace" }} had more than 5% non-local contention errors in the last 30 minutes.'
         isPaused: false
-      -
       - uid: df3t10f23cm68c
         title: 'Ingestion saturation'
         condition: C
