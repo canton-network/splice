@@ -84,6 +84,10 @@ monitoring:
         mediatorRetentionDays: 30
         participantRetentionDays: 30
         sequencerRetentionDays: 30
+      scanConnectionDisagreement:
+        disagreementRateThreshold: 0.1
+        excludedRequests: []
+        successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
       sequencerRateLimits:
