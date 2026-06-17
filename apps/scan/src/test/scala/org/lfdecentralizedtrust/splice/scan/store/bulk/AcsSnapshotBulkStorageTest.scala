@@ -77,7 +77,7 @@ class AcsSnapshotBulkStorageTest
 
   "AcsSnapshotBulkStorage" should {
     "successfully dump a single ACS snapshot" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val ts = CantonTimestamp.tryFromInstant(Instant.parse("2026-01-02T00:00:00Z"))
       val store = new MockAcsSnapshotStore(ts).store
       val metricsFactory = new InMemoryMetricsFactory
@@ -153,7 +153,7 @@ class AcsSnapshotBulkStorageTest
     }
 
     "correctly process multiple ACS snapshots" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val ts1 = CantonTimestamp.tryFromInstant(Instant.now().truncatedTo(ChronoUnit.DAYS))
       val ts2 = ts1.add(3.hours)
       val ts3 = ts1.add(24.hours)
@@ -179,7 +179,7 @@ class AcsSnapshotBulkStorageTest
       val progress = new AcsSnapshotBulkStoragePersistentProgress(
         "latest_acs_snapshot_in_bulk_storage",
         kvProvider,
-        historyMetrics.BulkStorage.latestAcsSnapshot,
+        historyMetrics.BulkStorage.latestAcsSnapshotStaging,
         loggerFactory,
       )
       val bulkStorage = new AcsSnapshotBulkStorage(
@@ -192,10 +192,12 @@ class AcsSnapshotBulkStorageTest
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotBulkStorage = bulkStorage,
+        acsSnapshotBulkStorageStaging = bulkStorage,
+        acsSnapshotBulkStorageCommitted = null, // FIXME: use once we start using the committed bucket
         updateHistoryBulkStorage = null, // not needed for this test
         bulkStorageTestConfig,
         s3BucketConnection,
+        committedS3Connection = null, // FIXME: use once we start using the committed bucket
         loggerFactory,
       )
 
