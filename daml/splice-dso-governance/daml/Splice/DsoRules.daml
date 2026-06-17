@@ -1208,6 +1208,20 @@ template DsoRules with
 
         pure DsoRules_UpdateHostedSvWeightResult with result
 
+    -- | Creates an instruction to offboard a hosted SV.
+    --
+    -- This is the first step of the hosted-SV offboarding flow. The DSO records
+    -- which hosted SV should be offboarded. The hosted SV is validated when the
+    -- instruction is consumed by 'DsoRules_OffboardHostedSv'.
+    nonconsuming choice DsoRules_InstructOffboardHostedSv : DsoRules_InstructOffboardHostedSvResult
+      with
+        hostedSv : Party
+          -- ^ The hosted SV to offboard.
+      controller dso
+      do
+        instructionCid <- create OffboardHostedSvInstruction with hostedSv; dso
+        pure DsoRules_InstructOffboardHostedSvResult with instructionCid
+
     -- | Completes the offboarding of a hosted SV.
     --
     -- This is the second step of the hosted-SV offboarding flow. It consumes the
@@ -1218,16 +1232,18 @@ template DsoRules with
     -- as the 'HostedSv' contract being offboarded.
     nonconsuming choice DsoRules_OffboardHostedSv : DsoRules_OffboardHostedSvResult
       with
-        hostedSv : Party
-          -- ^ The hosted SV to offboard.
         instructionCid : ContractId OffboardHostedSvInstruction
           -- ^ The DSO instruction authorizing the hosted-SV offboarding.
         hostedSvCid : ContractId HostedSv
           -- ^ The hosted SV contract being offboarded.
         hostedSvRewardStateCid : ContractId HostedSvRewardState
           -- ^ The hosted SV reward state contract for the hosted SV being offboarded.
-      controller dso
+        svOperator : Party
+          -- ^ An SV node operator completing the offboarding.
+      controller svOperator
       do
+        _ <- getAndValidateSvParty this (Some svOperator)
+
         -- Archive the hosted SV's associated contracts.
         instruction <- fetchAndArchive (ForDso with dso) instructionCid
         hostedSvCo <- fetchAndArchive (ForDso with dso) hostedSvCid
