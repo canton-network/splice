@@ -10,7 +10,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.AnyContract
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 import org.lfdecentralizedtrust.splice.util.{
@@ -111,20 +110,10 @@ object ChoiceContextBuilder {
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[(Builder, round.OpenMiningRound)] = {
+  ): Future[Builder] = {
     val now = clock.now
     for {
       amuletRules <- store.getAmuletRules()
-      newestOpenRound <- store
-        .lookupLatestUsableOpenMiningRound(now)
-        .map(
-          _.getOrElse(
-            throw io.grpc.Status.NOT_FOUND
-              .withDescription(s"No open usable OpenMiningRound found.")
-              .asRuntimeException()
-          )
-        )
-      // TODO(#4950) Don't include amulet rules and newest open round when informees all have vetted the newest version.
       externalPartyConfigStateO <- store.lookupLatestExternalPartyConfigState()
     } yield {
       val choiceContextBuilder: Builder = newBuilder(
@@ -133,16 +122,8 @@ object ChoiceContextBuilder {
           .decentralizedSynchronizer
           .activeSynchronizer
       )
-
-      (
-        choiceContextBuilder
-          .addContracts(
-            "amulet-rules" -> amuletRules,
-            "open-round" -> newestOpenRound.contract,
-          )
-          .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO),
-        newestOpenRound.contract.payload,
-      )
+      choiceContextBuilder
+        .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
     }
   }
 
@@ -170,7 +151,7 @@ object ChoiceContextBuilder {
           amulet.LockedAmulet.COMPANION
         )(lockedAmuletId)
       }
-      (choiceContextBuilder, _) <- getAmuletRulesTransferContext[
+      choiceContextBuilder <- getAmuletRulesTransferContext[
         DisclosedContract,
         ChoiceContext,
         Builder,

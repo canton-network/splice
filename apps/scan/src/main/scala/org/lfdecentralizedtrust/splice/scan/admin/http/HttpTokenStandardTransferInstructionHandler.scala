@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
@@ -19,10 +18,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyconfigstate.ExternalPartyConfigState
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.util
-import org.lfdecentralizedtrust.splice.store.{ChoiceContextContractFetcher, MiningRoundsStore}
+import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
-  AssignedContract,
   Contract,
   ContractWithState,
   DarResourcesUtil,
@@ -78,7 +76,6 @@ class HttpTokenStandardTransferInstructionHandler(
         result <- buildTransferFactory(
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.sender),
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.receiver),
-          body.excludeDebugFields.getOrElse(false),
         )((optTransferPreapproval, optFeaturedAppRight, externalPartyAmuletRules) => {
           val isSelfTransfer = transferInstr.transfer.receiver == transferInstr.transfer.sender
           val kind =
@@ -190,7 +187,6 @@ class HttpTokenStandardTransferInstructionHandler(
           PartyId.tryFromProtoPrimitive(
             TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.receiver)
           ),
-          body.excludeDebugFields.getOrElse(false),
         )((optTransferPreapproval, optFeaturedAppRight, externalPartyAmuletRules) => {
           val isSelfTransfer = transferInstr.transfer.receiver == transferInstr.transfer.sender
           val kind =
@@ -275,7 +271,6 @@ class HttpTokenStandardTransferInstructionHandler(
   private def buildTransferFactory[FactoryResponse](
       sender: PartyId,
       receiver: PartyId,
-      excludeDebugFields: Boolean,
   )(
       build: (
           Option[ContractWithState[
@@ -292,7 +287,6 @@ class HttpTokenStandardTransferInstructionHandler(
       tc: TraceContext
   ): Future[FactoryResponse] = {
     for {
-      choiceContextBuilder <- getAmuletRulesTransferContextV1(excludeDebugFields)
       externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
       // pre-approval and featured app rights are only provided if they exist and are required
       isSelfTransfer = receiver == sender
@@ -319,21 +313,16 @@ class HttpTokenStandardTransferInstructionHandler(
       tc: TraceContext
   ): Future[V1ChoiceContextBuilder] = {
     val now = clock.now
-    getAmuletRulesTransferContext(now) {
-      (amuletRules, newestOpenRound, externalPartyConfigStateO) =>
-        val choiceContextBuilder = new V1ChoiceContextBuilder(
-          AmuletConfigSchedule(amuletRules.payload.configSchedule)
-            .getConfigAsOf(now)
-            .decentralizedSynchronizer
-            .activeSynchronizer,
-          excludeDebugFields,
-        )
-        choiceContextBuilder
-          .addContracts(
-            "amulet-rules" -> amuletRules,
-            "open-round" -> newestOpenRound.contract,
-          )
-          .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
+    getAmuletRulesTransferContext { (amuletRules, externalPartyConfigStateO) =>
+      val choiceContextBuilder = new V1ChoiceContextBuilder(
+        AmuletConfigSchedule(amuletRules.payload.configSchedule)
+          .getConfigAsOf(now)
+          .decentralizedSynchronizer
+          .activeSynchronizer,
+        excludeDebugFields,
+      )
+      choiceContextBuilder
+        .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
     }
   }
 
@@ -341,28 +330,22 @@ class HttpTokenStandardTransferInstructionHandler(
       tc: TraceContext
   ): Future[V2ChoiceContextBuilder] = {
     val now = clock.now
-    getAmuletRulesTransferContext(now) {
-      (amuletRules, newestOpenRound, externalPartyConfigStateO) =>
-        val choiceContextBuilder = new V2ChoiceContextBuilder(
-          AmuletConfigSchedule(amuletRules.payload.configSchedule)
-            .getConfigAsOf(now)
-            .decentralizedSynchronizer
-            .activeSynchronizer,
-          excludeDebugFields,
-        )
-        choiceContextBuilder
-          .addContracts(
-            "amulet-rules" -> amuletRules,
-            "open-round" -> newestOpenRound.contract,
-          )
-          .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
+    getAmuletRulesTransferContext { (amuletRules, externalPartyConfigStateO) =>
+      val choiceContextBuilder = new V2ChoiceContextBuilder(
+        AmuletConfigSchedule(amuletRules.payload.configSchedule)
+          .getConfigAsOf(now)
+          .decentralizedSynchronizer
+          .activeSynchronizer,
+        excludeDebugFields,
+      )
+      choiceContextBuilder
+        .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
     }
   }
 
-  private def getAmuletRulesTransferContext[CB](now: CantonTimestamp)(
+  private def getAmuletRulesTransferContext[CB](
       build: (
           Contract[splice.amuletrules.AmuletRules.ContractId, splice.amuletrules.AmuletRules],
-          MiningRoundsStore.OpenMiningRound[AssignedContract],
           Option[Contract[ExternalPartyConfigState.ContractId, ExternalPartyConfigState]],
       ) => CB
   )(implicit
@@ -370,18 +353,8 @@ class HttpTokenStandardTransferInstructionHandler(
   ): Future[CB] = {
     for {
       amuletRules <- store.getAmuletRules()
-      newestOpenRound <- store
-        .lookupLatestUsableOpenMiningRound(now)
-        .map(
-          _.getOrElse(
-            throw io.grpc.Status.NOT_FOUND
-              .withDescription(s"No open usable OpenMiningRound found.")
-              .asRuntimeException()
-          )
-        )
-      // TODO(#4950) Don't include amulet rules and newest open round when informees all have vetted the newest version.
       externalPartyConfigStateO <- store.lookupLatestExternalPartyConfigState()
-    } yield build(amuletRules, newestOpenRound, externalPartyConfigStateO)
+    } yield build(amuletRules, externalPartyConfigStateO)
   }
 
   /** Generic method to fetch choice contexts for all choices on a transfer instruction */
