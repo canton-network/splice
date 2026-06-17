@@ -155,15 +155,8 @@ describe('Governance Page Sorting', () => {
       acceptanceThreshold: BigInt(11),
     };
 
-    test('should sort by effective date descending (most recent first)', () => {
-      const unsortedRequests: ProposalListingData[] = [
-        {
-          ...baseData,
-          actionName: 'Action A - Oldest',
-          contractId: 'a' as ContractId<VoteRequest>,
-          voteTakesEffect: '2025-01-10 12:00',
-          votingThresholdDeadline: '2025-01-05 12:00',
-        },
+    test('renders in backend order without client re-sorting', () => {
+      const backendOrdered: ProposalListingData[] = [
         {
           ...baseData,
           actionName: 'Action C - Most recent',
@@ -173,10 +166,10 @@ describe('Governance Page Sorting', () => {
         },
         {
           ...baseData,
-          actionName: 'Action D - Same day, earlier time',
-          contractId: 'd' as ContractId<VoteRequest>,
-          voteTakesEffect: '2025-01-20 10:00',
-          votingThresholdDeadline: '2025-01-15 12:00',
+          actionName: 'Action A - Oldest',
+          contractId: 'a' as ContractId<VoteRequest>,
+          voteTakesEffect: '2025-01-10 12:00',
+          votingThresholdDeadline: '2025-01-05 12:00',
         },
         {
           ...baseData,
@@ -191,12 +184,11 @@ describe('Governance Page Sorting', () => {
         <MemoryRouter>
           <ProposalListingSection
             sectionTitle="Vote History"
-            data={unsortedRequests}
+            data={backendOrdered}
             noDataMessage="No data"
             uniqueId="vote-history"
             showStatus
             showVoteStats
-            sortOrder="effectiveAtDesc"
           />
         </MemoryRouter>
       );
@@ -208,9 +200,8 @@ describe('Governance Page Sorting', () => {
 
       expect(actionNames).toEqual([
         'Action C - Most recent',
-        'Action D - Same day, earlier time',
-        'Action B - Middle',
         'Action A - Oldest',
+        'Action B - Middle',
       ]);
     });
   });

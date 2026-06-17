@@ -41,10 +41,12 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   ): SqlStreamingAction[Vector[
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
+    val effectiveAtSortKey =
+      s"coalesce($effectiveAtColumnName::timestamptz, (entry_data->'result'->>'completedAt')::timestamptz)"
     val afterCondition = after match {
       case Some(a) =>
         Some(
-          sql"""(record_time, entry_number) < ((select record_time from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
+          sql"""(#$effectiveAtSortKey, entry_number) < ((select #$effectiveAtSortKey from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
         )
       case None => None
     }
@@ -95,7 +97,8 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       txLogTableName,
       txLogStoreId,
       where = whereClause.toActionBuilder,
-      orderLimit = sql"""order by record_time desc, entry_number desc limit ${sqlLimit(limit)}""",
+      orderLimit =
+        sql"""order by #$effectiveAtSortKey desc, entry_number desc limit ${sqlLimit(limit)}""",
     )
   }
 }
