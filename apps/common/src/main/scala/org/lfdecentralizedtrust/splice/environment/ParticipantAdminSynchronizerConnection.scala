@@ -256,17 +256,29 @@ trait ParticipantAdminSynchronizerConnection {
   )(implicit traceContext: TraceContext): Future[Seq[RegisteredSynchronizer]] =
     for {
       registeredSynchronizers <- listAllRegisteredSynchronizers()
-    } yield registeredSynchronizers
-      .collect {
-        case registeredSynchronizer
-            if registeredSynchronizer.config.synchronizerAlias == synchronizerAlias && psid.forall(
-              filterPsid =>
-                registeredSynchronizer.psid.toOption.contains(
-                  filterPsid
-                ) || registeredSynchronizer.config.synchronizerId.contains(filterPsid)
-            ) =>
-          registeredSynchronizer
+    } yield {
+      val withMatchingAlias = registeredSynchronizers.filter(
+        _.config.synchronizerAlias == synchronizerAlias
+      )
+      def matchesPsid(
+          registeredSynchronizer: RegisteredSynchronizer,
+          filterPsid: PhysicalSynchronizerId,
+      ) =
+        registeredSynchronizer.psid.toOption.contains(filterPsid) ||
+          registeredSynchronizer.config.synchronizerId.contains(filterPsid)
+      val activeSynchronizers =
+        withMatchingAlias.filter(
+          _.status == data.RegisteredSynchronizer.Status.Active
+        )
+      psid match {
+        case Some(filterPsid) =>
+          val matchingPsid = withMatchingAlias.filter(matchesPsid(_, filterPsid))
+          // If nothing matches the given psid, fall back to an active synchronizer with the alias.
+          if (matchingPsid.nonEmpty) matchingPsid else activeSynchronizers
+        case None =>
+          activeSynchronizers
       }
+    }
 
   def lookupRegisteredSynchronizer(
       synchronizerAlias: SynchronizerAlias,
