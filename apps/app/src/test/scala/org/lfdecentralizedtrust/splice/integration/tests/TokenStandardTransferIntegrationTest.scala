@@ -26,8 +26,6 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 
 import java.util.UUID
 
-// this test sets fees to zero, and that only works from 0.1.14 onwards
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_14
 class TokenStandardTransferIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
