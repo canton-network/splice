@@ -694,19 +694,21 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       }
     }
 
-    clue("Wait for allocations to be ingested by splitwell participant") {
+    clue(s"Wait for allocation ${aliceAllocationId} to be ingested by splitwell participant") {
       eventuallySucceeds() {
         splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
           .awaitJava(amuletallocation.AmuletAllocation.COMPANION)(
             venueParty,
             predicate = c => c.id == aliceAllocationId,
           )
-        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-          .awaitJava(amuletallocation.AmuletAllocation.COMPANION)(
-            venueParty,
-            predicate = c => c.id == bobAllocationId,
-          )
       }
+    }
+    clue(s"Wait for allocation ${bobAllocationId} to be ingested by splitwell participant") {
+      splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .awaitJava(amuletallocation.AmuletAllocation.COMPANION)(
+          venueParty,
+          predicate = c => c.id == bobAllocationId,
+        )
     }
 
     clue("Settlement venue settles the trade") {
