@@ -166,7 +166,14 @@ class DsoDelegateBasedAutomationService(
       )
     )
 
-    registerTrigger(new ExpireRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+    registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
 
     registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
 
