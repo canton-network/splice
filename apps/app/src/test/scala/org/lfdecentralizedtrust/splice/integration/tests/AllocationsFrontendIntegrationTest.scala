@@ -542,7 +542,7 @@ class AllocationsFrontendIntegrationTest
       val nextIteration =
         Map(amuletInstrumentIdName -> BigDecimal(99).bigDecimal.setScale(10)).asJava
 
-      val (_, aliceAllocationAfter) = actAndCheck(
+      actAndCheck(
         "provider settles billing against prefunded allocation", {
           val enrichedChoice = sv1ScanBackend.getSettlementFactoryV2(
             new allocationv2.SettlementFactory_SettleBatch(
@@ -594,17 +594,17 @@ class AllocationsFrontendIntegrationTest
               ),
             ) should have size 1 withClue "Provider Allocations after settlement"
 
-          aliceWalletClient.listAmuletAllocations().loneElement
+          val aliceAllocationAfter = aliceWalletClient.listAmuletAllocations().loneElement
+
+          aliceAllocationAfter match {
+            case TokenStandard.V1AmuletAllocation(_) => fail("Expected a V2 allocation")
+            case TokenStandard.V2AmuletAllocation(contract) =>
+              contract.payload.numIterations should be(1)
+              contract.payload.allocation.nextIterationFunding.toScala
+                .valueOrFail("Missing nextIterationFunding") should be(nextIteration)
+          }
         },
       )
-
-      aliceAllocationAfter match {
-        case TokenStandard.V1AmuletAllocation(_) => fail("Expected a V2 allocation")
-        case TokenStandard.V2AmuletAllocation(contract) =>
-          contract.payload.numIterations should be(1)
-          contract.payload.allocation.nextIterationFunding.toScala
-            .valueOrFail("Missing nextIterationFunding") should be(nextIteration)
-      }
     }
 
   }
