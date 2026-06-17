@@ -35,6 +35,9 @@ persistence:
   secretName: "postgres-secrets"
   enablePgInitContainer: true
   initImageName: "postgres:14"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  secretOverrides:
+    postgresPassword: ""
 
 migration:
   attachPvc: true

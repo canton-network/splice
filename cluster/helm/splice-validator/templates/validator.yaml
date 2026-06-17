@@ -185,10 +185,14 @@ spec:
               }
             }
         - name: SPLICE_APP_POSTGRES_PASSWORD
+          {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- end }}
         {{- with .Values.participantIdentitiesDumpPeriodicBackup }}
         - name: ADDITIONAL_CONFIG_SPLICE_APP_VALIDATOR_PARTICIPANT_IDENTITIES_DUMP_PERIODIC_BACKUP
@@ -209,10 +213,14 @@ spec:
               backup-interval = {{ .backupInterval }}
             }
         - name: SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+          {{- if ((.location.bucket).secretOverrides).jsonCredentials }}
+          value: {{ .location.bucket.secretOverrides.jsonCredentials | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: "json-credentials"
               name: {{ .location.bucket.secretName }}
+          {{- end }}
         {{- end }}
         {{- with .Values.participantIdentitiesDumpImport }}
         - name: ADDITIONAL_CONFIG_SPLICE_APP_SV_PARTICIPANT_IDENTITIES_DUMP_IMPORT
@@ -400,10 +408,14 @@ spec:
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'

@@ -325,6 +325,14 @@
             },
             "initImageName": {
               "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -445,6 +453,14 @@
                     },
                     "secretName": {
                       "type": "string"
+                    },
+                    "secretOverrides": {
+                      "type": "object",
+                      "properties": {
+                        "jsonCredentials": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 },
