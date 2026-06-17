@@ -359,6 +359,27 @@ components:
             Cursor for the next page of results. Pass this as `pageToken` in the request.
             If absent or `null`, there are no more pages.
 
+    PreviousSvRewardWeightRequest:
+      type: object
+      required:
+        - svParty
+      properties:
+        svParty:
+          type: string
+        effectiveBefore:
+          type: string
+          description: |
+            Only consider reward weight changes that took effect strictly before this time.
+
+    PreviousSvRewardWeightResponse:
+      type: object
+      properties:
+        rewardWeight:
+          type: string
+          description: |
+            The SV's reward weight set by the most recent accepted `UpdateSvRewardWeight` proposal
+            before `effectiveBefore`, or absent if there is no such proposal.
+
     ListValidatorLicensesResponse:
       type: object
       required:

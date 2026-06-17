@@ -535,7 +535,6 @@ trait BaseTest
   lazy val VettingMainCompatPath: String = BaseTest.VettingMainCompatPath
   lazy val VettingMainIncompatPath: String = BaseTest.VettingMainIncompatPath
   lazy val VettingMainSubstitutionPath: String = BaseTest.VettingMainSubstitutionPath
-  lazy val ModelTestsPath: String = BaseTest.ModelTestsPath
   lazy val SubViewsIfaceV1Path: String = BaseTest.SubViewsIfaceV1Path
   lazy val SubViewsAssetV1Path: String = BaseTest.SubViewsAssetV1Path
   lazy val SubViewsAssetV2Path: String = BaseTest.SubViewsAssetV2Path
@@ -674,6 +673,8 @@ object BaseTest {
     case object CommandTracking extends UnsupportedExternalPartyTest
     // TODO(i30256): Synchronizer routing for external parties
     case object MultiSynchronizerParties extends UnsupportedExternalPartyTest
+    // TODO(i32169): NUCK Support for external parties
+    case object NuckSupport extends UnsupportedExternalPartyTest
   }
 
   lazy val testedProtocolVersion: ProtocolVersion = ProtocolVersion.forSynchronizer
@@ -712,11 +713,11 @@ object BaseTest {
   lazy val VettingMainCompatPath: String = getResourcePath("VettingMain-2.0.0.dar")
   lazy val VettingMainIncompatPath: String = getResourcePath("VettingMain-3.0.0.dar")
   lazy val VettingMainSubstitutionPath: String = getResourcePath("VettingMain-4.0.0.dar")
-  lazy val ModelTestsPath: String = getResourcePath("model-tests-1.0.0.dar")
   lazy val SubViewsIfaceV1Path: String = getResourcePath("sub-views-iface-1.0.0.dar")
   lazy val SubViewsAssetV1Path: String = getResourcePath("sub-views-asset-1.0.0.dar")
   lazy val SubViewsAssetV2Path: String = getResourcePath("sub-views-asset-2.0.0.dar")
   lazy val SubViewsMainV1Path: String = getResourcePath("sub-views-main-1.0.0.dar")
+  lazy val UniversalPath: String = getResourcePath("universal.dar")
 
   def getResourcePath(name: String): String =
     Option(getClass.getClassLoader.getResource(name))

@@ -1,0 +1,27 @@
+name: Automatically trigger an upgrade test on PRs
+on:
+  pull_request_target:
+    # This is only triggered on PR creation to avoid spamming the PR with comments on every update.
+    # It is up to the author to decided if subsequent changes require another upgrade test.
+    types: [ opened ]
+    paths:
+      - 'cluster/pulumi/**/package.json'
+      - 'nix/**'
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write # To comment back on the PR
+jobs:
+  request_upgrade_test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Add a comment to the PR to request an upgrade test
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script : |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "Requesting an /upgrade_test due to changes in Pulumi or Nix package versions."
+            });

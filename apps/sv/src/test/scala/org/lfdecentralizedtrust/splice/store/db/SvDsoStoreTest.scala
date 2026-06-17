@@ -59,7 +59,7 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore.{IdleAnsSubscription, RoundBatch}
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStore
-import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore}
+import org.lfdecentralizedtrust.splice.sv.store.{IgnoredPartiesStore, SvDsoStore, SvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
@@ -241,7 +241,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listExpiredAmulets(Set.empty)(
+          result <- store.listExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -262,7 +262,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- createMiningRoundsTriple(store, startRound = 3L) // oldest is round 3, newest is 5
           _ <- dummy2Domain.create(expiresAtRound2)(store.multiDomainAcsStore)
           _ <- dummyDomain.create(expiresAtRound3)(store.multiDomainAcsStore)
-          result <- store.listExpiredAmulets(Set.empty)(
+          result <- store.listExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -291,25 +291,27 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listExpiredAmulets(Set.empty)(
+          result <- store.listExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty1 <- store.listExpiredAmulets(Set(party1))(
+          resultNoParty1 <- store.listExpiredAmulets(Some(new IgnoredPartiesStore(Set(party1))))(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty2 <- store.listExpiredAmulets(Set(party2))(
+          resultNoParty2 <- store.listExpiredAmulets(Some(new IgnoredPartiesStore(Set(party2))))(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty1And2 <- store.listExpiredAmulets(Set(party1, party2))(
+          resultNoParty1And2 <- store.listExpiredAmulets(
+            Some(new IgnoredPartiesStore(Set(party1, party2)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -351,7 +353,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listLockedExpiredAmulets(Set.empty)(
+          result <- store.listLockedExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -372,7 +374,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- createMiningRoundsTriple(store, startRound = 3L) // oldest is round 3, newest is 5
           _ <- dummy2Domain.create(expiresAtRound2)(store.multiDomainAcsStore)
           _ <- dummyDomain.create(expiresAtRound3)(store.multiDomainAcsStore)
-          result <- store.listLockedExpiredAmulets(Set.empty)(
+          result <- store.listLockedExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -401,31 +403,39 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listLockedExpiredAmulets(Set.empty)(
+          result <- store.listLockedExpiredAmulets()(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty1 <- store.listLockedExpiredAmulets(Set(party1))(
+          resultNoParty1 <- store.listLockedExpiredAmulets(
+            Some(new IgnoredPartiesStore(Set(party1)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty2 <- store.listLockedExpiredAmulets(Set(party2))(
+          resultNoParty2 <- store.listLockedExpiredAmulets(
+            Some(new IgnoredPartiesStore(Set(party2)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty1And2 <- store.listLockedExpiredAmulets(Set(party1, party2))(
+          resultNoParty1And2 <- store.listLockedExpiredAmulets(
+            Some(new IgnoredPartiesStore(Set(party1, party2)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty3 <- store.listLockedExpiredAmulets(Set(party3))(
+          resultNoParty3 <- store.listLockedExpiredAmulets(
+            Some(new IgnoredPartiesStore(Set(party3)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
@@ -496,18 +506,20 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
 
-          resultAll <- store.listExpiredAmuletAllocations(Set.empty)(
+          resultAll <- store.listExpiredAmuletAllocations()(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
-          resultFiltered <- store.listExpiredAmuletAllocations(Set(userParty(2)))(
+          resultFiltered <- store.listExpiredAmuletAllocations(
+            Some(new IgnoredPartiesStore(Set(userParty(2))))
+          )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
           resultFilteredTwoParties <- store.listExpiredAmuletAllocations(
-            Set(userParty(2), userParty(3))
+            Some(new IgnoredPartiesStore(Set(userParty(2), userParty(3))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
@@ -571,12 +583,14 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
 
-          resultAll <- store.listExpiredAmuletTransferInstructions(Set.empty)(
+          resultAll <- store.listExpiredAmuletTransferInstructions()(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
-          resultFiltered <- store.listExpiredAmuletTransferInstructions(Set(userParty(2)))(
+          resultFiltered <- store.listExpiredAmuletTransferInstructions(
+            Some(new IgnoredPartiesStore(Set(userParty(2))))
+          )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
@@ -1007,19 +1021,17 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           domain = dummyDomain,
           enableExpireValidatorFaucet = true,
           batchSize = PageLimit.tryCreate(1000),
-          ignoredExpiredRewardsPartyIds = Set.empty,
         )
         resultWithIgnoredUserParty <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
           domain = dummyDomain,
           enableExpireValidatorFaucet = true,
           batchSize = PageLimit.tryCreate(1000),
-          ignoredExpiredRewardsPartyIds = Set(userParty(1), userParty(3)),
+          ignoredPartiesStore = Some(new IgnoredPartiesStore(Set(userParty(1), userParty(3)))),
         )
         resultWithoutFaucet <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
           domain = dummyDomain,
           enableExpireValidatorFaucet = false,
           batchSize = PageLimit.tryCreate(1000),
-          ignoredExpiredRewardsPartyIds = Set.empty,
         )
       } yield {
         result should have size 4
@@ -1098,7 +1110,6 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           enableExpireValidatorFaucet = false,
           batchSize = PageLimit.tryCreate(3),
           numBatches = PageLimit.tryCreate(100),
-          ignoredExpiredRewardsPartyIds = Set.empty,
         )
       } yield {
         result should have size 2
@@ -1127,7 +1138,6 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           enableExpireValidatorFaucet = false,
           batchSize = PageLimit.tryCreate(100),
           numBatches = PageLimit.tryCreate(1),
-          ignoredExpiredRewardsPartyIds = Set.empty,
         )
       } yield {
         result.loneElement.closedRoundNumber shouldBe 2
@@ -2117,24 +2127,30 @@ class DbSvDsoStoreTest
         )
         results <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set.empty)
+            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold)
             .map(result => (threshold, result))
         )
         resultsNoProvider1 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set(providerParty(1)))
+            .featuredAppActivityMarkerCountAboveOrEqualTo(
+              threshold,
+              Some(new IgnoredPartiesStore(Set(providerParty(1)))),
+            )
             .map(result => (threshold, result))
         )
         resultsNoProvider2 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
-            .featuredAppActivityMarkerCountAboveOrEqualTo(threshold, Set(providerParty(2)))
+            .featuredAppActivityMarkerCountAboveOrEqualTo(
+              threshold,
+              Some(new IgnoredPartiesStore(Set(providerParty(2)))),
+            )
             .map(result => (threshold, result))
         )
         resultsNoProvider1And2 <- MonadUtil.sequentialTraverse(thresholds)(threshold =>
           store
             .featuredAppActivityMarkerCountAboveOrEqualTo(
               threshold,
-              Set(providerParty(1), providerParty(2)),
+              Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
             )
             .map(result => (threshold, result))
         )
@@ -2181,7 +2197,6 @@ class DbSvDsoStoreTest
             Int.MinValue,
             0,
             20,
-            Set.empty,
           )
           .map(_.map(_.contractId))
         results2 <- store
@@ -2189,7 +2204,6 @@ class DbSvDsoStoreTest
             1,
             Int.MaxValue,
             20,
-            Set.empty,
           )
           .map(_.map(_.contractId))
       } yield {
@@ -2212,7 +2226,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(1)),
+            Some(new IgnoredPartiesStore(Set(providerParty(1)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider2 <- store
@@ -2220,7 +2234,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(2)),
+            Some(new IgnoredPartiesStore(Set(providerParty(2)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider1And2 <- store
@@ -2228,7 +2242,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Set(providerParty(1), providerParty(2)),
+            Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
           )
           .map(_.map(_.contractId))
       } yield {
@@ -2259,7 +2273,6 @@ class DbSvDsoStoreTest
           Int.MinValue,
           Int.MaxValue,
           2,
-          Set.empty,
         )
       } yield {
         limitedResults should have(size(2))

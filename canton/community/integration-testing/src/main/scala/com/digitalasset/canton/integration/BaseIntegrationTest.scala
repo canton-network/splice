@@ -92,7 +92,11 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
       within,
       assertions.map { assertion => (entry: LogEntry) =>
         assertion(entry)
-        entry.commandFailureMessage
+        // `commandFailureMessage` forces the loggerName to be one of Canton's,
+        // but we use our custom one from splice... so we have to hack around that
+        entry
+          .copy(loggerName = "com.digitalasset.canton.integration.EnvironmentDefinition")
+          .commandFailureMessage
         succeed
       }*
     )
@@ -187,6 +191,9 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
 
     def asScalaProtoCreated: Option[com.daml.ledger.api.v2.event.CreatedEvent] =
       com.daml.ledger.api.v2.event.Event.fromJavaProto(events.toProtoEvent).event.created
+
+    def asScalaProtoExercised: Option[com.daml.ledger.api.v2.event.ExercisedEvent] =
+      com.daml.ledger.api.v2.event.Event.fromJavaProto(events.toProtoEvent).event.exercised
   }
 
   implicit class EnrichedEvents(events: java.util.List[Event]) {

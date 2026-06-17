@@ -194,7 +194,7 @@ class SqlIndexInitializationTriggerStoreTest
               $$$$ language plpgsql immutable;
               """,
             "create slow_function",
-          )
+          )(implicitly, implicitly, _ => false)
           .failOnShutdown
         _ <- storage.underlying
           .update(
@@ -212,7 +212,7 @@ class SqlIndexInitializationTriggerStoreTest
               )
               .asTry,
             "insert test data",
-          )
+          )(implicitly, implicitly, _ => false)
           .failOnShutdown
 
         indexNamesBefore <- listIndexNames()
@@ -319,7 +319,7 @@ class SqlIndexInitializationTriggerStoreTest
                   )
                   .asTry,
                 "insert test data",
-              )
+              )(implicitly, implicitly, _ => false)
               .failOnShutdown,
             loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
               within = {

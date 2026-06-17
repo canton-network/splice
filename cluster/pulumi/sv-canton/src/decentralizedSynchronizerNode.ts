@@ -80,6 +80,7 @@ abstract class InStackDecentralizedSynchronizerNode
 
   protected installDecentralizedSynchronizer(
     svConfig: SingleSvConfiguration,
+    migrationId: number,
     dbs: {
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
@@ -111,6 +112,7 @@ abstract class InStackDecentralizedSynchronizerNode
     const mediatorDbName = `${sanitizedName}_mediator`;
     const sequencerDbName = `${sanitizedName}_sequencer`;
     this.version = version;
+    const physicalSynchronizerConfig = svConfig.physicalSynchronizers[migrationId];
 
     const decentralizedSynchronizerValues: ChartValues = loadYamlFromFile(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/global-domain-values.yaml`,
@@ -146,8 +148,8 @@ abstract class InStackDecentralizedSynchronizerNode
             additionalEnvVars: (rateLimitConfig
               ? [{ name: 'ADDITIONAL_CONFIG_SEQUENCER_RATE_LIMITS', value: rateLimitConfig }]
               : []
-            ).concat(svConfig.sequencer?.additionalEnvVars || []),
-            resources: svConfig.sequencer?.resources,
+            ).concat(physicalSynchronizerConfig.sequencer.additionalEnvVars),
+            resources: physicalSynchronizerConfig.sequencer.resources,
           },
           mediator: {
             ...decentralizedSynchronizerValues.mediator,
@@ -158,8 +160,8 @@ abstract class InStackDecentralizedSynchronizerNode
               postgresName: dbs.mediatorPostgres.instanceName,
               ...(dbs.setCoreDbNames ? { databaseName: mediatorDbName } : {}),
             },
-            additionalEnvVars: svConfig.mediator?.additionalEnvVars,
-            resources: svConfig.mediator?.resources,
+            additionalEnvVars: physicalSynchronizerConfig.mediator.additionalEnvVars,
+            resources: physicalSynchronizerConfig.mediator.resources,
           },
           enablePostgresMetrics: true,
           metrics: {
@@ -169,7 +171,10 @@ abstract class InStackDecentralizedSynchronizerNode
             },
           },
           livenessProbeInitialDelaySeconds: domainLivenessProbeInitialDelaySeconds,
-          additionalJvmOptions: getAdditionalJvmOptions(svConfig.sequencer?.additionalJvmOptions),
+          // TODO(#5805): These are used both for sequencer and mediator while the mediator config is ignored.
+          additionalJvmOptions: getAdditionalJvmOptions(
+            physicalSynchronizerConfig.sequencer.additionalJvmOptions
+          ),
           pvc: spliceConfig.configuration.persistentHeapDumps
             ? {
                 size: '35Gi',
@@ -261,6 +266,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
     this.cometbftRpcServiceName = cometbftRelease.rpcServiceName;
     this.installDecentralizedSynchronizer(
       svConfig,
+      migrationId,
       dbs,
       {
         type: 'cometbft',
@@ -296,6 +302,7 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
     super(migrationId, xns, version);
     this.installDecentralizedSynchronizer(
       svConfig,
+      migrationId,
       dbs,
       {
         type: 'cantonbft',

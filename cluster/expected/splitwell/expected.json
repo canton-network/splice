@@ -582,11 +582,7 @@
         "enablePostgresMetrics": true,
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "metrics": {
-          "enable": true,
-          "migration": {
-            "active": true,
-            "id": 2
-          }
+          "enable": true
         },
         "participantAdminUserNameFrom": {
           "secretKeyRef": {

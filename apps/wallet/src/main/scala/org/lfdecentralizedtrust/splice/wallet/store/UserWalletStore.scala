@@ -673,6 +673,21 @@ object UserWalletStore {
             rewardCouponWeight = Some(co.payload.weight),
           )
         ),
+        mkFilter(amuletCodegen.RewardCouponV2.COMPANION)(
+          co =>
+            co.payload.dso == dso &&
+              (co.payload.provider == endUser ||
+                co.payload.beneficiary == java.util.Optional.of(endUser)),
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.endUserParty), now)(tc)
+          },
+        )(co =>
+          UserWalletAcsStoreRowData(
+            co,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(co.payload.expiresAt)),
+            rewardCouponRound = Some(co.payload.round.number),
+          )
+        ),
         mkFilter(amuletCodegen.UnclaimedActivityRecord.COMPANION)(co =>
           co.payload.dso == dso &&
             co.payload.beneficiary == endUser

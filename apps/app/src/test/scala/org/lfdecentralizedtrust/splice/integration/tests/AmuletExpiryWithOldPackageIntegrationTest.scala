@@ -21,7 +21,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTest,
+  IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
@@ -40,7 +40,7 @@ import scala.concurrent.duration.*
 import java.time.Duration
 
 abstract class AmuletExpiryWithOldPackageIntegrationTestBase
-    extends IntegrationTest
+    extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
     with TimeTestUtil
     with TriggerTestUtil
@@ -67,7 +67,7 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
-      .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
+      .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .withTrafficTopupsDisabled
       .addConfigTransforms(
         (_, c) =>

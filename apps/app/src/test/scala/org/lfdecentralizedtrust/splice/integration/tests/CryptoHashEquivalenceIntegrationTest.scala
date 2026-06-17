@@ -147,12 +147,14 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         storage,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv = false,
         loggerFactory,
       )
       rewardsStore = new DbScanAppRewardsStore(
         storage,
         updateHistory,
         appActivityRecordStore,
+        BigDecimal(0.001),
         loggerFactory,
       )
       rewardsHistoryId = updateHistory.historyId

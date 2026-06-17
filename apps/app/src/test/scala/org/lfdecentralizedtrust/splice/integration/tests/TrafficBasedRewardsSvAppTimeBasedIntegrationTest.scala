@@ -1,17 +1,26 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.CloseContext
+import com.digitalasset.canton.metrics.MetricValue
+import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
 import java.util.Optional
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   RewardConfig,
   RewardVersion,
   USD,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_StartProcessingRewardsV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.GetRewardAccountingBatchResponse
 import definitions.GetRewardAccountingRootHashResponse
@@ -24,6 +33,8 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
   CalculateRewardsTrigger,
 }
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTrigger
+import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
@@ -32,6 +43,9 @@ import org.lfdecentralizedtrust.splice.util.{
   TriggerTestUtil,
   WalletTestUtil,
 }
+
+import scala.concurrent.duration.DurationInt
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 // This test focuses on the SV app side triggers testing
 // - Turning on/off of dry-run and minting-version in rewardConfig
@@ -53,11 +67,15 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
+            mintingVersion = "RewardVersion_FeaturedAppMarkers",
             dryRunVersion = None,
             appRewardCouponThreshold = BigDecimal("0"),
           )
         )(config)
       )
+      // Prevent wallets from minting RewardCouponV2 before the test
+      // can observe them on the DSO store.
+      .withoutAutomaticRewardsCollectionAndAmuletMerging
 
   "Enable, disable of dryRunVersion/mintingVersion take effect at round closure" in {
     implicit env =>
@@ -92,12 +110,14 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(5)
-      doTransfer(bobParty)
 
       // oldest=5: rounds 5,6,7 open. R8 will have
       // both dryRunVersion and mintingVersion set.
       clue("vote to enable dryRunVersion + mintingVersion") {
-        changeRewardConfig(enableDryRun = true, enableMinting = true)
+        changeRewardConfig(
+          enableDryRun = true,
+          rewardVersion = RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS,
+        )
       }
 
       val svBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
@@ -116,7 +136,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(7)
-        doTransfer(bobParty)
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(8)
@@ -124,7 +143,6 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         advanceRoundsToNextRoundOpening
         assertOldestOpenRound(9)
-        doTransfer(bobParty)
 
         clue("CalculateRewardsV2 are created for rounds, 6 and 8") {
           eventually() {
@@ -181,6 +199,179 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
           ) should not be empty
         }
       }
+
+      confirmBftRead(bobParty)
+  }
+
+  // Here we confirm that sv2 can do BFT read of root-hash and batch from sv1 and sv4 only
+  // And the rewards processing works even when sv3 is offline.
+  private def confirmBftRead(
+      bobParty: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    clue("Stop sv3 to confirm we can perform bft read from sv1, sv4 only") {
+      sv3Backend.stop()
+      sv3ScanBackend.stop()
+    }
+
+    // sv2 will process all ProcessRewardsV2
+    val otherProcessRewardsTriggers =
+      Seq(sv1Backend, sv4Backend).map(_.dsoDelegateBasedAutomation.trigger[ProcessRewardsTrigger])
+
+    otherProcessRewardsTriggers.foreach(_.pause().futureValue)
+
+    try {
+      val sv2CalculateRewards = sv2Backend.dsoAutomation.trigger[CalculateRewardsTrigger]
+
+      // Pausing this ensures that the root-hash is not calculated while we advance round
+      val sv2RewardComputation = sv2ScanBackend.automation.trigger[RewardComputationTrigger]
+
+      // Here we ensure that SV2 has done ingestion of app-activity for the round just closed
+      // But then its AppActivityRecordMetaT is bumped so that it cannot compute the
+      // root-hash for the round.
+      val (calculateRewardsCid, round) = setTriggersWithin(
+        triggersToPauseAtStart = Seq(sv2CalculateRewards, sv2RewardComputation)
+      ) {
+        val round = oldestOpenRound
+        doTransfer(bobParty)
+        // Need to advance by two rounds, see note below about last_archived_round
+        // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
+        // on summarizing and issuing round to complete, and here the
+        // summarizing round will block until the sv2 provides the round totals
+        // via bft read.
+        advanceTimeAndWaitForRoundOpening
+        advanceTimeAndWaitForRoundOpening
+
+        val (calculateRewardsCid, rootHash) =
+          clue(
+            s"Round $round just closed: its CalculateRewardsV2 exists and sv1 serves root-hash"
+          ) {
+            eventually() {
+              val calc = sv1Backend.appState.dsoStore
+                .listCalculateRewardsV2()
+                .futureValue
+                .filterNot(_.payload.dryRun)
+                .find(_.payload.round.number == round)
+                .value
+              val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+                  h.rootHash
+              }
+              (calc.contractId, rootHash)
+            }
+          }
+
+        clue(s"Only sv1 and sv4 confirm round $round, so it is not yet processed") {
+          eventually() {
+            val startProcessingAction = new ARC_AmuletRules(
+              new CRARC_StartProcessingRewardsV2(
+                new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(rootHash))
+              )
+            )
+            sv1Backend.appState.dsoStore
+              .listConfirmations(startProcessingAction)
+              .futureValue should have size 2
+          }
+          sv1Backend.appState.dsoStore
+            .listOldestSummarizingMiningRounds()
+            .futureValue
+            .map(_.payload.round.number) should contain(round)
+        }
+
+        // This is trying to simulate AppActivityRecordMetaT's userVersion bump
+        // albeit in a direct way, to avoid restart of scan app, etc.
+        actAndCheck(
+          s"Reset sv2's earliest-ingested round to $round", {
+            val sv2Db = sv2ScanBackend.appState.storage match {
+              case db: DbStorage => db
+              case other => fail(s"Expected DbStorage")
+            }
+            implicit val closeContext: CloseContext = CloseContext(sv2Db)
+            // Here the last_archived_round must reach earliest_ingested_round + 1 for the scan
+            // to confirm that it CannotProvide for a round.
+            // In practice it would mean that SV2 would wait for its scan to
+            // ingest verdicts for one full round after the version bump,
+            // and only then get to know that its own scan does not have the data.
+            sv2Db
+              .update_(
+                sqlu"""update app_activity_record_meta
+                       set earliest_ingested_round = $round,
+                           last_archived_round = ${round + 1}""",
+                "test.increaseAppActivityMeta_EarliestIngestedRound",
+              )
+              .futureValueUS
+          },
+        )(
+          s"sv2's own scan now answers CannotProvide for round $round",
+          _ =>
+            sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
+              a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide],
+        )
+
+        (calculateRewardsCid, round)
+      }
+
+      // setTriggersWithin has resumed sv2's CalculateRewardsTrigger. sv3 is stopped and sv2's own
+      // scan CannotProvide, so the deciding 3rd confirmation can only come from sv2 via bft read.
+      clue(s"sv2's own scan still answers CannotProvide for round $round") {
+        sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
+          a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide]
+      }
+
+      clue(
+        s"sv2 reads round $round from the sv1 and sv4, and supplies the 3rd confirmation vote"
+      ) {
+        eventually() {
+          sv1Backend.appState.dsoStore
+            .listCalculateRewardsV2()
+            .futureValue
+            .map(_.contractId) should not contain calculateRewardsCid
+        }
+      }
+
+      clue(
+        s"sv2 does processing of ProcessRewardsV2"
+      ) {
+        eventually() {
+          sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .map(_.payload.round.number) should contain(round)
+          sv1Backend.appState.dsoStore
+            .listProcessRewardsV2()
+            .futureValue
+            .map(_.payload.round.number) should not contain round
+        }
+      }
+
+      clue(
+        "sv2's BFT-read counters incremented, as it obtained both root-hash and batch via BFT read"
+      ) {
+        // metrics.get can throw before the meter is first marked, so retry.
+        eventually(retryOnTestFailuresOnly = false) {
+          def bftReads(name: String): Long =
+            sv2Backend.metrics
+              .get(s"$MetricsPrefix.$name", Map("dryRun" -> "false"))
+              .select[MetricValue.LongPoint]
+              .value
+              .value
+
+          bftReads("calculate_rewards_v2.root_hash_bft_reads") should be >= 1L
+          bftReads("process_rewards_v2.batch_bft_reads") should be >= 1L
+        }
+      }
+    } finally {
+      otherProcessRewardsTriggers.foreach(_.resume())
+      clue("Restart sv3") {
+        sv3ScanBackend.start()
+        sv3Backend.start()
+        sv3Backend.waitForInitialization(
+          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+        )
+        sv3ScanBackend.waitForInitialization(
+          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+        )
+      }
+    }
   }
 
   private def doTransfer(
@@ -209,6 +400,11 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         b.mintingAllowances.toSeq
     }
 
+  private def oldestOpenRound(implicit env: SpliceTestConsoleEnvironment): Long = {
+    val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    openRounds.map(_.contract.payload.round.number.toLong).min
+  }
+
   private def assertOldestOpenRound(
       expected: Long
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
@@ -224,14 +420,13 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
   private def changeRewardConfig(
       enableDryRun: Boolean,
-      enableMinting: Boolean = false,
+      rewardVersion: RewardVersion = RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val amuletRules = sv1Backend.getDsoInfo().amuletRules
     val existing = AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
     val rc = existing.rewardConfig.get()
     val newRc = new RewardConfig(
-      if (enableMinting) RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
-      else rc.mintingVersion,
+      rewardVersion,
       if (enableDryRun) Optional.of(RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS)
       else Optional.empty[RewardVersion](),
       rc.batchSize,
@@ -249,6 +444,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       existing.optDevelopmentFundManager,
       existing.externalPartyConfigStateTickDuration,
       Optional.of(newRc),
+      existing.transferPreapprovalBaseDuration,
     )
     setAmuletConfig(Seq((None, newConfig, existing)))
     eventually() {

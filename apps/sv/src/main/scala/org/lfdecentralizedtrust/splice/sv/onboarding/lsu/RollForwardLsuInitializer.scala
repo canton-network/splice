@@ -87,7 +87,7 @@ class RollForwardLsuInitializer(
         "sequencer_startup",
         "New sequencer has started",
         currentNode.sequencerAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION
@@ -101,7 +101,7 @@ class RollForwardLsuInitializer(
         "mediator_startup",
         "New mediator has started",
         currentNode.mediatorAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION

@@ -45,6 +45,7 @@ import org.lfdecentralizedtrust.splice.splitwell.metrics.SplitwellAppMetrics
 import org.lfdecentralizedtrust.splice.splitwell.store.SplitwellStore
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -116,13 +117,7 @@ class SplitwellApp(
     }
     storeKey = SplitwellStore.Key(providerParty = partyId)
     domainMigrationId <- appInitStep(s"Resolving domain migration id") {
-      retryProvider.getValueWithRetries(
-        RetryFor.WaitingOnInitDependency,
-        "splitwell_domain_migration_id",
-        s"Wait for splitwell domain migration id to be available",
-        scanConnection.getMigrationId(),
-        logger,
-      )
+      resolveDomainMigrationId(scanConnection)
     }
     store = SplitwellStore(
       storeKey,
@@ -208,6 +203,26 @@ class SplitwellApp(
       timeouts,
     )
   }
+
+  private def resolveDomainMigrationId(
+      scanConnection: ScanConnection
+  )(implicit traceContext: TraceContext): Future[Long] =
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
+      case Some(migrationId) =>
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
+        Future.successful(migrationId)
+      case None =>
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "splitwell_domain_migration_id",
+          s"Wait for splitwell domain migration id to be available",
+          scanConnection.getMigrationId().map { migrationId =>
+            logger.info(s"Resolved domain migration id $migrationId from scan")
+            migrationId
+          },
+          logger,
+        )
+    }
 
   private def createSplitwellRules(
       domains: SplitwellDomains,

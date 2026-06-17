@@ -28,7 +28,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: splitwell-app
-        image: "{{ .Values.imageRepo }}/splitwell-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).splitwell_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).splitwell_app) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -84,7 +84,7 @@ spec:
             mountPath: /app/logback
       initContainers:
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:

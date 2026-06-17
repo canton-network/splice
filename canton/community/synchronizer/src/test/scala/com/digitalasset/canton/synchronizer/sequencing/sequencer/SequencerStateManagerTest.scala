@@ -22,7 +22,10 @@ import com.digitalasset.canton.synchronizer.HasTopologyTransactionTestFactory
 import com.digitalasset.canton.synchronizer.block.*
 import com.digitalasset.canton.synchronizer.block.LedgerBlockEvent.*
 import com.digitalasset.canton.synchronizer.block.data.memory.InMemorySequencerBlockStore
-import com.digitalasset.canton.synchronizer.block.update.BlockUpdateGeneratorImpl
+import com.digitalasset.canton.synchronizer.block.update.{
+  BlockUpdateGeneratorImpl,
+  InFlightAggregations,
+}
 import com.digitalasset.canton.synchronizer.metrics.{SequencerMetrics, SequencerTestMetrics}
 import com.digitalasset.canton.synchronizer.sequencer.Sequencer.SignedSubmissionRequest
 import com.digitalasset.canton.synchronizer.sequencer.block.BlockSequencerFactory.OrderingTimeFixMode
@@ -103,7 +106,11 @@ class SequencerStateManagerTest
   private val ts101 = ts0.plusSeconds(101)
 
   private lazy val aggregationRule1 =
-    AggregationRule(NonEmpty(Seq, alice, bob), PositiveInt.tryCreate(2), testedProtocolVersion)
+    AggregationRule.testing(
+      NonEmpty(Seq, alice, bob),
+      PositiveInt.tryCreate(2),
+      testedProtocolVersion,
+    )
 
   private def aggregationRequestFor(
       sender: Member,
@@ -126,7 +133,7 @@ class SequencerStateManagerTest
       .value
 
   private lazy val aggregationRule2 =
-    AggregationRule(NonEmpty(Seq, alice), PositiveInt.one, testedProtocolVersion)
+    AggregationRule.testing(NonEmpty(Seq, alice), PositiveInt.one, testedProtocolVersion)
   private lazy val aggregationRequest2 = aggregationRequestFor(alice, aggregationRule2).futureValue
   @unused
   private lazy val aggregationId2 =
@@ -195,7 +202,7 @@ class SequencerStateManagerTest
             UninitializedBlockHeight,
             Map.empty,
             SequencerPruningStatus(CantonTimestamp.Epoch, ts1, Set.empty),
-            Map.empty,
+            InFlightAggregations.empty,
             None,
             testedProtocolVersion,
             Seq.empty,
@@ -290,6 +297,7 @@ class SequencerStateManagerTest
     val topologyStore =
       new InMemoryTopologyStore(
         SynchronizerStore(synchronizerId),
+        predecessor = None,
         testedProtocolVersion,
         loggerFactory,
         timeouts,
@@ -337,7 +345,6 @@ class SequencerStateManagerTest
       topologyClient,
       defaultStaticSynchronizerParameters,
       topologyTransactionFactory.syncCryptoClient.crypto,
-      BatchingConfig().parallelism,
       CachingConfigs.defaultPublicKeyConversionCache,
       DefaultProcessingTimeouts.testing,
       FutureSupervisor.Noop,
@@ -374,7 +381,7 @@ class SequencerStateManagerTest
       producePostOrderingTopologyTicks = false,
       SequencerTestMetrics,
       BatchingConfig(),
-      loggerFactory,
+      consistencyChecks = true,
       memberValidator = new SequencerMemberValidator {
         override def isMemberRegisteredAt(member: Member, time: CantonTimestamp)(implicit
             tc: TraceContext
@@ -384,6 +391,7 @@ class SequencerStateManagerTest
             tc: TraceContext
         ): FutureUnlessShutdown[Map[Member, Boolean]] = ???
       },
+      loggerFactory,
     )(closeContext, NoReportingTracerProvider.tracer)
 
     def signedAcknowledgement(

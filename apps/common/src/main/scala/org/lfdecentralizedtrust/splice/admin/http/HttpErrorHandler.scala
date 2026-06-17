@@ -26,6 +26,7 @@ import com.digitalasset.canton.ledger.error.groups.CommandExecutionErrors.Interp
 import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
 import com.digitalasset.canton.error.{ErrorCodeUtils, TransactionRoutingError}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.participant.sync.SyncServiceInjectionError
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.Printer
 import io.circe.syntax.*
@@ -113,6 +114,7 @@ final class HttpErrorHandler(
           Interpreter.UnhandledException,
           Interpreter.InterpretationUserError,
           Interpreter.TemplatePreconditionViolated,
+          SyncServiceInjectionError.NotConnectedToAnySynchronizer,
           TransactionRoutingError.TopologyErrors.UnknownContractSynchronizers,
         )
         if (conflictErrorCodes.exists(ErrorCodeUtils.isError(grpcDesc, _)))

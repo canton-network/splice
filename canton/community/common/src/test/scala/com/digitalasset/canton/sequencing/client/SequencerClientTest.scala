@@ -1851,17 +1851,27 @@ final class SequencerClientTest
 
     override def nbConnections: NonNegativeInt = ???
 
-    override def getConnections(requester: String, nb: PositiveInt, exclusions: Set[SequencerId])(
-        implicit traceContext: TraceContext
+    override def getConnections(
+        requester: String,
+        nb: PositiveInt,
+        excluded: Set[SequencerId],
+        acceptableO: Option[Set[SequencerId]],
+    )(implicit
+        traceContext: TraceContext
     ): Set[SequencerConnection] = Set(connection)
 
-    override def getOneConnectionPerSequencer(requester: String)(implicit
+    override def getOneConnectionPerSequencer(
+        requester: String,
+        acceptableO: Option[Set[SequencerId]],
+    )(implicit
         traceContext: TraceContext
     ): Map[SequencerId, SequencerConnection] = ???
 
-    override def getAllConnections()(implicit
+    override def getAllConnections: Seq[SequencerConnection] = ???
+
+    override def getAllSequencerIds(implicit
         traceContext: TraceContext
-    ): Seq[SequencerConnection] = ???
+    ): Map[SequencerAlias, SequencerId] = ???
 
     override def contents: Map[SequencerId, Set[SequencerConnection]] = ???
 

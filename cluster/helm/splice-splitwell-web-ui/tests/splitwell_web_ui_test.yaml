@@ -60,3 +60,23 @@ tests:
             app.kubernetes.io/version: 0.4.1-snapshot.20250527.9394.0.vb6a641dc
             # Note how we truncated this
             helm.sh/chart: splice-splitwell-web-ui-0.4.1-snapshot.20250527.9394.0.vb6a641d
+
+  - it: "allows overriding splitwell web ui image name"
+    set:
+      imageRepo: "secure-registry.example.com"
+      imageName: "custom-splitwell-ui"
+      auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
+      auth.audience: "mock_audience"
+      spliceInstanceNames.networkName: "MockNet"
+      spliceInstanceNames.networkFaviconUrl: "https://mock.net/favicon.ico"
+      spliceInstanceNames.amuletName: "Mocklet"
+      spliceInstanceNames.amuletNameAcronym: "MCK"
+      spliceInstanceNames.nameServiceName: "Mock Name Service"
+      spliceInstanceNames.nameServiceNameAcronym: "MNS"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-web-ui')].image
+          pattern: "^secure-registry\\.example\\.com/custom-splitwell-ui:"
