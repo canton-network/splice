@@ -34,12 +34,14 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
 
   for (let i = 1; i <= synchronizerCount; i++) {
     const key = getValue(`decentralizedSynchronizer${i}`);
+    const acsCommitmentReconciliationInterval = getValue(
+      `decentralizedSynchronizerAcsCommitmentReconciliationInterval${i}`
+    );
     const value = {
       state: getValue(`decentralizedSynchronizerState${i}`) as SynchronizerState,
       cometBftGenesisJson: getValue(`decentralizedSynchronizerCometBftGenesisJson${i}`),
-      acsCommitmentReconciliationInterval: getValue(
-        `decentralizedSynchronizerAcsCommitmentReconciliationInterval${i}`
-      ),
+      acsCommitmentReconciliationInterval:
+        acsCommitmentReconciliationInterval === '' ? null : acsCommitmentReconciliationInterval,
     };
     synchronizers = synchronizers.set(key, value);
   }
