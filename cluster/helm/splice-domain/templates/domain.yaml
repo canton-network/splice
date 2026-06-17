@@ -37,10 +37,14 @@ spec:
         - name: CANTON_DOMAIN_POSTGRES_SERVER
           value: {{ .Values.sequencer.persistence.host }}
         - name: CANTON_DOMAIN_POSTGRES_PASSWORD
+          {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+          value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
            secretKeyRef:
               name: {{ .Values.sequencer.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- if .Values.sequencer.persistence.databaseName }}
         - name: CANTON_SEQUENCER_POSTGRES_DB
           value: {{ .Values.sequencer.persistence.databaseName }}
@@ -92,10 +96,14 @@ spec:
           image: {{ .Values.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.sequencer.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -113,10 +121,14 @@ spec:
           image: {{ .Values.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.mediator.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.mediator.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.mediator.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
