@@ -49,6 +49,14 @@ class ScanMediatorVerdictIngestionMetrics(metricsFactory: LabeledMetricsFactory)
       )
     )(MetricsContext.Empty)
 
+  val noEventAtTimestampsCount: Meter = metricsFactory.meter(
+    MetricInfo(
+      name = prefix :+ "no_event_at_timestamps_count",
+      summary = "Number of NO_EVENT_AT_TIMESTAMPS errors from the sequencer",
+      qualification = Traffic,
+    )
+  )(MetricsContext.Empty)
+
   override def close(): Unit = {
     lastIngestedRecordTime.close()
   }
