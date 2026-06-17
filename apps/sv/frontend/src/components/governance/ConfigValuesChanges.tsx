@@ -3,7 +3,7 @@
 
 import { Box, Typography } from '@mui/material';
 import { ConfigChange } from '../../utils/types';
-import { PartyId } from '@lfdecentralizedtrust/splice-common-frontend';
+import { PartyId } from '@canton-network/splice-common-frontend';
 
 interface ConfigValuesChangesProps {
   changes: ConfigChange[];
@@ -43,33 +43,37 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
               {change.label}
             </Typography>
 
-            <Box
-              sx={{
-                px: 1.5,
-                py: 0.5,
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: 1,
-                minWidth: 80,
-                textAlign: 'center',
-              }}
-              data-testid="config-change-current-value-container"
-            >
-              {change.isId ? (
-                <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
-              ) : (
-                <Typography
-                  variant="body2"
-                  fontFamily="monospace"
-                  data-testid="config-change-current-value"
+            {change.currentValue && (
+              <>
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 0.5,
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: 1,
+                    minWidth: 80,
+                    textAlign: 'center',
+                  }}
+                  data-testid="config-change-current-value-container"
                 >
-                  {change.currentValue}
-                </Typography>
-              )}
-            </Box>
+                  {change.isId ? (
+                    <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
+                  ) : (
+                    <Typography
+                      variant="body2"
+                      fontFamily="monospace"
+                      data-testid="config-change-current-value"
+                    >
+                      {change.currentValue}
+                    </Typography>
+                  )}
+                </Box>
 
-            <Typography variant="body1" sx={{ mx: 1 }}>
-              →
-            </Typography>
+                <Typography variant="body1" sx={{ mx: 1 }}>
+                  →
+                </Typography>
+              </>
+            )}
 
             <Box
               sx={{

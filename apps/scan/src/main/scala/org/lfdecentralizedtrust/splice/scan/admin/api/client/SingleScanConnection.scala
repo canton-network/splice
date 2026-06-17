@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
@@ -477,6 +478,15 @@ class SingleScanConnection private[client] (
       )
     )
 
+  override def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetMigrationId(),
+    )
+
   override def lookupTransferPreapprovalByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -568,6 +578,14 @@ class SingleScanConnection private[client] (
       limit,
       pageToken,
     ),
+  )
+
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.GetPreviousSvRewardWeight(svParty, effectiveBefore),
   )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit
@@ -802,6 +820,15 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetActivePhysicalSynchronizerSerial(),
+    )
+
+  override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber),
     )
 
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit

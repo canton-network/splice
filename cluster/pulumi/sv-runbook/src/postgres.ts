@@ -8,12 +8,9 @@ import {
   loadYamlFromFile,
   SPLICE_ROOT,
   supportsSvRunbookReset,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installPostgres(
   xns: ExactNamespace,

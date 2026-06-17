@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
-import { runSvCantonForAllMigrations } from '@lfdecentralizedtrust/splice-pulumi-sv-canton/pulumi';
-import { runSvProjectForAllSvs } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumi';
+import { runSvCantonForAllMigrations } from '@canton-network/splice-pulumi-sv-canton/pulumi';
+import { runSvProjectForAllSvs } from '@canton-network/splice-pulumi-sv/pulumi';
 
 import { awaitAllOrThrowAllExceptions, Operation, stack } from './pulumi';
 import { operation } from './pulumiOperations';

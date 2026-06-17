@@ -43,6 +43,7 @@ class DsoPreflightIntegrationTest
         s"${infoUrl}",
         s"${infoUrl}/runtime/",
         s"${infoUrl}/runtime/dso.json",
+        s"${infoUrl}/runtime/info.json",
         s"${infoUrl}/runtime/status.json",
       )
 
@@ -63,7 +64,7 @@ class DsoPreflightIntegrationTest
             assert(json.isObject, s"Response body must be a JSON object, but got: $body")
             if (url == s"${infoUrl}/runtime/") {
               val expected = parse(
-                """{"dso":"/runtime/dso.json","status":"/runtime/status.json"}"""
+                """{"dso":"/runtime/dso.json","info":"/runtime/info.json","status":"/runtime/status.json"}"""
               ).getOrElse(fail("Hardcoded JSON invalid"))
               assert(json == expected, s"Expected $expected but got $json")
             }

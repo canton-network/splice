@@ -13,7 +13,6 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.LogEntry
 import com.digitalasset.canton.sequencing.protocol.*
 import com.digitalasset.canton.synchronizer.sequencer.InFlightAggregation
-import com.digitalasset.canton.synchronizer.sequencer.InFlightAggregation.AggregationBySender
 import com.digitalasset.canton.synchronizer.sequencer.store.SequencerStore
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.tracing.TraceContext.withNewTraceContext
@@ -113,7 +112,7 @@ trait SequencerStateManagerStoreTest
             )
           } yield {
             val inFlightAggregations = lowerBoundAndInFlightAggregations
-            inFlightAggregations shouldBe Map.empty
+            inFlightAggregations.byId shouldBe Map.empty
           }).failOnShutdown
         }
       }
@@ -124,7 +123,7 @@ trait SequencerStateManagerStoreTest
         val aggregationId1 = AggregationId(TestHash.digest(1))
         val aggregationId2 = AggregationId(TestHash.digest(2))
         val aggregationId3 = AggregationId(TestHash.digest(3))
-        val rule = AggregationRule(
+        val rule = AggregationRule.testing(
           NonEmpty(Seq, alice, bob),
           threshold = PositiveInt.tryCreate(2),
           testedProtocolVersion,
@@ -205,23 +204,23 @@ trait SequencerStateManagerStoreTest
             )
           } yield {
             // All aggregations by sender have later timestamps and the in-flight aggregations are therefore considered inexistent
-            head2pred shouldBe Map.empty
-            head2 shouldBe Map(
+            head2pred.byId shouldBe Map.empty
+            head2.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1
                 .focus(_.aggregatedSenders)
                 // bob's aggregation happened later
                 .modify(_.removed(bob))
             )
-            head3 shouldBe Map(
+            head3.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1
             )
-            head4pred shouldBe Map(
+            head4pred.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1,
               // aggregationId2 has already expired
               aggregationId3 -> inFlightAggregation3,
             )
             // All in-flight aggregations have expired
-            head4 shouldBe Map.empty
+            head4.byId shouldBe Map.empty
           }).failOnShutdown
         }
       }
@@ -233,7 +232,7 @@ trait SequencerStateManagerStoreTest
 
         val aggregationId1 = AggregationId(TestHash.digest(1))
         val aggregationId2 = AggregationId(TestHash.digest(2))
-        val rule = AggregationRule(
+        val rule = AggregationRule.testing(
           NonEmpty(Seq, alice, bob, carlos),
           threshold = PositiveInt.tryCreate(2),
           testedProtocolVersion,
@@ -309,21 +308,21 @@ trait SequencerStateManagerStoreTest
               maxSequencingTimeUpperBound = maxSequencingTimeUpperBound,
             )
           } yield {
-            head2 shouldBe Map(
+            head2.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1,
               aggregationId2 -> inFlightAggregation2,
             )
-            head2WithBound1 shouldBe Map(
+            head2WithBound1.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1
             )
-            head2WithBound2 shouldBe Map(
+            head2WithBound2.byId shouldBe Map(
               aggregationId1 -> inFlightAggregation1,
               aggregationId2 -> inFlightAggregation2,
             )
-            head3 shouldBe Map(
+            head3.byId shouldBe Map(
               aggregationId2 -> inFlightAggregation2
             )
-            head2expired shouldBe Map(
+            head2expired.byId shouldBe Map(
               aggregationId2 -> inFlightAggregation2
             )
           }).failOnShutdown

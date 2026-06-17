@@ -7,7 +7,6 @@ import cats.data.OptionT
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.ledger.api.v2.update_service.*
 import com.daml.logging.entries.LoggingEntries
-import com.daml.tracing.Telemetry
 import com.digitalasset.canton.ledger.api.grpc.StreamingServiceLifecycleManagement
 import com.digitalasset.canton.ledger.api.validation.UpdateServiceRequestValidator
 import com.digitalasset.canton.ledger.api.{UpdateFormat, ValidationLogger}
@@ -22,9 +21,12 @@ import com.digitalasset.canton.logging.{
   NamedLogging,
 }
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
+import com.digitalasset.canton.platform.config.UpdateServiceConfig
 import com.digitalasset.canton.platform.store.backend.common.UpdatePointwiseQueries.LookupKey
 import com.digitalasset.canton.protocol.UpdateId
+import com.digitalasset.canton.tracing.TraceContextGrpc
 import com.digitalasset.canton.util.Thereafter.syntax.*
+import com.digitalasset.daml.lf.data.Ref
 import io.grpc.stub.StreamObserver
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
@@ -34,8 +36,9 @@ import scala.concurrent.{ExecutionContext, Future}
 final class ApiUpdateService(
     updateService: IndexUpdateService,
     metrics: LedgerApiServerMetrics,
-    telemetry: Telemetry,
     val loggerFactory: NamedLoggerFactory,
+    participantId: Ref.ParticipantId,
+    updateServiceConfig: UpdateServiceConfig,
 )(implicit
     esf: ExecutionSequencerFactory,
     executionContext: ExecutionContext,
@@ -49,7 +52,7 @@ final class ApiUpdateService(
       responseObserver: StreamObserver[GetUpdatesResponse],
   ): Unit = {
     implicit val loggingContextWithTrace: LoggingContextWithTrace =
-      LoggingContextWithTrace(loggerFactory, telemetry)
+      LoggingContextWithTrace(loggerFactory)(TraceContextGrpc.fromGrpcContext)
     registerStream(responseObserver) {
       implicit val errorLoggingContext: ErrorLoggingContext =
         ErrorLoggingContext(logger, loggingContextWithTrace)
@@ -74,7 +77,13 @@ final class ApiUpdateService(
             }
             logger.trace(s"Update request: $req.")
             updateService
-              .updates(req.startExclusive, req.endInclusive, req.updateFormat, req.descendingOrder)
+              .updates(
+                req.startExclusive,
+                req.endInclusive,
+                req.updateFormat,
+                req.descendingOrder,
+                skipPruningChecks = false,
+              )
               .via(logger.enrichedDebugStream("Responding with updates.", updatesLoggable))
               .via(logger.logErrorsOnStream)
               .via(StreamMetrics.countElements(metrics.lapi.streams.updates))
@@ -88,7 +97,7 @@ final class ApiUpdateService(
       req: GetUpdateByOffsetRequest
   ): Future[GetUpdateResponse] = {
     implicit val loggingContextWithTrace: LoggingContextWithTrace =
-      LoggingContextWithTrace(loggerFactory, telemetry)
+      LoggingContextWithTrace(loggerFactory)(TraceContextGrpc.fromGrpcContext)
     implicit val errorLoggingContext: ErrorLoggingContext =
       ErrorLoggingContext(logger, loggingContextWithTrace)
 
@@ -128,7 +137,8 @@ final class ApiUpdateService(
   override def getUpdateById(
       req: GetUpdateByIdRequest
   ): Future[GetUpdateResponse] = {
-    val loggingContextWithTrace = LoggingContextWithTrace(loggerFactory, telemetry)
+    val loggingContextWithTrace =
+      LoggingContextWithTrace(loggerFactory)(TraceContextGrpc.fromGrpcContext)
     val errorLoggingContext = ErrorLoggingContext(logger, loggingContextWithTrace)
 
     UpdateServiceRequestValidator
@@ -156,6 +166,49 @@ final class ApiUpdateService(
         },
       )
   }
+
+  override def getUpdatesPage(request: GetUpdatesPageRequest): Future[GetUpdatesPageResponse] = {
+    val loggingContextWithTrace: LoggingContextWithTrace =
+      LoggingContextWithTrace(loggerFactory)(TraceContextGrpc.fromGrpcContext)
+    implicit val errorLoggingContext: ErrorLoggingContext =
+      ErrorLoggingContext(logger, loggingContextWithTrace)
+    logger.debug(s"Received new update request $request.")(loggingContextWithTrace.traceContext)
+    for {
+      ledgerEnd <- updateService.currentLedgerEnd()
+      validation = UpdateServiceRequestValidator.validateUpdatesPageRequest(
+        req = request,
+        ledgerEnd = ledgerEnd,
+        participantId = participantId,
+        updateServiceConfig = updateServiceConfig,
+      )
+      res <- validation.fold(
+        t =>
+          Future.failed(
+            ValidationLogger.logFailureWithTrace(logger, request, t)(
+              loggingContextWithTrace
+            )
+          ),
+        request => {
+          implicit val loggingContext: LoggingContextWithTrace =
+            LoggingContextWithTrace.enriched(
+              logging.startExclusiveOpt(request.startExclusive),
+              logging.endInclusive(request.endInclusive),
+              logging.maxPageSize(request.maxPageSize),
+              logging.updateFormat(request.updateFormat),
+              logging.descendingOrder(request.descendingOrder),
+              logging.continueStreamFromIncl(request.continueStreamFromIncl),
+            )(loggingContextWithTrace)
+          internalGetUpdatesPage(request)
+        },
+      )
+    } yield res
+  }
+  private def internalGetUpdatesPage(
+      request: com.digitalasset.canton.ledger.api.messages.update.GetUpdatesPageRequest
+  )(implicit
+      loggingContext: LoggingContextWithTrace
+  ): Future[GetUpdatesPageResponse] =
+    updateService.updatesPage(request)
 
   private def internalGetUpdateById(
       updateId: UpdateId,

@@ -1256,6 +1256,28 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetMigrationId()
+      extends InternalBaseCommand[
+        http.GetMigrationIdResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetMigrationIdResponse] = {
+      client.getMigrationId(headers)
+    }
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetMigrationIdResponse.OK(response) =>
+        Right(response.migrationId)
+    }
+  }
+
   @deprecated(message = "Use GetUpdateHistory instead", since = "0.2.5")
   case class GetUpdateHistoryV0(
       count: Int,
@@ -2401,6 +2423,27 @@ object HttpScanAppClient {
         )
         .toSeq
       Right((results, response.nextPageToken))
+    }
+  }
+
+  case class GetPreviousSvRewardWeight(
+      svParty: String,
+      effectiveBefore: Option[String],
+  ) extends InternalBaseCommand[http.GetPreviousSvRewardWeightResponse, Option[Long]] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetPreviousSvRewardWeightResponse] =
+      client.getPreviousSvRewardWeight(
+        body = definitions.PreviousSvRewardWeightRequest(svParty, effectiveBefore),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetPreviousSvRewardWeightResponse.OK(response) =>
+      Right(response.rewardWeight.map(_.toLong))
     }
   }
 

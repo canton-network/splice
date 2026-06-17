@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { clusterSubConfig } from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -94,6 +94,21 @@ const MonitoringConfigSchema = z
         sequencerRateLimits: z.object({
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
+        }),
+        scanConnectionDisagreement: z.object({
+          // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
+          // disagree with the consensus result before the warning alert fires.
+          disagreementRateThreshold: z.number(),
+          // Number of successful (2xx) responses that disagree with BFT consensus that
+          // may occur before the critical alert fires.
+          successfulDisagreementThreshold: z.number(),
+          // Requests (by their `request` label) to exclude from the scan connection
+          // disagreement alerts. Matched as a regex against the `request` label.
+          excludedRequests: z.array(z.string()).default([]),
+          // Scan connections (by their `scan_connection` label) to exclude from the scan
+          // connection disagreement alerts. Matched as a regex against the
+          // `scan_connection` label.
+          excludedConnections: z.array(z.string()).default([]),
         }),
         walletSweep: z.object({
           tolerance: z.number(),

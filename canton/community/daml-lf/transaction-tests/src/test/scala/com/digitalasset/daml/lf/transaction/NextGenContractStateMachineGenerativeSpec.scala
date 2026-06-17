@@ -11,11 +11,9 @@ import com.digitalasset.canton.testing.modelbased.checker.{
   PropertyCheckerResultAssertions,
 }
 import com.digitalasset.canton.testing.modelbased.generators.{ConcreteGenerators, Shrinker}
-import com.digitalasset.canton.testing.modelbased.solver.SymbolicSolver.KeyMode
 import com.digitalasset.canton.testing.modelbased.syntax.{Parser, Pretty}
 import com.digitalasset.daml.lf.crypto.Hash
 import com.digitalasset.daml.lf.data.Ref
-import com.digitalasset.daml.lf.language.LanguageVersion
 import com.digitalasset.daml.lf.transaction.test.TransactionBuilder.Implicits.{
   defaultPackageId,
   toIdentifier,
@@ -126,12 +124,13 @@ abstract class NextGenContractStateMachineGenerativeSpec(
 
 object NextGenContractStateMachineGenerativeSpec {
 
+  // TODO (#31844) The framework should pass the actual template ID
+  private val dummyTmplId: Ref.TypeConId = Ref.TypeConId.assertFromString("-dummy-:Mod:T")
+
   private val generators =
     new ConcreteGenerators(
-      LanguageVersion.v2_dev,
+      contractKeys = true,
       readOnlyRollbacks = true,
-      generateQueryByKey = true,
-      keyMode = KeyMode.NonUniqueContractKeys,
     )
 
   private val pkgName: Ref.PackageName = Ref.PackageName.assertFromString("test-package")
@@ -192,8 +191,6 @@ object NextGenContractStateMachineGenerativeSpec {
         Set(toContractId(contractId)) ++ subTransaction.flatMap(collectIds)
       case Concrete.Fetch(contractId) => Set(toContractId(contractId))
       case Concrete.FetchByKey(contractId, _, _) => Set(toContractId(contractId))
-      case Concrete.LookupByKey(Some(contractId), _, _) => Set(toContractId(contractId))
-      case Concrete.LookupByKey(None, _, _) => Set.empty
       case Concrete.QueryByKey(contractIds, _, _, _) => contractIds.map(toContractId).toSet
       case Concrete.Rollback(subTransaction) => subTransaction.flatMap(collectIds).toSet
     }
@@ -233,6 +230,7 @@ object NextGenContractStateMachineGenerativeSpec {
           for {
             s <- state.visitExercise(
               nodeId = freshNodeId(),
+              tmplId = dummyTmplId,
               targetId = toContractId(contractId),
               mbKey = keyOf(contractId),
               byKey = false,
@@ -245,6 +243,7 @@ object NextGenContractStateMachineGenerativeSpec {
           for {
             s <- state.visitExercise(
               nodeId = freshNodeId(),
+              tmplId = dummyTmplId,
               targetId = toContractId(contractId),
               mbKey = Some(toGlobalKey(keyId)),
               byKey = true,
@@ -255,6 +254,7 @@ object NextGenContractStateMachineGenerativeSpec {
 
         case Concrete.Fetch(contractId) =>
           state.visitFetch(
+            tmplId = dummyTmplId,
             contractId = toContractId(contractId),
             mbKey = keyOf(contractId),
             byKey = false,
@@ -262,26 +262,11 @@ object NextGenContractStateMachineGenerativeSpec {
 
         case Concrete.FetchByKey(contractId, keyId, _) =>
           state.visitFetch(
+            tmplId = dummyTmplId,
             contractId = toContractId(contractId),
             mbKey = Some(toGlobalKey(keyId)),
             byKey = true,
           )
-
-        case Concrete.LookupByKey(contractIdOpt, keyId, _) =>
-          contractIdOpt match {
-            case Some(contractId) =>
-              state.visitQueryByKey(
-                key = toGlobalKey(keyId),
-                result = Vector(toContractId(contractId)),
-                exhaustive = false,
-              )
-            case None =>
-              state.visitQueryByKey(
-                key = toGlobalKey(keyId),
-                result = Vector.empty,
-                exhaustive = true,
-              )
-          }
 
         case Concrete.QueryByKey(contractIds, keyId, _, exhaustive) =>
           state.visitQueryByKey(

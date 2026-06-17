@@ -8,8 +8,8 @@ import {
   ChartValues,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig';
+} from '@canton-network/splice-pulumi-common';
+import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
 
 const circleCiNamespace = new Namespace('circleci-runner', {

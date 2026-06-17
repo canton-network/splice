@@ -8,19 +8,17 @@ import {
   ExactNamespace,
   installLedgerApiUserSecret,
   SpliceCustomResourceOptions,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   InstalledMigrationSpecificSv,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { installPostgres, Postgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import {
   InStackCantonBftDecentralizedSynchronizerNode,
   InStackCometBftDecentralizedSynchronizerNode,
-} from '@lfdecentralizedtrust/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
-
-import { spliceConfig } from '../../common/src/config/config';
+} from '@canton-network/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
 
 export async function installCantonComponents(
   xns: ExactNamespace,
@@ -73,6 +71,7 @@ export async function installCantonComponents(
   if (!migrationInfo) {
     throw new Error(`Migration ${migrationId} not found in migration config`);
   }
+  const physicalSynchronizerConfig = svConfig.physicalSynchronizers[migrationId];
   const version = isActiveMigration
     ? (svConfig.versionOverride ?? migrationInfo.version)
     : migrationInfo.version;
@@ -83,7 +82,7 @@ export async function installCantonComponents(
       `mediator-${migrationId}-pg`,
       `mediator-pg`,
       version,
-      svConfig.mediator?.cloudSql || spliceConfig.pulumiProjectConfig.cloudSql,
+      physicalSynchronizerConfig.mediator.cloudSql,
       true,
       {
         isActive: migrationStillRunning,
@@ -98,7 +97,7 @@ export async function installCantonComponents(
       `sequencer-${migrationId}-pg`,
       `sequencer-pg`,
       version,
-      svConfig.sequencer?.cloudSql || spliceConfig.pulumiProjectConfig.cloudSql,
+      physicalSynchronizerConfig.sequencer.cloudSql,
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
@@ -129,7 +128,6 @@ export async function installCantonComponents(
             setCoreDbNames: svConfig.isCoreSv,
           },
           isActiveMigration,
-          migrationConfig.isRunningMigration(),
           svConfig.onboardingName,
           version,
           imagePullServiceAccountName,

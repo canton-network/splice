@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.config
 
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.BlacklistLeaderSelectionPolicyConfig
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
@@ -14,6 +15,7 @@ import com.digitalasset.canton.config.RequireTypes.{
   NonNegativeLong,
   NonNegativeNumeric,
   PositiveInt,
+  PositiveLong,
   PositiveNumeric,
 }
 import com.digitalasset.canton.synchronizer.mediator.RemoteMediatorConfig
@@ -323,6 +325,20 @@ final case class SvParticipantClientConfig(
       SequencerConnectionPoolDelays.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
+final case class BftSequencingParameters(
+    pbftViewChangeTimeout: PositiveFiniteDuration,
+    segmentLength: PositiveLong,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+) {
+  import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+  def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
+    SequencingParameters.create(
+      pbftViewChangeTimeout.toInternal,
+      SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig,
+    )(protocolVersion)
+}
+
 case class SvAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
@@ -348,8 +364,6 @@ case class SvAppBackendConfig(
     participantBootstrappingDump: Option[ParticipantBootstrapDumpConfig] = None,
     identitiesDump: Option[BackupDumpConfig] = None,
     domainMigrationDumpPath: Option[Path] = None,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
     onLedgerStatusReportInterval: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMinutes(2),
     lsuSequencingTestInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
@@ -434,6 +448,7 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    bftSequencingParameters: Option[BftSequencingParameters],
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =

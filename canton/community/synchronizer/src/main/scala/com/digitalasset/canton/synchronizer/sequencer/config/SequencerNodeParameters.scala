@@ -17,6 +17,7 @@ trait SequencerParameters {
   def maxConfirmationRequestsBurstFactor: PositiveDouble
   def processingTimeouts: ProcessingTimeout
   def maxSubscriptionsPerMember: PositiveInt
+  def disableSubmissionChecksForTesting: Boolean
 }
 
 /** Parameters for a SequencerNode. We "merge" parameters that are valid for all nodes (i.e.
@@ -47,7 +48,10 @@ trait SequencerParameters {
   *   Allows to specify an upper bound on the sequencing times: any message with sequencing time
   *   strictly greater to this value will not be delivered. Important notes:
   *   - SHOULD be set only in disaster recovery scenarios.
-  *   - MUST be the same value in all sequencers of a synchronizer.
+  *   - MUST be the same value in all sequencers of a synchronizer
+  * @param disableReleaseVersionHandshakeCheck
+  *   If set to true, then the sequencer will skip checking that the client binary aligns 100% with
+  *   the server binary when the server is running an unstable protocol version.
   */
 final case class SequencerNodeParameters(
     general: CantonNodeParameters.General,
@@ -62,6 +66,10 @@ final case class SequencerNodeParameters(
     maxAuthTokensPerMember: PositiveInt = PositiveInt.tryCreate(25),
     maxSubscriptionsPerMember: PositiveInt = PositiveInt.tryCreate(5),
     drSequencingTimeUpperBound: Option[DisasterRecoverySequencingTimeUpperBound] = None,
+    delayRequestsBeforeLsuTrafficInit: Boolean,
+    disableSubmissionChecksForTesting: Boolean = false,
+    disableReleaseVersionHandshakeCheck: Boolean = false,
+    lsuConfig: SequencerLsuConfig,
 ) extends CantonNodeParameters
     with HasGeneralCantonNodeParameters
     with HasProtocolCantonNodeParameters

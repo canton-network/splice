@@ -33,7 +33,7 @@ spec:
         imagePullPolicy: {{ . }}
         {{- end }}
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         volumeMounts:
         - name: config
           mountPath: /etc/nginx/conf.d/staticfile.conf
@@ -57,10 +57,10 @@ spec:
         {{- end }}
         command: ["/scripts/updater.sh"]
         env:
-          - name: MIGRATION_ID
-            value: {{ .Values.runtimeDetails.migrationId | quote }}
+          - name: SERIAL_ID
+            value: {{ .Values.runtimeDetails.synchronizerSerialId | quote }}
           - name: SCAN_URL
-            value: {{ .Values.runtimeDetails.scanUrl | quote }}
+            value: {{ .Values.runtimeDetails.scanUrl | default "http://scan-app:5012" | quote }}
           - name: TLS_SKIP_VERIFY
             value: {{ .Values.runtimeDetails.tlsSkipVerify | default false | quote }}
         volumeMounts:

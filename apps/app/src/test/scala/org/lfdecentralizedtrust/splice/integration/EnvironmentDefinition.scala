@@ -217,7 +217,7 @@ case class EnvironmentDefinition(
             }
             if (
               existing.item.featureFlags
-                .contains(ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer)
+                .contains(ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer)
             ) {
               logger.info(
                 s"Participant ${validator.participantClient.id} already has multi synchronizer feature flag enabled for ${sync.synchronizerId}"
@@ -230,7 +230,7 @@ case class EnvironmentDefinition(
                 validator.participantClient.id,
                 sync.synchronizerId,
                 featureFlags = Seq(
-                  ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer
+                  ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer
                 ),
               )
             }

@@ -479,10 +479,13 @@ class DbScanVerdictStore(
     *
     * @param items verdicts with transaction view constructors
     * @param appActivityRecords activity records with placeholder verdictRowIds
+    * @param lastArchivedRoundO the highest archived OpenMiningRound round as of the
+    *                           max record time of the batch
     */
   def insertVerdictsWithAppActivityRecords(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
+      lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
@@ -497,6 +500,7 @@ class DbScanVerdictStore(
         if (appActivityRecords.nonEmpty)
           Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
         else None,
+        lastArchivedRoundO,
       )
     } yield ()
 
@@ -543,10 +547,12 @@ class DbScanVerdictStore(
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Option[Long],
+      lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros)
+      case Some(s) =>
+        s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros, lastArchivedRoundO)
     }
 
   private def afterFilters(

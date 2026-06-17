@@ -197,12 +197,12 @@ trait SvDsoStore
 
   /** List amulets that are expired and can never be used as transfer input. */
   def listExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet]
 
   /** List amulet transfer instructions that are expired */
   def listExpiredAmuletTransferInstructions(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amulettransferinstruction.AmuletTransferInstruction.ContractId,
     splice.amulettransferinstruction.AmuletTransferInstruction,
@@ -210,7 +210,7 @@ trait SvDsoStore
 
   /** List amulet allocations that are expired */
   def listExpiredAmuletAllocations(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amuletallocation.AmuletAllocation.ContractId,
     splice.amuletallocation.AmuletAllocation,
@@ -218,7 +218,7 @@ trait SvDsoStore
 
   /** List locked amulets that are expired and can never be used as transfer input. */
   def listLockedExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet]
 
   def listExpiredVoteRequests(): ListExpiredContracts[VoteRequest.ContractId, VoteRequest] =
@@ -425,12 +425,13 @@ trait SvDsoStore
   final def getExpiredCouponsInBatchesPerRoundAndCouponType(
       domain: SynchronizerId,
       enableExpireValidatorFaucet: Boolean,
-      ignoredExpiredRewardsPartyIds: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
       batchSize: Limit = PageLimit.tryCreate(100),
       numBatches: Limit = PageLimit.tryCreate(100),
   )(implicit
       tc: TraceContext
   ): Future[Seq[ExpiredRewardCouponsBatch]] = {
+    val ignoredExpiredRewardsPartyIds = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     def associateRoundContractWithBatch[T](
         batches: Seq[SvDsoStore.RoundBatch[T]],
         roundMap: Map[
@@ -1078,7 +1079,7 @@ trait SvDsoStore
   /** Whether there are more than the given number of featured app activity markers. */
   def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Boolean]
@@ -1087,7 +1088,7 @@ trait SvDsoStore
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,
@@ -1310,7 +1311,12 @@ object SvDsoStore {
           rewardWeight = Some(contract.payload.weight),
         )
       },
-      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
+      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
         DsoAcsStoreRowData(
           contract,
           rewardRound = Some(contract.payload.round.number),
@@ -1319,16 +1325,22 @@ object SvDsoStore {
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.round.number),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
@@ -1504,16 +1516,24 @@ object SvDsoStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
       },
-      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) =>
+            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.holdingFeesOpenRoundNumber.number),
         )
       },
-      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) =>
+            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
+        },
       ) {
         DsoAcsStoreRowData(_)
       },

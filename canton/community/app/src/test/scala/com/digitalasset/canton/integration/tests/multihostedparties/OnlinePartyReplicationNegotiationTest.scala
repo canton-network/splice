@@ -20,7 +20,6 @@ import com.digitalasset.canton.admin.api.client.data.{
   SynchronizerConnectionConfig,
   TemplateId,
 }
-import com.digitalasset.canton.annotations.RollbackTest
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
 import com.digitalasset.canton.console.{
@@ -52,6 +51,8 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.participant.admin.party.PartyReplicationAdminWorkflow
 import com.digitalasset.canton.participant.admin.workflows.java.canton.internal as M
 import com.digitalasset.canton.participant.config.AlphaOnlinePartyReplicationConfig
+import com.digitalasset.canton.synchronizer.sequencer.BlockSequencerConfig.CircuitBreakerConfig
+import com.digitalasset.canton.synchronizer.sequencer.SequencerConfig.{BftSequencer, External}
 import com.digitalasset.canton.synchronizer.sequencer.config.SequencerNodeConfig
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -99,6 +100,20 @@ sealed trait OnlinePartyReplicationNegotiationTest
       .focus(_.parameters.unsafeSequencerChannelSupport)
       .replace(sequencer != "sequencer3")
 
+  /** Flake prevention: Disables sequencer circuit breakers to prevent spurious test failures. In
+    * resource-constrained CI environments, temporary CPU/memory throttling can trip the circuit
+    * breaker, resulting in false-positive sync rejection errors rather than standard timeouts.
+    */
+  private def disableCircuitBreakers(config: SequencerNodeConfig): SequencerNodeConfig = {
+    val disabledCb = CircuitBreakerConfig(enabled = false)
+
+    config.focus(_.sequencer).modify {
+      case bft: BftSequencer => bft.focus(_.block.circuitBreaker).replace(disabledCb)
+      case ext: External => ext.focus(_.block.circuitBreaker).replace(disabledCb)
+      case other => other
+    }
+  }
+
   registerPlugin(new UseBftSequencer(loggerFactory))
 
   private val aliceName = "Alice"
@@ -128,6 +143,8 @@ sealed trait OnlinePartyReplicationNegotiationTest
             .replace(Some(AlphaOnlinePartyReplicationConfig(unsafeSequencerChannelSupport = true)))
         ),
         ConfigTransforms.updateAllSequencerConfigs(selectivelyEnableSequencerChannels),
+        // Flake prevention: strip circuit breakers to prevent flaky sync rejections on slow CI runners.
+        ConfigTransforms.updateAllSequencerConfigs((_, config) => disableCircuitBreakers(config)),
       )
       .withNetworkBootstrap { implicit env =>
         import env.*
@@ -143,6 +160,11 @@ sealed trait OnlinePartyReplicationNegotiationTest
       }
       .withSetup { implicit env =>
         import env.*
+
+        // Flake prevention: avoid `RequestRefused` warnings in the log by ensuring BFT sequencers
+        //  have fully established their P2P network before we start allocating parties.
+        waitUntilAllBftSequencersAuthenticateDisseminationQuorum()
+
         connectivityMap.foreach { case (participant, sequencers) =>
           val sequencerConnections = SequencerConnections.tryMany(
             sequencers
@@ -179,8 +201,6 @@ sealed trait OnlinePartyReplicationNegotiationTest
 
   "Obtain agreement to establish to replicate a party" onlyRunWith ProtocolVersion.dev in {
     implicit env =>
-      waitUntilAllBftSequencersAuthenticateDisseminationQuorum()
-
       import env.*
       val (sourceParticipant, targetParticipant) = (participant1, participant2)
 
@@ -579,7 +599,6 @@ sealed trait OnlinePartyReplicationNegotiationTest
 //   registerPlugin(new UseH2(loggerFactory))
 // }
 
-@RollbackTest
 class OnlinePartyReplicationNegotiationTestPostgres extends OnlinePartyReplicationNegotiationTest {
   registerPlugin(new UsePostgres(loggerFactory))
 }

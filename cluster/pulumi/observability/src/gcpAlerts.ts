@@ -7,7 +7,7 @@ import {
   CLUSTER_NAME,
   conditionalString,
   config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { slackAlertNotificationChannel, slackToken } from './alertings';
 import { type GcpQuotaAlertsConfig, monitoringConfig } from './config';

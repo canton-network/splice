@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
@@ -12,7 +11,6 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, PackageUnvettingUtil}
-import org.slf4j.event.Level
 
 abstract class AdditionalPackagesToUnvetIntegrationTestBase
     extends IntegrationTest
@@ -80,7 +78,7 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
       .withManualStart
 }
 
-/** This test verifies that an SV cannot unvet packages that still have vetted dependencies, but can unvet them if the dependencies are unvetted as well.
+/** This test verifies that an SV can unvet packages that still have vetted dependencies
   */
 class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
@@ -94,7 +92,7 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
   override val additionalPackagesToUnvetSv1Local: Seq[DarResource] =
     darsWithMissingDependency :+ missingDependency
 
-  "sv1 cannot unvet packages that still have dependencies" in { implicit env =>
+  "sv1 can unvet packages that still have dependencies" in { implicit env =>
     import env.executionContext
 
     startAllSync(
@@ -105,20 +103,15 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
     val synchronizerId =
       sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
 
-    clue(s"sv1 cannot unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
+    clue(s"sv1 can unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
         .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
-      loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
-        within = {},
-        lines =>
-          forAtLeast(1, lines) { line =>
-            line.message should include regex s"TOPOLOGY_DEPENDENCIES_NOT_VETTED.*${problematicDar.packageId}"
-          },
-      )
       eventually() {
-        getVettedPackageIds(
+        val vettedPackageIds = getVettedPackageIds(
           sv1Backend.appState.participantAdminConnection,
           synchronizerId,
-        ) should contain(problematicDar.packageId)
+        )
+        vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
+        vettedPackageIds should contain(missingDependency.packageId)
       }
       stopAllAsync(
         sv1Backend,

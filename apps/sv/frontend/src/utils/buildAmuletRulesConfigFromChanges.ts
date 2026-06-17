@@ -95,6 +95,7 @@ export function buildAmuletRulesConfigFromChanges(
       externalPartyConfigStateTickDuration === ''
         ? null
         : { microseconds: externalPartyConfigStateTickDuration },
+    transferPreapprovalBaseDuration: null,
     transferConfig: {
       createFee: { fee: getValue('transferConfigCreateFee') },
       holdingFee: { rate: getValue('transferConfigHoldingFeeRate') },

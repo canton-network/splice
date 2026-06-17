@@ -22,16 +22,20 @@ import com.digitalasset.canton.integration.{
   EnvironmentDefinition,
   SharedEnvironment,
 }
-import com.digitalasset.canton.logging.{LogEntry, SuppressionRule}
+import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality.OptionalMany
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.sequencing.client.pool.{
   SequencerConnectionPool,
   SequencerSubscriptionPool,
 }
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+import com.digitalasset.canton.time.PositiveFiniteDuration
 import com.digitalasset.canton.{SequencerAlias, config}
 import monocle.macros.syntax.lens.*
 import org.slf4j.event.Level.INFO
 
 import scala.concurrent.duration.DurationInt
+import scala.jdk.DurationConverters.ScalaDurationOps
 
 sealed trait SequencerConnectionServiceIntegrationTest
     extends CommunityIntegrationTest
@@ -154,31 +158,37 @@ sealed trait SequencerConnectionServiceIntegrationTest
           ),
         )
 
-        // The configuration has not changed
-        mediator1.sequencer_connection
-          .get()
-          .value
-          .connections
-          .forgetNE
-          .loneElement shouldBe connectionsConfig(1)
+        // Wrap the configuration check and the eventually block in a single unordered log
+        // assertion to continuously suppress background warnings while the sequencer is down.
+        loggerFactory.assertLogsUnorderedOptional(
+          {
+            // The configuration has not changed
+            mediator1.sequencer_connection
+              .get()
+              .value
+              .connections
+              .forgetNE
+              .loneElement shouldBe connectionsConfig(1)
 
-        // The mediator is still functional
-        // We possibly need to retry, because if participant1 has a single subscription on sequencer2, it will not detect
-        // that sequencer1 is down until it first sends to it, and could therefore still pick it for the first send.
-        // An alternative would be to use amplification.
-        eventually(timeUntilSuccess = 1.minute) {
-          loggerFactory.assertLoggedWarningsAndErrorsSeq(
-            participant1.health.maybe_ping(participant1.id, timeout = 2.seconds) shouldBe defined,
-            LogEntry.assertLogSeq(
-              mustContainWithClue = Seq.empty,
-              mayContain = Seq(
-                _.warningMessage should include regex
-                  raw"Request failed for server-.*\. Is the server running\? Did you configure the server address as 0\.0\.0\.0\?" +
-                  raw" Are you using the right TLS settings\?"
-              ),
-            ),
-          )
-        }
+            // The mediator is still functional
+            // We possibly need to retry, because if participant1 has a single subscription on sequencer2, it will not detect
+            // that sequencer1 is down until it first sends to it, and could therefore still pick it for the first send.
+            // An alternative would be to use amplification.
+            eventually(timeUntilSuccess = 1.minute) {
+              participant1.health.maybe_ping(participant1.id, timeout = 2.seconds) shouldBe defined
+            }
+          },
+          (
+            OptionalMany,
+            _.warningMessage should include regex
+              raw"Request failed for server-.*\. Is the server running\? Did you configure the server address as 0\.0\.0\.0\?" +
+              raw" Are you using the right TLS settings\?",
+          ),
+          (
+            OptionalMany,
+            _.warningMessage should include regex raw"Response message for request.*timed out at",
+          ),
+        )
       }
     }
   }
@@ -190,7 +200,14 @@ class SequencerConnectionServiceIntegrationTestDefault
   registerPlugin(
     new UseBftSequencer(
       loggerFactory,
-      consensusBlockCompletionTimeout = 1.second,
+      sequencingParameters = Some(
+        SequencingParameters.create(
+          pbftViewChangeTimeout = PositiveFiniteDuration.tryCreate(1.second.toJava),
+          segmentLength = SequencingParameters.DefaultSegmentLength,
+          blacklistLeaderSelectionPolicyConfig =
+            SequencingParameters.DefaultLeaderSelectionPolicyConfig,
+        )(testedProtocolVersion)
+      ),
     )
   )
 }

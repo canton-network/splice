@@ -6,7 +6,6 @@ package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.mo
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.synchronizer.metrics.SequencerMetrics
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.LeaderSelectionPolicyConfig.Blacklisting
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.OutputModuleTest.TestOutputMetadataStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.OutputMetadataStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.{
@@ -21,6 +20,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   ViewNumber,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.OrderingTopology
+import com.digitalasset.canton.version.ProtocolVersion
 import org.scalatest.wordspec.AnyWordSpec
 
 import scala.collection.immutable.SortedSet
@@ -35,6 +35,7 @@ class BlacklistLeaderSelectionPolicyTest extends AnyWordSpec with BaseTest {
   implicit val futureContext: FutureContext[IgnoringUnitTestEnv] = new FunctionFutureContext
   private val metrics = SequencerMetrics.noop(getClass.getSimpleName).bftOrdering
   implicit val metricsContext: MetricsContext = MetricsContext.Empty
+  implicit val pv: ProtocolVersion = testedProtocolVersion
 
   "BlacklistLeaderSelectionPolicy" should {
     "be able to get leaders" in {
@@ -46,7 +47,6 @@ class BlacklistLeaderSelectionPolicyTest extends AnyWordSpec with BaseTest {
       val leaderSelectionPolicy =
         BlacklistLeaderSelectionPolicy.create(
           state,
-          Blacklisting(),
           orderingTopology,
           store,
           metrics,
@@ -66,7 +66,6 @@ class BlacklistLeaderSelectionPolicyTest extends AnyWordSpec with BaseTest {
       val leaderSelectionPolicy =
         BlacklistLeaderSelectionPolicy.create(
           state,
-          Blacklisting(),
           orderingTopology,
           store,
           metrics,

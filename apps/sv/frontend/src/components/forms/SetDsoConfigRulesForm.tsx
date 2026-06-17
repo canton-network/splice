@@ -9,8 +9,8 @@ import {
   getDsoConfigToCompareWith,
   PrettyJsonDiff,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { Alert, Box, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';

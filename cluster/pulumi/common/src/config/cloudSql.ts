@@ -1,6 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { merge } from 'lodash';
 import { z } from 'zod';
+
+import { spliceConfig } from './config';
 
 export const CloudSqlConfigSchema = z.object({
   enabled: z.boolean(),

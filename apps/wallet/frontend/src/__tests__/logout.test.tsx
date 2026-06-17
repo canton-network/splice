@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
-import { UserStatusResponse } from '@lfdecentralizedtrust/wallet-openapi';
+import { UserStatusResponse } from '@canton-network/wallet-openapi';
 
 import App from '../App';
 import { WalletConfigProvider } from '../utils/config';

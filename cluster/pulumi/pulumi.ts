@@ -1,13 +1,13 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
-import { allowDowngrade } from '@lfdecentralizedtrust/splice-pulumi-common';
-import { config } from '@lfdecentralizedtrust/splice-pulumi-common/src/config';
-import { spliceEnvConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/envConfig';
+import { allowDowngrade } from '@canton-network/splice-pulumi-common';
+import { config } from '@canton-network/splice-pulumi-common/src/config';
+import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 import {
   CLUSTER_BASENAME,
   PULUMI_STACKS_DIR,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/utils';
+} from '@canton-network/splice-pulumi-common/src/utils';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -243,6 +243,12 @@ export async function awaitAllOrThrowAllExceptions(operations: Operation[]): Pro
                 ? (cmdResult.stdout ?? '') + (cmdResult.stderr ?? '')
                 : err.message;
             writeOperationErrorOutput(op.name, output);
+            if (cmdResult?.stderr) {
+              console.error(cmdResult.stderr);
+            }
+            if (cmdResult?.stdout) {
+              console.log(cmdResult.stdout);
+            }
           } else {
             console.error(`Operation ${op.name} failed with an unknown error.`);
             const output = err instanceof Error ? err.message : String(err);

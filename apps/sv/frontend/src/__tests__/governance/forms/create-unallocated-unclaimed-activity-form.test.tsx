@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';

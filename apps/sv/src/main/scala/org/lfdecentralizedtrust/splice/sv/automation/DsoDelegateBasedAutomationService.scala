@@ -14,7 +14,7 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
@@ -27,7 +27,8 @@ class DsoDelegateBasedAutomationService(
     domainTimeSync: DomainTimeSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
@@ -173,10 +174,20 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
-      new ProcessRewardsTrigger(triggerContext, svTaskContext, scanConnectionF)
+      new ProcessRewardsTrigger(
+        triggerContext,
+        svTaskContext,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
+      )
     )
     registerTrigger(
-      new ProcessRewardsDryRunTrigger(triggerContext, svTaskContext, scanConnectionF)
+      new ProcessRewardsDryRunTrigger(
+        triggerContext,
+        svTaskContext,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
+      )
     )
   }
 

@@ -109,7 +109,7 @@ class LsuTrigger(
       case NodeStatus.Failure(msg) =>
         logger.error(s"Failed to get successor $nodeName status: $msg")
         false
-      case NodeStatus.NotInitialized(_, _) => true
+      case NodeStatus.NotInitialized(_, _, _) => true
       case NodeStatus.Success(_) => false
     }
   }

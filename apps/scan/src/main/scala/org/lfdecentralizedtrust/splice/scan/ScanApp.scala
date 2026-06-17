@@ -22,7 +22,7 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round as roundCodegen
-import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, SharedSpliceAppParameters}
 import org.lfdecentralizedtrust.splice.environment.{
   BaseLedgerConnection,
   DarResources,
@@ -51,7 +51,12 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   ScanVerdictAutomationService,
 }
 import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
-import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanSynchronizerConfig}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.SingleScanConnection
+import org.lfdecentralizedtrust.splice.scan.config.{
+  ScanAppBackendConfig,
+  ScanAppClientConfig,
+  ScanSynchronizerConfig,
+}
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanAppMetrics
@@ -70,6 +75,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbScanAppRewardsStore,
   DbScanVerdictStore,
 }
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -84,6 +90,8 @@ import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStand
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+
+import org.apache.pekko.stream.Materializer
 
 /** Class representing a Scan app instance.
   *
@@ -192,12 +200,15 @@ class ScanApp(
       svName <- appInitStep(s"Get SV name from ${config.svUser}") {
         appInitConnection.getSvNameFromUserMetadata(config.svUser)
       }
+      domainMigrationId <- appInitStep("Resolving domain migration id") {
+        resolveDomainMigrationId()
+      }
       store = ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
         storage,
         loggerFactory,
         retryProvider,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         config.cache,
         nodeMetrics.dbScanStore,
@@ -208,7 +219,7 @@ class ScanApp(
       )
       updateHistory = new UpdateHistory(
         storage,
-        config.domainMigrationId,
+        domainMigrationId,
         store.storeName,
         participantId,
         store.acsContractFilter.ingestionFilter.primaryParty,
@@ -222,7 +233,7 @@ class ScanApp(
         storage,
         updateHistory,
         dsoParty,
-        config.domainMigrationId,
+        domainMigrationId,
         loggerFactory,
       )
       syncNodes = LocalSynchronizerNodes(
@@ -242,18 +253,20 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = BulkStorage(
-        scanStorageConfigV1,
-        config.bulkStorage,
-        acsSnapshotStore,
-        updateHistory,
-        currentMigrationId = config.domainMigrationId,
-        kvProvider,
-        retryProvider.metricsFactory,
-        config.automation,
-        backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
-        retryProvider,
-        loggerFactory,
+      bulkStorage = config.bulkStorage.s3.map(_ =>
+        BulkStorage(
+          scanStorageConfigV1,
+          config.bulkStorage,
+          acsSnapshotStore,
+          updateHistory,
+          currentMigrationId = domainMigrationId,
+          kvProvider,
+          retryProvider.metricsFactory,
+          config.automation,
+          backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
+          retryProvider,
+          loggerFactory,
+        )
       )
       // Conditionally create traffic summary ingestion dependencies
       appActivityRecordStoreO =
@@ -266,12 +279,32 @@ class ScanApp(
                 AppActivityComputation.ActivityIngestionCodeVersion,
                 config.activityIngestionUserVersion.fold(0)(_.toInt),
               ),
+              config.isFirstSv,
               loggerFactory,
             )
           )
         } else None
       appRewardsStoreO = appActivityRecordStoreO.map(appActivityRecordStore =>
-        new DbScanAppRewardsStore(storage, updateHistory, appActivityRecordStore, loggerFactory)
+        new DbScanAppRewardsStore(
+          storage,
+          updateHistory,
+          appActivityRecordStore,
+          config.rewardMintingAllowanceTolerance,
+          loggerFactory,
+        )
+      )
+      synchronizerId <-
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "synchronizer id",
+          "synchronizer id from participant",
+          participantAdminConnection.getSynchronizerId(config.globalSynchronizerAlias),
+          logger,
+        )
+      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+        synchronizerId,
+        appInitConnection,
+        loggerFactory,
       )
       automation = new ScanAutomationService(
         config,
@@ -288,6 +321,7 @@ class ScanApp(
         serviceUserPrimaryParty,
         svName,
         amuletAppParameters.upgradesConfig,
+        packageVersionSupport,
       )
       scanVerdictStore = DbScanVerdictStore(
         storage,
@@ -321,27 +355,6 @@ class ScanApp(
         dsoParty,
         config.spliceInstanceNames.nameServiceNameAcronym.toLowerCase(),
       )
-      synchronizerId <- appInitStep("Get synchronizer id") {
-        retryProvider.getValueWithRetries(
-          RetryFor.WaitingOnInitDependency,
-          "amulet synchronizer id",
-          "amulet rules synchronizer id",
-          store.getAmuletRulesWithState().map {
-            _.state.fold(
-              identity,
-              throw Status.FAILED_PRECONDITION
-                .withDescription("Amulet rules in fllight")
-                .asRuntimeException(),
-            )
-          },
-          logger,
-        )
-      }
-      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        synchronizerId,
-        appInitConnection,
-        loggerFactory,
-      )
       rewardsReferenceStoreO =
         if (config.enableAppActivityRecordAndTrafficIngestion) {
           val rewardsStore = ScanRewardsReferenceStore(
@@ -352,7 +365,7 @@ class ScanApp(
             storage,
             loggerFactory,
             retryProvider,
-            config.domainMigrationId,
+            domainMigrationId,
             participantId,
             config.automation.ingestion,
             config.parameters.defaultLimit,
@@ -369,7 +382,7 @@ class ScanApp(
         loggerFactory,
         nodeMetrics.grpcClientMetrics,
         scanVerdictStore,
-        config.domainMigrationId,
+        domainMigrationId,
         synchronizerId,
         nodeMetrics.verdictIngestion,
         rewardsReferenceStoreO,
@@ -386,7 +399,7 @@ class ScanApp(
         appActivityRecordStoreO,
         acsSnapshotStore,
         scanEventStore,
-        bulkStorage,
+        bulkStorage.map(_.reader),
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
         config.enableForcedAcsSnapshots,
@@ -522,6 +535,55 @@ class ScanApp(
       )
     }
   }
+
+  private def resolveDomainMigrationId()(implicit tc: TraceContext): Future[Long] =
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
+      case Some(migrationId) =>
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
+        Future.successful(migrationId)
+      case None if config.isFirstSv =>
+        logger.info("Resolved domain migration id 0 for the founding scan")
+        Future.successful(0L)
+      case None =>
+        config.sponsorScanUrl match {
+          case Some(sponsorScanUrl) =>
+            migrationIdFromSponsorScan(sponsorScanUrl).map { migrationId =>
+              logger.info(
+                s"Resolved domain migration id $migrationId from the sponsor scan $sponsorScanUrl"
+              )
+              migrationId
+            }
+          case None =>
+            Future.failed(
+              Status.FAILED_PRECONDITION
+                .withDescription(
+                  "No migration id found in the DB and no sponsor scan configured. " +
+                    "Set `sponsor-scan-url` in the scan config to bootstrap this node."
+                )
+                .asRuntimeException()
+            )
+        }
+    }
+
+  private def migrationIdFromSponsorScan(
+      sponsorScanUrl: NetworkAppClientConfig
+  )(implicit tc: TraceContext): Future[Long] =
+    SingleScanConnection.withSingleScanConnection(
+      ScanAppClientConfig(adminApi = sponsorScanUrl),
+      amuletAppParameters.upgradesConfig,
+      clock,
+      retryProvider,
+      loggerFactory,
+    ) { connection =>
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "get_migration_id",
+        "Getting migration id from sponsor scan",
+        connection.getMigrationId(),
+        logger,
+      )
+    }(ec, tc, Materializer(ac), httpClient, templateDecoder)
+
   override lazy val ports = Map("admin" -> config.adminApi.port)
 
   protected[this] override def automationServices(st: ScanApp.State) =
@@ -536,7 +598,7 @@ object ScanApp {
       storage: Storage,
       store: ScanStore,
       automation: ScanAutomationService,
-      bulkStorage: BulkStorage,
+      bulkStorage: Option[BulkStorage],
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
       logger: TracedLogger,
@@ -551,8 +613,8 @@ object ScanApp {
     override def close(): Unit = {
       LifeCycle.close(bftSequencersAdminConnections*)(logger)
       LifeCycle.close(cleanups*)(logger)
+      bulkStorage.foreach(LifeCycle.close(_)(logger))
       LifeCycle.close(
-        bulkStorage,
         automation,
         verdictAutomation,
         store,

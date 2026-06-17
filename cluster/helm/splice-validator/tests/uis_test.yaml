@@ -45,3 +45,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[?(@.name=="wallet-web-ui")].env[?(@.name=="SPLICE_APP_UI_UNSAFE")].value
           value: "true"
+
+  - it: "allows overriding walletImageName"
+    set:
+      imageRepo: "secure-registry.com"
+      wallet.imageName: "custom-wallet-ui"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="wallet-web-ui")].image
+          pattern: "^secure-registry\\.com/custom-wallet-ui:"

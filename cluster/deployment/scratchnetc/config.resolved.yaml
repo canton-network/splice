@@ -46,7 +46,7 @@ monitoring:
         computeDuration:
           seconds: 1200
       acsSnapshots:
-        saveLatencyThresholdSeconds: 2700
+        saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
       cloudSql:
         maintenance: false
@@ -84,6 +84,12 @@ monitoring:
         mediatorRetentionDays: 30
         participantRetentionDays: 30
         sequencerRetentionDays: 30
+      scanConnectionDisagreement:
+        disagreementRateThreshold: 0.1
+        excludedConnections: []
+        excludedRequests:
+          - 'getTransferInstructionAcceptContext'
+        successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
       sequencerRateLimits:
@@ -200,8 +206,8 @@ sv:
         /api/scan/v0/active-synchronizer-serial:
           name: 'activeSynchronizerSerial'
           type: 'unlimited'
-        /api/scan/v0/activities:
-          name: 'activities'
+        /api/scan/v0/admin/sv/previous-sv-reward-weight:
+          name: 'sv-previous-sv-reward-weight'
           type: 'unlimited'
         /api/scan/v0/admin/sv/voterequests:
           name: 'sv-voterequests'

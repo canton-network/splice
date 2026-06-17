@@ -147,12 +147,18 @@ monitoring:
           seconds: 1200
       acsSnapshots:
         # This task repeats every ~3h
-        saveLatencyThresholdSeconds: 2700
+        saveLatencyThresholdSeconds: 5400
         # This task repeats every ~30sec
         updateLatencyThresholdSeconds: 3
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
+      scanConnectionDisagreement:
+        disagreementRateThreshold: 0.1
+        successfulDisagreementThreshold: 5
+        excludedRequests:
+          - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
+        excludedConnections: []
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.

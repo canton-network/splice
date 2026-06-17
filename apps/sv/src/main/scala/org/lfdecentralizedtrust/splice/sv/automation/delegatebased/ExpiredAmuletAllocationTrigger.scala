@@ -37,7 +37,7 @@ class ExpiredAmuletAllocationTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletAllocationBatchSize,
-      svTaskContext.dsoStore.listExpiredAmuletAllocations(ignoredPartiesStore.getAll),
+      svTaskContext.dsoStore.listExpiredAmuletAllocations(Some(ignoredPartiesStore)),
       splice.amuletallocation.AmuletAllocation.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,

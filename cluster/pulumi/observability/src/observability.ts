@@ -22,15 +22,15 @@ import {
   loadTesterConfig,
   ObservabilityReleaseName,
   SPLICE_ROOT,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { allSvsConfiguration } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/singleSvConfig';
+} from '@canton-network/splice-pulumi-common';
+import { allSvsConfiguration } from '@canton-network/splice-pulumi-common-sv/src/singleSvConfig';
 import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { SplicePostgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
-import { infraStack } from '@lfdecentralizedtrust/splice-pulumi-common/src/stackReferences';
+} from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
@@ -736,6 +736,35 @@ function defaultAlertSubstitutions(alert: string): string {
   );
 }
 
+function substituteScanConnectionDisagreementAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.scanConnectionDisagreement;
+  const matchers: string[] = [];
+  if (config.excludedRequests.length > 0) {
+    matchers.push(`request!~"${config.excludedRequests.join('|')}"`);
+  }
+  if (config.excludedConnections.length > 0) {
+    matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const bareFilter = matchers.join(', ');
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  return (
+    alert
+      // Replace the `_BARE` placeholder first since `$SCAN_DISAGREEMENT_FILTER`
+      // is a prefix of `$SCAN_DISAGREEMENT_FILTER_BARE`.
+      .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+      .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+      .replaceAll(
+        '$SCAN_DISAGREEMENT_RATE_THRESHOLD_PERCENT',
+        (config.disagreementRateThreshold * 100).toString()
+      )
+      .replaceAll('$SCAN_DISAGREEMENT_RATE_THRESHOLD', config.disagreementRateThreshold.toString())
+      .replaceAll(
+        '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD',
+        config.successfulDisagreementThreshold.toString()
+      )
+  );
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -926,6 +955,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
               ),
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
+            ),
+            'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
+              readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(

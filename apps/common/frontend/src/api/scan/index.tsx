@@ -1,7 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { ScanClientProvider, useScanClient } from './ScanClientContext';
-import useActivity from './useActivity';
 import useAmuletPrice, { useAmuletPriceFromOpenRounds } from './useAmuletPrice';
 import useBackfillingStatus from './useBackfillingStatus';
 import useDsoInfo from './useDsoInfo';
@@ -32,7 +31,6 @@ export {
   useGetDsoPartyId,
   useLookupFeaturedAppRight,
   useLookupFeaturedAppRightBuilder,
-  useActivity,
   useListAnsEntries,
   useListAnsEntriesFromResponse,
   useLookupAnsEntryByName,

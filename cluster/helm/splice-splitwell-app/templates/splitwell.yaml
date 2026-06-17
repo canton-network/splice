@@ -13,7 +13,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" "splitwell-app") | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -29,7 +28,7 @@ spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: splitwell-app
-        image: "{{ .Values.imageRepo }}/splitwell-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).splitwell_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).splitwell_app) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -38,8 +37,6 @@ spec:
           value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         - name: SPLICE_APP_SPLITWELL_SCAN_URL
           value: {{ .Values.scanAddress }}
-        - name: SPLICE_APP_SPLITWELL_MIGRATION_ID
-          value: {{ .Values.migration.id | quote }}
         - name: SPLICE_APP_SPLITWELL_PARTICIPANT_HOST
           value: {{ .Values.participantHost }}
         {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "splitwell" "keyName" "splitwell" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
@@ -87,7 +84,7 @@ spec:
             mountPath: /app/logback
       initContainers:
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
               valueFrom:
@@ -131,7 +128,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" "splitwell-app") | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: splitwell-app

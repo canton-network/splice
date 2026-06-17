@@ -16,12 +16,17 @@ dso_json_file="$html_dir/$dso_json_path"
 status_json_path=runtime/status.json
 status_json_file="$html_dir/$status_json_path"
 
+info_json_path=runtime/info.json
+info_json_file="$html_dir/$info_json_path"
+
 jq -n \
   --arg dso "/$dso_json_path" \
   --arg status "/$status_json_path" \
+  --arg info "/$info_json_path" \
   '
     {
       $dso,
+      $info,
       $status,
     }
   ' > "$runtime_index_file"
@@ -37,6 +42,12 @@ while true; do
 
   if result=$(/scripts/get-status.sh); then
     dest="$status_json_file"
+    echo "$result" > "$dest.new"
+    mv "$dest.new" "$dest"
+  fi &
+
+  if result=$(/scripts/get-info.sh); then
+    dest="$info_json_file"
     echo "$result" > "$dest.new"
     mv "$dest.new" "$dest"
   fi &

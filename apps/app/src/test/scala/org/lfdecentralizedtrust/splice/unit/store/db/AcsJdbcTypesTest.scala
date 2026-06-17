@@ -158,7 +158,11 @@ class AcsJdbcTypesTest
     super.beforeEach()
     val ddl = TestTable.schema.createIfNotExists.statements
     Await.result(
-      storage.update(DBIO.sequence(ddl.map(s => sqlu"#$s")), "create test table"),
+      storage.update(DBIO.sequence(ddl.map(s => sqlu"#$s")), "create test table")(
+        implicitly,
+        implicitly,
+        _ => false,
+      ),
       10.seconds,
     )
   }

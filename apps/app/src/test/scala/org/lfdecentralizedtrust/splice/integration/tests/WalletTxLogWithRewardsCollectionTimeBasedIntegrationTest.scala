@@ -11,7 +11,9 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
   TransferTxLogEntry,
   TxLogEntry as walletLogEntry,
 }
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.HasExecutionContext
+import monocle.macros.syntax.lens.*
 
 import java.util.UUID
 
@@ -29,11 +31,18 @@ class WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       // Set a non-unit amulet price to better test CC-USD conversion.
       .addConfigTransform((_, config) => ConfigTransforms.setAmuletPrice(amuletPrice)(config))
-      .addConfigTransforms((_, config) =>
-        // without this, you can have 1 or 2 transfers in the txlog, or just 1 with different balance
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ReceiveFaucetCouponTrigger]
-        )(config)
+      .addConfigTransforms(
+        (_, config) =>
+          // without this, you can have 1 or 2 transfers in the txlog, or just 1 with different balance
+          updateAutomationConfig(ConfigurableApp.Validator)(
+            _.withPausedTrigger[ReceiveFaucetCouponTrigger]
+          )(config),
+        (_, config) =>
+          ConfigTransforms.updateAllValidatorConfigs_(
+            // Bump lifetime above base duration to burn fees and generate validator rewards
+            _.focus(_.transferPreapproval.preapprovalLifetime)
+              .replace(NonNegativeFiniteDuration.ofDays(100))
+          )(config),
       )
   }
 

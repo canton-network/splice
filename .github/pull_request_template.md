@@ -4,6 +4,7 @@
 
 #### Cluster Testing
 - [ ] If a cluster test is required, comment `/cluster_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
+- [ ] If an upgrade test is required, comment `/upgrade_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
 - [ ] If a hard-migration test is required (from the latest release), comment `/hdm_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
 - [ ] If a logical synchronizer upgrade test is required (from canton-3.5), comment `/lsu_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
 
