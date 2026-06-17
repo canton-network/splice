@@ -31,6 +31,7 @@ class WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       // Set a non-unit amulet price to better test CC-USD conversion.
       .addConfigTransform((_, config) => ConfigTransforms.setAmuletPrice(amuletPrice)(config))
+      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
       .addConfigTransforms(
         (_, config) =>
           // without this, you can have 1 or 2 transfers in the txlog, or just 1 with different balance

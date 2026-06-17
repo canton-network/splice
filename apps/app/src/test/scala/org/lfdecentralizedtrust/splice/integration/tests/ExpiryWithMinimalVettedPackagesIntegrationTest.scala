@@ -70,6 +70,7 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .withTrafficTopupsDisabled
+      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
       .addConfigTransforms(
         (_, c) =>
           ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(c),
