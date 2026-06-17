@@ -13,6 +13,30 @@ import { GlobalStyles } from '@mui/system';
 import { AmuletConfig, USD } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { DsoRulesConfig } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
+type DamlMapLike = { entriesArray: () => [unknown, unknown][] };
+
+function isDamlMap(value: object): value is DamlMapLike {
+  return typeof (value as { entriesArray?: unknown }).entriesArray === 'function';
+}
+
+function normalizeDamlMaps(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (isDamlMap(value)) {
+    return value.entriesArray().map(([k, v]) => [k, normalizeDamlMaps(v)]);
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeDamlMaps);
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]): [string, unknown] => [
+      k,
+      normalizeDamlMaps(v),
+    ])
+  );
+}
+
 const jsondiffpatchInstance = jsondiffpatch.create({
   arrays: {
     detectMove: true,
@@ -204,9 +228,11 @@ export const PrettyJsonDiff: React.FC<PrettyJsonDiffProps> = ({
   changes: { newConfig, baseConfig, actualConfig },
 }) => {
   // baseConfig ensures a fixed delta independent of actualConfig
-  const baseForDiff = baseConfig || actualConfig;
+  const baseForDiff = normalizeDamlMaps(baseConfig || actualConfig);
+  const normalizedNewConfig = normalizeDamlMaps(newConfig);
+  const normalizedActualConfig = normalizeDamlMaps(actualConfig);
   // Calculate the difference between newConfig objects
-  const delta = jsondiffpatchInstance.diff(baseForDiff, newConfig);
+  const delta = jsondiffpatchInstance.diff(baseForDiff, normalizedNewConfig);
 
   // If there's no difference, render the newConfig as pretty-printed JSON
   if (!delta) {
@@ -216,14 +242,14 @@ export const PrettyJsonDiff: React.FC<PrettyJsonDiffProps> = ({
         sx={{ overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}
         data-testid="stringify-display"
       >
-        {JSON.stringify(newConfig, null, 2)}
+        {JSON.stringify(normalizedNewConfig, null, 2)}
       </Box>
     );
   }
 
   // Sanitize and format the HTML for the diff 'display'
   // @ts-expect-error Type mismatch.
-  const sanitizedHtml = DOMPurify.sanitize(htmlFormatter.format(delta, actualConfig));
+  const sanitizedHtml = DOMPurify.sanitize(htmlFormatter.format(delta, normalizedActualConfig));
 
   return (
     <>
