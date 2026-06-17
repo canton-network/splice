@@ -62,7 +62,7 @@ class UpdateHistoryBulkStorageTest
   "UpdateHistoryBulkStorage" should {
 
     "successfully dump a single segment of updates to an s3 bucket" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val initialStoreSize = 1500
       val segmentSize = 2200L
       val segmentFromTimestamp = 100L
@@ -159,7 +159,7 @@ class UpdateHistoryBulkStorageTest
     }
 
     "successfully handle an empty segment" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val mockStore =
         new MockUpdateHistoryStore(10, { i => Instant.ofEpochMilli(i + 1000) })
       val fromTimestamp =
@@ -202,7 +202,7 @@ class UpdateHistoryBulkStorageTest
     }
 
     "successfully dump all segments" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val initialStoreSize = 2000
       val genesisDate = LocalDate.of(2001, 1, 23)
       val genesisInstant = genesisDate.atTime(2, 34).toInstant(ZoneOffset.UTC)
@@ -236,7 +236,7 @@ class UpdateHistoryBulkStorageTest
         val progress = new UpdateHistoryBulkStoragePersistentProgress(
           "latest_updates_segment_in_bulk_storage",
           kvProvider,
-          metrics.BulkStorage.latestUpdatesSegment,
+          metrics.BulkStorage.latestUpdatesSegmentStaging,
           loggerFactory,
         )
         val bulkStorage = new UpdateHistoryBulkStorage(
@@ -333,7 +333,7 @@ class UpdateHistoryBulkStorageTest
     }
 
     "list objects correctly" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val mockKvStore = mock[KeyValueStore]
       when(
         mockKvStore.readValueAndLogOnDecodingFailure[UpdatesSegment](
@@ -378,7 +378,7 @@ class UpdateHistoryBulkStorageTest
           mockKvProvider,
           new HistoryMetrics(new InMemoryMetricsFactory)(
             MetricsContext.Empty
-          ).BulkStorage.latestUpdatesSegment,
+          ).BulkStorage.latestUpdatesSegmentStaging,
           loggerFactory,
         ),
         bulkStorageTestConfig,
@@ -388,10 +388,12 @@ class UpdateHistoryBulkStorageTest
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotBulkStorage = null, // not needed for this test
+        acsSnapshotBulkStorageStaging = null, // not needed for this test
+        acsSnapshotBulkStorageCommitted = null, // not needed for this test
         updateHistoryBulkStorage = svc,
-        bulkStorageTestConfig,
-        bucketConnection,
+        storageConfig = bulkStorageTestConfig,
+        stagingS3Connection = bucketConnection,
+        committedS3Connection = null,
         loggerFactory,
       )
 
