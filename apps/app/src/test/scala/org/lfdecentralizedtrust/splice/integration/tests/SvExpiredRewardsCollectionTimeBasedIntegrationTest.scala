@@ -18,13 +18,15 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
     with SvTestUtil {
 
   override def environmentDefinition =
-    super.environmentDefinition.addConfigTransform((_, config) =>
-      ConfigTransforms.updateAllValidatorConfigs_(
-        // Bump lifetime above base duration to burn fees and generate validator rewards
-        _.focus(_.transferPreapproval.preapprovalLifetime)
-          .replace(NonNegativeFiniteDuration.ofDays(100))
-      )(config)
-    )
+    super.environmentDefinition
+      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllValidatorConfigs_(
+          // Bump lifetime above base duration to burn fees and generate validator rewards
+          _.focus(_.transferPreapproval.preapprovalLifetime)
+            .replace(NonNegativeFiniteDuration.ofDays(100))
+        )(config)
+      )
 
   "collect expired reward coupons" in { implicit env =>
     def getRewardCoupons(
