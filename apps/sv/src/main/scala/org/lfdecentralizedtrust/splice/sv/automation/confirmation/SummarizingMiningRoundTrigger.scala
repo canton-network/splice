@@ -27,9 +27,11 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingAc
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
+import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore}
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
+import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
@@ -59,6 +61,8 @@ class SummarizingMiningRoundTrigger(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
+  private val rewardMetrics =
+    new RewardProcessingMetrics(context.metricsFactory)(MetricsContext.Empty)
 
   private def amuletRulesStartIssuingAction(
       miningRoundCid: SummarizingMiningRound.ContractId,
@@ -229,7 +233,8 @@ class SummarizingMiningRoundTrigger(
         .withDescription(s"For round $round: $reason")
         .asRuntimeException()
 
-    def bftReadTotals: Future[definitions.RewardAccountingActivityTotalsOk] =
+    def bftReadTotals: Future[definitions.RewardAccountingActivityTotalsOk] = {
+      rewardMetrics.summarizingRoundTotalsBftReads.mark()
       for {
         bftScan <- bftScanConnectionF()
         response <- bftScan.getRewardAccountingActivityTotals(round)
@@ -239,6 +244,7 @@ class SummarizingMiningRoundTrigger(
           ok
         case _ => totalsUnavailable("could not obtain reward accounting totals via BFT read.")
       }
+    }
 
     for {
       ownScan <- scanConnectionF()
