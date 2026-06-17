@@ -739,13 +739,12 @@ trait SvDsoStore
       splice.amulet.DevelopmentFundCoupon.COMPANION
     )
 
-  def listExpiredRewardCouponsV2: ListExpiredContracts[
+  def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[
     splice.amulet.RewardCouponV2.ContractId,
     splice.amulet.RewardCouponV2,
-  ] =
-    multiDomainAcsStore.listExpiredFromPayloadExpiry(
-      splice.amulet.RewardCouponV2.COMPANION
-    )
+  ]
 
   /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
     * Returns only the parties, not the coupons, to keep the query index-only.

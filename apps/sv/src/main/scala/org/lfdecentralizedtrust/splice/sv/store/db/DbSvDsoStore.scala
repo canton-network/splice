@@ -1245,6 +1245,40 @@ class DbSvDsoStore(
       }
     }
 
+  override def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[RewardCouponV2.ContractId, RewardCouponV2] = {
+    (now, limit) => implicit tc =>
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      // Ignore only if (reward_beneficiary_is_observer = true)
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and (reward_beneficiary_is_observer = false or (" ++
+          notInClause("reward_party", ignoredParties) ++
+          sql" and (create_arguments->>'beneficiary' is null or " ++
+          notInClause("create_arguments->>'beneficiary'", ignoredParties) ++
+          sql")))").toActionBuilder
+      } else {
+        sql""
+      }
+      waitUntilAcsIngested {
+        for {
+          result <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              RewardCouponV2.COMPANION,
+              additionalWhere =
+                (sql"""and acs.contract_expires_at < $now""" ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredRewardCouponsV2",
+          )
+          limited = applyLimit("listExpiredRewardCouponsV2", limit, result)
+        } yield limited.map(assignedContractFromRow(RewardCouponV2.COMPANION)(_))
+      }
+  }
+
   override def listMemberTrafficContracts(
       memberId: Member,
       synchronizerId: SynchronizerId,
