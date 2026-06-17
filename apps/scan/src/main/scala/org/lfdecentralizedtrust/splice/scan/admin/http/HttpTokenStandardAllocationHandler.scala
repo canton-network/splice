@@ -133,7 +133,7 @@ class HttpTokenStandardAllocationHandler(
             Future.failed(
               io.grpc.Status.INVALID_ARGUMENT
                 .withDescription(
-                  s"Field `choiceArguments` does not contain a valid `${allocationv2.SettlementFactory.CHOICE_SettlementFactory_SettleBatch.name}`: $err"
+                  s"Field `choiceArguments` does not contain a valid `${allocationv2.SettlementFactory.CHOICE_SettlementFactory_SettleBatch.name}`. Error: $err"
                 )
                 .asRuntimeException()
             )

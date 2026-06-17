@@ -105,7 +105,7 @@ class HttpTokenStandardAllocationInstructionHandler(
             Future.failed(
               io.grpc.Status.INVALID_ARGUMENT
                 .withDescription(
-                  s"Field `choiceArguments` does not contain a valid `${allocationinstructionv2.AllocationFactory.CHOICE_AllocationFactory_Allocate.name}`: $err"
+                  s"Field `choiceArguments` does not contain a valid `${allocationinstructionv2.AllocationFactory.CHOICE_AllocationFactory_Allocate.name}`. Error: $err"
                 )
                 .asRuntimeException()
             )
