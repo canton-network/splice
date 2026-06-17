@@ -12,8 +12,6 @@ import com.digitalasset.canton.config.StorageConfig.Memory
 import com.digitalasset.canton.config.{CantonConfig, QueryCostMonitoringConfig}
 import com.digitalasset.canton.crypto.provider.jce.JcePrivateCrypto
 import com.digitalasset.canton.crypto.{Fingerprint, SigningKeySpec, SigningKeyUsage}
-import com.digitalasset.canton.environment.CantonEnvironment
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.integration.plugins.UseBftSequencer.UseStandaloneConfig
 import com.digitalasset.canton.integration.plugins.UseReferenceBlockSequencer.{
   MultiSynchronizer,
@@ -83,7 +81,7 @@ final class UseBftSequencer(
     availabilityMinProposalCreationDelay: FiniteDuration = 50.millis,
     dedicatedExecutionContextDivisor: Option[Int] = DefaultDedicatedExecutionContextDivisor,
     availabilityMaxProposalCreationDelay: FiniteDuration = 50.millis,
-) extends EnvironmentSetupPlugin[CantonConfig, CantonEnvironment] {
+) extends EnvironmentSetupPlugin {
 
   private val tmpDir = better.files.File(System.getProperty("java.io.tmpdir"))
 
@@ -96,7 +94,7 @@ final class UseBftSequencer(
 
   override def afterEnvironmentCreated(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit =
     sequencingParameters.foreach { sequencingParameters =>
       val sequencingParametersByteString = sequencingParameters.toByteString
