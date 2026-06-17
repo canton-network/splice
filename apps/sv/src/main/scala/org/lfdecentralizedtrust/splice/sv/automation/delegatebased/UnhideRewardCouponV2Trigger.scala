@@ -14,12 +14,10 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.RewardCouponV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_UnhideRewardCouponsV2
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.util.Contract
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -73,56 +71,47 @@ class UnhideRewardCouponV2Trigger(
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val batchSize = svConfig.delegatelessAutomationUnhideRewardCouponV2BatchSize
-    def loop(totalUnhidden: Int): Future[Int] =
-      for {
-        coupons <- store.listNonObserverRewardCouponsV2ForProvider(
-          task.providerParty,
-          PageLimit.tryCreate(batchSize),
-        )
-        result <-
-          if (coupons.isEmpty) Future.successful(totalUnhidden)
-          else
-            for {
-              _ <- unhideBatch(coupons, controller)
-              _ = logger.debug(
-                s"Unhid batch of ${coupons.size} reward coupons for ${task.providerParty}"
-              )
-              result <- loop(totalUnhidden + coupons.size)
-            } yield result
-      } yield result
-    loop(0).map(count => TaskSuccess(s"unhid $count reward coupons for ${task.providerParty}"))
-  }
-
-  private def unhideBatch(
-      coupons: Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
-      controller: String,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    val cids = coupons.map(_.contractId).asJava
-    val beneficiaries: java.util.List[String] = coupons
-      .map(_.payload.provider)
-      .distinct
-      .asJava
     for {
-      dsoRules <- store.getDsoRules()
-      amuletRules <- store.getAmuletRules()
-      cmd = dsoRules.exercise(
-        _.exerciseDsoRules_UnhideRewardCouponsV2(
-          amuletRules.contractId,
-          new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
-          controller,
-        )
+      coupons <- store.listNonObserverRewardCouponsV2ForProvider(
+        task.providerParty,
+        PageLimit.tryCreate(batchSize),
       )
-      _ <- svTaskContext
-        .connection(SpliceLedgerConnectionPriority.Low)
-        .submit(
-          Seq(store.key.svParty),
-          Seq(store.key.dsoParty),
-          cmd,
-        )
-        .noDedup
-        .withSynchronizerId(dsoRules.domain)
-        .yieldUnit()
-    } yield ()
+      result <-
+        if (coupons.isEmpty)
+          Future.successful(
+            TaskSuccess(s"no reward coupons to unhide for ${task.providerParty}")
+          )
+        else {
+          val cids = coupons.map(_.contractId).asJava
+          val beneficiaries: java.util.List[String] = coupons
+            .map(_.payload.provider)
+            .distinct
+            .asJava
+          for {
+            dsoRules <- store.getDsoRules()
+            amuletRules <- store.getAmuletRules()
+            cmd = dsoRules.exercise(
+              _.exerciseDsoRules_UnhideRewardCouponsV2(
+                amuletRules.contractId,
+                new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
+                controller,
+              )
+            )
+            _ <- svTaskContext
+              .connection(SpliceLedgerConnectionPriority.Low)
+              .submit(
+                Seq(store.key.svParty),
+                Seq(store.key.dsoParty),
+                cmd,
+              )
+              .noDedup
+              .withSynchronizerId(dsoRules.domain)
+              .yieldUnit()
+          } yield TaskSuccess(
+            s"unhid ${coupons.size} reward coupons for ${task.providerParty}"
+          )
+        }
+    } yield result
   }
 }
 
