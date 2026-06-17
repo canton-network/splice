@@ -4229,10 +4229,13 @@ components:
           format: int64
         total_app_reward_minting_allowance:
           type: string
+          description: The total of all minting allowances granted to app providers in this round.
         total_app_reward_thresholded:
           type: string
+          description: Total amount of minting allowances that fell below the configured app reward threshold and was thus burned.
         total_app_reward_unclaimed:
           type: string
+          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap). 
         rewarded_app_provider_parties_count:
           type: integer
           format: int64
