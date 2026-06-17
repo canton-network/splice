@@ -16,16 +16,14 @@ import ExpireRewardCouponV2Trigger.*
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 class ExpireRewardCouponV2Trigger(
-    override protected val svConfig: SvAppBackendConfig,
+    svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -33,14 +31,13 @@ class ExpireRewardCouponV2Trigger(
 ) extends BatchedMultiDomainExpiredContractTrigger.Template[CouponCid, Coupon](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredRewardCouponV2BatchSize,
-      svTaskContext.dsoStore.listExpiredRewardCouponsV2(Some(ignoredPartiesStore)),
+      svTaskContext.dsoStore.listExpiredRewardCouponsV2(None),
       splice.amulet.RewardCouponV2.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       payload => (payload.dso +: observerParties(payload)).map(PartyId.tryFromProtoPrimitive(_)),
     )
-    with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with SvTaskBasedTrigger[Task] {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
@@ -59,36 +56,30 @@ class ExpireRewardCouponV2Trigger(
       val cids = expiredCoupons.map(_.contractId).asJava
       val expiryObservers =
         expiredCoupons.flatMap(c => observerParties(c.payload)).distinct.sorted
-      completeWithIgnoredAmuletVersionCheck(
-        task.work.vettedVersion.toString,
-        expiryObservers.map(PartyId.tryFromProtoPrimitive(_)).toSet,
-        enableUnresponsivePartiesAutoIgnore = true,
-      ) {
-        for {
-          dsoRules <- store.getDsoRules()
-          amuletRules <- store.getAmuletRules()
-          cmd = dsoRules.exercise(
-            _.exerciseDsoRules_ClaimExpiredRewardsV2(
-              amuletRules.contractId,
-              new AmuletRules_ClaimExpiredRewardsV2(
-                cids,
-                expiryObservers.asJava,
-              ),
-              controller,
-            )
+      for {
+        dsoRules <- store.getDsoRules()
+        amuletRules <- store.getAmuletRules()
+        cmd = dsoRules.exercise(
+          _.exerciseDsoRules_ClaimExpiredRewardsV2(
+            amuletRules.contractId,
+            new AmuletRules_ClaimExpiredRewardsV2(
+              cids,
+              expiryObservers.asJava,
+            ),
+            controller,
           )
-          _ <- svTaskContext
-            .connection(SpliceLedgerConnectionPriority.Low)
-            .submit(
-              Seq(store.key.svParty),
-              Seq(store.key.dsoParty),
-              cmd,
-            )
-            .noDedup
-            .withSynchronizerId(dsoRules.domain)
-            .yieldUnit()
-        } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
-      }
+        )
+        _ <- svTaskContext
+          .connection(SpliceLedgerConnectionPriority.Low)
+          .submit(
+            Seq(store.key.svParty),
+            Seq(store.key.dsoParty),
+            cmd,
+          )
+          .noDedup
+          .withSynchronizerId(dsoRules.domain)
+          .yieldUnit()
+      } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
     }
   }
 }
