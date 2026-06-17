@@ -260,7 +260,10 @@ trait ParticipantAdminSynchronizerConnection {
       .collect {
         case registeredSynchronizer
             if registeredSynchronizer.config.synchronizerAlias == synchronizerAlias && psid.forall(
-              filterPsid => registeredSynchronizer.psid.toOption.contains(filterPsid)
+              filterPsid =>
+                registeredSynchronizer.psid.toOption.contains(
+                  filterPsid
+                ) || registeredSynchronizer.config.synchronizerId.contains(filterPsid)
             ) =>
           registeredSynchronizer
       }
