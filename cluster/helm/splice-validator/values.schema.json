@@ -119,6 +119,25 @@
           "type": "string"
         }
       }
+    },
+    "validatorWebUi": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
