@@ -5,7 +5,7 @@ multiValidator:
 loadTester:
   enable: true
   maxVUs: 300
-  iterationsPerMinute: 1800
+  iterationsPerMinute: 1200
 svs:
   sv-1: !include(sv.yaml) {}
   sv-2: !include(sv.yaml) {}
