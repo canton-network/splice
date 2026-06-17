@@ -2705,6 +2705,16 @@ class HttpScanHandler(
     ScanResource.GetRewardAccountingActivityTotalsResponse
   ] = {
     implicit val tc = extracted
+    val undetermined = ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+      definitions.GetRewardAccountingActivityTotalsResponse(
+        definitions.RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+      )
+    )
+    val cannotProvide = ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+      definitions.GetRewardAccountingActivityTotalsResponse(
+        definitions.RewardAccountingActivityTotalsCannotProvide(status = "CannotProvide")
+      )
+    )
     withSpan(s"$workflowId.getRewardAccountingActivityTotals") { _ => _ =>
       (appRewardsStoreO, appActivityStoreO) match {
         case (Some(appRewardsStore), Some(appActivityStore)) =>
@@ -2732,44 +2742,18 @@ class HttpScanHandler(
                 case None =>
                   // We should never hit this, as both activity totals and round
                   // totals are added in a single DB Tx
-                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                    definitions.GetRewardAccountingActivityTotalsResponse(
-                      definitions.RewardAccountingActivityTotalsUndetermined(
-                        status = "Undetermined"
-                      )
-                    )
-                  )
+                  undetermined
               }
             case None =>
               appActivityStore.earliestRoundWithCompleteAppActivity().map {
                 case Some(earliest) if roundNumber < earliest =>
-                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                    definitions.GetRewardAccountingActivityTotalsResponse(
-                      definitions.RewardAccountingActivityTotalsCannotProvide(
-                        status = "CannotProvide"
-                      )
-                    )
-                  )
+                  cannotProvide
                 case _ =>
-                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                    definitions.GetRewardAccountingActivityTotalsResponse(
-                      definitions.RewardAccountingActivityTotalsUndetermined(
-                        status = "Undetermined"
-                      )
-                    )
-                  )
+                  undetermined
               }
           }
         case _ =>
-          Future.successful(
-            ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-              definitions.GetRewardAccountingActivityTotalsResponse(
-                definitions.RewardAccountingActivityTotalsCannotProvide(
-                  status = "CannotProvide"
-                )
-              )
-            )
-          )
+          Future.successful(cannotProvide)
       }
     }
   }
@@ -2780,6 +2764,16 @@ class HttpScanHandler(
     ScanResource.GetRewardAccountingRootHashResponse
   ] = {
     implicit val tc = extracted
+    val undetermined = ScanResource.GetRewardAccountingRootHashResponse.OK(
+      definitions.GetRewardAccountingRootHashResponse(
+        definitions.RewardAccountingRootHashUndetermined(status = "Undetermined")
+      )
+    )
+    val cannotProvide = ScanResource.GetRewardAccountingRootHashResponse.OK(
+      definitions.GetRewardAccountingRootHashResponse(
+        definitions.RewardAccountingRootHashCannotProvide(status = "CannotProvide")
+      )
+    )
     withSpan(s"$workflowId.getRewardAccountingRootHash") { _ => _ =>
       (appRewardsStoreO, appActivityStoreO) match {
         case (Some(appRewardsStore), Some(appActivityStore)) =>
@@ -2799,33 +2793,13 @@ class HttpScanHandler(
             case None =>
               appActivityStore.earliestRoundWithCompleteAppActivity().map {
                 case Some(earliest) if roundNumber < earliest =>
-                  ScanResource.GetRewardAccountingRootHashResponse.OK(
-                    definitions.GetRewardAccountingRootHashResponse(
-                      definitions.RewardAccountingRootHashCannotProvide(
-                        status = "CannotProvide"
-                      )
-                    )
-                  )
+                  cannotProvide
                 case _ =>
-                  ScanResource.GetRewardAccountingRootHashResponse.OK(
-                    definitions.GetRewardAccountingRootHashResponse(
-                      definitions.RewardAccountingRootHashUndetermined(
-                        status = "Undetermined"
-                      )
-                    )
-                  )
+                  undetermined
               }
           }
         case _ =>
-          Future.successful(
-            ScanResource.GetRewardAccountingRootHashResponse.OK(
-              definitions.GetRewardAccountingRootHashResponse(
-                definitions.RewardAccountingRootHashCannotProvide(
-                  status = "CannotProvide"
-                )
-              )
-            )
-          )
+          Future.successful(cannotProvide)
       }
     }
   }
