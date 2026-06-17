@@ -156,7 +156,8 @@ monitoring:
       scanConnectionDisagreement:
         disagreementRateThreshold: 0.1
         successfulDisagreementThreshold: 5
-        excludedRequests: []
+        excludedRequests:
+          - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
