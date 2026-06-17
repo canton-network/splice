@@ -7,7 +7,12 @@ import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.{ReplicationConfig, StorageConfig}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.resource.{DbLockCounter, StorageFactory, StorageMultiFactory}
+import com.digitalasset.canton.resource.{
+  DbLockCounter,
+  StorageFactory,
+  StorageMultiFactory,
+  StorageSingleFactory,
+}
 import com.digitalasset.canton.tracing.TraceContext
 
 import java.util.concurrent.atomic.AtomicReference
@@ -69,29 +74,26 @@ object SpliceStorageFactory {
       futureSupervisor: FutureSupervisor,
       loggerFactory: NamedLoggerFactory,
       onPassive: () => Unit,
-  ): StorageFactory = {
-    val replicationConfig =
-      if (instanceLockEnabled) ReplicationConfig.withDefaultO(storage, None)
-      else None
-
-    new StorageMultiFactory(
-      config = storage,
-      exitOnFatalFailures = exitOnFatalFailures,
-      replicationConfig = replicationConfig,
-      onActive = _ => FutureUnlessShutdown.unit,
-      onPassive = logger => {
-        implicit val tc: TraceContext = TraceContext.empty
-        logger.error(
-          "Lost DB instance lock – another node instance may have taken over. Shutting down."
-        )
-        FutureUnlessShutdown.pure(onPassive())
-      },
-      mustStayActive = true,
-      mainLockCounter = mainLockCounter,
-      poolLockCounter = poolLockCounter,
-      futureSupervisor = futureSupervisor,
-      loggerFactory = loggerFactory,
-      getSessionContextO = None,
-    )
-  }
+  ): StorageFactory =
+    if (!instanceLockEnabled) new StorageSingleFactory(storage)
+    else
+      new StorageMultiFactory(
+        config = storage,
+        exitOnFatalFailures = exitOnFatalFailures,
+        replicationConfig = ReplicationConfig.withDefaultO(storage, None),
+        onActive = _ => FutureUnlessShutdown.unit,
+        onPassive = logger => {
+          implicit val tc: TraceContext = TraceContext.empty
+          logger.error(
+            "Lost DB instance lock – another node instance may have taken over. Shutting down."
+          )
+          FutureUnlessShutdown.pure(onPassive())
+        },
+        mustStayActive = true,
+        mainLockCounter = mainLockCounter,
+        poolLockCounter = poolLockCounter,
+        futureSupervisor = futureSupervisor,
+        loggerFactory = loggerFactory,
+        getSessionContextO = None,
+      )
 }
