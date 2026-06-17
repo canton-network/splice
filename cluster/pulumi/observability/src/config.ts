@@ -105,6 +105,10 @@ const MonitoringConfigSchema = z
           // Requests (by their `request` label) to exclude from the scan connection
           // disagreement alerts. Matched as a regex against the `request` label.
           excludedRequests: z.array(z.string()).default([]),
+          // Scan connections (by their `scan_connection` label) to exclude from the scan
+          // connection disagreement alerts. Matched as a regex against the
+          // `scan_connection` label.
+          excludedConnections: z.array(z.string()).default([]),
         }),
         walletSweep: z.object({
           tolerance: z.number(),

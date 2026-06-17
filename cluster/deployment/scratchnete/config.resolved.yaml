@@ -86,6 +86,7 @@ monitoring:
         sequencerRetentionDays: 30
       scanConnectionDisagreement:
         disagreementRateThreshold: 0.1
+        excludedConnections: []
         excludedRequests:
           - 'getTransferInstructionAcceptContext'
         successfulDisagreementThreshold: 5

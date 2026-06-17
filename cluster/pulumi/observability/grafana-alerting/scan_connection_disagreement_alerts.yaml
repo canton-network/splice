@@ -20,9 +20,9 @@ groups:
                 uid: prometheus
               editorMode: code
               expr: |-
-                sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree"$SCAN_DISAGREEMENT_REQUEST_FILTER}[30m]))
+                sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree"$SCAN_DISAGREEMENT_FILTER}[30m]))
                 /
-                sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{$SCAN_DISAGREEMENT_REQUEST_FILTER_BARE}[30m]))
+                sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{$SCAN_DISAGREEMENT_FILTER_BARE}[30m]))
               instant: true
               intervalMs: 1000
               legendFormat: '{{namespace}}:{{job}}:{{node_name}}:{{scan_connection}}:{{request}}'
@@ -87,7 +87,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree", success="true"$SCAN_DISAGREEMENT_REQUEST_FILTER}[30m]))
+              expr: sum by (namespace, job, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus="disagree", success="true"$SCAN_DISAGREEMENT_FILTER}[30m]))
               instant: true
               intervalMs: 1000
               legendFormat: '{{namespace}}:{{job}}:{{node_name}}:{{scan_connection}}:{{request}}'
