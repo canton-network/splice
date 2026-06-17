@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.metrics
 
 import com.daml.metrics.api.MetricHandle.{Gauge, Histogram, LabeledMetricsFactory, Meter, Timer}
 import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
-import com.daml.metrics.api.MetricQualification.{Latency, Saturation, Traffic}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency, Saturation, Traffic}
 import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
@@ -53,7 +53,7 @@ class ScanMediatorVerdictIngestionMetrics(metricsFactory: LabeledMetricsFactory)
     MetricInfo(
       name = prefix :+ "no_event_at_timestamps_count",
       summary = "Number of NO_EVENT_AT_TIMESTAMPS errors from the sequencer",
-      qualification = Traffic,
+      qualification = Errors,
     )
   )(MetricsContext.Empty)
 
