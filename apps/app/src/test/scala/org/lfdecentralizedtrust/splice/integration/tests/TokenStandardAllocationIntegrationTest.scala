@@ -11,6 +11,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -50,6 +51,7 @@ class TokenStandardAllocationIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,

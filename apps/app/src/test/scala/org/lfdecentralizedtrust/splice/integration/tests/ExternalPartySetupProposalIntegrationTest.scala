@@ -75,6 +75,7 @@ class ExternalPartySetupProposalIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
       .addConfigTransforms(
         // set renewal duration to be same as pre-approval lifetime to ensure renewal
         // gets triggered immediately

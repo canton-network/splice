@@ -809,6 +809,9 @@ object ConfigTransforms {
   ): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = Some(rewardConfig)))
 
+  def withoutRewardConfig: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = None))
+
   private def portTransform(bump: Int, c: AdminServerConfig): AdminServerConfig =
     c.copy(internalPort = c.internalPort.map(_ + bump))
 
