@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AppRewardCoupon
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -99,6 +100,44 @@ abstract class ExternalPartyWalletStoreTest
         } yield {
           store1.lookupTransferCommandCounter().futureValue.value shouldBe transferCommandCtr1
           store2.lookupTransferCommandCounter().futureValue shouldBe None
+        }
+      }
+
+    }
+
+    "AppRewardCoupon ingestion" should {
+
+      "ingest coupons where external party is provider or beneficiary" in {
+        for {
+          store <- mkStore(externalParty1)
+          // external party is the provider, no beneficiary
+          couponAsProvider = appRewardCoupon(round = 1, provider = externalParty1)
+          // external party is the beneficiary, different provider
+          couponAsBeneficiary = appRewardCoupon(
+            round = 1,
+            provider = externalParty2,
+            beneficiary = Some(externalParty1),
+          )
+          // neither provider nor beneficiary — should not be ingested
+          couponForOther = appRewardCoupon(round = 1, provider = externalParty2)
+          _ <- dummyDomain.create(
+            couponAsProvider,
+            createdEventSignatories = Seq(dsoParty, externalParty1),
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            couponAsBeneficiary,
+            createdEventSignatories = Seq(dsoParty, externalParty1),
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            couponForOther,
+            createdEventSignatories = Seq(dsoParty, externalParty2),
+          )(store.multiDomainAcsStore)
+        } yield {
+          val coupons = store.multiDomainAcsStore
+            .listContracts(AppRewardCoupon.COMPANION, HardLimit.tryCreate(Limit.DefaultMaxPageSize))
+            .futureValue
+          coupons.map(_.contractId) should contain theSameElementsAs
+            Seq(couponAsProvider, couponAsBeneficiary).map(_.contractId)
         }
       }
 
