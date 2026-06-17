@@ -432,7 +432,7 @@ class TokenStandardV2TransferIntegrationTest
               aliceAmuletHoldings.asJava,
               emptyMetadata,
             ),
-            Seq(aliceUserParty, aliceValidatorParty).map(_.toProtoPrimitive).asJava,
+            /* actors */ Seq(aliceUserParty, aliceValidatorParty).map(_.toProtoPrimitive).asJava,
             emptyExtraArgs,
           )
         )
