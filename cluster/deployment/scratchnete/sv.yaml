@@ -1,8 +1,5 @@
 svApp:
   additionalEnvVars:
-    - name: ADDITIONAL_CONFIG_DABFT_PRUNING
-      value: |
-        canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.dabft-pruning = null
     - name: ADDITIONAL_CONFIG_PROTOCOL_VERSION
       value: |
         canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = "35"
