@@ -35,7 +35,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 0.05
+                      - 0.1
                       - 0
                     type: gt
                   operator:
@@ -48,7 +48,7 @@ groups:
                   type: query
                   unloadEvaluator:
                     params:
-                      - 0.05
+                      - 0.1
                       - 0
                     type: lt
               datasource:
@@ -68,9 +68,9 @@ groups:
         annotations:
           __dashboardUid__: cnndx7p
           __panelId__: "6"
-          description: More than 5% of the BFT consensus comparisons on this scan connection disagreed with the consensus result over the last 10 minutes. This can indicate the scan node is serving stale or incorrect data.
+          description: More than 10% of the BFT consensus comparisons on this scan connection disagreed with the consensus result over the last 10 minutes. This can indicate the scan node is serving stale or incorrect data.
           severity: warning
-          summary: Scan connection {{ $labels.scan_connection }} of job {{ $labels.job }} (node {{ $labels.node_name }}) in namespace {{ $labels.namespace }} disagreed with BFT consensus on {{ index $values "A" }} of requests in the last 10m (threshold 5%).
+          summary: Scan connection {{ $labels.scan_connection }} of job {{ $labels.job }} (node {{ $labels.node_name }}) in namespace {{ $labels.namespace }} disagreed with BFT consensus on {{ index $values "A" }} of requests in the last 10m (threshold 10%).
         labels: {}
         isPaused: false
       - uid: aescandisagreeok1
@@ -100,7 +100,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 0
+                      - 5
                       - 0
                     type: gt
                   operator:
@@ -113,7 +113,7 @@ groups:
                   type: query
                   unloadEvaluator:
                     params:
-                      - 0
+                      - 5
                       - 0
                     type: lte
               datasource:
@@ -133,7 +133,7 @@ groups:
         annotations:
           __dashboardUid__: cnndx7p
           __panelId__: "6"
-          description: A scan connection returned a successful (2xx) response that disagreed with the BFT consensus result in the last 10 minutes. A successful but divergent response indicates the scan node is serving incorrect or stale data and should be investigated.
+          description: A scan connection returned more than 5 successful (2xx) responses that disagreed with the BFT consensus result in the last 10 minutes. A successful but divergent response indicates the scan node is serving incorrect or stale data and should be investigated.
           severity: critical
           summary: Scan connection {{ $labels.scan_connection }} of job {{ $labels.job }} (node {{ $labels.node_name }}) in namespace {{ $labels.namespace }} returned {{ index $values "A" }} successful response(s) that disagreed with BFT consensus in the last 10m.
         labels: {}
