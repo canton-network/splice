@@ -407,7 +407,7 @@ class TokenStandardV2TransferIntegrationTest
     "support single step transfers" in { implicit env =>
       // they need to be hosted on the same participant for this test
       // in practice, we expect this choice to be called as part of a larger
-      // Daml tx, e.g., to distribute holdings that were just received by an 
+      // Daml tx, e.g., to distribute holdings that were just received by an
       // decentralized app to all its backers.
       val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
