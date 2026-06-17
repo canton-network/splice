@@ -81,6 +81,12 @@ extraInitContainers: []
 ansWebUi:
   enabled: true
   imageName: "ans-web-ui"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  # This is useful for integrating with external secret management tools.
+  # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+  secretOverrides:
+    clientId: ""
+    url: ""
 # set if validator-web-ui should be deployed
 validatorWebUi:
   enabled: true
