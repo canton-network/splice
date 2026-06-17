@@ -111,7 +111,10 @@ object ValidatorAppBootstrap {
           clock,
           validatorMetrics,
           new StorageSingleFactory(
-            withConfiguredPostgresConnectionSettings(validatorConfig.storage, validatorConfig.postgres)
+            withConfiguredPostgresConnectionSettings(
+              validatorConfig.storage,
+              validatorConfig.postgres,
+            )
           ),
           loggerFactory,
           futureSupervisor,

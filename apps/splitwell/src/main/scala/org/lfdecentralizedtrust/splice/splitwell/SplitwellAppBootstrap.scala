@@ -110,7 +110,10 @@ object SplitwellAppBootstrap {
           clock,
           splitwellMetrics,
           new StorageSingleFactory(
-            withConfiguredPostgresConnectionSettings(splitwellConfig.storage, splitwellConfig.postgres)
+            withConfiguredPostgresConnectionSettings(
+              splitwellConfig.storage,
+              splitwellConfig.postgres,
+            )
           ),
           loggerFactory,
           futureSupervisor,
