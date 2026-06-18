@@ -352,3 +352,42 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].image
           value: "secure-registry.example.com/postgres:14-driver"
+
+  - it: "allows overriding sequencer base database password with raw strings"
+    set:
+      sequencer.driver.type: "postgres"
+      sequencer.driver.address: "mock-driver-address"
+      sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/sequencer/postgres-password"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='CANTON_DOMAIN_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_DATABASE_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+
+  - it: "allows overriding bft driver database password with raw strings"
+    set:
+      sequencer.driver.type: "cantonbft"
+      sequencer.driver.externalAddress: "sequencer.example.com"
+      sequencer.driver.externalPort: 5010
+      sequencer.driver.persistence:
+        host: "custom-driver-host"
+        secretOverrides:
+          postgresPassword: "vault:kv/data/sequencer/driver-password"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_BFT_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/driver-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/sequencer/driver-password"
