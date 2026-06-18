@@ -12,6 +12,12 @@ ui:
   #    clientId: ""
   #    url: ""
 
+#secretOverrides:
+#  svPublicKey: ""
+#  svPrivateKey: ""
+
+
+
 # Custom annotations and labels for deployed resources
 pod:
   annotations: {}
@@ -42,6 +48,8 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   initImageName: "postgres:14"
+#  secretOverrides:
+#    postgresPassword: ""
 
 migration:
   attachPvc: true

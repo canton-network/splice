@@ -6,6 +6,13 @@
     "imageName": {
       "type": "string"
     },
+    "secretOverrides": {
+      "type": "object",
+      "properties": {
+        "svPublicKey": { "type": "string" },
+        "svPrivateKey": { "type": "string" }
+      }
+    },
     "ui": {
       "type": "object",
       "required": ["imageName"],
@@ -323,6 +330,12 @@
                 },
                 "secretName": {
                   "type": "string"
+                },
+                "secretOverrides": {
+                  "type": "object",
+                  "properties": {
+                    "jsonCredentials": { "type": "string" }
+                  }
                 }
               },
               "required": [
@@ -493,6 +506,12 @@
             },
             "initImageName": {
               "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": { "type": "string" }
+              }
             }
           }
         },
