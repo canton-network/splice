@@ -11,6 +11,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
   TaskOutcome,
+  TaskNoop,
   TaskSuccess,
   TriggerContext,
 }
@@ -78,9 +79,7 @@ class UnhideRewardCouponV2Trigger(
       )
       result <-
         if (coupons.isEmpty)
-          Future.successful(
-            TaskSuccess(s"no reward coupons to unhide for ${task.providerParty}")
-          )
+          Future.successful(TaskNoop)
         else {
           val cids = coupons.map(_.contractId).asJava
           val beneficiaries: java.util.List[String] = coupons
