@@ -154,6 +154,31 @@ class S3BucketConnection(
       .map { _.map(ByteString.fromByteBuffer) }
   }
 
+  def doesObjectExist(key: String)(implicit ec: ExecutionContext): Future[Boolean] = {
+    val request = HeadObjectRequest.builder().bucket(bucketName).key(key).build()
+    s3Client.headObject(request).asScala.map(_ => true).recover {
+      case _: NoSuchKeyException => false
+    }
+  }
+
+  // Should be called on the bucket connection of the destination bucket. Assumes that that service account has permissions to read the source object.
+  def copyObject(sourceBucket: String, sourceKey: String, destinationKey: String)(implicit ec: ExecutionContext): Future[Unit] = {
+    val copyReq = CopyObjectRequest
+      .builder()
+      .destinationBucket(bucketName)
+      .destinationKey(destinationKey)
+      .sourceBucket(sourceBucket)
+      .sourceKey(sourceKey)
+      .build()
+
+    s3Client.copyObject(copyReq).asScala.map(_ => ())
+  }
+
+  def deleteObject(key: String)(implicit ec: ExecutionContext): Future[Unit] = {
+    val request = DeleteObjectRequest.builder().bucket(bucketName).key(key).build()
+    s3Client.deleteObject(request).asScala.map(_ => ())
+  }
+
   /** Wrapper around multi-part upload that simplifies uploading parts in order
     */
   class AppendWriteObject protected[S3BucketConnection] (val key: String)(implicit
