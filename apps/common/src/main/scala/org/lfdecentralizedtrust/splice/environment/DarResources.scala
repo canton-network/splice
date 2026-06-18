@@ -2753,7 +2753,7 @@ object DarResources {
   )
   val amulet = PackageResource(
     amulet_current,
-    amulet_0_1_15,
+    amulet_0_1_17,
     Seq(
       amulet_0_1_0,
       amulet_0_1_1,
@@ -4129,7 +4129,7 @@ object DarResources {
   )
   val dsoGovernance = PackageResource(
     dsoGovernance_current,
-    dsoGovernance_0_1_21,
+    dsoGovernance_0_1_23,
     Seq(
       dsoGovernance_0_1_0,
       dsoGovernance_0_1_1,
@@ -5435,7 +5435,7 @@ object DarResources {
   )
   val wallet = PackageResource(
     wallet_current,
-    wallet_0_1_15,
+    wallet_0_1_18,
     Seq(
       wallet_0_1_0,
       wallet_0_1_1,
@@ -6560,7 +6560,7 @@ object DarResources {
   )
   val amuletNameService = PackageResource(
     amuletNameService_current,
-    amuletNameService_0_1_16,
+    amuletNameService_0_1_18,
     Seq(
       amuletNameService_0_1_0,
       amuletNameService_0_1_1,
@@ -7614,7 +7614,7 @@ object DarResources {
   )
   val walletPayments = PackageResource(
     walletPayments_current,
-    walletPayments_0_1_15,
+    walletPayments_0_1_17,
     Seq(
       walletPayments_0_1_0,
       walletPayments_0_1_1,
@@ -8738,7 +8738,7 @@ object DarResources {
   )
   val splitwell = PackageResource(
     splitwell_current,
-    splitwell_0_1_15,
+    splitwell_0_1_18,
     Seq(
       splitwell_0_1_0,
       splitwell_0_1_1,

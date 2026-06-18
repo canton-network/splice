@@ -32,8 +32,6 @@ import java.time.Instant
 import java.util.UUID
 import scala.jdk.CollectionConverters.*
 
-// this test sets fees to zero, and that only works from 0.1.14 onwards
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_14
 class TokenStandardV2TransferIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
