@@ -1248,6 +1248,8 @@ class BftScanConnectionTest
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           {
+            // TODO(tech-debt): make the retry params configurable so that we
+            // don't spend time waiting in long backoffs
             eventually(timeUntilSuccess = 40.seconds) {
               inside(bft.getRewardAccountingRootHash(round).futureValue) {
                 case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
