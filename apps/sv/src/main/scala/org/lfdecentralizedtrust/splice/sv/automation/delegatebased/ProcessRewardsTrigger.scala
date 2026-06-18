@@ -45,6 +45,8 @@ import scala.jdk.CollectionConverters.*
 
 import ProcessRewardsTriggerBase.*
 
+import scala.util.{Failure, Success}
+
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
@@ -192,10 +194,13 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
 
     for {
       ownScan <- getOwnScanConnection()
-      response <- ownScan.getRewardAccountingBatch(round, batchHash)
-      batch <- response match {
-        case Some(batch) => Future.successful(batch)
-        case None => bftReadBatch
+      batch <- ownScan.getRewardAccountingBatch(round, batchHash).transformWith {
+        case Success(Some(batch)) =>
+          Future.successful(batch)
+        case Success(None) =>
+          bftReadBatch
+        case Failure(_) =>
+          bftReadBatch
       }
     } yield batch
   }
