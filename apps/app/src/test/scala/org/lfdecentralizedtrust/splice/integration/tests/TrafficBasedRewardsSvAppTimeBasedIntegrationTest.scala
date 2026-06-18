@@ -51,7 +51,7 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 // - Turning on/off of dry-run and minting-version in rewardConfig
 //   And confirming that rewards processing works.
 //
-// Later this test would be extended to cover unhide, expire, etc
+// - BFT read in all three SV app's reward processing triggers
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment

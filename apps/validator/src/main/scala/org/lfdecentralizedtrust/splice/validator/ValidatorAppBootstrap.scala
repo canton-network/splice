@@ -9,6 +9,7 @@ import cats.implicits.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import org.lfdecentralizedtrust.splice.admin.http.AdminRoutes
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
+import org.lfdecentralizedtrust.splice.config.SpliceDbConfig.withConfiguredPostgresConnectionSettings
 import org.lfdecentralizedtrust.splice.environment.NodeBootstrapBase
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfig
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
@@ -109,7 +110,12 @@ object ValidatorAppBootstrap {
           testingConfigInternal,
           clock,
           validatorMetrics,
-          new StorageSingleFactory(validatorConfig.storage),
+          new StorageSingleFactory(
+            withConfiguredPostgresConnectionSettings(
+              validatorConfig.storage,
+              validatorConfig.postgres,
+            )
+          ),
           loggerFactory,
           futureSupervisor,
           configuredOpenTelemetry,

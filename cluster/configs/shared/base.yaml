@@ -122,6 +122,9 @@ monitoring:
         total:
           rate: 25
           overMinutes: 5
+      dsoMissedConfirmations:
+        threshold: 0.01
+        windowMinutes: 10
       cloudSql:
         maintenance: false
       cometbft:

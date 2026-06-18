@@ -8,50 +8,24 @@
 .. release-notes:: Upcoming
 
 
-  - Deployment
+      - PostgreSQL Data Checksums
 
-      - Helm Charts
+          - `PostgreSQL data checksums <https://www.postgresql.org/docs/14/checksums.html>`_ are now
+            **enabled by default** for all PostgreSQL databases created by Splice. This applies to the
+            in-cluster Postgres Helm chart (``splice-postgres``) and the Docker-Compose based deployments
+            (SV, validator and LocalNet). Data checksums help detect on-disk data corruption early.
 
-          - All Helm charts now support overriding full image names.
-            It is possible to override the default image names using new Helm values.
-            This change helps deployments that require specific naming conventions for images.
+            .. warning::
 
-      - Docker Images
+               Data checksums can only be enabled when a database cluster is first initialized
+               (``initdb``). **Enabling them by default
+               only affects freshly initialized databases.** Existing deployments are *not* automatically
+               migrated and will continue to run without data checksums until they are explicitly enabled.
 
-          - All Splice web UI Docker images have been updated to use the latest nginx-unprivileged base image,
-            and switched to the version based on alpine-slim, to improve security and reduce image size.
+               Operators of existing deployments should enable checksums on
+               their existing databases out-of-band, for example by stopping PostgreSQL and running
+               ``pg_checksums --enable`` against the data directory (see the
+               `pg_checksums documentation <https://www.postgresql.org/docs/14/app-pgchecksums.html>`_).
 
-    - Daml
-
-      - Add a ``transferPreapprovalBaseDuration`` configuration parameter which defines the duration of a ``TransferPreapproval`` that can be requested or renewed for free
-        as the traffic costs already cover the costs sufficiently. This parameter defaults to 90 days. This allows creating a preapproval just using the free traffic rate
-        which allows bootstrapping a new validator by creating a preapproval and then purchasing CC from an exchange.
-
-        See [CIP 119](https://github.com/canton-foundation/cips/blob/main/cip-0119/cip-0119.md) for more details.
-
-      - Set ``sponsor = validator`` in ``ValidatorLicense`` contracts
-        for new validators and ones that report liveness through
-        ``ValidatorLicense_ReportActive``. This change was made to
-        reduce some confusion around the sponsor having a special role
-        for a validator after the initial onboarding.
-
-      - Limit the maximal amount that can be tapped in a single transaction to 100M CC
-        to avoid problems in downstream processing of very large total supply amounts.
-
-      - These changes require a Daml upgrade to the following versions:
-
-          ================== =======
-          name               version
-          ================== =======
-          amulet             0.1.20
-          amuletNameService  0.1.21
-          dsoGovernance      0.1.26
-          validatorLifecycle 0.1.7
-          wallet             0.1.21
-          walletPayments     0.1.20
-          ================== =======
-
-
-    - Scan and SV UI
-
-          - Remove the ``sponsor`` field from the validator license list as it is redundant with the Daml change to set ``sponsor = validator``.
+          - Splice nodes now perform a best-effort check at startup and log a ``WARN`` if PostgreSQL
+            data checksums are not enabled on their backing database. This check never fails startup.

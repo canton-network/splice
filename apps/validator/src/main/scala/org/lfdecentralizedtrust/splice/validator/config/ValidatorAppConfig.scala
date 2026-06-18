@@ -147,6 +147,7 @@ final case class MigrateValidatorPartyConfig(
 case class ValidatorAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     ledgerApiUser: String,
     // The hint to be used for the validator operator's party ID
     // Must be None for SV validators, Some(hint) for non-SV validators

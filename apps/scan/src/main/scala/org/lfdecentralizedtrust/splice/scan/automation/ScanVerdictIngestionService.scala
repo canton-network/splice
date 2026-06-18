@@ -299,7 +299,6 @@ class ScanVerdictIngestionService(
       // Recover from NO_EVENT_AT_TIMESTAMPS by returning an empty result.
       // See ensureVerdictsHaveTrafficSummaries for when missing summaries are
       // tolerated vs treated as errors.
-      // TODO(#5460): Add a metric recording missed timestamps for alerting.
       .recoverWith { case ex @ GrpcException(status, trailers) =>
         val statusProto = StatusProto.fromStatusAndTrailers(status, trailers)
         val errorDetails = ErrorDetails.from(statusProto)
@@ -311,9 +310,14 @@ class ScanVerdictIngestionService(
           }
           .headOption
           .getOrElse("none")
-        if (errorCodeId == TrafficControlErrors.NoEventAtTimestamps.id)
+        if (errorCodeId == TrafficControlErrors.NoEventAtTimestamps.id) {
+          ingestionMetrics.noEventAtTimestampsCount.mark()(MetricsContext.Empty)
+          logger.info(
+            s"Sequencer returned NO_EVENT_AT_TIMESTAMPS for ${sequencingTimes.size} timestamps" +
+              s" (first=${sequencingTimes.headOption}, last=${sequencingTimes.lastOption})"
+          )
           Future.successful(Seq.empty)
-        else
+        } else
           Future.failed(ex)
       }
   }

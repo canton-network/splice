@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 
 import org.lfdecentralizedtrust.splice.store.Limit
@@ -51,6 +52,7 @@ final case class BulkStorageConfig(
 case class ScanAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     svUser: String,
     override val participantClient: ParticipantClientConfig,
     synchronizerNodes: ScanSynchronizerNodesConfig,

@@ -1245,6 +1245,40 @@ class DbSvDsoStore(
       }
     }
 
+  override def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[RewardCouponV2.ContractId, RewardCouponV2] = {
+    (now, limit) => implicit tc =>
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      // Ignore only if (reward_beneficiary_is_observer = true)
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and (reward_beneficiary_is_observer = false or (" ++
+          notInClause("reward_party", ignoredParties) ++
+          sql" and (create_arguments->>'beneficiary' is null or " ++
+          notInClause("create_arguments->>'beneficiary'", ignoredParties) ++
+          sql")))").toActionBuilder
+      } else {
+        sql""
+      }
+      waitUntilAcsIngested {
+        for {
+          result <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              RewardCouponV2.COMPANION,
+              additionalWhere =
+                (sql"""and acs.contract_expires_at < $now""" ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredRewardCouponsV2",
+          )
+          limited = applyLimit("listExpiredRewardCouponsV2", limit, result)
+        } yield limited.map(assignedContractFromRow(RewardCouponV2.COMPANION)(_))
+      }
+  }
+
   override def listMemberTrafficContracts(
       memberId: Member,
       synchronizerId: SynchronizerId,
@@ -1268,6 +1302,64 @@ class DbSvDsoStore(
         )
     } yield applyLimit("listMemberTrafficContracts", limit, result).map(
       contractFromRow(MemberTraffic.COMPANION)(_)
+    )
+  }
+
+  override def listNonObserverRewardCouponsV2ProvidersSample(
+      limit: Limit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[PartyId]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          // To do the `order by random()` the dedup/distinct must be a subquery.
+          // Only the reward_party is fetched here to keep the query index-only.
+          (sql"""
+             select reward_party
+             from (
+               select distinct on (reward_party) reward_party
+               from #${DsoTables.acsTableName}
+               where store_id = $acsStoreId
+                 and migration_id = $domainMigrationId
+                 and package_name = ${RewardCouponV2.PACKAGE_NAME}
+                 and template_id_qualified_name = ${QualifiedName(
+              RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and reward_beneficiary_is_observer = false
+               order by reward_party
+             ) sub
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[String],
+          "listNonObserverRewardCouponsV2ProvidersSample",
+        )
+    } yield applyLimit("listNonObserverRewardCouponsV2ProvidersSample", limit, result)
+      .map(PartyId.tryFromProtoPrimitive)
+  }
+
+  override def listNonObserverRewardCouponsV2ForProvider(
+      provider: PartyId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            RewardCouponV2.COMPANION,
+            where =
+              sql"reward_beneficiary_is_observer = false and reward_party = ${lengthLimited(provider.toProtoPrimitive)}",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listNonObserverRewardCouponsV2ForProvider",
+        )
+    } yield applyLimit("listNonObserverRewardCouponsV2ForProvider", limit, result).map(
+      contractFromRow(RewardCouponV2.COMPANION)(_)
     )
   }
 
