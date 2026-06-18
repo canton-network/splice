@@ -80,3 +80,26 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='splitwell-web-ui')].image
           pattern: "^secure-registry\\.example\\.com/custom-splitwell-ui:"
+
+  - it: "allows overriding splitwell-web-ui secret env vars with raw strings"
+    set:
+      auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
+      auth.audience: "mock_audience"
+      spliceInstanceNames.networkName: "MockNet"
+      spliceInstanceNames.networkFaviconUrl: "https://mock.net/favicon.ico"
+      spliceInstanceNames.amuletName: "Mocklet"
+      spliceInstanceNames.amuletNameAcronym: "MCK"
+      spliceInstanceNames.nameServiceName: "Mock Name Service"
+      spliceInstanceNames.nameServiceNameAcronym: "MNS"
+      secretOverrides.clientId: "vault:kv/data/splitwell-ui/client-id"
+      secretOverrides.url: "vault:kv/data/splitwell-ui/url"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-web-ui')].env[?(@.name=='SPLICE_APP_UI_AUTH_CLIENT_ID')].value
+          pattern: "vault:kv/data/splitwell-ui/client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-web-ui')].env[?(@.name=='SPLICE_APP_UI_AUTH_URL')].value
+          pattern: "vault:kv/data/splitwell-ui/url"
