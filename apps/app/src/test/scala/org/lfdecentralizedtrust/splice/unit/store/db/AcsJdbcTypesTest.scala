@@ -52,9 +52,22 @@ class AcsJdbcTypesTest
         )
         .value
         .map(_.value)
-    } yield fetched match {
-      case arr: Array[?] => arr should contain theSameElementsAs value.asInstanceOf[Array[?]]
-      case _ => fetched should be(value)
+      fetchedLiteral <- storage.underlying
+        .querySingle(
+          sql"select $value".as[T].headOption,
+          "fetch literal",
+        )
+        .value
+        .map(_.value)
+    } yield {
+      value match {
+        case valueArray: Array[?] =>
+          fetched.asInstanceOf[Array[?]] should contain theSameElementsAs valueArray
+          fetchedLiteral.asInstanceOf[Array[?]] should contain theSameElementsAs valueArray
+        case _ =>
+          fetched should be(value)
+          fetchedLiteral should be(value)
+      }
     }
   }
 
@@ -81,8 +94,16 @@ class AcsJdbcTypesTest
         )
         .value
         .map(_.value)
+      fetchedLiteral <- storage.underlying
+        .querySingle(
+          sql"select null".as[Option[T]].headOption,
+          "fetch literal",
+        )
+        .value
+        .map(_.value)
     } yield {
       fetched shouldBe None
+      fetchedLiteral shouldBe None
     }
   }
 
