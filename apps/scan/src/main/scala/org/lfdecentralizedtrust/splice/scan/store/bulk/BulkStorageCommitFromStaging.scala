@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
 trait BulkStorageCommitFromStaging[T] extends NamedLogging {
-  def checkBftForObjects(
+  private def checkBftForObjects(
       objects: Seq[ObjectKeyAndChecksum]
   )(implicit tc: TraceContext): Future[Boolean] = {
     logger.debug(
@@ -22,7 +22,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
   }
   // TODO(#XXXX): implement the BFT check
 
-  def waitForBftAgreement(implicit
+  private def waitForBftAgreement(implicit
       ec: ExecutionContext,
       tc: TraceContext,
       actorSystem: ActorSystem,
@@ -73,7 +73,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
     }
   }
 
-  def copyToCommitted(
+  private def copyToCommitted(
       stagingS3Connection: S3BucketConnection,
       committedS3Connection: S3BucketConnection,
   )(implicit
@@ -91,7 +91,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
           .map(_ => (ts, objs))
       }
 
-  def deleteFromStaging(
+  private def deleteFromStaging(
       stagingS3Connection: S3BucketConnection
   )(implicit ec: ExecutionContext): Flow[
     (T, Seq[ObjectKeyAndChecksum]),
