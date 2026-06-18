@@ -4,9 +4,6 @@
 
 set -Eeo pipefail
 
-# Enable PostgreSQL data checksums by default for fresh data directories to detect
-# on-disk data corruption. This is only applied when initdb runs on an empty data
-# directory; existing data directories are left untouched.
 export POSTGRES_INITDB_ARGS="--data-checksums ${POSTGRES_INITDB_ARGS:-}"
 
 docker-ensure-initdb.sh
