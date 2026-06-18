@@ -43,6 +43,9 @@ tests:
       - equal:
           path: data.POSTGRES_USER
           value: "cnadmin"
+      - equal:
+          path: data.POSTGRES_INITDB_ARGS
+          value: "--data-checksums"
 
   - it: "deploys a StatefulSet with correct configuration"
     documentIndex: 1

@@ -11,6 +11,10 @@ data:
   PGDATA: "/var/lib/postgresql/data/pgdata"
   POSTGRES_DB: "cantonnet"
   POSTGRES_USER: "cnadmin"
+  # Enable PostgreSQL data checksums by default for fresh data directories to detect
+  # on-disk data corruption. This only takes effect when initdb runs on an empty data
+  # directory; existing data directories are left untouched.
+  POSTGRES_INITDB_ARGS: "--data-checksums"
 ---
 apiVersion: apps/v1
 kind: StatefulSet
