@@ -77,6 +77,8 @@ class BulkStorage(
     loggerFactory,
   )
   val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
+    stagingConnection,
+    committedConnection,
     getReader,
     loggerFactory,
   )

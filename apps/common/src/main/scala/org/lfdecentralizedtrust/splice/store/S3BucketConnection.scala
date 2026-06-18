@@ -156,13 +156,15 @@ class S3BucketConnection(
 
   def doesObjectExist(key: String)(implicit ec: ExecutionContext): Future[Boolean] = {
     val request = HeadObjectRequest.builder().bucket(bucketName).key(key).build()
-    s3Client.headObject(request).asScala.map(_ => true).recover {
-      case _: NoSuchKeyException => false
+    s3Client.headObject(request).asScala.map(_ => true).recover { case _: NoSuchKeyException =>
+      false
     }
   }
 
   // Should be called on the bucket connection of the destination bucket. Assumes that that service account has permissions to read the source object.
-  def copyObject(sourceBucket: String, sourceKey: String, destinationKey: String)(implicit ec: ExecutionContext): Future[Unit] = {
+  def copyObject(sourceBucket: String, sourceKey: String, destinationKey: String)(implicit
+      ec: ExecutionContext
+  ): Future[Unit] = {
     val copyReq = CopyObjectRequest
       .builder()
       .destinationBucket(bucketName)

@@ -193,7 +193,8 @@ class AcsSnapshotBulkStorageTest
       )
       val reader = new BulkStorageReader(
         acsSnapshotBulkStorageStaging = bulkStorage,
-        acsSnapshotBulkStorageCommitted = null, // FIXME: use once we start using the committed bucket
+        acsSnapshotBulkStorageCommitted =
+          null, // FIXME: use once we start using the committed bucket
         updateHistoryBulkStorage = null, // not needed for this test
         bulkStorageTestConfig,
         s3BucketConnection,
@@ -225,7 +226,8 @@ class AcsSnapshotBulkStorageTest
           expectedTs: CantonTimestamp,
           expectedNumObjects: Int,
       ) = {
-        val getObjectsResult = reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
+        val getObjectsResult =
+          reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
             s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"

@@ -38,7 +38,12 @@ class AcsSnapshotBulkStorageCommitFromStaging(
 
   private def checkBftForObjects(
       objects: AcsSnapshotObjects
-  ): Future[Boolean] = Future.successful(true)
+  )(implicit tc: TraceContext): Future[Boolean] = {
+    logger.debug(
+      s"Checking BFT agreement for objects: ${objects.objects.map(_.key).mkString(", ")} (for snapshot at timestamp ${objects.timestamp})"
+    )
+    Future.successful(true)
+  }
   // TODO(#XXXX): implement the BFT check
 
   private def waitForBftAgreement(implicit
@@ -74,7 +79,9 @@ class AcsSnapshotBulkStorageCommitFromStaging(
     }
   }
 
-  private def copyObjectToCommitted(obj: S3BucketConnection.ObjectKeyAndChecksum): Future[Unit] = {
+  private def copyObjectToCommitted(
+      obj: S3BucketConnection.ObjectKeyAndChecksum
+  )(implicit tc: TraceContext): Future[Unit] = {
     committedS3Connection.doesObjectExist(obj.key).flatMap {
       case true =>
         logger.debug(
@@ -88,7 +95,8 @@ class AcsSnapshotBulkStorageCommitFromStaging(
   }
 
   private def copyToCommitted(implicit
-      ec: ExecutionContext
+      ec: ExecutionContext,
+      tc: TraceContext,
   ): Flow[
     (TimestampWithMigrationId, AcsSnapshotObjects),
     (TimestampWithMigrationId, AcsSnapshotObjects),
