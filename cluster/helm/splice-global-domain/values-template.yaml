@@ -43,6 +43,9 @@ mediator:
     databaseName: cantonnet_mediator
     port: 5432
     initImageName: "postgres:14"
+#    secretOverrides:
+#      postgresPassword: ""
+
 
 metrics:
   enable: false
