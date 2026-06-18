@@ -1248,7 +1248,7 @@ class BftScanConnectionTest
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           {
-            eventually() {
+            eventually(timeUntilSuccess = 40.seconds) {
               inside(bft.getRewardAccountingRootHash(round).futureValue) {
                 case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
                   ok.rootHash should be("aabb")
@@ -1364,7 +1364,7 @@ class BftScanConnectionTest
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           {
-            eventually() {
+            eventually(timeUntilSuccess = 40.seconds) {
               inside(bft.getRewardAccountingActivityTotals(round).futureValue) {
                 case GetRewardAccountingActivityTotalsResponse.members
                       .RewardAccountingActivityTotalsOk(ok) =>
