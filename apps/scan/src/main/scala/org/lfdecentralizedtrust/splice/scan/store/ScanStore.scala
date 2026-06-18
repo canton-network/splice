@@ -53,6 +53,8 @@ trait ScanStore
     with VotesStore
     with ExternalPartyConfigStateStore {
 
+  override def dsoPartyId = key.dsoParty
+
   def key: ScanStore.Key
 
   protected[store] def domainMigrationId: Long

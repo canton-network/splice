@@ -80,6 +80,8 @@ trait SvDsoStore
 
   def key: SvStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   def domainMigrationId: Long
 
   def lookupSvStatusReport(svPartyId: PartyId)(implicit

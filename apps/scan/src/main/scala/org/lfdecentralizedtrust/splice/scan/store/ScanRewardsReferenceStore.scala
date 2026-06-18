@@ -32,6 +32,8 @@ trait ScanRewardsReferenceStore extends AppStore {
 
   def key: ScanRewardsReferenceStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   /** Waits for this store to be initialized.
     * All other methods on this store will independently wait for initialization
     * to complete before returning results, this method is useful for cases where
