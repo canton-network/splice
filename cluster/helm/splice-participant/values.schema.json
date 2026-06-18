@@ -76,6 +76,14 @@
         },
         "enableParticipantDbConflictCheck": {
           "type": "boolean"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },
