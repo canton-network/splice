@@ -150,12 +150,14 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           c.payload.provider == bobParty.toProtoPrimitive && c.payload.beneficiary.isEmpty
         )
 
+    // TODO: (#5624) Fix the bootstrap of network such that processing of rounds
+    // before the first activity by a featured-app is ingested, and use advanceRoundsToNextRoundOpening
     for (round <- 1 to 3) {
-      advanceRoundsToNextRoundOpening
+      advanceTimeAndWaitForRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
-    advanceRoundsToNextRoundOpening
+    advanceTimeAndWaitForRoundOpening
     assertOldestOpenRound(4)
     // FA right now effective from round 4
     doTransfer()
