@@ -1,20 +1,34 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.daml.ledger.api.v2.CommandsOuterClass
+import com.daml.ledger.api.v2.event.CreatedEvent.toJavaProto as createdEventToJavaProto
+import com.daml.ledger.api.v2.value.Identifier.toJavaProto as identifierToJavaProto
+import com.daml.ledger.javaapi.data.CreatedEvent
+import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_ContractId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  holdingv2,
+  metadatav1,
+  transferinstructionv2,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.BatchingUtility as BatchingUtilityV2
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
+import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
-import org.lfdecentralizedtrust.splice.util.{
-  StandaloneCanton,
-  TimeTestUtil,
-  TriggerTestUtil,
-  WalletTestUtil,
-}
+import org.lfdecentralizedtrust.splice.util.*
 
 import java.nio.file.Paths
+import java.time.Instant
+import scala.jdk.CollectionConverters.*
 
 // Not checking Daml compatibility because it doesn't make sense with TestTokenV2
 @org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
@@ -55,9 +69,9 @@ class TestTokenV2SettlementIntegrationTest
       .simpleTopology1SvWithLocalValidator(this.getClass.getSimpleName)
       .withoutAliceValidatorConnectingToSplitwell
       .withSequencerConnectionsFromScanDisabled()
-      .addConfigTransform((_, conf) =>
-        conf.copy(
-          svApps = conf.svApps.map { case (instanceName, svApp) =>
+      .addConfigTransform((_, config) =>
+        config.copy(
+          svApps = config.svApps.map { case (instanceName, svApp) =>
             instanceName -> svApp.copy(expectedValidatorOnboardings =
               svApp.expectedValidatorOnboardings :+ ExpectedValidatorOnboardingConfig(
                 "aliceExtraValidator"
@@ -65,7 +79,7 @@ class TestTokenV2SettlementIntegrationTest
             )
           },
           validatorApps =
-            conf.validatorApps.updatedWith(InstanceName.tryCreate("aliceValidatorLocal")) {
+            config.validatorApps.updatedWith(InstanceName.tryCreate("aliceValidatorLocal")) {
               _.map { aliceValidatorConfig =>
                 aliceValidatorConfig.copy(
                   adminApi = aliceValidatorConfig.adminApi
@@ -75,6 +89,18 @@ class TestTokenV2SettlementIntegrationTest
                 )
               }
             },
+          walletAppClients = config.walletAppClients + (
+            InstanceName.tryCreate("aliceValidatorLocalWallet") -> {
+              val aliceValidatorWalletConfig =
+                config.walletAppClients(InstanceName.tryCreate("aliceValidatorWallet"))
+
+              aliceValidatorWalletConfig
+                .copy(
+                  adminApi = aliceValidatorWalletConfig.adminApi
+                    .copy(url = bumpUrl(22_000, aliceValidatorWalletConfig.adminApi.url.toString()))
+                )
+            }
+          ),
         )
       )
   }
@@ -91,16 +117,194 @@ class TestTokenV2SettlementIntegrationTest
       "EXTRA_PARTICIPANT_DB" -> dbName,
     ) {
       Seq(
-        sv1ValidatorBackend,
-        aliceValidatorBackend,
-        bobValidatorBackend,
-        aliceValidatorLocalBackend,
+        sv1ValidatorBackend, // hosts DSO
+        aliceValidatorBackend, // hosts Alice
+        bobValidatorBackend, // hosts Bob
+        splitwellValidatorBackend, // hosts the venue party
+        aliceValidatorLocalBackend, // hosts the ttadmin
       ).foreach { validatorBackend =>
         validatorBackend.startSync()
         validatorBackend.participantClient
           .upload_dar_unless_exists(testTokenV2DarPath)
       }
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      val venueValidator = splitwellValidatorBackend
+      val venueParty = venueValidator.getValidatorPartyId()
+      logger.info(venueParty.toProtoPrimitive)
+      val ttAdminValidator = aliceValidatorLocalBackend
+      val ttAdminParty = ttAdminValidator.getValidatorPartyId()
+      val registry = new TestTokenV2Registry(ttAdminParty, ttAdminValidator)
+
+      // make venue and ttadmin featured app parties
+      splitwellWalletClient.selfGrantFeaturedAppRight()
+      aliceValidatorWalletLocalClient.selfGrantFeaturedAppRight()
+
+      // Create BatchingUtilityV2 contracts for Alice and Bob
+      Map(aliceValidatorBackend -> aliceParty, bobValidatorBackend -> bobParty).foreach {
+        case (validatorBackend, party) =>
+          validatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(party),
+              commands = BatchingUtilityV2.create(party.toProtoPrimitive).commands().asScala.toSeq,
+            )
+      }
+
+      // Create TokenRules for ttadmin
+      val tokenRulesId = ttAdminValidator.participantClient.ledger_api_extensions.commands
+        .submitWithResult(
+          userId = ttAdminValidator.config.ledgerApiUser,
+          actAs = Seq(ttAdminParty),
+          readAs = Seq(ttAdminParty),
+          update = TokenV2Rules.create(ttAdminParty.toProtoPrimitive),
+        )
+        .contractId
+
+      // Call TokenRules_OfferMint to offer 100 USDC to Bob
+      val bobConfigAccount = new testtokenv2.accountconfig.AccountConfig(
+        ttAdminParty.toProtoPrimitive,
+        basicAccount(bobParty),
+        new testtokenv2.accountconfig.PartyConfig(true, true),
+        new testtokenv2.accountconfig.PartyConfig(false, false),
+      )
+      ttAdminValidator.participantClient.ledger_api_extensions.commands
+        .submitJava(
+          userId = ttAdminValidator.config.ledgerApiUser,
+          actAs = Seq(ttAdminParty),
+          commands = tokenRulesId
+            .exerciseTokenRules_OfferMint(
+              basicAccount(bobParty),
+              BigDecimal(100).bigDecimal,
+              new holdingv2.InstrumentId(ttAdminParty.toProtoPrimitive, "USDC"),
+              Instant.now(),
+              bobConfigAccount,
+            )
+            .commands()
+            .asScala
+            .toSeq,
+        )
+
+      // Bob accepts
+      val transferInstruction =
+        Contract
+          .fromCreatedEvent(transferinstructionv2.TransferInstruction.INTERFACE)(
+            CreatedEvent.fromProto(
+              createdEventToJavaProto(
+                bobValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+                  .of_party(
+                    party = bobParty,
+                    filterInterfaces =
+                      Seq(transferinstructionv2.TransferInstruction.TEMPLATE_ID).map(templateId =>
+                        TemplateId(
+                          templateId.getPackageId,
+                          templateId.getModuleName,
+                          templateId.getEntityName,
+                        )
+                      ),
+                  )
+                  .loneElement
+                  .event
+              )
+            )
+          )
+          .valueOrFail("Failed to read transferinstructionv2.TransferInstruction")
+      val acceptContext =
+        registry.getTransferInstructionAcceptContext(transferInstruction)
+      bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitWithResult(
+          userId = bobValidatorBackend.config.ledgerApiUser,
+          actAs = Seq(bobParty),
+          readAs = Seq(bobParty),
+          update = transferInstruction.contractId.exerciseTransferInstruction_Accept(
+            java.util.List.of(bobParty.toProtoPrimitive),
+            new metadatav1.ExtraArgs(acceptContext.choiceContext, emptyMetadata),
+          ),
+          disclosedContracts = acceptContext.disclosedContracts,
+        )
     }
   }
 
+  class TestTokenV2Registry(
+      adminParty: PartyId,
+      adminValidatorBackend: ValidatorAppBackendReference,
+  ) {
+    private def getTokenRules() = {
+      val fromLedger = adminValidatorBackend.participantClient.ledger_api.state.acs
+        .of_party(
+          party = adminParty,
+          filterTemplates = Seq(TokenV2Rules.TEMPLATE_ID).map(templateId =>
+            TemplateId(
+              templateId.getPackageId,
+              templateId.getModuleName,
+              templateId.getEntityName,
+            )
+          ),
+          includeCreatedEventBlob = true,
+        )
+        .loneElement
+      Contract
+        .fromCreatedEvent(TokenV2Rules.COMPANION)(
+          CreatedEvent.fromProto(
+            createdEventToJavaProto(
+              fromLedger.event
+            )
+          )
+        )
+        .valueOrFail("Failed to read TokenV2Rules") -> fromLedger.synchronizerId.valueOrFail(
+        "No synchronizerid defined"
+      )
+    }
+
+    def getTransferInstructionAcceptContext(
+        transferInstruction: Contract[
+          transferinstructionv2.TransferInstruction.ContractId,
+          transferinstructionv2.TransferInstructionView,
+        ]
+    ): ChoiceContextWithDisclosures = {
+      val (tokenRules, synchronizerId) = getTokenRules()
+      val holdings = transferInstruction.payload.transfer.inputHoldingCids.asScala.map {
+        holdingCid =>
+          val holding = adminValidatorBackend.participantClient.ledger_api.state.acs
+            .of_party(
+              party = adminParty,
+              filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+                TemplateId(
+                  templateId.getPackageId,
+                  templateId.getModuleName,
+                  templateId.getEntityName,
+                )
+              ),
+              includeCreatedEventBlob = true,
+            )
+            .find(_.contractId == holdingCid.contractId)
+            .valueOrFail(s"No Holding for cid $holdingCid")
+          CommandsOuterClass.DisclosedContract
+            .newBuilder()
+            .setContractId(holdingCid.contractId)
+            .setCreatedEventBlob(holding.event.createdEventBlob)
+            .setSynchronizerId(synchronizerId.toProtoPrimitive)
+            .setTemplateId(identifierToJavaProto(holding.templateId.toIdentifier))
+            .build()
+      }
+
+      val disclosedContracts = holdings :+ CommandsOuterClass.DisclosedContract
+        .newBuilder()
+        .setContractId(tokenRules.contractId.contractId)
+        .setCreatedEventBlob(tokenRules.createdEventBlob)
+        .setSynchronizerId(synchronizerId.toProtoPrimitive)
+        .setTemplateId(tokenRules.identifier.toProto)
+        .build()
+      ChoiceContextWithDisclosures(
+        disclosedContracts.toSeq,
+        new metadatav1.ChoiceContext(
+          java.util.Map.of(
+            "testTokenV2/tokenRules",
+            new AV_ContractId(
+              new metadatav1.AnyContract.ContractId(tokenRules.contractId.contractId)
+            ),
+          )
+        ),
+      )
+    }
+  }
 }
