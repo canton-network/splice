@@ -765,6 +765,15 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   );
 }
 
+function substituteDsoMissedConfirmationsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
+  return alert
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT', (config.threshold * 100).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -955,6 +964,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
               ),
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
+            ),
+            'dso_missed_confirmations_alerts.yaml': substituteDsoMissedConfirmationsAlerts(
+              readGrafanaAlertingFile('dso_missed_confirmations_alerts.yaml')
             ),
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
