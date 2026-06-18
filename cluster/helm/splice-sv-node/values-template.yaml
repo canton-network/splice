@@ -5,6 +5,12 @@ imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "sv-app"
 ui:
   imageName: "sv-web-ui"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  # This is useful for integrating with external secret management tools.
+  # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+  #  secretOverrides:
+  #    clientId: ""
+  #    url: ""
 
 # Custom annotations and labels for deployed resources
 pod:
