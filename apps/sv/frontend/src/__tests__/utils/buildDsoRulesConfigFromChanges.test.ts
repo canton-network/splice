@@ -57,7 +57,7 @@ describe('buildDsoRulesConfigFromChanges', () => {
     });
   });
 
-  it('should map an empty acsCommitmentReconciliationInterval to null, not an empty string', () => {
+  it('should serialize an empty nullable acsCommitmentReconciliationInterval as null, not ""', () => {
     const changes: ConfigChange[] = [
       {
         fieldName: 'decentralizedSynchronizer1',
