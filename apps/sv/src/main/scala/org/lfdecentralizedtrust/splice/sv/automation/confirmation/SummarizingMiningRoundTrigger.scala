@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
 import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter}
-import com.daml.metrics.api.MetricQualification.Traffic
+import com.daml.metrics.api.MetricQualification.Errors
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -313,7 +313,7 @@ object SummarizingMiningRoundTrigger {
           summary = "Count of BFT reads of the reward-accounting totals",
           description =
             "This metric counts the BFT reads of the reward-accounting totals performed by the SummarizingMiningRound trigger, i.e., the cases where this SV's own Scan could not provide the totals and it had to be obtained via a BFT read against peer Scans.",
-          qualification = Traffic,
+          qualification = Errors,
         )
       )(metricsContext)
   }

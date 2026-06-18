@@ -34,7 +34,7 @@ import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
-import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.{Set as DamlSet}
+import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.Set as DamlSet
 import com.daml.ledger.javaapi.data.Unit as DamlUnit
 import com.digitalasset.canton.topology.PartyId
 
@@ -43,7 +43,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
 import ProcessRewardsTriggerBase.*
 import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter, Timer}
-import com.daml.metrics.api.MetricQualification.{Latency, Traffic}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
@@ -264,7 +264,7 @@ object ProcessRewardsTriggerBase {
           summary = "Count of BFT reads of the reward-accounting batch",
           description =
             "This metric counts the BFT reads of the reward-accounting batch performed by the ProcessRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the batch and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
-          qualification = Traffic,
+          qualification = Errors,
         )
       )(metricsContext)
   }

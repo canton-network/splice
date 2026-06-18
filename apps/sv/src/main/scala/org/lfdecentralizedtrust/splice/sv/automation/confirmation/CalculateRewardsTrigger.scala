@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
 import com.daml.metrics.api.MetricHandle.{Gauge, LabeledMetricsFactory, Meter, Timer}
-import com.daml.metrics.api.MetricQualification.{Latency, Saturation, Traffic}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency, Saturation}
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -281,7 +281,7 @@ object CalculateRewardsTriggerBase {
           summary = "Count of BFT reads of the reward-accounting root-hash",
           description =
             "This metric counts the BFT reads of the reward-accounting root-hash performed by the CalculateRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the root-hash and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
-          qualification = Traffic,
+          qualification = Errors,
         )
       )(metricsContext)
 
