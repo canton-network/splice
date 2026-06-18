@@ -180,9 +180,9 @@ abstract class NodeBootstrapBase[
       .onComplete {
         case Success(UnlessShutdown.Outcome(Some(value))) if value.trim.toLowerCase == "on" =>
           logger.info("PostgreSQL data checksums are enabled.")
-        case Success(UnlessShutdown.Outcome(_)) =>
+        case Success(UnlessShutdown.Outcome(value)) =>
           logger.warn(
-            s"PostgreSQL data checksums are not enabled on the database. See https://www.postgresql.org/docs/current/checksums.html"
+            s"PostgreSQL data checksums are not enabled on the database (result: $value). See https://www.postgresql.org/docs/current/checksums.html"
           )
         case Success(UnlessShutdown.AbortedDueToShutdown) =>
           ()
