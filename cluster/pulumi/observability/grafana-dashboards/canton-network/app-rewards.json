@@ -42,7 +42,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -73,34 +107,30 @@
       },
       "id": 32,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "splice_scan_reward_computation_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"$dryRun\"}",
+          "expr": "max by (namespace)(splice_scan_reward_computation_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"} != -1)",
           "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "CalculateRewardsV2 contracts in scan",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -110,7 +140,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -141,34 +205,30 @@
       },
       "id": 33,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "splice_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"$dryRun\"}",
+          "expr": "max by (namespace)(splice_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"} != -1)",
           "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "CalculateRewardsV2 contracts in sv app",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -178,7 +238,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -209,21 +303,17 @@
       },
       "id": 34,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.0",
       "targets": [
@@ -236,7 +326,7 @@
         }
       ],
       "title": "ProcessRewardsV2 contracts in sv app",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -1336,7 +1426,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards.*Trigger\", trigger_type=\"taskbased\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards${dryRun}\", trigger_type=\"taskbased\"}[$__rate_interval]))",
           "instant": true,
           "legendFormat": "{{namespace}}",
           "range": true,
@@ -1530,9 +1620,9 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_avg(rate(splice_calculate_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "histogram_avg(rate(splice_calculate_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval]))",
           "instant": true,
-          "legendFormat": "{{namespace}} {{dryRun}}",
+          "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
@@ -1629,7 +1719,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(splice_trigger_completed_total{trigger_name=~\"ProcessRewards(DryRun)?Trigger\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "expr": "rate(splice_trigger_completed_total{trigger_name=\"ProcessRewards${dryRun}\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "{{namespace}} {{outcome}}",
           "range": true,
           "refId": "A"
@@ -1728,7 +1818,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards.*Trigger\", statusCode!~\"OK\"}[$__rate_interval]))",
+          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=\"CalculateRewards${dryRun}\", statusCode!~\"OK\"}[$__rate_interval]))",
           "instant": false,
           "legendFormat": "{{namespace}} {{statusCode}}",
           "range": true,
@@ -1828,7 +1918,7 @@
           "exemplar": false,
           "expr": "rate(splice_calculate_rewards_v2_root_hash_bft_reads{namespace=~\"$namespace\"}[$__rate_interval])",
           "instant": true,
-          "legendFormat": "{{namespace}} {{dryRun}}",
+          "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
@@ -1940,7 +2030,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"ProcessRewards.*Trigger\", trigger_type=\"taskbased\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=\"ProcessRewards${dryRun}\", trigger_type=\"taskbased\"}[$__rate_interval]))",
           "instant": true,
           "legendFormat": "{{namespace}}",
           "range": true,
@@ -2133,8 +2223,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_avg(rate(splice_process_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}} {{dryRun}}",
+          "expr": "histogram_avg(rate(splice_process_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval]))",
+          "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
@@ -2231,7 +2321,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(splice_trigger_completed_total{trigger_name=~\"ProcessRewards(DryRun)?Trigger\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "expr": "rate(splice_trigger_completed_total{trigger_name=\"ProcessRewards${dryRun}\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "{{namespace}} {{trigger_name}} {{outcome}}",
           "range": true,
           "refId": "A"
@@ -2245,6 +2335,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Note: this is a delegate based trigger. It is normal that this trigger fails (e.g., with FAILED_PRECONDITION/UNKNOWN_CONTRACT_SYNCHRONIZERS) if multiple SVs attempt to complete a task at the same time.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2330,7 +2421,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=~\"ProcessRewards.*Trigger\", statusCode!~\"OK\"}[$__rate_interval])) > 0",
+          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=\"ProcessRewards${dryRun}\", statusCode!~\"OK\"}[$__rate_interval])) > 0",
           "instant": false,
           "legendFormat": "{{namespace}} {{statusCode}}",
           "range": true,
@@ -2428,9 +2519,9 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "rate(splice_calculate_rewards_v2_root_hash_bft_reads{namespace=~\"$namespace\"}[$__rate_interval])",
+          "expr": "rate(splice_process_rewards_v2_batch_bft_reads_total{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval])",
           "instant": true,
-          "legendFormat": "{{namespace}} {{dryRun}}",
+          "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
@@ -2446,21 +2537,9 @@
     "list": [
       {
         "current": {
-          "text": [
-            "sv-2",
-            "sv-3",
-            "sv-4",
-            "sv-5",
-            "sv-6",
-            "sv-7"
-          ],
+          "text": "All",
           "value": [
-            "sv-2",
-            "sv-3",
-            "sv-4",
-            "sv-5",
-            "sv-6",
-            "sv-7"
+            "$__all"
           ]
         },
         "datasource": {
@@ -2484,52 +2563,27 @@
       },
       {
         "current": {
-          "text": [
-            "true"
-          ],
-          "value": [
-            "true"
-          ]
+          "text": "DryRunTrigger",
+          "value": "DryRunTrigger"
         },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "definition": "label_values(splice_calculate_rewards_v2_processing_delay_duration_seconds,dryRun)",
+        "includeAll": false,
         "label": "Dry run",
-        "multi": true,
-        "name": "dryrun",
+        "name": "dryRun",
         "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(splice_calculate_rewards_v2_processing_delay_duration_seconds,dryRun)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "regexApplyTo": "value",
-        "staticOptions": [
-          {
-            "text": "true",
-            "value": "true"
-          },
-          {
-            "text": "false",
-            "value": "false"
-          }
-        ],
-        "type": "query"
+        "query": "true : DryRunTrigger, false : Trigger",
+        "type": "custom",
+        "valuesFormat": "csv"
       }
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Traffic-based app rewards (CIP-104)",
   "uid": "cnx7gsn",
-  "version": 18,
+  "version": 28,
   "weekStart": ""
 }
