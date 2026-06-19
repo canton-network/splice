@@ -161,7 +161,7 @@ monitoring:
         successfulDisagreementThreshold: 5
         excludedRequests:
           - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
-          - "getOpenAndIssuingMiningRounds"
+          - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
         excludedConnections: []
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
