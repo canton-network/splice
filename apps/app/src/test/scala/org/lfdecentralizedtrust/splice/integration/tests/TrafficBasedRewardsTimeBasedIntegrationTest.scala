@@ -628,7 +628,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       withClue(
         s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        weightSum should be > (totalTrafficCost - numFeaturedAppParties)
+        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
         weightSum should be <= totalTrafficCost
       }
     }
