@@ -84,6 +84,7 @@ abstract class InStackDecentralizedSynchronizerNode
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
     },
     driver:
       | { type: 'cometbft'; host: Output<string>; port: number }
@@ -97,6 +98,12 @@ abstract class InStackDecentralizedSynchronizerNode
             databaseName?: string;
             port?: number;
             user?: string;
+            migrateFrom?: {
+              host: Output<string>;
+              secretName: Output<string>;
+              port?: number;
+              user?: string;
+            };
           };
         },
     version: CnChartVersion,
@@ -181,7 +188,11 @@ abstract class InStackDecentralizedSynchronizerNode
       this.version,
       {
         ...opts,
-        dependsOn: (opts?.dependsOn || []).concat([dbs.sequencerPostgres, dbs.mediatorPostgres]),
+        dependsOn: (opts?.dependsOn || []).concat(
+          [dbs.sequencerPostgres, dbs.mediatorPostgres].concat(
+            dbs.bftSequencerPostgres ? [dbs.bftSequencerPostgres] : []
+          )
+        ),
         parent: this,
       }
     );
@@ -288,12 +299,32 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
+      migrateBftSequencerDbFromSharedServer?: boolean;
     },
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
   ) {
     super(migrationId, xns, version);
+    const databaseName = `sequencer_${migrationId}_dabft`;
+    const persistence = dbs.bftSequencerPostgres
+      ? {
+          host: dbs.bftSequencerPostgres.address,
+          secretName: dbs.bftSequencerPostgres.secretName,
+          databaseName,
+          ...(dbs.migrateBftSequencerDbFromSharedServer
+            ? {
+                migrateFrom: {
+                  host: dbs.sequencerPostgres.address,
+                  secretName: dbs.sequencerPostgres.secretName,
+                },
+              }
+            : {}),
+        }
+      : {
+          databaseName,
+        };
     this.installDecentralizedSynchronizer(
       svConfig,
       migrationId,
@@ -302,9 +333,7 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
         type: 'cantonbft',
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
-        persistence: {
-          databaseName: `sequencer_${migrationId}_dabft`,
-        },
+        persistence,
       },
       version,
       svConfig.logging?.cantonLogLevel,

@@ -276,6 +276,28 @@
       },
       "kind": "Secret",
       "metadata": {
+        "name": "sequencer-bft-10-pg-secrets",
+        "namespace": "sv-1"
+      },
+      "type": "Opaque"
+    },
+    "name": "cn-app-sv-1-sequencer-bft-10-pg-secrets",
+    "provider": "",
+    "type": "kubernetes:core/v1:Secret"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "data": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": {
+          "postgresPassword": ""
+        }
+      },
+      "kind": "Secret",
+      "metadata": {
         "name": "mediator-10-pg-secrets",
         "namespace": "sv-da-1"
       },
@@ -540,6 +562,28 @@
       },
       "kind": "Secret",
       "metadata": {
+        "name": "sequencer-bft-10-pg-secrets",
+        "namespace": "sv-da-1"
+      },
+      "type": "Opaque"
+    },
+    "name": "cn-app-sv-da-1-sequencer-bft-10-pg-secrets",
+    "provider": "",
+    "type": "kubernetes:core/v1:Secret"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "data": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": {
+          "postgresPassword": ""
+        }
+      },
+      "kind": "Secret",
+      "metadata": {
         "name": "mediator-10-pg-secrets",
         "namespace": "sv"
       },
@@ -788,6 +832,28 @@
       "type": "Opaque"
     },
     "name": "cn-app-sv-sequencer-9-pg-secrets",
+    "provider": "",
+    "type": "kubernetes:core/v1:Secret"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "data": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": {
+          "postgresPassword": ""
+        }
+      },
+      "kind": "Secret",
+      "metadata": {
+        "name": "sequencer-bft-10-pg-secrets",
+        "namespace": "sv"
+      },
+      "type": "Opaque"
+    },
+    "name": "cn-app-sv-sequencer-bft-10-pg-secrets",
     "provider": "",
     "type": "kubernetes:core/v1:Secret"
   },
@@ -1876,6 +1942,16 @@
     "type": "gcp:sql/database:Database"
   },
   {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cantonnet"
+    },
+    "name": "sv-1-db-sequencer-bft-10-pg-cantonnet",
+    "provider": "",
+    "type": "gcp:sql/database:Database"
+  },
+  {
     "custom": false,
     "id": "",
     "inputs": {},
@@ -1974,7 +2050,8 @@
             "externalAddress": "sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com",
             "externalPort": 443,
             "persistence": {
-              "databaseName": "sequencer_10_dabft"
+              "databaseName": "sequencer_10_dabft",
+              "secretName": "sequencer-bft-10-pg-secrets"
             },
             "type": "cantonbft"
           },
@@ -3966,6 +4043,136 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "sv-1-sequencer-bft-10-pg-cnadmin-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {
+      "active": true,
+      "alias": "sequencer-bft-pg",
+      "cloudSqlConfig": {
+        "enabled": true,
+        "enterprisePlus": false,
+        "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
+          "random_page_cost": "1.1",
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "protected": true,
+        "tier": "sequencer-override-tier"
+      },
+      "defaultUserName": "cnadmin",
+      "deletionProtection": true,
+      "instanceName": "sequencer-bft-10-pg",
+      "logicalDecoding": false,
+      "migrationId": 10,
+      "namespace": {
+        "logicalName": "sv-1",
+        "ns": {
+          "__aliases": [],
+          "__name": "sv-1",
+          "__providers": {},
+          "__pulumiCustomResource": true,
+          "__pulumiResource": true,
+          "__pulumiType": "kubernetes:core/v1:Namespace",
+          "__transformations": [],
+          "__version": "4.28.0",
+          "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "metadata": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "spec": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "status": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "urn": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi."
+        }
+      },
+      "retainDbResourcesOnDelete": false,
+      "secretName": "sequencer-bft-10-pg-secrets"
+    },
+    "name": "sv-1-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "canton:cloud:postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "databaseVersion": "POSTGRES_14",
+      "deletionProtection": false,
+      "region": "europe-west6",
+      "settings": {
+        "activationPolicy": "ALWAYS",
+        "backupConfiguration": {
+          "enabled": true,
+          "pointInTimeRecoveryEnabled": true
+        },
+        "databaseFlags": [
+          {
+            "name": "random_page_cost",
+            "value": "1.1"
+          },
+          {
+            "name": "temp_file_limit",
+            "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
+          }
+        ],
+        "deletionProtectionEnabled": true,
+        "edition": "ENTERPRISE",
+        "insightsConfig": {
+          "queryInsightsEnabled": true
+        },
+        "ipConfiguration": {
+          "enablePrivatePathForGoogleCloudServices": true,
+          "ipv4Enabled": false,
+          "privateNetwork": "projects/test-project/global/networks/default"
+        },
+        "locationPreference": {
+          "zone": "europe-west6-a"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "tier": "sequencer-override-tier",
+        "userLabels": {
+          "cluster": "mock",
+          "migration_id": "10"
+        }
+      }
+    },
+    "name": "sv-1-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "gcp:sql/databaseInstance:DatabaseInstance"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Secret",
       "metadata": {
@@ -5375,6 +5582,16 @@
     "type": "gcp:sql/database:Database"
   },
   {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cantonnet"
+    },
+    "name": "sv-da-1-db-sequencer-bft-10-pg-cantonnet",
+    "provider": "",
+    "type": "gcp:sql/database:Database"
+  },
+  {
     "custom": false,
     "id": "",
     "inputs": {},
@@ -5473,7 +5690,8 @@
             "externalAddress": "sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com",
             "externalPort": 443,
             "persistence": {
-              "databaseName": "sequencer_10_dabft"
+              "databaseName": "sequencer_10_dabft",
+              "secretName": "sequencer-bft-10-pg-secrets"
             },
             "type": "cantonbft"
           },
@@ -7465,6 +7683,136 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "sv-da-1-sequencer-bft-10-pg-cnadmin-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {
+      "active": true,
+      "alias": "sequencer-bft-pg",
+      "cloudSqlConfig": {
+        "enabled": true,
+        "enterprisePlus": false,
+        "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
+          "random_page_cost": "1.1",
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "protected": true,
+        "tier": "sequencer-override-tier"
+      },
+      "defaultUserName": "cnadmin",
+      "deletionProtection": true,
+      "instanceName": "sequencer-bft-10-pg",
+      "logicalDecoding": false,
+      "migrationId": 10,
+      "namespace": {
+        "logicalName": "sv-da-1",
+        "ns": {
+          "__aliases": [],
+          "__name": "sv-da-1",
+          "__providers": {},
+          "__pulumiCustomResource": true,
+          "__pulumiResource": true,
+          "__pulumiType": "kubernetes:core/v1:Namespace",
+          "__transformations": [],
+          "__version": "4.28.0",
+          "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "metadata": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "spec": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "status": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "urn": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi."
+        }
+      },
+      "retainDbResourcesOnDelete": false,
+      "secretName": "sequencer-bft-10-pg-secrets"
+    },
+    "name": "sv-da-1-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "canton:cloud:postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "databaseVersion": "POSTGRES_14",
+      "deletionProtection": false,
+      "region": "europe-west6",
+      "settings": {
+        "activationPolicy": "ALWAYS",
+        "backupConfiguration": {
+          "enabled": true,
+          "pointInTimeRecoveryEnabled": true
+        },
+        "databaseFlags": [
+          {
+            "name": "random_page_cost",
+            "value": "1.1"
+          },
+          {
+            "name": "temp_file_limit",
+            "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
+          }
+        ],
+        "deletionProtectionEnabled": true,
+        "edition": "ENTERPRISE",
+        "insightsConfig": {
+          "queryInsightsEnabled": true
+        },
+        "ipConfiguration": {
+          "enablePrivatePathForGoogleCloudServices": true,
+          "ipv4Enabled": false,
+          "privateNetwork": "projects/test-project/global/networks/default"
+        },
+        "locationPreference": {
+          "zone": "europe-west6-a"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "tier": "sequencer-override-tier",
+        "userLabels": {
+          "cluster": "mock",
+          "migration_id": "10"
+        }
+      }
+    },
+    "name": "sv-da-1-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "gcp:sql/databaseInstance:DatabaseInstance"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Secret",
       "metadata": {
@@ -7936,6 +8284,16 @@
     "type": "gcp:sql/database:Database"
   },
   {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cantonnet"
+    },
+    "name": "sv-db-sequencer-bft-10-pg-cantonnet",
+    "provider": "",
+    "type": "gcp:sql/database:Database"
+  },
+  {
     "custom": false,
     "id": "",
     "inputs": {},
@@ -8034,7 +8392,8 @@
             "externalAddress": "sequencer-p2p-10.sv.mock.global.canton.network.digitalasset.com",
             "externalPort": 443,
             "persistence": {
-              "databaseName": "sequencer_10_dabft"
+              "databaseName": "sequencer_10_dabft",
+              "secretName": "sequencer-bft-10-pg-secrets"
             },
             "type": "cantonbft"
           },
@@ -10038,6 +10397,137 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "sv-sequencer-bft-10-pg-cnadmin-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {
+      "active": true,
+      "alias": "sequencer-bft-pg",
+      "cloudSqlConfig": {
+        "enabled": true,
+        "enterprisePlus": false,
+        "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
+          "random_page_cost": "1.1",
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "protected": true,
+        "tier": "sequencer-override-tier"
+      },
+      "defaultUserName": "cnadmin",
+      "deletionProtection": false,
+      "disableProtection": true,
+      "instanceName": "sequencer-bft-10-pg",
+      "logicalDecoding": false,
+      "migrationId": 10,
+      "namespace": {
+        "logicalName": "sv",
+        "ns": {
+          "__aliases": [],
+          "__name": "sv",
+          "__providers": {},
+          "__pulumiCustomResource": true,
+          "__pulumiResource": true,
+          "__pulumiType": "kubernetes:core/v1:Namespace",
+          "__transformations": [],
+          "__version": "4.28.0",
+          "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "metadata": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "spec": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "status": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "urn": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi."
+        }
+      },
+      "retainDbResourcesOnDelete": false,
+      "secretName": "sequencer-bft-10-pg-secrets"
+    },
+    "name": "sv-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "canton:cloud:postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "databaseVersion": "POSTGRES_14",
+      "deletionProtection": false,
+      "region": "europe-west6",
+      "settings": {
+        "activationPolicy": "ALWAYS",
+        "backupConfiguration": {
+          "enabled": true,
+          "pointInTimeRecoveryEnabled": true
+        },
+        "databaseFlags": [
+          {
+            "name": "random_page_cost",
+            "value": "1.1"
+          },
+          {
+            "name": "temp_file_limit",
+            "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
+          }
+        ],
+        "deletionProtectionEnabled": false,
+        "edition": "ENTERPRISE",
+        "insightsConfig": {
+          "queryInsightsEnabled": true
+        },
+        "ipConfiguration": {
+          "enablePrivatePathForGoogleCloudServices": true,
+          "ipv4Enabled": false,
+          "privateNetwork": "projects/test-project/global/networks/default"
+        },
+        "locationPreference": {
+          "zone": "europe-west6-a"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "tier": "sequencer-override-tier",
+        "userLabels": {
+          "cluster": "mock",
+          "migration_id": "10"
+        }
+      }
+    },
+    "name": "sv-sequencer-bft-10-pg",
+    "provider": "",
+    "type": "gcp:sql/databaseInstance:DatabaseInstance"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Secret",
       "metadata": {
@@ -10566,6 +11056,20 @@
         "value": null
       }
     },
+    "name": "user-sv-1-sequencer-bft-10-pg-cnadmin",
+    "provider": "",
+    "type": "gcp:sql/user:User"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cnadmin",
+      "password": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": null
+      }
+    },
     "name": "user-sv-da-1-mediator-10-pg-cnadmin",
     "provider": "",
     "type": "gcp:sql/user:User"
@@ -10734,6 +11238,20 @@
         "value": null
       }
     },
+    "name": "user-sv-da-1-sequencer-bft-10-pg-cnadmin",
+    "provider": "",
+    "type": "gcp:sql/user:User"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cnadmin",
+      "password": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": null
+      }
+    },
     "name": "user-sv-mediator-10-pg-cnadmin",
     "provider": "",
     "type": "gcp:sql/user:User"
@@ -10889,6 +11407,20 @@
       }
     },
     "name": "user-sv-sequencer-9-pg-cnadmin",
+    "provider": "",
+    "type": "gcp:sql/user:User"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "name": "cnadmin",
+      "password": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": null
+      }
+    },
+    "name": "user-sv-sequencer-bft-10-pg-cnadmin",
     "provider": "",
     "type": "gcp:sql/user:User"
   }

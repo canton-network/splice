@@ -32,6 +32,10 @@ export const MigrationInfoSchema = z
     sequencer: z
       .object({
         enableBftSequencer: z.boolean().default(false),
+        // Use a separate DB server for DABFT.
+        dedicatedBftSequencerDb: z.boolean().default(true),
+        // Migrate data from dedicatedBftSequencerDb: false => dedicatedBftSequencerDb: true
+        migrateBftSequencerDbFromSharedServer: z.boolean().default(false),
       })
       .strict()
       .prefault({}),

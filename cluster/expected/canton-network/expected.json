@@ -302,7 +302,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": false
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": false,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
@@ -323,7 +325,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -343,7 +347,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -361,7 +367,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -383,7 +391,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": false
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": false,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
@@ -403,7 +413,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": true
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": true,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
