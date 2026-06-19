@@ -20,7 +20,7 @@ jobs:
 
   get_head:
     runs-on: ubuntu-24.04
-    if: github.event.issue.pull_request || github.event_name == 'workflow_call'
+    if: ${{ !github.event_name == 'issue_comment' || github.event.issue.pull_request }}
     outputs:
       sha: ${{ steps.get_head.outputs.sha }}
       repo: ${{ steps.get_head.outputs.repo }}
@@ -45,6 +45,7 @@ jobs:
 
   determine_test_type:
     runs-on: ubuntu-24.04
+    if: ${{ !github.event_name == 'issue_comment' || github.event.issue.pull_request }}
     outputs:
       workflow: ${{ steps.determine_test_type.outputs.workflow }}
     steps:
@@ -57,23 +58,20 @@ jobs:
           script: |
             let workflow = '';
 
-            switch (context.eventName) {
-              case 'workflow_call':
-                workflow = process.env.INPUTS_WORKFLOW;
-                break;
-              case 'issue_comment':
-                const body = context.payload.comment.body || '';
-                
-                if (body.includes('/cluster_test')) {
-                  workflow = 'cluster_test';
-                } else if (body.includes('/hdm_test')) {
-                  workflow = 'hdm_test';
-                } else if (body.includes('/lsu_test')) {
-                  workflow = 'lsu_test';
-                } else if (body.includes('/upgrade_test')) {
-                  workflow = 'upgrade_test';
-                }
-                break;
+            if (process.env.INPUTS_WORKFLOW !== '') {
+              workflow = process.env.INPUTS_WORKFLOW;
+            } else {
+              const body = context.payload.comment.body || '';
+              
+              if (body.includes('/cluster_test')) {
+                workflow = 'cluster_test';
+              } else if (body.includes('/hdm_test')) {
+                workflow = 'hdm_test';
+              } else if (body.includes('/lsu_test')) {
+                workflow = 'lsu_test';
+              } else if (body.includes('/upgrade_test')) {
+                workflow = 'upgrade_test';
+              }
             }
 
             core.setOutput('workflow', workflow);
