@@ -257,15 +257,13 @@ object SqlIndexInitializationTrigger {
       ),
     IndexAction
       .Create(
-        indexName = "scan_txlog_store_sid_rt_en_vot",
+        indexName = "scan_txlog_store_sid_effat_en_vot",
         createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sid_rt_en_vot
-          on scan_txlog_store (store_id, record_time desc, entry_number desc)
+          create index concurrently if not exists scan_txlog_store_sid_effat_en_vot
+          on scan_txlog_store (store_id, coalesce(vote_effective_at, entry_data->'result'->>'completedAt') desc, entry_number desc)
           where entry_type = 'vot'
         """,
       ),
-    // Superseded by scan_txlog_store_sid_rt_en_vot when vote results switched from
-    // entry_number to record time ordering.
     IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
   )
 

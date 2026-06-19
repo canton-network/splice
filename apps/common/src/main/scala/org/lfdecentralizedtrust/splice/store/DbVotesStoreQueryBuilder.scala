@@ -42,7 +42,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
     val effectiveAtSortKey =
-      s"coalesce($effectiveAtColumnName::timestamptz, (entry_data->'result'->>'completedAt')::timestamptz)"
+      s"coalesce($effectiveAtColumnName, entry_data->'result'->>'completedAt')"
     val afterCondition = after match {
       case Some(a) =>
         Some(

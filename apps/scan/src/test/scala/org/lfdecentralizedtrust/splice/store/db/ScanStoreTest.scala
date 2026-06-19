@@ -480,12 +480,10 @@ abstract class ScanStoreTest
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
         }
 
-        "return results in record time order, including backfilled entries" in {
-          // Simulates a txlog where backfilling inserted older entries after live ingestion
-          // started: backfilling walks backwards in time, so backfilled entries get entry
-          // numbers in reverse record time order.
+        "return results in effective-at order, independent of ingestion and record time" in {
           val baseTime = Instant.now().truncatedTo(ChronoUnit.MICROS)
           def recordTime(n: Int) = baseTime.plusSeconds(n.toLong)
+          def effectiveAt(n: Int) = baseTime.plus((5 - n).toLong, ChronoUnit.DAYS)
           val voteRequests = (1 to 4).map { n =>
             voteRequest(
               requester = userParty(n),
@@ -494,7 +492,10 @@ abstract class ScanStoreTest
               ),
             )
           }
-          val results = voteRequests.map(mkVoteRequestResult(_))
+          val results =
+            (1 to 4).map(n =>
+              mkVoteRequestResult(voteRequests(n - 1), effectiveAt = effectiveAt(n))
+            )
           def closeVoteRequest(store: ScanStore, n: Int) =
             dummyDomain.exercise(
               contract = dsoRules(dsoParty),
@@ -509,10 +510,8 @@ abstract class ScanStoreTest
             _ <- MonadUtil.sequentialTraverse(voteRequests)(
               dummyDomain.create(_)(store.multiDomainAcsStore)
             )
-            // Live ingestion of results 3 and 4...
             _ <- closeVoteRequest(store, 3)
             _ <- closeVoteRequest(store, 4)
-            // ...then backfilling inserts the older results, walking backwards in time.
             _ <- closeVoteRequest(store, 2)
             _ <- closeVoteRequest(store, 1)
             page1 <- store.listVoteRequestResults(
@@ -534,9 +533,9 @@ abstract class ScanStoreTest
             )
           } yield {
             page1.resultsInPage.map(_.request.requester) shouldBe
-              Seq(4, 3, 2).map(userParty(_).toProtoPrimitive)
+              Seq(1, 2, 3).map(userParty(_).toProtoPrimitive)
             page2.resultsInPage.map(_.request.requester) shouldBe
-              Seq(1).map(userParty(_).toProtoPrimitive)
+              Seq(4).map(userParty(_).toProtoPrimitive)
           }
         }
       }
