@@ -92,6 +92,7 @@ monitoring:
         excludedConnections: []
         excludedRequests:
           - 'getTransferInstructionAcceptContext'
+          - 'getOpenAndIssuingMiningRounds'
         successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
