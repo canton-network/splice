@@ -29,6 +29,14 @@
           - Splice nodes now perform a best-effort check at startup and log a ``WARN`` if PostgreSQL
             data checksums are not enabled on their backing database. This check never fails startup.
 
+      - Database instance locking
+
+          - Splice apps now take a PostgreSQL instance lock on startup so
+            that only one instance runs against a given database at a time, guarding against data
+            corruption from an accidentally duplicated app. Enabled by default
+            (``instanceLockEnabled = true``); set it to ``false`` only if you deliberately point
+            multiple apps at one shared database.
+
       - Validator, sv and scan app
 
           - Support passing client-id and secret through Http Basic Authentication instead of in the request body. For backwards compatibility this is disabled by default.
