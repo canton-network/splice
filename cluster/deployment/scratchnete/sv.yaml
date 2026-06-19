@@ -5,7 +5,7 @@ svApp:
         canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = "35"
 sequencer:
   cloudSql:
-    tier: 'db-perf-optimized-N-4'
+    tier: 'db-perf-optimized-N-8'
     enterprisePlus: true
     flags:
       max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
