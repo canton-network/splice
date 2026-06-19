@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
+import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter}
+import com.daml.metrics.api.MetricQualification.Errors
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -18,7 +20,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.SummarizingMini
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_MiningRound_StartIssuing
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerConnection, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingActivityTotalsResponse.members.{
   RewardAccountingActivityTotalsCannotProvide,
@@ -27,11 +29,10 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingAc
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore}
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
@@ -61,8 +62,8 @@ class SummarizingMiningRoundTrigger(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
-  private val rewardMetrics =
-    new RewardProcessingMetrics(context.metricsFactory)(MetricsContext.Empty)
+
+  private val miningRoundMetrics = new SummarizingMiningRoundMetrics(context.metricsFactory)
 
   private def amuletRulesStartIssuingAction(
       miningRoundCid: SummarizingMiningRound.ContractId,
@@ -234,7 +235,7 @@ class SummarizingMiningRoundTrigger(
         .asRuntimeException()
 
     def bftReadTotals: Future[definitions.RewardAccountingActivityTotalsOk] = {
-      rewardMetrics.summarizingRoundTotalsBftReads.mark()
+      miningRoundMetrics.summarizingRoundTotalsBftReads.mark()
       for {
         bftScan <- bftScanConnectionF()
         response <- bftScan.getRewardAccountingActivityTotals(round)
@@ -298,5 +299,22 @@ object SummarizingMiningRoundTrigger {
       prettyOfClass(
         param("summarizingRound", _.summarizingRound)
       )
+  }
+
+  class SummarizingMiningRoundMetrics(metricsFactory: LabeledMetricsFactory) {
+
+    private val metricsContext = MetricsContext.Empty
+
+    private val prefix: MetricName = SpliceMetrics.MetricsPrefix
+    val summarizingRoundTotalsBftReads: Meter =
+      metricsFactory.meter(
+        MetricInfo(
+          name = prefix :+ "summarizing_mining_round" :+ "totals_bft_reads",
+          summary = "Count of BFT reads of the reward-accounting totals",
+          description =
+            "This metric counts the BFT reads of the reward-accounting totals performed by the SummarizingMiningRound trigger, i.e., the cases where this SV's own Scan could not provide the totals and it had to be obtained via a BFT read against peer Scans.",
+          qualification = Errors,
+        )
+      )(metricsContext)
   }
 }

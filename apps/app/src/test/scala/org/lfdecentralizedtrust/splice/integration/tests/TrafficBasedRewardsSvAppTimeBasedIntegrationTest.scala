@@ -2,11 +2,13 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeDuration
+import com.digitalasset.canton.console.LocalInstanceReference
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
+
 import java.time.Duration
 import java.util.Optional
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash
@@ -155,6 +157,73 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               .toSet shouldBe Set(true, false)
           }
         }
+
+        clue("SV trigger tasks are created and metrics updated") {
+          eventually() {
+            // Dry run for R6 and R8
+            val dryRunTasks = sv1Backend.dsoAutomation
+              .trigger[CalculateRewardsDryRunTrigger]
+              .retrieveTasks()
+              .futureValue
+              .map(_.calculateRewards.payload.round.number)
+            dryRunTasks should contain allElementsOf Seq(6, 8)
+            val dryRunMetric =
+              metricValue(
+                sv1Backend,
+                "calculate_rewards_v2.active_contracts",
+                Map("dryRun" -> "true"),
+              )
+            dryRunMetric shouldBe 2L
+
+            // Non-dry run for R8 only
+            val mintingTasks = sv1Backend.dsoAutomation
+              .trigger[CalculateRewardsTrigger]
+              .retrieveTasks()
+              .futureValue
+              .map(_.calculateRewards.payload.round.number)
+            mintingTasks should contain(8)
+            mintingTasks should not contain (6)
+
+            val mintingMetric =
+              metricValue(
+                sv1Backend,
+                "calculate_rewards_v2.active_contracts",
+                Map("dryRun" -> "false"),
+              )
+            mintingMetric shouldBe 1L
+          }
+        }
+
+        clue("CalculateRewardsV2 contracts are also visible in scan rewards reference store") {
+          eventually() {
+            val v2s = sv1ScanBackend.appState.rewardsReferenceStoreO.value
+              .listActiveCalculateRewardsV2()
+              .futureValue
+            v2s.map(c =>
+              (c.payload.round.number, c.payload.dryRun)
+            ) should contain allElementsOf Seq((6L, true), (8L, true), (8L, false))
+          }
+        }
+
+        clue("Scan metrics are updated") {
+          // retrieveTasks updates the metric
+          sv1ScanBackend.automation
+            .trigger[RewardComputationTrigger]
+            .retrieveTasks()
+            .futureValue
+          val dryRunMetric = metricValue(
+            sv1ScanBackend,
+            "scan.reward_computation.calculate_rewards_v2.active_contracts",
+            Map("dryRun" -> "true"),
+          )
+          dryRunMetric shouldBe 2L
+          val mintingMetric = metricValue(
+            sv1ScanBackend,
+            "scan.reward_computation.calculate_rewards_v2.active_contracts",
+            Map("dryRun" -> "false"),
+          )
+          mintingMetric shouldBe 1L
+        }
       }
 
       clue("Alice and Bob have minting allowances for R6") {
@@ -202,6 +271,17 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
       confirmBftRead(bobParty)
   }
+
+  private def metricValue(
+      node: LocalInstanceReference,
+      name: String,
+      labels: Map[String, String],
+  ): Long =
+    node.metrics
+      .get(s"$MetricsPrefix.$name", labels)
+      .select[MetricValue.LongPoint]
+      .value
+      .value
 
   // Here we confirm that sv2 can do BFT read of root-hash and batch from sv1 and sv4 only
   // And the rewards processing works even when sv3 is offline.
@@ -348,15 +428,16 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       ) {
         // metrics.get can throw before the meter is first marked, so retry.
         eventually(retryOnTestFailuresOnly = false) {
-          def bftReads(name: String): Long =
-            sv2Backend.metrics
-              .get(s"$MetricsPrefix.$name", Map("dryRun" -> "false"))
-              .select[MetricValue.LongPoint]
-              .value
-              .value
-
-          bftReads("calculate_rewards_v2.root_hash_bft_reads") should be >= 1L
-          bftReads("process_rewards_v2.batch_bft_reads") should be >= 1L
+          metricValue(
+            sv2Backend,
+            "calculate_rewards_v2.root_hash_bft_reads",
+            Map("dryRun" -> "false"),
+          ) should be >= 1L
+          metricValue(
+            sv2Backend,
+            "process_rewards_v2.batch_bft_reads",
+            Map("dryRun" -> "false"),
+          ) should be >= 1L
         }
       }
     } finally {
