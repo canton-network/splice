@@ -9,11 +9,16 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_ContractId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.{
+  TransferInstructionResult_Completed
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  allocationv2,
   holdingv2,
   metadatav1,
   transferinstructionv2,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
@@ -25,6 +30,7 @@ import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanit
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 import java.nio.file.Paths
 import java.time.Instant
@@ -63,6 +69,8 @@ class TestTokenV2SettlementIntegrationTest
     )
     .toAbsolutePath
     .toString
+
+  private val usdcInstrumentName = "USDC"
 
   override def environmentDefinition: SpliceEnvironmentDefinition = {
     EnvironmentDefinition
@@ -124,6 +132,7 @@ class TestTokenV2SettlementIntegrationTest
         aliceValidatorLocalBackend, // hosts the ttadmin
       ).foreach { validatorBackend =>
         validatorBackend.startSync()
+        validatorBackend.participantClient.upload_dar_unless_exists(tokenStandardV2TestDarPath)
         validatorBackend.participantClient
           .upload_dar_unless_exists(testTokenV2DarPath)
       }
@@ -135,6 +144,9 @@ class TestTokenV2SettlementIntegrationTest
       val ttAdminValidator = aliceValidatorLocalBackend
       val ttAdminParty = ttAdminValidator.getValidatorPartyId()
       val registry = new TestTokenV2Registry(ttAdminParty, ttAdminValidator)
+
+      // Give alice some CC
+      aliceWalletClient.tap(1000)
 
       // make venue and ttadmin featured app parties
       splitwellWalletClient.selfGrantFeaturedAppRight()
@@ -209,18 +221,123 @@ class TestTokenV2SettlementIntegrationTest
           )
           .valueOrFail("Failed to read transferinstructionv2.TransferInstruction")
       val acceptContext =
-        registry.getTransferInstructionAcceptContext(transferInstruction)
-      bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
-        .submitWithResult(
-          userId = bobValidatorBackend.config.ledgerApiUser,
-          actAs = Seq(bobParty),
-          readAs = Seq(bobParty),
-          update = transferInstruction.contractId.exerciseTransferInstruction_Accept(
-            java.util.List.of(bobParty.toProtoPrimitive),
-            new metadatav1.ExtraArgs(acceptContext.choiceContext, emptyMetadata),
-          ),
-          disclosedContracts = acceptContext.disclosedContracts,
+        registry.getContext(
+          transferInstruction.payload.transfer.inputHoldingCids.asScala.toSeq
         )
+      val transferResult =
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+          .submitWithResult(
+            userId = bobValidatorBackend.config.ledgerApiUser,
+            actAs = Seq(bobParty),
+            readAs = Seq(bobParty),
+            update = transferInstruction.contractId.exerciseTransferInstruction_Accept(
+              java.util.List.of(bobParty.toProtoPrimitive),
+              new metadatav1.ExtraArgs(acceptContext.choiceContext, emptyMetadata),
+            ),
+            disclosedContracts = acceptContext.disclosedContracts,
+          )
+      transferResult.exerciseResult.output match {
+        case completed: TransferInstructionResult_Completed =>
+          completed.receiverHoldingCids.asScala.toSeq
+        case other => fail(s"Offer mint was not completed: $other")
+      }
+
+      // Venue creates the trade
+      val (_, otcTrade) = actAndCheck(
+        "Venue creates OTC Trade", {
+          venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(venueParty),
+              commands = new tradingappv2.OTCTrade(
+                venueParty.toProtoPrimitive,
+                Seq(
+                  // Alice -> Bob: 100 CC
+                  new tradingappv2.TradeLeg(
+                    dsoParty.toProtoPrimitive,
+                    new allocationv2.TransferLeg(
+                      "alicetobob100CC",
+                      basicAccount(aliceParty),
+                      basicAccount(bobParty),
+                      BigDecimal(100).bigDecimal,
+                      amuletInstrumentIdName,
+                      emptyMetadata,
+                    ),
+                  ),
+                  // Bob -> Alice: 15 USDC
+                  new tradingappv2.TradeLeg(
+                    ttAdminParty.toProtoPrimitive,
+                    new allocationv2.TransferLeg(
+                      "bobtoalice15USDC",
+                      basicAccount(bobParty),
+                      basicAccount(aliceParty),
+                      BigDecimal(15).bigDecimal,
+                      usdcInstrumentName,
+                      emptyMetadata,
+                    ),
+                  ),
+                  // Alice -> Venue: 0.2 USDC
+                  new tradingappv2.TradeLeg(
+                    ttAdminParty.toProtoPrimitive,
+                    new allocationv2.TransferLeg(
+                      "alicetovenue0.2USDC",
+                      basicAccount(aliceParty),
+                      basicAccount(venueParty),
+                      BigDecimal(0.2).bigDecimal,
+                      usdcInstrumentName,
+                      emptyMetadata,
+                    ),
+                  ),
+                ).asJava,
+                Instant.now(),
+                Instant.now().plusSeconds(60L),
+                java.util.Optional.of(Instant.now().plusSeconds(180L)),
+              )
+                .create()
+                .commands()
+                .asScala
+                .toSeq,
+            )
+        },
+      )(
+        "There exists a trade visible to the venue's participant",
+        _ =>
+          venueValidator.participantClientWithAdminToken.ledger_api_extensions.acs
+            .awaitJava(tradingappv2.OTCTrade.COMPANION)(
+              venueParty
+            ),
+      )
+
+      actAndCheck(
+        "Venue creates allocation requests", {
+          venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(venueParty),
+              commands = otcTrade.id
+                .exerciseOTCTrade_RequestAllocations()
+                .commands()
+                .asScala
+                .toSeq,
+            )
+        },
+      )(
+        "Sender and receiver see the allocation requests",
+        _ => {
+          val bobAllocationRequest = inside(
+            bobWalletClient.listAllocationRequests()
+          ) {
+            case (allocationRequest: HttpWalletAppClient.TokenStandard.V2AllocationRequest) +: Nil =>
+              allocationRequest
+          }
+          val aliceAllocationRequest = inside(
+            aliceWalletClient.listAllocationRequests()
+          ) {
+            case (allocationRequest: HttpWalletAppClient.TokenStandard.V2AllocationRequest) +: Nil =>
+              allocationRequest
+          }
+
+          (bobAllocationRequest, aliceAllocationRequest)
+        },
+      )
     }
   }
 
@@ -255,36 +372,32 @@ class TestTokenV2SettlementIntegrationTest
       )
     }
 
-    def getTransferInstructionAcceptContext(
-        transferInstruction: Contract[
-          transferinstructionv2.TransferInstruction.ContractId,
-          transferinstructionv2.TransferInstructionView,
-        ]
+    def getContext(
+        inputHoldingCids: Seq[holdingv2.Holding.ContractId]
     ): ChoiceContextWithDisclosures = {
       val (tokenRules, synchronizerId) = getTokenRules()
-      val holdings = transferInstruction.payload.transfer.inputHoldingCids.asScala.map {
-        holdingCid =>
-          val holding = adminValidatorBackend.participantClient.ledger_api.state.acs
-            .of_party(
-              party = adminParty,
-              filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
-                TemplateId(
-                  templateId.getPackageId,
-                  templateId.getModuleName,
-                  templateId.getEntityName,
-                )
-              ),
-              includeCreatedEventBlob = true,
-            )
-            .find(_.contractId == holdingCid.contractId)
-            .valueOrFail(s"No Holding for cid $holdingCid")
-          CommandsOuterClass.DisclosedContract
-            .newBuilder()
-            .setContractId(holdingCid.contractId)
-            .setCreatedEventBlob(holding.event.createdEventBlob)
-            .setSynchronizerId(synchronizerId.toProtoPrimitive)
-            .setTemplateId(identifierToJavaProto(holding.templateId.toIdentifier))
-            .build()
+      val holdings = inputHoldingCids.map { holdingCid =>
+        val holding = adminValidatorBackend.participantClient.ledger_api.state.acs
+          .of_party(
+            party = adminParty,
+            filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+              TemplateId(
+                templateId.getPackageId,
+                templateId.getModuleName,
+                templateId.getEntityName,
+              )
+            ),
+            includeCreatedEventBlob = true,
+          )
+          .find(_.contractId == holdingCid.contractId)
+          .valueOrFail(s"No Holding for cid $holdingCid")
+        CommandsOuterClass.DisclosedContract
+          .newBuilder()
+          .setContractId(holdingCid.contractId)
+          .setCreatedEventBlob(holding.event.createdEventBlob)
+          .setSynchronizerId(synchronizerId.toProtoPrimitive)
+          .setTemplateId(identifierToJavaProto(holding.templateId.toIdentifier))
+          .build()
       }
 
       val disclosedContracts = holdings :+ CommandsOuterClass.DisclosedContract
@@ -295,7 +408,7 @@ class TestTokenV2SettlementIntegrationTest
         .setTemplateId(tokenRules.identifier.toProto)
         .build()
       ChoiceContextWithDisclosures(
-        disclosedContracts.toSeq,
+        disclosedContracts,
         new metadatav1.ChoiceContext(
           java.util.Map.of(
             "testTokenV2/tokenRules",
