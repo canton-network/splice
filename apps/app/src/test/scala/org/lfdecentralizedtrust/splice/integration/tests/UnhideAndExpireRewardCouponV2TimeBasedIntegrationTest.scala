@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
@@ -25,6 +26,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireRewardCouponV2Trigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
@@ -114,6 +116,15 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[AcceptedTransferOfferTrigger]
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllSvAppConfigs_(svConfig =>
+          svConfig.copy(
+            packageVettingCache = svConfig.packageVettingCache.copy(
+              ttl = NonNegativeFiniteDuration.ofMillis(1)
+            )
+          )
         )(config)
       )
       .withoutAutomaticRewardsCollectionAndAmuletMerging
@@ -294,12 +305,16 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       )(
         "ExpireRewardCouponV2Trigger ignores Alice coupons",
         _ => {
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[ExpireRewardCouponV2Trigger]
+            .runOnce()
+            .futureValue
           val remaining = sv1Backend.appState.dsoStore
             .listRewardCouponsV2()
             .futureValue
             .map(_.contractId.contractId)
             .toSet
-          aliceObservedCoupons.subsetOf(remaining) shouldBe true
+          remaining shouldBe aliceObservedCoupons
         },
       )
 
@@ -308,7 +323,13 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         revetV2AmuletOnAlice(aliceParticipantId),
       )(
         "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
-        _ => sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty,
+        _ => {
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[ExpireRewardCouponV2Trigger]
+            .runOnce()
+            .futureValue
+          sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty
+        },
       )
     }
   }

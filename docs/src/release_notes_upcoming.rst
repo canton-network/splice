@@ -7,7 +7,6 @@
 
 .. release-notes:: Upcoming
 
-
       - PostgreSQL Data Checksums
 
           - `PostgreSQL data checksums <https://www.postgresql.org/docs/14/checksums.html>`_ are now
@@ -29,3 +28,8 @@
 
           - Splice nodes now perform a best-effort check at startup and log a ``WARN`` if PostgreSQL
             data checksums are not enabled on their backing database. This check never fails startup.
+
+      - Validator, sv and scan app
+
+          - Support passing client-id and secret through Http Basic Authentication instead of in the request body. For backwards compatibility this is disabled by default.
+            To enable it set an environment variable ``ADDITIONAL_CONFIG_HTTP_BASIC_AUTH=canton.validator-apps.sv.participant-client.ledger-api.auth-config.http-basic-auth = true``.

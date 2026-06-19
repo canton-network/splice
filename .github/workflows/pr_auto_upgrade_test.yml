@@ -1,6 +1,6 @@
 name: Automatically trigger an upgrade test on PRs
 on:
-  pull_request:
+  pull_request_target:
     # This is only triggered on PR creation to avoid spamming the PR with comments on every update.
     # It is up to the author to decided if subsequent changes require another upgrade test.
     types: [ opened ]
