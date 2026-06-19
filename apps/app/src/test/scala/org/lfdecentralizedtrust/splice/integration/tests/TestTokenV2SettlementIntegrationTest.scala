@@ -8,12 +8,12 @@ import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.AllocationFactory_Allocate
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_ContractId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.{
-  TransferInstructionResult_Completed
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv2,
+  allocationinstructionv2,
   holdingv2,
   metadatav1,
   transferinstructionv2,
@@ -22,7 +22,14 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradinga
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.BatchingUtility as BatchingUtilityV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.TSA_AllocationFactory_AllocateV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
+  BatchingUtility,
+  ChoiceCall,
+  HoldingMap,
+  ScopedAccount,
+  BatchingUtility as BatchingUtilityV2,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -153,14 +160,18 @@ class TestTokenV2SettlementIntegrationTest
       aliceValidatorWalletLocalClient.selfGrantFeaturedAppRight()
 
       // Create BatchingUtilityV2 contracts for Alice and Bob
-      Map(aliceValidatorBackend -> aliceParty, bobValidatorBackend -> bobParty).foreach {
-        case (validatorBackend, party) =>
-          validatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
-            .submitJava(
-              actAs = Seq(party),
-              commands = BatchingUtilityV2.create(party.toProtoPrimitive).commands().asScala.toSeq,
-            )
-      }
+      val batchingUtilityIds: Map[PartyId, BatchingUtility.ContractId] =
+        Map(aliceValidatorBackend -> aliceParty, bobValidatorBackend -> bobParty).map {
+          case (validatorBackend, party) =>
+            party -> validatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+              .submitWithResult(
+                userId = validatorBackend.config.ledgerApiUser,
+                actAs = Seq(party),
+                readAs = Seq(party),
+                update = BatchingUtilityV2.create(party.toProtoPrimitive),
+              )
+              .contractId
+        }
 
       // Create TokenRules for ttadmin
       val tokenRulesId = ttAdminValidator.participantClient.ledger_api_extensions.commands
@@ -307,7 +318,7 @@ class TestTokenV2SettlementIntegrationTest
             ),
       )
 
-      actAndCheck(
+      val (_, (bobAllocationRequest, aliceAllocationRequest)) = actAndCheck(
         "Venue creates allocation requests", {
           venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
             .submitJava(
@@ -338,6 +349,86 @@ class TestTokenV2SettlementIntegrationTest
           (bobAllocationRequest, aliceAllocationRequest)
         },
       )
+
+      clue(
+        "Alice uses the BatchingUtilityV2 to create two allocations and accept the allocation request in a single tx"
+      ) {
+        val batchingUtility = batchingUtilityIds(aliceParty)
+        val aliceAmulets = aliceWalletClient
+          .list()
+          .amulets
+          .map(_.contract.contractId.toInterface(holdingv2.Holding.INTERFACE))
+        val amuletSendSpec = aliceAllocationRequest.contract.payload.allocations.asScala
+          .filter(_.admin == dsoParty.toProtoPrimitive)
+          .loneElement
+        val usdcSendSpec = aliceAllocationRequest.contract.payload.allocations.asScala
+          .filter(_.admin == ttAdminParty.toProtoPrimitive)
+          .loneElement
+        val amuletAllocationFactory = sv1ScanBackend.getAllocationFactoryV2(
+          new allocationinstructionv2.AllocationFactory_Allocate(
+            aliceAllocationRequest.contract.payload.settlement,
+            amuletSendSpec,
+            aliceAllocationRequest.contract.payload.requestedAt,
+            aliceAmulets.asJava,
+            emptyExtraArgs,
+            java.util.List.of(aliceParty.toProtoPrimitive),
+          )
+        )
+        val usdcContext = registry.getContext(Seq.empty)
+        aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+          .submitJava(
+            actAs = Seq(aliceParty),
+            readAs = Seq(aliceParty),
+            commands = batchingUtility
+              .exerciseBatchingUtility_ExecuteBatch(
+                new HoldingMap(
+                  Map(
+                    new ScopedAccount(
+                      dsoParty.toProtoPrimitive,
+                      basicAccount(aliceParty),
+                    ) -> Map[String, java.util.List[holdingv2.Holding.ContractId]](
+                      amuletInstrumentIdName -> aliceAmulets.asJava
+                    ).asJava,
+                    new ScopedAccount(
+                      ttAdminParty.toProtoPrimitive,
+                      basicAccount(aliceParty),
+                    ) -> Map
+                      .empty[String, java.util.List[holdingv2.Holding.ContractId]]
+                      .asJava, // alice has no USDC here yet
+                  ).asJava
+                ),
+                java.util.List.of(
+                  new TSA_AllocationFactory_AllocateV2(
+                    new ChoiceCall[AllocationFactory_Allocate](
+                      new metadatav1.AnyContract.ContractId(
+                        amuletAllocationFactory.factoryId.contractId
+                      ),
+                      amuletAllocationFactory.args,
+                    )
+                  ),
+                  new TSA_AllocationFactory_AllocateV2(
+                    new ChoiceCall[AllocationFactory_Allocate](
+                      new metadatav1.AnyContract.ContractId(tokenRulesId.contractId),
+                      new allocationinstructionv2.AllocationFactory_Allocate(
+                        aliceAllocationRequest.contract.payload.settlement,
+                        usdcSendSpec,
+                        aliceAllocationRequest.contract.payload.requestedAt,
+                        java.util.List.of(),
+                        new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                        java.util.List.of(aliceParty.toProtoPrimitive),
+                      ),
+                    )
+                  ),
+                ),
+                true,
+              )
+              .commands()
+              .asScala
+              .toSeq,
+            disclosedContracts =
+              amuletAllocationFactory.disclosedContracts ++ usdcContext.disclosedContracts,
+          )
+      }
     }
   }
 
