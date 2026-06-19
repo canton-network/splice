@@ -3,6 +3,9 @@ svApp:
     - name: ADDITIONAL_CONFIG_PROTOCOL_VERSION
       value: |
         canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = "35"
+    - name: ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS
+      value: |
+        canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = "linear", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = "num-faults-tolerated", } }
 sequencer:
   cloudSql:
     tier: 'db-perf-optimized-N-8'
