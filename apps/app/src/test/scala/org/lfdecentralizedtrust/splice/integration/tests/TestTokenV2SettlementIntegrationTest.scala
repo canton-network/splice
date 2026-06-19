@@ -358,16 +358,16 @@ class TestTokenV2SettlementIntegrationTest
           .list()
           .amulets
           .map(_.contract.contractId.toInterface(holdingv2.Holding.INTERFACE))
-        val amuletSendSpec = aliceAllocationRequest.contract.payload.allocations.asScala
+        val amuletSpec = aliceAllocationRequest.contract.payload.allocations.asScala
           .filter(_.admin == dsoParty.toProtoPrimitive)
           .loneElement
-        val usdcSendSpec = aliceAllocationRequest.contract.payload.allocations.asScala
+        val usdcSpec = aliceAllocationRequest.contract.payload.allocations.asScala
           .filter(_.admin == ttAdminParty.toProtoPrimitive)
           .loneElement
         val amuletAllocationFactory = sv1ScanBackend.getAllocationFactoryV2(
           new allocationinstructionv2.AllocationFactory_Allocate(
             aliceAllocationRequest.contract.payload.settlement,
-            amuletSendSpec,
+            amuletSpec,
             aliceAllocationRequest.contract.payload.requestedAt,
             aliceAmulets.asJava,
             emptyExtraArgs,
@@ -411,11 +411,102 @@ class TestTokenV2SettlementIntegrationTest
                       new metadatav1.AnyContract.ContractId(tokenRulesId.contractId),
                       new allocationinstructionv2.AllocationFactory_Allocate(
                         aliceAllocationRequest.contract.payload.settlement,
-                        usdcSendSpec,
+                        usdcSpec,
                         aliceAllocationRequest.contract.payload.requestedAt,
                         java.util.List.of(),
                         new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
                         java.util.List.of(aliceParty.toProtoPrimitive),
+                      ),
+                    )
+                  ),
+                ),
+                true,
+              )
+              .commands()
+              .asScala
+              .toSeq,
+            disclosedContracts =
+              amuletAllocationFactory.disclosedContracts ++ usdcContext.disclosedContracts,
+          )
+      }
+
+      clue(
+        "Bob uses the BatchingUtilityV2 to accept the request and create two allocations in a single tx"
+      ) {
+        val batchingUtility = batchingUtilityIds(bobParty)
+        val amuletSpec = bobAllocationRequest.contract.payload.allocations.asScala
+          .filter(_.admin == dsoParty.toProtoPrimitive)
+          .loneElement
+        val usdcSpec = bobAllocationRequest.contract.payload.allocations.asScala
+          .filter(_.admin == ttAdminParty.toProtoPrimitive)
+          .loneElement
+        val amuletAllocationFactory = sv1ScanBackend.getAllocationFactoryV2(
+          new allocationinstructionv2.AllocationFactory_Allocate(
+            bobAllocationRequest.contract.payload.settlement,
+            amuletSpec,
+            bobAllocationRequest.contract.payload.requestedAt,
+            java.util.List.of(), // bob has no amulets
+            emptyExtraArgs,
+            java.util.List.of(bobParty.toProtoPrimitive),
+          )
+        )
+        val bobUsdcHoldings =
+          bobValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+            .of_party(
+              party = bobParty,
+              filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+                TemplateId(
+                  templateId.getPackageId,
+                  templateId.getModuleName,
+                  templateId.getEntityName,
+                )
+              ),
+              includeCreatedEventBlob = true,
+            )
+            .map(_.contractId)
+            .map(id => new holdingv2.Holding.ContractId(id))
+        val usdcContext = registry.getContext(
+          bobUsdcHoldings
+        )
+        bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+          .submitJava(
+            actAs = Seq(bobParty),
+            readAs = Seq(bobParty),
+            commands = batchingUtility
+              .exerciseBatchingUtility_ExecuteBatch(
+                new HoldingMap(
+                  Map(
+                    new ScopedAccount(
+                      dsoParty.toProtoPrimitive,
+                      basicAccount(bobParty),
+                    ) -> Map[String, java.util.List[holdingv2.Holding.ContractId]]().asJava,
+                    new ScopedAccount(
+                      ttAdminParty.toProtoPrimitive,
+                      basicAccount(bobParty),
+                    ) -> Map[String, java.util.List[holdingv2.Holding.ContractId]](
+                      usdcInstrumentName -> bobUsdcHoldings.asJava
+                    ).asJava, // alice has no USDC here yet
+                  ).asJava
+                ),
+                java.util.List.of(
+                  new TSA_AllocationFactory_AllocateV2(
+                    new ChoiceCall[AllocationFactory_Allocate](
+                      new metadatav1.AnyContract.ContractId(
+                        amuletAllocationFactory.factoryId.contractId
+                      ),
+                      amuletAllocationFactory.args,
+                    )
+                  ),
+                  new TSA_AllocationFactory_AllocateV2(
+                    new ChoiceCall[AllocationFactory_Allocate](
+                      new metadatav1.AnyContract.ContractId(tokenRulesId.contractId),
+                      new allocationinstructionv2.AllocationFactory_Allocate(
+                        bobAllocationRequest.contract.payload.settlement,
+                        usdcSpec,
+                        bobAllocationRequest.contract.payload.requestedAt,
+                        java.util.List.of(),
+                        new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                        java.util.List.of(bobParty.toProtoPrimitive),
                       ),
                     )
                   ),
