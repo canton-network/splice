@@ -4,13 +4,13 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
+import org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, PackageUnvettingUtil}
 
 abstract class AdditionalPackagesToUnvetIntegrationTestBase
@@ -81,6 +81,7 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
 
 /** This test verifies that an SV can unvet packages that still have vetted dependencies
   */
+@RequiresPv35
 class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
   private val missingDependency = DarResources.wallet_0_1_15
@@ -104,51 +105,44 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
     val synchronizerId =
       sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
 
-    val currentPv = sv1Backend.config.localSynchronizerNodes.current.protocolVersion
-
-    if (currentPv >= ProtocolVersion.v35) {
-
-      clue(s"sv1 can unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
-          .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
-        eventually() {
-          val vettedPackageIds = getVettedPackageIds(
-            sv1Backend.appState.participantAdminConnection,
-            synchronizerId,
-          )
-          vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
-          vettedPackageIds should contain(missingDependency.packageId)
-        }
-      }
-    }
-
-    stopAllAsync(
-      sv1Backend,
-      sv1ValidatorBackend,
-    ).futureValue
-
-    if (currentPv >= ProtocolVersion.v35) {
-
-      clue(
-        s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
-            .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
-      ) {
-        startAllSync(
-          sv1LocalBackend,
-          sv1ValidatorLocalBackend,
+    clue(s"sv1 can unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
+        .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
+      eventually() {
+        val vettedPackageIds = getVettedPackageIds(
+          sv1Backend.appState.participantAdminConnection,
+          synchronizerId,
         )
-        eventually() {
-          val vettedPackageIds = getVettedPackageIds(
-            sv1LocalBackend.appState.participantAdminConnection,
-            synchronizerId,
-          )
-          vettedPackageIds should contain noElementsOf darsWithMissingDependency :+ missingDependency
-        }
-        stopAllAsync(
-          sv1LocalBackend,
-          sv1ValidatorLocalBackend,
-        ).futureValue
+        vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
+        vettedPackageIds should contain(missingDependency.packageId)
       }
+
+      stopAllAsync(
+        sv1Backend,
+        sv1ValidatorBackend,
+      ).futureValue
     }
+
+    clue(
+      s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
+          .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
+    ) {
+      startAllSync(
+        sv1LocalBackend,
+        sv1ValidatorLocalBackend,
+      )
+      eventually() {
+        val vettedPackageIds = getVettedPackageIds(
+          sv1LocalBackend.appState.participantAdminConnection,
+          synchronizerId,
+        )
+        vettedPackageIds should contain noElementsOf darsWithMissingDependency :+ missingDependency
+      }
+      stopAllAsync(
+        sv1LocalBackend,
+        sv1ValidatorLocalBackend,
+      ).futureValue
+    }
+
   }
 }
 

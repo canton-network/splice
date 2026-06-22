@@ -112,7 +112,20 @@ object BuildCommon {
         Test / testOptions ++= Seq(
           // Enable logging of begin and end of test cases, test suites, and test runs.
           Tests.Argument("-C", "com.digitalasset.canton.LogReporter")
-        ),
+        ) ++ {
+          val isLegacyPv = sys.env
+            .get("PROTOCOL_VERSION")
+            .flatMap(v => scala.util.Try(v.toInt).toOption)
+            .exists(_ < 35)
+          if (isLegacyPv) {
+            Seq(
+              Tests
+                .Argument("-l", "org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35")
+            )
+          } else {
+            Seq.empty
+          }
+        },
       )
 
   lazy val damlSettings: Seq[Def.Setting[_]] =
