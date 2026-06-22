@@ -376,7 +376,7 @@ main() {
   local sequencer_status_reachability; sequencer_status_reachability=$(sequencer_get_status_reachability)
   local sequencer_status; sequencer_status=$(echo "$sequencer_status_lag" "$sequencer_status_reachability" | merge_status)
 
-  jq -n \
+  jq -Sn \
     --argjson sv "$sv_status" \
     --argjson sv_threshold "$SV_THRESHOLD" \
     --argjson mediator "$mediator_status" \
