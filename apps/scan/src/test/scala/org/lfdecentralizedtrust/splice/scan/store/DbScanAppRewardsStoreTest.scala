@@ -456,7 +456,7 @@ class DbScanAppRewardsStoreTest
 
     "aggregateActivityTotals — succeeds for round 0 when isFirstSv" in {
       for {
-        (store, historyId) <- newStore(isFirstSv = true)
+        (store, historyId) <- newStore()
         _ <- markRoundComplete(historyId, 0L)
         _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))
         _ <- insertActivityRecord(historyId, 1L, Seq("sentinel::provider"), Seq(1L))
@@ -1208,8 +1208,7 @@ class DbScanAppRewardsStoreTest
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   private def newStore(
-      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001),
-      isFirstSv: Boolean = false,
+      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001)
   ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
@@ -1230,7 +1229,6 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(

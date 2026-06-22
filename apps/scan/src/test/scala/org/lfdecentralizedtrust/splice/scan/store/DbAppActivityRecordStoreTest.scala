@@ -429,13 +429,13 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "on first SV" should {
+    "on fresh network bootstrap" should {
 
-      "return round 0 on fresh network" in {
+      "return round 0 when earliest_ingested_round is -1" in {
         for {
-          (store, historyId) <- newStore(isFirstSv = true)
+          (store, historyId) <- newStore()
           baseTs = CantonTimestamp.now()
-          // ensureMetaDBIO sets earliest_ingested_round = -1 on fresh isFirstSv network
+          // earliest_ingested_round = -1 so that round 0 = -1 + 1 is considered complete
           _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, -1L, Some(1L))
           _ <- insertRecordsForRounds(
             store,
@@ -453,7 +453,7 @@ class DbAppActivityRecordStoreTest
 
       "return None until last_archived_round is set" in {
         for {
-          (store, historyId) <- newStore(isFirstSv = true)
+          (store, historyId) <- newStore()
           baseTs = CantonTimestamp.now()
           _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, -1L, None)
           _ <- insertRecordsForRounds(store, historyId, baseTs, ("round-0", 0L))
@@ -464,13 +464,12 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "on first SV after version bump" should {
+    "after version bump" should {
 
       "return version 2 earliest round after version bump" in {
         for {
           (store, historyId) <- newStore(
-            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
-            isFirstSv = true,
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0)
           )
           baseTs = CantonTimestamp.now()
           _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, Some(1L))
@@ -497,8 +496,7 @@ class DbAppActivityRecordStoreTest
       "return version 2 earliest round when version bump via ensureMeta" in {
         for {
           (store, historyId) <- newStore(
-            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
-            isFirstSv = true,
+            versions = DbAppActivityRecordStore.IngestionVersions(2, 0)
           )
           baseTs = CantonTimestamp.now()
           // Version 1 meta row exists from prior run
@@ -776,32 +774,28 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "on first SV" should {
-
-      "set earliest_ingested_round to -1 on fresh network" in {
-        for {
-          (store, _) <- newStore(isFirstSv = true)
-          r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
-          meta <- store.lookupActivityRecordMeta(1, 0)
-        } yield {
-          r1 shouldBe Checked(InsertMeta)
-          meta.value.earliestIngestedRound shouldBe -1L
-        }
+    "use earliestRound as provided by caller" in {
+      for {
+        (store, _) <- newStore()
+        r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
+        meta <- store.lookupActivityRecordMeta(1, 0)
+      } yield {
+        r1 shouldBe Checked(InsertMeta)
+        meta.value.earliestIngestedRound shouldBe 10L
       }
+    }
 
-      "use actual earliest_ingested_round on version bump" in {
-        for {
-          (store, _) <- newStore(
-            versions = DbAppActivityRecordStore.IngestionVersions(2, 0),
-            isFirstSv = true,
-          )
-          _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
-          r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
-          meta <- store.lookupActivityRecordMeta(2, 0)
-        } yield {
-          r1 shouldBe Checked(InsertMeta)
-          meta.value.earliestIngestedRound shouldBe 10L
-        }
+    "use actual earliest_ingested_round on version bump" in {
+      for {
+        (store, _) <- newStore(
+          versions = DbAppActivityRecordStore.IngestionVersions(2, 0)
+        )
+        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
+        r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
+        meta <- store.lookupActivityRecordMeta(2, 0)
+      } yield {
+        r1 shouldBe Checked(InsertMeta)
+        meta.value.earliestIngestedRound shouldBe 10L
       }
     }
   }
@@ -988,8 +982,7 @@ class DbAppActivityRecordStoreTest
     */
   private def newStore(
       versions: DbAppActivityRecordStore.IngestionVersions =
-        DbAppActivityRecordStore.IngestionVersions(1, 0),
-      isFirstSv: Boolean = false,
+        DbAppActivityRecordStore.IngestionVersions(1, 0)
   ): Future[(DbAppActivityRecordStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
@@ -1010,7 +1003,6 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         versions,
-        isFirstSv,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -1039,7 +1031,6 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv = false,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(

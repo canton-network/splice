@@ -279,7 +279,6 @@ class ScanApp(
                 AppActivityComputation.ActivityIngestionCodeVersion,
                 config.activityIngestionUserVersion.fold(0)(_.toInt),
               ),
-              config.isFirstSv,
               loggerFactory,
             )
           )
