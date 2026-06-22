@@ -232,7 +232,7 @@ spec:
                   key: postgresPassword
                   name: {{ $targetSecret }}
               {{- end }}
-               {{- with $p.migrateFrom }}
+            {{- with $p.migrateFrom }}
             - name: PGPASSWORD_SOURCE
               {{- if and $.Values.sequencer.driver.persistence.secretOverrides $.Values.sequencer.driver.persistence.secretOverrides.migrateFromPostgresPassword }}
               value: {{ $.Values.sequencer.driver.persistence.secretOverrides.migrateFromPostgresPassword | quote }}
