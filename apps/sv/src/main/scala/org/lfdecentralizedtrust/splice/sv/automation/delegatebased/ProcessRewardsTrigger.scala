@@ -28,20 +28,23 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.util.AssignedContract
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
-import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.{Set as DamlSet}
+import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.Set as DamlSet
+import com.daml.ledger.javaapi.data.Unit as DamlUnit
+import com.digitalasset.canton.topology.PartyId
 
 import java.math.BigDecimal
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
-
 import ProcessRewardsTriggerBase.*
+import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter, Timer}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency}
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
@@ -63,9 +66,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     with SvTaskBasedTrigger[ProcessRewardsV2Contract] {
 
   private val store = svTaskContext.dsoStore
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)(
-    MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-  )
+  private val rewardMetrics = new ProcessRewardsMetrics(context.metricsFactory, isDryRun)
 
   override protected def source(implicit
       traceContext: TraceContext
@@ -84,10 +85,10 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       batch <- batchF
       dsoRules <- dsoRulesF
       damlBatch = convertBatch(batch)
+      providersWithWrongVettingState <- determineProvidersWithWrongVettingState(batch)
       choiceArg = new ProcessRewardsV2_ProcessBatch(
         damlBatch,
-        // TODO (#5715) determine 'providersWithWrongVettingState'
-        new DamlSet(java.util.Collections.emptyMap()),
+        providersWithWrongVettingState,
       )
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ProcessRewardsV2_ProcessBatch(
@@ -138,6 +139,34 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
           .asJava
         new BatchOfMintingAllowances(allowances)
     }
+
+  private def determineProvidersWithWrongVettingState(
+      batch: GetRewardAccountingBatchResponse
+  )(implicit tc: TraceContext): Future[DamlSet[String]] = {
+    val providers = batch match {
+      case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfMintingAllowances(
+            value
+          ) =>
+        value.mintingAllowances.map(_.provider)
+      case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfBatches(_) =>
+        Vector.empty[String]
+    }
+    val now = context.clock.now
+    Future
+      .traverse(providers) { provider =>
+        val partyId = PartyId.tryFromProtoPrimitive(provider)
+        svTaskContext.packageVersionSupport
+          .supportsTrafficBasedAppRewards(Seq(partyId), now)
+          .map(support => provider -> support.supported)
+      }
+      .map { supportByProvider =>
+        val withWrongVettingState = supportByProvider.collect { case (provider, false) => provider }
+        damlSetOf(withWrongVettingState)
+      }
+  }
+
+  private def damlSetOf(values: Seq[String]): DamlSet[String] =
+    new DamlSet(values.map(_ -> DamlUnit.getInstance).toMap.asJava)
 
   private def fetchBatch(round: Long, batchHash: String)(implicit
       tc: TraceContext
@@ -205,9 +234,38 @@ class ProcessRewardsDryRunTrigger(
       isDryRun = true,
     )
 
-private[delegatebased] object ProcessRewardsTriggerBase {
+object ProcessRewardsTriggerBase {
   type ProcessRewardsV2Contract = AssignedContract[
     ProcessRewardsV2.ContractId,
     ProcessRewardsV2,
   ]
+
+  class ProcessRewardsMetrics(metricsFactory: LabeledMetricsFactory, dryRun: Boolean) {
+
+    private val metricsContext = MetricsContext.Empty.withExtraLabels("dryRun" -> dryRun.toString)
+
+    private val prefix: MetricName = SpliceMetrics.MetricsPrefix
+
+    val processRewardsProcessingDelay: Timer =
+      metricsFactory.timer(
+        MetricInfo(
+          name = prefix :+ "process_rewards_v2" :+ "processing_delay",
+          summary = "Delay between round close and ProcessRewardsV2 processing",
+          description =
+            "This metric captures the time it took between the closing of a round, and this SV's processing of a ProcessRewardsV2 contract for that round. Labeled with dryRun.",
+          qualification = Latency,
+        )
+      )(metricsContext)
+
+    val processRewardsBatchBftReads: Meter =
+      metricsFactory.meter(
+        MetricInfo(
+          name = prefix :+ "process_rewards_v2" :+ "batch_bft_reads",
+          summary = "Count of BFT reads of the reward-accounting batch",
+          description =
+            "This metric counts the BFT reads of the reward-accounting batch performed by the ProcessRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the batch and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
+          qualification = Errors,
+        )
+      )(metricsContext)
+  }
 }

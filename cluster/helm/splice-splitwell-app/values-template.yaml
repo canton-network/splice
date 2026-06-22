@@ -3,7 +3,7 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "splitwell-app"
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
 fixedTokens: false
 resources:
   limits:
@@ -25,6 +25,8 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   initImageName: "postgres:14"
+#  secretOverrides:
+#    postgresPassword: ""
 
 migration:
   id: 0
@@ -44,4 +46,3 @@ failOnAppVersionMismatch: true
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
-

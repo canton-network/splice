@@ -35,6 +35,7 @@ scaleAmuletConfig amuletPrice config = AmuletConfig with
   optDevelopmentFundManager = config.optDevelopmentFundManager
   externalPartyConfigStateTickDuration = config.externalPartyConfigStateTickDuration
   rewardConfig = config.rewardConfig
+  transferPreapprovalBaseDuration = config.transferPreapprovalBaseDuration
 
 test : Script ()
 test = script do

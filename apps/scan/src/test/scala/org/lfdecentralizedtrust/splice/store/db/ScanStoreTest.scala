@@ -24,10 +24,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
+  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -475,6 +478,67 @@ abstract class ScanStoreTest
           val store = mkStore().futureValue
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
+        }
+      }
+
+      "lookupLatestSvRewardWeightChange" should {
+
+        "return the weight of the latest accepted UpdateSvRewardWeight before the given time" in {
+          val sv = userParty(42)
+          val firstVoteAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          val secondVoteAt = firstVoteAt.plusSeconds(10)
+          def updateWeightAction(weight: Long) = new ARC_DsoRules(
+            new SRARC_UpdateSvRewardWeight(
+              new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, weight)
+            )
+          )
+          val firstVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(30000L),
+            )
+          val secondVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(50000L),
+            )
+          for {
+            store <- mkStore()
+            noVotes <- store.lookupLatestSvRewardWeightChange(sv, None)
+            _ <- dummyDomain.create(firstVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(firstVote.contractId),
+              mkVoteRequestResult(firstVote, effectiveAt = firstVoteAt).toValue,
+              txEffectiveAt = firstVoteAt,
+              recordTime = firstVoteAt,
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(secondVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(secondVote.contractId),
+              mkVoteRequestResult(secondVote, effectiveAt = secondVoteAt).toValue,
+              txEffectiveAt = secondVoteAt,
+              recordTime = secondVoteAt,
+            )(store.multiDomainAcsStore)
+            latest <- store.lookupLatestSvRewardWeightChange(sv, None)
+            beforeSecondVote <- store.lookupLatestSvRewardWeightChange(
+              sv,
+              Some(secondVoteAt.toString),
+            )
+            unknown <- store.lookupLatestSvRewardWeightChange(userParty(999), None)
+          } yield {
+            noVotes shouldBe None
+            latest shouldBe Some(50000L)
+            beforeSecondVote shouldBe Some(30000L)
+            unknown shouldBe None
+          }
         }
       }
 

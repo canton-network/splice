@@ -5,17 +5,16 @@ package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.OptionT
 import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommands
-import com.digitalasset.canton.admin.api.client.data.ListConnectedSynchronizersResult
+import com.digitalasset.canton.admin.api.client.data.{
+  ListConnectedSynchronizersResult,
+  RegisteredSynchronizer,
+}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.admin.api.client.data
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
-import com.digitalasset.canton.topology.{
-  ConfiguredPhysicalSynchronizerId,
-  KnownPhysicalSynchronizerId,
-  PhysicalSynchronizerId,
-  SynchronizerId,
-}
+import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
 import com.github.blemale.scaffeine.Scaffeine
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.HasParticipantId
@@ -51,10 +50,10 @@ trait ParticipantAdminSynchronizerConnection {
       traceContext: TraceContext
   ): Future[Option[PhysicalSynchronizerId]] =
     OptionT(for {
-      configuredSynchronziers <- listRegisteredSynchronizers()
-    } yield configuredSynchronziers.collectFirst {
+      configuredSynchronizers <- listRegisteredSynchronizers()
+    } yield configuredSynchronizers.collectFirst {
       case (configuredSynchronizer, psid, _)
-          if configuredSynchronizer.synchronizerAlias == synchronizerAlias =>
+          if configuredSynchronizer.synchronizerAlias == synchronizerAlias && psid.isDefined =>
         psid.toOption
     }.flatten)
       .orElseF(
@@ -66,19 +65,33 @@ trait ParticipantAdminSynchronizerConnection {
       )
       .value
 
+  private def listAllRegisteredSynchronizers()(implicit
+      tc: TraceContext
+  ): Future[Seq[RegisteredSynchronizer]] = {
+    runCmd(
+      ParticipantAdminCommands.SynchronizerConnectivity.ListAllRegisteredSynchronizers
+    )
+  }
+
   def listRegisteredSynchronizers()(implicit
       tc: TraceContext
-  ): Future[Seq[(SynchronizerConnectionConfig, ConfiguredPhysicalSynchronizerId, Boolean)]] = {
+  ): Future[Seq[(SynchronizerConnectionConfig, data.ConfiguredPhysicalSynchronizerId, Boolean)]] = {
     runCmd(
-      ParticipantAdminCommands.SynchronizerConnectivity.ListRegisteredSynchronizers
-    )
+      ParticipantAdminCommands.SynchronizerConnectivity.ListActiveRegisteredSynchronizers
+    ).map(_.map { config =>
+      (
+        config._1.toInternal,
+        config._2,
+        config._3,
+      )
+    })
   }
 
   def getPhysicalSynchronizerId(synchronizerId: SynchronizerId)(implicit
       traceContext: TraceContext
   ): Future[PhysicalSynchronizerId] = listRegisteredSynchronizers().map(
     _.collectFirst {
-      case (_, KnownPhysicalSynchronizerId(psid), _) if psid.logical == synchronizerId => psid
+      case (_, data.KnownPhysicalSynchronizerId(psid), _) if psid.logical == synchronizerId => psid
     }.getOrElse(
       throw Status.NOT_FOUND
         .withDescription(
@@ -161,7 +174,7 @@ trait ParticipantAdminSynchronizerConnection {
           retryFor,
           "synchronizer_registered_no_handshake",
           s"participant registered ${config.synchronizerAlias}",
-          lookupSynchronizerConnectionConfig(config.synchronizerAlias).map(_.toRight(())),
+          isSynchronizerRegistered(config.synchronizerAlias).map(Either.cond(_, (), ())),
           (_: Unit) => registerSynchronizer(config),
           logger,
         )
@@ -179,15 +192,15 @@ trait ParticipantAdminSynchronizerConnection {
         retryFor,
         "synchronizer_registered",
         s"participant registered ${config.synchronizerAlias} with config $config",
-        lookupSynchronizerConnectionConfig(config.synchronizerAlias).map {
+        lookupRegisteredSynchronizer(config.synchronizerAlias, config.synchronizerId).map {
           case Some(_) if !overwriteExistingConnection => Right(())
           // We don't set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
           case Some(existingConfig)
               if ParticipantAdminConnection.dropSequencerId(
-                existingConfig
+                existingConfig.config.toInternal
               ) == ParticipantAdminConnection.dropSequencerId(config) =>
             Right(())
-          case Some(other) => Left(Some(other))
+          case Some(other) => Left(Some(other.config.toInternal))
           case None => Left(None)
         },
         (existingConfig: Option[SynchronizerConnectionConfig]) =>
@@ -198,6 +211,7 @@ trait ParticipantAdminSynchronizerConnection {
             case Some(_) =>
               modifySynchronizerConnectionConfigAndReconnect(
                 config.synchronizerAlias,
+                config.synchronizerId,
                 reconnectOnSynchronizerConfigurationChange,
                 _ => Some(config),
               )
@@ -231,22 +245,52 @@ trait ParticipantAdminSynchronizerConnection {
     _ <- connectSynchronizer(alias)
   } yield ()
 
-  def lookupSynchronizerConnectionConfig(
+  def isSynchronizerRegistered(
       synchronizerAlias: SynchronizerAlias
-  )(implicit traceContext: TraceContext): Future[Option[SynchronizerConnectionConfig]] =
-    for {
-      registeredSynchronizers <- listRegisteredSynchronizers()
-    } yield registeredSynchronizers
-      .collectFirst {
-        case (registeredSynchronizer, _, _)
-            if registeredSynchronizer.synchronizerAlias == synchronizerAlias =>
-          registeredSynchronizer
-      }
+  )(implicit tc: TraceContext): Future[Boolean] =
+    listSynchronizerConnectionConfig(synchronizerAlias).map(_.nonEmpty)
 
-  def getSynchronizerConnectionConfig(
-      synchronizerAlias: SynchronizerAlias
-  )(implicit traceContext: TraceContext): Future[SynchronizerConnectionConfig] =
-    lookupSynchronizerConnectionConfig(synchronizerAlias).map(
+  private def listSynchronizerConnectionConfig(
+      synchronizerAlias: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId] = None,
+  )(implicit traceContext: TraceContext): Future[Seq[RegisteredSynchronizer]] =
+    for {
+      registeredSynchronizers <- listAllRegisteredSynchronizers()
+    } yield {
+      val withMatchingAlias = registeredSynchronizers.filter(
+        _.config.synchronizerAlias == synchronizerAlias
+      )
+      def matchesPsid(
+          registeredSynchronizer: RegisteredSynchronizer,
+          filterPsid: PhysicalSynchronizerId,
+      ) =
+        registeredSynchronizer.psid.toOption.contains(filterPsid) ||
+          registeredSynchronizer.config.synchronizerId.contains(filterPsid)
+      val activeSynchronizers =
+        withMatchingAlias.filter(
+          _.status == data.RegisteredSynchronizer.Status.Active
+        )
+      psid match {
+        case Some(filterPsid) =>
+          val matchingPsid = withMatchingAlias.filter(matchesPsid(_, filterPsid))
+          // If nothing matches the given psid, fall back to an active synchronizer with the alias.
+          if (matchingPsid.nonEmpty) matchingPsid else activeSynchronizers
+        case None =>
+          activeSynchronizers
+      }
+    }
+
+  def lookupRegisteredSynchronizer(
+      synchronizerAlias: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId] = None,
+  )(implicit tc: TraceContext): Future[Option[RegisteredSynchronizer]] =
+    listSynchronizerConnectionConfig(synchronizerAlias, psid).map(_.headOption)
+
+  def getRegisteredSynchronizer(
+      synchronizerAlias: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId] = None,
+  )(implicit traceContext: TraceContext): Future[RegisteredSynchronizer] =
+    lookupRegisteredSynchronizer(synchronizerAlias, psid).map(
       _.getOrElse(
         throw Status.NOT_FOUND
           .withDescription(s"Synchronizer $synchronizerAlias is not configured on the participant")
@@ -256,39 +300,50 @@ trait ParticipantAdminSynchronizerConnection {
 
   def modifySynchronizerConnectionConfig(
       synchronizer: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId],
       f: SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig],
   )(implicit traceContext: TraceContext): Future[Boolean] = {
     retryProvider.retryForClientCalls(
       "modify_synchronizer_connection",
       "Set the new synchronizer connection if required",
       for {
-        oldConfig <- getSynchronizerConnectionConfig(synchronizer)
-        newConfig = f(oldConfig)
-        configModified <- newConfig match {
-          case None =>
-            logger.trace("No update to synchronizer connection config required")
-            Future.successful(false)
-          case Some(config) =>
-            if (
-              oldConfig.synchronizerId
-                .exists(oldPsid => config.synchronizerId.exists(psid => psid != oldPsid))
-            ) {
-              Future.failed(
-                Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"New config physical synchronizer id ${config.synchronizerId} cannot be different from the old one ${oldConfig.synchronizerId} for synchronizer $synchronizer"
+        registeredSynchronizer <- getRegisteredSynchronizer(synchronizer, psid)
+        newConfig = f(registeredSynchronizer.config.toInternal)
+        configModified <- registeredSynchronizer.status match {
+          case data.RegisteredSynchronizer.Status.Active =>
+            newConfig match {
+              case None =>
+                logger.trace("No update to synchronizer connection config required")
+                Future.successful(false)
+              case Some(config) =>
+                if (
+                  registeredSynchronizer.psid.toOption
+                    .exists(oldPsid => config.synchronizerId.exists(psid => psid != oldPsid))
+                ) {
+                  Future.failed(
+                    Status.INVALID_ARGUMENT
+                      .withDescription(
+                        s"New config physical synchronizer id ${config.synchronizerId} cannot be different from the old one ${registeredSynchronizer.psid} for synchronizer $synchronizer"
+                      )
+                      .asRuntimeException()
                   )
-                  .asRuntimeException()
-              )
-            } else {
-
-              logger.info(
-                s"Updating to new synchronizer connection config for synchronizer $synchronizer. Old config: $oldConfig, new config: $config"
-              )
-              for {
-                _ <- setSynchronizerConnectionConfig(config)
-              } yield true
+                } else {
+                  logger.info(
+                    s"Updating to new synchronizer connection config for synchronizer $synchronizer. Old config: $registeredSynchronizer, new config: $config"
+                  )
+                  for {
+                    _ <- setSynchronizerConnectionConfig(
+                      config,
+                      registeredSynchronizer.psid.toOption.orElse(config.synchronizerId),
+                    )
+                  } yield true
+                }
             }
+          case nonActiveStatus =>
+            logger.info(
+              s"Not modifying synchronizer connection config to $newConfig for $registeredSynchronizer as status is non active: $nonActiveStatus"
+            )
+            Future.successful(false)
         }
       } yield configModified,
       logger,
@@ -302,14 +357,15 @@ trait ParticipantAdminSynchronizerConnection {
       retryFor: RetryFor,
   )(implicit traceContext: TraceContext): Future[Boolean] =
     for {
-      configO <- lookupSynchronizerConnectionConfig(config.synchronizerAlias)
-      needsReconnect <- configO match {
-        case Some(config) =>
+      isSynchronizerRegistered <- isSynchronizerRegistered(config.synchronizerAlias)
+      needsReconnect <-
+        if (isSynchronizerRegistered) {
           modifySynchronizerConnectionConfig(
             config.synchronizerAlias,
+            config.synchronizerId,
             f,
           )
-        case None =>
+        } else {
           logger.info(s"Synchronizer ${config.synchronizerAlias} is new, registering")
           ensureSynchronizerRegisteredAndConnected(
             config,
@@ -317,16 +373,17 @@ trait ParticipantAdminSynchronizerConnection {
             reconnectOnSynchronizerConfigurationChange = reconnectOnSynchronizerConfigurationChange,
             retryFor = retryFor,
           ).map(_ => false)
-      }
+        }
     } yield needsReconnect
 
   def modifySynchronizerConnectionConfigAndReconnect(
       synchronizerAlias: SynchronizerAlias,
+      psid: Option[PhysicalSynchronizerId],
       reconnectOnSynchronizerConfigurationChange: Boolean,
       f: SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig],
   )(implicit traceContext: TraceContext): Future[Unit] =
     for {
-      configModified <- modifySynchronizerConnectionConfig(synchronizerAlias, f)
+      configModified <- modifySynchronizerConnectionConfig(synchronizerAlias, psid, f)
       _ <-
         if (configModified && reconnectOnSynchronizerConfigurationChange) {
           logger.info(
@@ -341,7 +398,8 @@ trait ParticipantAdminSynchronizerConnection {
       reconnectOnSynchronizerConfigurationChange: Boolean,
       f: SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig],
       retryFor: RetryFor,
-  )(implicit traceContext: TraceContext): Future[Unit] =
+  )(implicit traceContext: TraceContext): Future[Unit] = {
+    require(config.synchronizerId.isDefined, "psid must be set")
     for {
       configModified <- modifyOrRegisterSynchronizerConnectionConfig(
         config,
@@ -357,13 +415,17 @@ trait ParticipantAdminSynchronizerConnection {
           reconnectSynchronizer(config.synchronizerAlias)
         } else Future.unit
     } yield ()
+  }
 
-  private def setSynchronizerConnectionConfig(config: SynchronizerConnectionConfig)(implicit
+  private def setSynchronizerConnectionConfig(
+      config: SynchronizerConnectionConfig,
+      psid: Option[PhysicalSynchronizerId],
+  )(implicit
       traceContext: TraceContext
   ): Future[Unit] =
     runCmd(
       ParticipantAdminCommands.SynchronizerConnectivity.ModifySynchronizerConnection(
-        config.synchronizerId,
+        psid,
         config,
         SequencerConnectionValidation.ThresholdActive,
       )

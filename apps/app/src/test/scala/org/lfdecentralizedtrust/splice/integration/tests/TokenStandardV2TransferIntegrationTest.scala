@@ -4,7 +4,9 @@ import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  holdingv2,
   metadatav1,
   transferinstructionv2,
 }
@@ -26,7 +28,9 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
   TxLogEntry,
 }
 
+import java.time.Instant
 import java.util.UUID
+import scala.jdk.CollectionConverters.*
 
 // this test sets fees to zero, and that only works from 0.1.14 onwards
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_14
@@ -35,7 +39,9 @@ class TokenStandardV2TransferIntegrationTest
     with WalletTestUtil
     with WalletTxLogTestUtil
     with HasActorSystem
-    with HasExecutionContext {
+    with HasExecutionContext
+    with TokenStandardTest
+    with TokenStandardV2TestUtil {
 
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
@@ -396,6 +402,65 @@ class TokenStandardV2TransferIntegrationTest
           })
         }
       }
+    }
+
+    "support single step transfers" in { implicit env =>
+      // they need to be hosted on the same participant for this test
+      // in practice, we expect this choice to be called as part of a larger
+      // Daml tx, e.g., to distribute holdings that were just received by an
+      // decentralized app to all its backers.
+      val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+      aliceWalletClient.tap(100)
+      val aliceBalanceBefore = aliceWalletClient.balance().unlockedQty
+
+      val aliceAmuletHoldings = aliceWalletClient
+        .list()
+        .amulets
+        .map(_.contract.contractId.toInterface(holdingv2.Holding.INTERFACE))
+
+      val (context, _) =
+        sv1ScanBackend.getTransferFactoryV2(
+          new transferinstructionv2.TransferFactory_Transfer(
+            new transferinstructionv2.Transfer(
+              basicAccount(aliceUserParty),
+              basicAccount(aliceValidatorParty),
+              BigDecimal(10).bigDecimal,
+              new holdingv2.InstrumentId(dsoParty.toProtoPrimitive, amuletInstrumentIdName),
+              Instant.now(),
+              Instant.now().plusSeconds(3600L),
+              aliceAmuletHoldings.asJava,
+              emptyMetadata,
+            ),
+            /* actors */ Seq(aliceUserParty, aliceValidatorParty).map(_.toProtoPrimitive).asJava,
+            emptyExtraArgs,
+          )
+        )
+
+      actAndCheck(
+        "Alice executes the single-step transfer", {
+          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = aliceWalletClient.config.ledgerApiUser,
+              actAs = Seq(aliceUserParty, aliceValidatorParty),
+              readAs = Seq(aliceUserParty, aliceValidatorParty),
+              update = context.factoryId
+                .exerciseTransferFactory_Transfer(context.args),
+              disclosedContracts = context.disclosedContracts,
+            )
+        },
+      )(
+        "The transfer is completed",
+        result => {
+          result.exerciseResult.output match {
+            case _: TransferInstructionResult_Completed =>
+            case other =>
+              fail(s"Expected transfer to complete, but got: $other")
+          }
+          aliceWalletClient.balance().unlockedQty should be(aliceBalanceBefore - 10)
+          aliceValidatorWalletClient.balance().unlockedQty should be(BigDecimal(10))
+        },
+      )
     }
 
   }

@@ -76,7 +76,15 @@ template TokenRules with
         admin
         meta = emptyMetadata
 
-      settlementFactory_settleBatchImpl = settlementFactoryV2_settleBatchDefaultImpl this.admin
+      settlementFactory_settleBatchImpl self arg = do
+        accountMap <- extractAccountConfigMap admin arg.extraArgs []
+        let getFilteredExtraArgs allocView settleArg = do
+              -- overwrite the account map so that only the account information
+              -- for the allocation's authorizer is included
+              let authorizer = allocView.allocation.authorizer
+              pure settleArg.extraArgs with
+                context = storeAccountConfigFor authorizer accountMap settleArg.extraArgs.context
+        settlementFactoryV2_settleBatchDefaultImpl getFilteredExtraArgs admin self arg
 
       -- no extra observers to avoid leaking the settlement of different allocations to the other authorizers
       settlementFactory_settleBatchExtraObservers _arg = []

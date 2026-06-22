@@ -89,11 +89,12 @@ case class AuthTokenSourceOAuthClientCredentials(
     scope: Option[String],
     requestTimeout: NonNegativeDuration,
     httpClientMetrics: HttpClientMetrics,
+    httpBasicAuth: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, ac: ActorSystem)
     extends AuthTokenSource
     with NamedLogging {
-  private val oauth = new OAuthApi(requestTimeout, httpClientMetrics, loggerFactory)
+  private val oauth = new OAuthApi(requestTimeout, httpClientMetrics, httpBasicAuth, loggerFactory)
 
   override def getToken(implicit tc: TraceContext): Future[Option[AuthToken]] = {
     for {
@@ -130,6 +131,7 @@ object AuthTokenSource {
           audience,
           scope,
           requestTimeout,
+          httpBasicAuth,
           _,
         ) =>
       new AuthTokenSourceOAuthClientCredentials(
@@ -141,6 +143,7 @@ object AuthTokenSource {
         audience = audience,
         scope = scope,
         requestTimeout = requestTimeout,
+        httpBasicAuth = httpBasicAuth,
       )
   }
 }

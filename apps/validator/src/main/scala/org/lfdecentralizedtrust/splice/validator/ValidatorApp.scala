@@ -65,7 +65,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
   ValidatorPackageVettingTrigger,
 }
 import org.lfdecentralizedtrust.splice.validator.config.*
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 import org.lfdecentralizedtrust.splice.validator.migration.ParticipantPartyMigrator
 import org.lfdecentralizedtrust.splice.validator.store.{
@@ -189,7 +189,7 @@ class ValidatorApp(
             domainMigrationId <- appInitStep("Resolving domain migration id") {
               resolveDomainMigrationId(scanConnection)
             }
-            domainConnector = new DomainConnector(
+            domainConnector = new SynchronizerConnector(
               config,
               participantAdminConnection,
               scanConnection,
@@ -198,8 +198,7 @@ class ValidatorApp(
               loggerFactory,
             )
             domainAlreadyRegistered <- participantAdminConnection
-              .lookupSynchronizerConnectionConfig(config.domains.global.alias)
-              .map(_.isDefined)
+              .isSynchronizerRegistered(config.domains.global.alias)
             now = clock.now
             // This is used by the ReconcileSequencerConnectionsTrigger to avoid travelling back in time if the domain time is behind this.
             // We want to avoid using this when we already have a synchronizer connection as then synchronizer time should be used so we
@@ -762,7 +761,7 @@ class ValidatorApp(
         ledgerClient,
         participantAdminConnection,
         participantIdentitiesStore,
-        new DomainConnector(
+        new SynchronizerConnector(
           config,
           participantAdminConnection,
           scanConnection,

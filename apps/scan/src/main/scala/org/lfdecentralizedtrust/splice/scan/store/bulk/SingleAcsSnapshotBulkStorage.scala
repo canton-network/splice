@@ -125,17 +125,17 @@ object SingleAcsSnapshotBulkStorage {
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
-  ): Flow[TimestampWithMigrationId, Seq[String], NotUsed] =
-    Flow[TimestampWithMigrationId].flatMapConcat {
+  ): Flow[TimestampWithMigrationId, (TimestampWithMigrationId, Seq[String]), NotUsed] =
+    Flow[TimestampWithMigrationId].flatMapConcat { ts =>
       new SingleAcsSnapshotBulkStorage(
-        _,
+        ts,
         storageConfig,
         appConfig,
         acsSnapshotStore,
         s3Connection,
         historyMetrics,
         loggerFactory,
-      ).getSource
+      ).getSource.map(keys => (ts, keys))
     }
 
   /** The same flow as a source, currently used only for unit testing.

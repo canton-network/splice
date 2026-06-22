@@ -100,6 +100,7 @@ class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -455,11 +456,16 @@ class DbAppActivityRecordStore(
               case None =>
                 DBIO.successful(NotReady: EnsureResult)
               case Some((firstRecordTimeMicros, earliestRound)) =>
+                // First SV on fresh network: set earliest_ingested_round to -1
+                // so that round 0 passes assertCompleteActivity (0 > -1)
+                // and earliestRoundWithCompleteAppActivity returns -1 + 1 = 0.
+                val adjustedEarliestRound =
+                  if (isFirstSv && maxVersions.isEmpty) -1L else earliestRound
                 insertActivityRecordMetaDBIO(
                   codeVersion,
                   userVersion,
                   firstRecordTimeMicros,
-                  earliestRound,
+                  adjustedEarliestRound,
                   lastArchivedRoundO,
                 ).map { _ =>
                   metaChecked.set(true)

@@ -55,10 +55,14 @@ spec:
         - name: CANTON_DOMAIN_POSTGRES_PORT
           value: {{ .Values.mediator.persistence.port | quote }}
         - name: CANTON_DOMAIN_POSTGRES_PASSWORD
+          {{- if ((.Values.mediator.persistence).secretOverrides).postgresPassword }}
+          value: {{ .Values.mediator.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
            secretKeyRef:
               name: {{ .Values.mediator.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- if .Values.mediator.persistence.databaseName }}
         - name: CANTON_MEDIATOR_POSTGRES_DB
           value: {{ .Values.mediator.persistence.databaseName }}
@@ -116,10 +120,14 @@ spec:
           image: {{ .Values.mediator.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.mediator.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.mediator.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.mediator.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'

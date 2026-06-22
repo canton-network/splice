@@ -107,6 +107,8 @@ class HttpTokenStandardMetadataHandler(
         "splice-api-token-holding-v2" -> 1,
         "splice-api-token-allocation-v2" -> 1,
         "splice-api-token-allocation-instruction-v2" -> 1,
+        "splice-api-token-transfer-instruction-v2" -> 1,
+        "splice-api-token-transfer-events-v2" -> 1,
       ),
     )
 

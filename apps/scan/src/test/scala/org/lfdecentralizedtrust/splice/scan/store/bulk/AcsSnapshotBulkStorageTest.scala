@@ -164,16 +164,38 @@ class AcsSnapshotBulkStorageTest
 
       val kvProvider = mkProvider.futureValue
 
-      val retryProvider =
+      val retryProvider = {
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-      val bulkStorage = new AcsSnapshotBulkStorage(
+      }
+      val historyMetrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
+      val bulkStorageProcessor = new AcsSnapshotBulkStorageWriterFromDb(
         bulkStorageTestConfig,
         appConfig,
         store.store,
-        updateHistory,
         s3BucketConnection,
+        historyMetrics,
+        loggerFactory,
+      )
+      val progress = new AcsSnapshotBulkStoragePersistentProgress(
+        "latest_acs_snapshot_in_bulk_storage",
         kvProvider,
-        new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+        historyMetrics.BulkStorage.latestAcsSnapshot,
+        loggerFactory,
+      )
+      val bulkStorage = new AcsSnapshotBulkStorage(
+        "Test AcsSnapshotBulkStorage",
+        bulkStorageProcessor,
+        progress,
+        appConfig,
+        store.store,
+        updateHistory,
+        loggerFactory,
+      )
+      val reader = new BulkStorageReader(
+        acsSnapshotBulkStorage = bulkStorage,
+        updateHistoryBulkStorage = null, // not needed for this test
+        bulkStorageTestConfig,
+        s3BucketConnection,
         loggerFactory,
       )
 
@@ -201,7 +223,7 @@ class AcsSnapshotBulkStorageTest
           expectedTs: CantonTimestamp,
           expectedNumObjects: Int,
       ) = {
-        val getObjectsResult = bulkStorage.getAcsSnapshotAtOrBefore(queryTs).futureValue
+        val getObjectsResult = reader.getAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
             s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"
@@ -214,7 +236,7 @@ class AcsSnapshotBulkStorageTest
       }
 
       Using.resources(svc, retryProvider) { (_, _) =>
-        val ex = bulkStorage.getAcsSnapshotAtOrBefore(ts1).failed.futureValue
+        val ex = reader.getAcsSnapshotAtOrBefore(ts1).failed.futureValue
         ex shouldBe a[StatusRuntimeException]
         ex.asInstanceOf[StatusRuntimeException]
           .getStatus
@@ -223,7 +245,7 @@ class AcsSnapshotBulkStorageTest
 
         clue("Initially, a single snapshot is dumped") {
           eventually(4.minutes) {
-            val persistedTs1 = kvProvider.getLatestAcsSnapshotInBulkStorage().value.futureValue
+            val persistedTs1 = progress.readLatestProcessedSnapshotTimestamp.futureValue
             persistedTs1 shouldBe Some(TimestampWithMigrationId(ts1, 0))
           }
           assertLatestSnapshotInMetrics(ts1)
@@ -252,14 +274,14 @@ class AcsSnapshotBulkStorageTest
           store.addSnapshot(ts3)
 
           eventually(4.minutes) {
-            val persistedTs3 = kvProvider.getLatestAcsSnapshotInBulkStorage().value.futureValue
+            val persistedTs3 = progress.readLatestProcessedSnapshotTimestamp.futureValue
             persistedTs3.value shouldBe TimestampWithMigrationId(ts3, 0)
           }
           assertLatestSnapshotInMetrics(ts3)
           assertGetObjects(ts3, ts3, 7)
         }
 
-        val ex1 = bulkStorage
+        val ex1 = reader
           .getAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
           .failed
           .futureValue

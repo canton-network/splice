@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as a
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
+import org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.util
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
@@ -30,6 +31,7 @@ class HttpTokenStandardAllocationHandler(
     store: ScanStore,
     contractFetcher: ChoiceContextContractFetcher,
     clock: Clock,
+    tokenStandardSettlementConfig: TokenStandardConfig.SettlementConfig,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -122,12 +124,16 @@ class HttpTokenStandardAllocationHandler(
         settleBatch <- Try(
           allocationv2.SettlementFactory_SettleBatch.fromJson(body.choiceArguments.noSpaces)
         ) match {
-          case Success(settleBatch) => Future.successful(settleBatch)
+          case Success(settleBatch) =>
+            Future {
+              tokenStandardSettlementConfig.validateSettleBatch(settleBatch)
+              settleBatch
+            }
           case Failure(err) =>
             Future.failed(
               io.grpc.Status.INVALID_ARGUMENT
                 .withDescription(
-                  s"Field `choiceArguments` does not contain a valid `${allocationv2.SettlementFactory.CHOICE_SettlementFactory_SettleBatch.name}`: $err"
+                  s"Field `choiceArguments` does not contain a valid `${allocationv2.SettlementFactory.CHOICE_SettlementFactory_SettleBatch.name}`. Error: $err"
                 )
                 .asRuntimeException()
             )

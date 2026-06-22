@@ -97,6 +97,8 @@ defaultAmuletConfig = AmuletConfig with
 
   rewardConfig = None
 
+  transferPreapprovalBaseDuration = None
+
 -- | Default configuration schedule with single current amulet config
 defaultAmuletConfigSchedule : Schedule Time (AmuletConfig USD)
 defaultAmuletConfigSchedule = Schedule with

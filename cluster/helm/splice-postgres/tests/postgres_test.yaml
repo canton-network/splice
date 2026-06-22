@@ -43,6 +43,9 @@ tests:
       - equal:
           path: data.POSTGRES_USER
           value: "cnadmin"
+      - equal:
+          path: data.POSTGRES_INITDB_ARGS
+          value: "--data-checksums"
 
   - it: "deploys a StatefulSet with correct configuration"
     documentIndex: 1
@@ -353,3 +356,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: "secure-registry.example.com/postgres:14-custom"
+
+  - it: "allows overriding postgres database secret env vars with raw strings"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/postgres/postgres-password"
+    documentIndex: 1
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='test-postgres')].env[?(@.name=='POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/postgres/postgres-password"

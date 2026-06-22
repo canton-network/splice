@@ -6,6 +6,7 @@ module Splice.Scripts.TestTap where
 import DA.Assert
 import Daml.Script
 import Splice.Amulet
+import Splice.AmuletRules
 import Splice.Scripts.Util
 
 testTap: Script ()
@@ -29,4 +30,18 @@ testTap = do
     amulet.amount.initialAmount === 100.0
     config <- getAmuletConfig app
     amulet.amount.ratePerRound.rate === config.transferConfig.holdingFee.rate / newPrice
+
+    -- check that we can't tap 100M but no more in one go
+    [(rulesCid, _)] <- query @AmuletRules app.dso
+    openMiningRound <- fst <$> getLatestOpenRound app
+    submit (actAs alice.primaryParty <> readAs app.dso) $ exerciseCmd rulesCid AmuletRules_DevNet_Tap with
+        openRound = openMiningRound
+        receiver = alice.primaryParty
+        amount = 100.0 * 1000.0 * 1000.0
+
+    submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ exerciseCmd rulesCid AmuletRules_DevNet_Tap with
+        openRound = openMiningRound
+        receiver = alice.primaryParty
+        amount = 100.0 * 1000.0 * 1000.0 + 0.0000000001
+
     return ()

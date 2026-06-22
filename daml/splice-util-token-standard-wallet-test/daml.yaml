@@ -4,7 +4,7 @@
 sdk-version: 3.4.11
 name: splice-util-token-standard-wallet-test
 source: daml
-version: 1.0.8
+version: 1.0.9
 dependencies:
   - daml-prim
   - daml-stdlib

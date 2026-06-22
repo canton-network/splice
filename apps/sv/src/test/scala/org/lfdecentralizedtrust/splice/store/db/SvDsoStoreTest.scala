@@ -13,6 +13,8 @@ import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext, SynchronizerAlias}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationv2, holdingv2}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AmuletRules_MiningRound_Archive,
   AppTransferContext,
@@ -544,6 +546,163 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       }
     }
 
+    "listExpiredAmuletAllocationsV2" should {
+
+      "filter ignored parties by both allocation owner and settlement executors" in {
+        val now = Instant.parse("2025-01-01T12:00:00.000000Z")
+        val past = now.minusSeconds(3600)
+        val amount = new java.math.BigDecimal("10.0").setScale(10)
+
+        def amuletAllocationV2(
+            authorizer: PartyId,
+            receiver: PartyId,
+            executors: Seq[PartyId],
+            amount: java.math.BigDecimal,
+            expiresAt: Instant,
+            createdAt: Instant,
+            contractId: String = nextCid(),
+        ): Contract[
+          splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+          splice.amuletallocationv2.AmuletAllocationV2,
+        ] = {
+          def account(owner: PartyId) =
+            new holdingv2.Account(Optional.of(owner.toProtoPrimitive), Optional.empty(), "")
+
+          val emptyMetadata = new Metadata(Collections.emptyMap())
+          val template = new splice.amuletallocationv2.AmuletAllocationV2(
+            Optional.empty(),
+            new allocationv2.SettlementInfo(
+              executors.map(_.toProtoPrimitive).asJava,
+              "test-settlement",
+              Optional.empty(),
+              emptyMetadata,
+            ),
+            new allocationv2.AllocationSpecification(
+              dsoParty.toProtoPrimitive,
+              account(authorizer),
+              java.util.List.of(
+                new allocationv2.TransferLegSide(
+                  "leg-1",
+                  allocationv2.TransferSide.SENDERSIDE,
+                  account(receiver),
+                  amount,
+                  "Amulet",
+                  emptyMetadata,
+                )
+              ),
+              Optional.of(expiresAt),
+              Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+              false,
+              emptyMetadata,
+            ),
+            expiresAt,
+            0L,
+            createdAt,
+          )
+
+          contract(
+            splice.amuletallocationv2.AmuletAllocationV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+            new splice.amuletallocationv2.AmuletAllocationV2.ContractId(contractId),
+            template,
+          )
+        }
+
+        val authorizerToIgnore = userParty(2)
+        val executorToIgnore1 = userParty(3)
+        val executorToIgnore2 = userParty(7)
+
+        val ownerIgnoredCid = amuletAllocationV2(
+          authorizer = authorizerToIgnore,
+          receiver = userParty(5),
+          executors = Seq(userParty(6)),
+          amount = amount,
+          expiresAt = past,
+          createdAt = past.minusSeconds(3600),
+        )
+
+        val executorIgnored1Cid = amuletAllocationV2(
+          authorizer = userParty(1),
+          receiver = userParty(5),
+          executors = Seq(executorToIgnore1, userParty(6)),
+          amount = amount,
+          expiresAt = past,
+          createdAt = past.minusSeconds(3600),
+        )
+
+        val executorIgnored2Cid = amuletAllocationV2(
+          authorizer = userParty(1),
+          receiver = userParty(5),
+          executors = Seq(executorToIgnore2, userParty(6)),
+          amount = amount,
+          expiresAt = past,
+          createdAt = past.minusSeconds(3600),
+        )
+
+        val visibleCid = amuletAllocationV2(
+          authorizer = userParty(1),
+          receiver = userParty(4),
+          executors = Seq(userParty(6)),
+          amount = amount,
+          expiresAt = past,
+          createdAt = past.minusSeconds(3600),
+        )
+
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(ownerIgnoredCid, executorIgnored1Cid, executorIgnored2Cid, visibleCid)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+
+          resultAll <- store.listExpiredAmuletAllocationsV2(Set.empty)(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          resultOwnerFiltered <- store.listExpiredAmuletAllocationsV2(Set(authorizerToIgnore))(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          resultExecutorFiltered <- store.listExpiredAmuletAllocationsV2(Set(executorToIgnore1))(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          resultFullyFiltered <- store.listExpiredAmuletAllocationsV2(
+            Set(authorizerToIgnore, executorToIgnore1, executorToIgnore2)
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+        } yield {
+          resultAll.map(_.contract) should contain theSameElementsAs Seq(
+            ownerIgnoredCid,
+            executorIgnored1Cid,
+            executorIgnored2Cid,
+            visibleCid,
+          )
+
+          resultOwnerFiltered.map(_.contract) should contain theSameElementsAs Seq(
+            executorIgnored1Cid,
+            executorIgnored2Cid,
+            visibleCid,
+          )
+
+          resultExecutorFiltered.map(_.contract) should contain theSameElementsAs Seq(
+            ownerIgnoredCid,
+            executorIgnored2Cid,
+            visibleCid,
+          )
+
+          resultFullyFiltered.map(_.contract) should contain theSameElementsAs Seq(visibleCid)
+        }
+      }
+    }
+
     "listExpiredAmuletTransferInstructions" should {
 
       "return expired instructions and respect ignored parties" in {
@@ -605,6 +764,100 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           filteredContracts should contain(expiredCid)
           filteredContracts should not contain ignoredCid
           filteredContracts should not contain activeCid
+        }
+      }
+    }
+
+    "listExpiredRewardCouponsV2" should {
+
+      "return expired observer coupons respecting ignored parties, and always include hidden coupons" in {
+        val now = Instant.parse("2025-01-01T12:00:00.000000Z")
+        val past = now.minusSeconds(3600)
+        val future = now.plusSeconds(3600)
+
+        val expiredHavingBeneficiary = rewardCouponV2(
+          round = 1,
+          provider = userParty(1),
+          beneficiary = Some(userParty(2)),
+          expiresAt = past,
+        )
+
+        val active = rewardCouponV2(
+          round = 1,
+          provider = userParty(1),
+          beneficiary = Some(userParty(2)),
+          expiresAt = future,
+        )
+
+        val expiredNoBeneficiary = rewardCouponV2(
+          round = 1,
+          provider = userParty(3),
+          beneficiary = None,
+          expiresAt = past,
+        )
+
+        val expiredHidden = rewardCouponV2(
+          round = 1,
+          provider = userParty(4),
+          beneficiary = None,
+          expiresAt = past,
+          providerIsObserver = false,
+        )
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(expiredHavingBeneficiary, active, expiredNoBeneficiary, expiredHidden)
+          )(dummyDomain.create(_)(store.multiDomainAcsStore))
+
+          resultAll <- store.listExpiredRewardCouponsV2()(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreProvider <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(1))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreBeneficiary <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(2))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreProviderOfHiddenAndNoBeneficiary <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(3), userParty(4))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+        } yield {
+          val all = resultAll.map(_.contract)
+          all should contain(expiredHavingBeneficiary)
+          all should contain(expiredNoBeneficiary)
+          all should contain(expiredHidden)
+          all should not contain active
+
+          val byProvider = ignoreProvider.map(_.contract)
+          byProvider should not contain expiredHavingBeneficiary
+          byProvider should contain(expiredNoBeneficiary)
+          byProvider should contain(expiredHidden)
+
+          val byBeneficiary = ignoreBeneficiary.map(_.contract)
+          byBeneficiary should not contain expiredHavingBeneficiary
+          byBeneficiary should contain(expiredNoBeneficiary)
+          byBeneficiary should contain(expiredHidden)
+
+          // expiredHidden coupon is always returned
+          val byProviderOfHiddenAndNoBeneficiary =
+            ignoreProviderOfHiddenAndNoBeneficiary.map(_.contract)
+          byProviderOfHiddenAndNoBeneficiary should contain(expiredHavingBeneficiary)
+          byProviderOfHiddenAndNoBeneficiary should not contain expiredNoBeneficiary
+          byProviderOfHiddenAndNoBeneficiary should contain(expiredHidden)
         }
       }
     }

@@ -55,17 +55,25 @@ spec:
                   sv-client.admin-api.url = "{{ .Values.joinWithKeyOnboarding.sponsorApiUrl }}"
                 }
             - name: SPLICE_APP_SV_PUBLIC_KEY
+              {{- if ((.Values.secretOverrides).svPublicKey) }}
+              value: {{ .Values.secretOverrides.svPublicKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: public
                   name: "splice-app-sv-key"
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_SV_PRIVATE_KEY
+              {{- if ((.Values.secretOverrides).svPrivateKey) }}
+              value: {{ .Values.secretOverrides.svPrivateKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: private
                   name: "splice-app-sv-key"
                   optional: false
+              {{- end }}
             {{- else if .Values.rollForwardLsu }}
             - name: ADDITIONAL_CONFIG_SV_ONBOARDING
               value: |
@@ -167,10 +175,14 @@ spec:
                   }
                 }
             - name: SPLICE_APP_POSTGRES_PASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ $.Values.persistence.secretName }}
                   key: postgresPassword
+              {{- end }}
             {{- end }}
             - name: ADDITIONAL_CONFIG_GLOBAL_DOMAIN_UPGRADE_DUMP_PATH
               value: |
@@ -349,17 +361,25 @@ spec:
             {{- end }}
             {{- if $anyGovernanceKey }}
             - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY
+              {{- if ((.Values.cometBFT).secretOverrides).governancePublicKey }}
+              value: {{ .Values.cometBFT.secretOverrides.governancePublicKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: public
                   name: "splice-app-sv-cometbft-governance-key"
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY
+              {{- if ((.Values.cometBFT).secretOverrides).governancePrivateKey }}
+              value: {{ .Values.cometBFT.secretOverrides.governancePrivateKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: private
                   name: "splice-app-sv-cometbft-governance-key"
                   optional: false
+              {{- end }}
             {{- end }}
             - name: SPLICE_APP_UI_NETWORK_NAME
               value: {{ .Values.spliceInstanceNames.networkName | quote }}
@@ -408,10 +428,14 @@ spec:
                   prefix = {{ .prefix | quote }}
                 }
             - name: SPLICE_APP_SV_IDS_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+              {{- if ((.bucket).secretOverrides).jsonCredentials }}
+              value: {{ .bucket.secretOverrides.jsonCredentials | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: "json-credentials"
                   name: {{ .bucket.secretName }}
+              {{- end }}
             {{- end }}
             {{- with .Values.participantIdentitiesDumpImport }}
             - name: ADDITIONAL_CONFIG_SPLICE_APP_SV_PARTICIPANT_IDENTITIES_DUMP_IMPORT
@@ -510,10 +534,14 @@ spec:
                   backup-interval = {{ .backupInterval | quote }}
                 }
             - name: SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+              {{- if ((.location.bucket).secretOverrides).jsonCredentials }}
+              value: {{ .location.bucket.secretOverrides.jsonCredentials | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: "json-credentials"
                   name: {{ .location.bucket.secretName }}
+              {{- end }}
             {{- end }}
           ports:
             - name: sv-api
@@ -560,10 +588,14 @@ spec:
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'

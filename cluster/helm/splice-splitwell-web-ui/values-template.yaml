@@ -4,6 +4,10 @@
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "splitwell-web-ui"
 
+#secretOverrides:
+#  clientId: ""
+#  url: ""
+
 resources:
   requests:
     cpu: 100m

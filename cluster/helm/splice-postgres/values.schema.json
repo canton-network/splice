@@ -86,6 +86,14 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },

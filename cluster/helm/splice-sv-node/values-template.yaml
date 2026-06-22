@@ -5,6 +5,18 @@ imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "sv-app"
 ui:
   imageName: "sv-web-ui"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  # This is useful for integrating with external secret management tools.
+  # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+  #  secretOverrides:
+  #    clientId: ""
+  #    url: ""
+
+#secretOverrides:
+#  svPublicKey: ""
+#  svPrivateKey: ""
+
+
 
 # Custom annotations and labels for deployed resources
 pod:
@@ -15,7 +27,7 @@ cluster:
   fixedTokens: false
 
 # TODO(DACH-NY/canton-network-internal#2125) Revisit idle timeout on 3.4
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m
 resources:
   limits:
     memory: 8Gi
@@ -36,6 +48,8 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   initImageName: "postgres:14"
+#  secretOverrides:
+#    postgresPassword: ""
 
 migration:
   attachPvc: true

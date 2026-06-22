@@ -4,6 +4,7 @@ import com.daml.ledger.api.v2
 import com.daml.ledger.javaapi
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.topology.PartyId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv2,
   holdingv2,
@@ -19,7 +20,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardV2Allocati
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 import java.time.Instant
-import java.util.UUID
+import java.util.{Optional, UUID}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -219,5 +220,41 @@ trait TokenStandardV2TestUtil extends TestCommon {
       (new holdingv2.Holding.ContractId(instr.contractId), instrView)
     })
   }
+
+  def mkSettlementV2(executor: PartyId, settlementRef: String = "some_reference") =
+    new allocationv2.SettlementInfo(
+      java.util.List.of(executor.toProtoPrimitive),
+      settlementRef,
+      Optional.empty,
+      new Metadata(java.util.Map.of("k1", "v1", "k2", "v2")),
+    )
+  def mkAllocationSpecV2(
+      admin: PartyId,
+      sender: PartyId,
+      receiver: PartyId,
+      legId: String,
+      settlementDeadline: Instant,
+  ) =
+    new allocationv2.AllocationSpecification(
+      admin.toProtoPrimitive,
+      basicAccount(sender),
+      java.util.List.of(
+        transferLegSideForAuthorizer(
+          sender,
+          new allocationv2.TransferLeg(
+            legId,
+            basicAccount(sender),
+            basicAccount(receiver),
+            BigDecimal(12).bigDecimal.setScale(10),
+            amuletInstrumentIdName,
+            new Metadata(java.util.Map.of("k3", "v3")),
+          ),
+        )
+      ),
+      java.util.Optional.of(settlementDeadline),
+      java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+      false,
+      new Metadata(java.util.Map.of("k4", "v4")),
+    )
 
 }

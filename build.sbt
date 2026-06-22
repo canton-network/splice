@@ -2547,7 +2547,13 @@ updateTestConfigForParallelRuns := {
     (
       "Preflight tests against core nodes",
       "test-full-class-names-core-preflight.log",
-      (t: String) => isCoreDeploymentPreflightIntegrationTest(t) && !isNonDevNetTest(t),
+      (t: String) =>
+        isCoreDeploymentPreflightIntegrationTest(t) && !isNonDevNetTest(t) && !isCometBftTest(t),
+    ),
+    (
+      "Preflight tests against core nodes for cometBft",
+      "test-full-class-names-core-preflight-cometbft.log",
+      (t: String) => isCoreDeploymentPreflightIntegrationTest(t) && isCometBftTest(t),
     ),
     (
       "Preflight tests against validator1",
@@ -2562,7 +2568,13 @@ updateTestConfigForParallelRuns := {
     (
       "Preflight tests against runbook SV",
       "test-full-class-names-sv-preflight.log",
-      (t: String) => isRunbookSvPreflightIntegrationTest(t) && !isNonDevNetTest(t),
+      (t: String) =>
+        isRunbookSvPreflightIntegrationTest(t) && !isNonDevNetTest(t) && !isCometBftTest(t),
+    ),
+    (
+      "Preflight tests against runbook SV for cometBft",
+      "test-full-class-names-sv-preflight-cometbft.log",
+      (t: String) => isRunbookSvPreflightIntegrationTest(t) && isCometBftTest(t),
     ),
     (
       "Non-DevNet Preflight tests against runbook SV",

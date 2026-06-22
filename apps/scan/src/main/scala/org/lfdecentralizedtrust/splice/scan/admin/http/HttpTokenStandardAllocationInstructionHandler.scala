@@ -17,10 +17,15 @@ import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v2
 import java.time.ZoneOffset
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
+import org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfig
+
+import scala.util.{Failure, Success, Try}
 
 class HttpTokenStandardAllocationInstructionHandler(
     store: ScanStore,
     clock: Clock,
+    tokenStandardSettlementConfig: TokenStandardConfig.SettlementConfig,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -89,6 +94,22 @@ class HttpTokenStandardAllocationInstructionHandler(
     withSpan(s"$workflowId.getAllocationFactory") { _ => _ =>
       val now = clock.now
       for {
+        _ <- Try(
+          allocationinstructionv2.AllocationFactory_Allocate.fromJson(body.choiceArguments.noSpaces)
+        ) match {
+          case Success(allocate) =>
+            Future {
+              tokenStandardSettlementConfig.validateAllocate(allocate)
+            }
+          case Failure(err) =>
+            Future.failed(
+              io.grpc.Status.INVALID_ARGUMENT
+                .withDescription(
+                  s"Field `choiceArguments` does not contain a valid `${allocationinstructionv2.AllocationFactory.CHOICE_AllocationFactory_Allocate.name}`. Error: $err"
+                )
+                .asRuntimeException()
+            )
+        }
         externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
         amuletRules <- store.getAmuletRules()
         externalPartyConfigStateO <- store.lookupLatestExternalPartyConfigState()

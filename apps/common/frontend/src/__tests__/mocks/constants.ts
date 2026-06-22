@@ -195,6 +195,7 @@ export const plannedVoteResult: DsoRules_CloseVoteRequestResult = {
                 optDevelopmentFundManager: null,
                 externalPartyConfigStateTickDuration: null,
                 rewardConfig: null,
+                transferPreapprovalBaseDuration: null,
               },
             },
           },
