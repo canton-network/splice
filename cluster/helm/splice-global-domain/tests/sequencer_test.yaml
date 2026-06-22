@@ -371,6 +371,9 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
           pattern: "vault:kv/data/sequencer/postgres-password"
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.valueFrom.secretKeyRef)]
+
 
   - it: "allows overriding bft driver database password with raw strings"
     set:
