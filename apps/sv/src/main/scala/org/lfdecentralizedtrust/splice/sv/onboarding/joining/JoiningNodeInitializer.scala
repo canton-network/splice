@@ -183,8 +183,9 @@ class JoiningNodeInitializer(
           )
         ),
       ).tupled
-      decentralizedSynchronizerId <- participantAdminConnection
-        .getSynchronizerId(config.domains.global.alias)
+      psid <- participantAdminConnection
+        .getPhysicalSynchronizerId(config.domains.global.alias)
+      decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
         decentralizedSynchronizerId,
@@ -356,6 +357,7 @@ class JoiningNodeInitializer(
       // Set autoConnect=true now that DSO party migration is complete
       _ <- participantAdminConnection.modifySynchronizerConnectionConfig(
         config.domains.global.alias,
+        Some(psid),
         config => if (config.manualConnect) Some(config.copy(manualConnect = false)) else None,
       )
       cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(

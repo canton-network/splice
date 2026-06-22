@@ -334,3 +334,23 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].image
           pattern: "secure-registry.com/postgres:14"
+
+  - it: "allows overriding nested persistence and bucket secret env vars with raw strings"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/validator/postgres-password"
+      persistence.enablePgInitContainer: true
+      participantIdentitiesDumpPeriodicBackup.location.bucket.secretOverrides.jsonCredentials: "vault:kv/data/validator/bucket-creds"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/validator/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/validator/postgres-password"
+      # FIXED: Real environment variable name
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
+          pattern: "vault:kv/data/validator/bucket-creds"

@@ -168,7 +168,7 @@ scan_get_status() {
             '
         )
 
-        # Use an exlusive lock to make sure we don't mix up the outputs
+        # Use an exclusive lock to make sure we don't mix up the outputs
         exec {LOCK_FD}<>"$lockfile"
         flock "$LOCK_FD"
 

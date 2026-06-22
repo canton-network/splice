@@ -51,10 +51,14 @@ spec:
             - name: CANTON_DOMAIN_POSTGRES_PORT
               value: {{ .Values.sequencer.persistence.port | quote }}
             - name: CANTON_DOMAIN_POSTGRES_PASSWORD
+              {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.sequencer.persistence.secretName }}
                   key: postgresPassword
+              {{- end }}
         {{- if .Values.sequencer.persistence.databaseName }}
             - name: CANTON_SEQUENCER_POSTGRES_DB
               value: {{ .Values.sequencer.persistence.databaseName }}
@@ -75,10 +79,14 @@ spec:
             - name: SEQUENCER_DRIVER_DATABASE_ADDRESS
               value: {{ .Values.sequencer.driver.address }}
             - name: SEQUENCER_DRIVER_DATABASE_PASSWORD
+              {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.sequencer.persistence.secretName }}
                   key: postgresPassword
+            {{- end }}
         {{- else if eq .Values.sequencer.driver.type "cometbft"}}
             - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_COMETBFT
               value: |
@@ -118,10 +126,14 @@ spec:
                   type = "BFT"
                 }
             - name: SEQUENCER_DRIVER_BFT_POSTGRES_PASSWORD
+              {{- if or (and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword) ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ if and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword }}{{ .Values.sequencer.driver.persistence.secretOverrides.postgresPassword | quote }}{{ else }}{{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}{{ end }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ ((.Values.sequencer.driver).persistence).secretName | default .Values.sequencer.persistence.secretName }}
                   key: postgresPassword
+              {{- end}}
         {{- end}}
             {{- with .Values.sequencer.tokenExpirationTime }}
             - name: SEQUENCER_TOKEN_EXPIRATION_TIME
@@ -180,10 +192,14 @@ spec:
           image: {{ .Values.sequencer.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.sequencer.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -202,10 +218,14 @@ spec:
           image: {{ .Values.sequencer.driver.persistence.initImageName | default "postgres:14" }}
           env:
             - name: PGPASSWORD
+              {{- if or (and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword) ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
+              value: {{ if and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword }}{{ .Values.sequencer.driver.persistence.secretOverrides.postgresPassword | quote }}{{ else }}{{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}{{ end }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.sequencer.driver.persistence.secretName | default .Values.sequencer.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'

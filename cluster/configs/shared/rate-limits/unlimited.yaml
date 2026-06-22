@@ -105,6 +105,10 @@ rateLimits:
     name: sv-voteresults
     type: unlimited
 
+  /api/scan/v0/admin/sv/previous-sv-reward-weight:
+    name: sv-previous-sv-reward-weight
+    type: unlimited
+
   /api/scan/v0/amulet-price:
     name: amulet-price-votes
     type: unlimited

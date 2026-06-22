@@ -10,7 +10,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
 resources:
   limits:
     memory: 32Gi
@@ -38,6 +38,8 @@ persistence:
   # database named 'participant' or starting with 'participant' already exists. This guards
   # against misconfiguration on a non-fresh deployment.
   enableParticipantDbConflictCheck: true
+#  secretOverrides:
+#    postgresPassword: ""
 # k8s affinity for all deployed pods (optional)
 # affinity:
 

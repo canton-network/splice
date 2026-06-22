@@ -11,7 +11,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=70 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=70 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
 resources:
   limits:
     memory: 6Gi
@@ -32,6 +32,8 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   initImageName: "postgres:14"
+#  secretOverrides:
+#    postgresPassword: ""
   # The user version of the ACS store (optional), a positive integer,
   # set to 1 if previously unset to re-ingest, increment by 1 to subsequently re-ingest, the ACS store
   # acsStoreDescriptorUserVersion:

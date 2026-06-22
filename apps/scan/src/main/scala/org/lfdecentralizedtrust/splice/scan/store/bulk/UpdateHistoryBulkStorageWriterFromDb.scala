@@ -25,9 +25,9 @@ class UpdateHistoryBulkStorageWriterFromDb(
     with NamedLogging
     with Spanning {
 
-  override def processSegment(
-      segment: UpdatesSegment
-  )(implicit tc: TraceContext): Flow[UpdatesSegment, UpdatesSegment, NotUsed] = {
+  override def processSegmentsFlow(implicit
+      tc: TraceContext
+  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed] = {
     UpdateHistorySegmentBulkStorage
       .asFlow(
         storageConfig,
@@ -37,12 +37,12 @@ class UpdateHistoryBulkStorageWriterFromDb(
         historyMetrics,
         loggerFactory,
       )
-      .map(keys => {
+      .map { case (segment, keys) =>
         logger.debug(
           s"Successfully dumped updates segment $segment to bulk storage, with object keys: $keys"
         )
         segment
-      })
+      }
   }
 
 }

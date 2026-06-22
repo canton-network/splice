@@ -158,10 +158,11 @@ class SV1Initializer(
           )
           Future.unit
         }
-      (namespace, synchronizerId) <-
+      (namespace, psid) <-
         if (config.shouldSkipSynchronizerInitialization) {
-          participantAdminConnection.getSynchronizerId(config.domains.global.alias).map { s =>
-            (s.namespace, s)
+          participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias).map {
+            s =>
+              (s.namespace, s)
           }
         } else {
           bootstrapDomain(synchronizerNodeService.nodes.current)
@@ -179,7 +180,7 @@ class SV1Initializer(
             sequencerConnectionPoolDelays =
               config.participantClient.sequencerConnectionPoolDelays.toInternal,
           ),
-          synchronizerId = None,
+          synchronizerId = Some(psid),
           timeTracker = SynchronizerTimeTrackerConfig(
             minObservationDuration = config.timeTrackerMinObservationDuration,
             observationLatency = config.timeTrackerObservationLatency,
@@ -199,11 +200,11 @@ class SV1Initializer(
         clock,
         loggerFactory,
         retryProvider,
-        synchronizerId,
+        psid.logical,
       )
       _ = logger.info("Synchronizer rotated OTK keys that were not signed")
       (dsoParty, svParty, _) <- (
-        setupDsoParty(synchronizerId, initConnection, namespace),
+        setupDsoParty(psid.logical, initConnection, namespace),
         SetupUtil.setupSvParty(
           initConnection,
           config,
@@ -229,7 +230,7 @@ class SV1Initializer(
             )
             vetting
               .vetCurrentPackages(
-                synchronizerId,
+                psid.logical,
                 sv1Config.initialPackageConfig.toPackageConfig,
                 config.additionalPackagesToUnvet,
               )
@@ -437,7 +438,7 @@ class SV1Initializer(
 
   private def bootstrapDomain(synchronizerNode: LocalSynchronizerNode)(implicit
       tc: TraceContext
-  ): Future[(Namespace, SynchronizerId)] = {
+  ): Future[(Namespace, PhysicalSynchronizerId)] = {
     withSpan("bootstrapDomain") { implicit tc => _ =>
       logger.info("Bootstrapping the domain as sv1")
 
@@ -579,7 +580,7 @@ class SV1Initializer(
             ),
             logger,
           )
-        } yield (namespace, synchronizerId)
+        } yield (namespace, physicalSynchronizerId)
       }
     }
   }

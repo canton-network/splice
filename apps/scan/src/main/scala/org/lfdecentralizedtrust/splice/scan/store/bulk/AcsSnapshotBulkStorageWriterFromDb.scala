@@ -52,7 +52,7 @@ class AcsSnapshotBulkStorageWriterFromDb(
     ret
   }
 
-  override def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
+  override def processSnapshotsFlow(implicit
       tc: TraceContext
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed] = {
     SingleAcsSnapshotBulkStorage
@@ -64,12 +64,12 @@ class AcsSnapshotBulkStorageWriterFromDb(
         historyMetrics,
         loggerFactory,
       )
-      .map(keys => {
+      .map { case (ts, keys) =>
         logger.debug(
           s"Successfully dumped snapshot from migration ${ts.migrationId}, timestamp ${ts.timestamp} to bulk storage, with object keys: $keys"
         )
         ts
-      })
+      }
   }
 
 }

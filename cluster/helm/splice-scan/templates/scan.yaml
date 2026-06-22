@@ -52,10 +52,14 @@ spec:
               }
             }
         - name: SPLICE_APP_POSTGRES_PASSWORD
+          {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- end }}
         {{- if .Values.isFirstSv }}
         - name: ADDITIONAL_CONFIG_IS_SV1
@@ -136,15 +140,23 @@ spec:
               }
             }
         - name: SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID
+          {{- if (($.Values.bulkStorage.s3).secretOverrides).accessKey }}
+          value: {{ $.Values.bulkStorage.s3.secretOverrides.accessKey | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.bulkStorage.s3.secretName }}
               key: accessKey
+          {{ end }}
         - name: SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY
+          {{- if (($.Values.bulkStorage.s3).secretOverrides).secretAccessKey }}
+          value: {{ $.Values.bulkStorage.s3.secretOverrides.secretAccessKey | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.bulkStorage.s3.secretName }}
               key: secretAccessKey
+          {{- end }}
         {{- end }}
         {{- with .Values.publicUrl }}
         - name: ADDITIONAL_CONFIG_PUBLIC_URL
@@ -255,10 +267,14 @@ spec:
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'

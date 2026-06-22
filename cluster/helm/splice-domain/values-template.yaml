@@ -10,7 +10,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
 resources:
   limits:
     memory: 8Gi
@@ -22,11 +22,18 @@ mediator:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+    # Optional: Provide raw strings to override the default Kubernetes secret injection.
+    # This is useful for integrating with external secret management tools.
+    # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+#    secretOverrides:
+#      postgresPassword: ""
 
 sequencer:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+#    secretOverrides:
+#      postgresPassword: ""
 
 # k8s affinity for all deployed pods (optional)
 # affinity:

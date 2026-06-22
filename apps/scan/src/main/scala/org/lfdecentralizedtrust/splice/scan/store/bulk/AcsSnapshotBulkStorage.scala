@@ -44,10 +44,10 @@ trait AcsSnapshotBulkStorageWriter {
       tc: TraceContext
   ): Boolean
 
-  /** Return the main Flow that processes the snapshot at the given timestamp.
-    * The Flow must emit back the same timestamp as its output once processing is complete.
+  /** Return the main Flow that processes snapshots at given timestamps.
+    * The Flow must emit back the same timestamps as its output on every processed snapshot.
     */
-  def processSnapshotAt(ts: TimestampWithMigrationId)(implicit
+  def processSnapshotsFlow(implicit
       tc: TraceContext
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
 
@@ -161,11 +161,7 @@ class AcsSnapshotBulkStorage(
             getAcsSnapshotTimestampsAfter(TimestampWithMigrationId(CantonTimestamp.MinValue, 0))
         }
         .filter { writer.shouldProcessSnapshotAt }
-        .flatMapConcat(ts =>
-          Source
-            .single(ts)
-            .via(writer.processSnapshotAt(ts))
-        )
+        .via(writer.processSnapshotsFlow)
         .mapAsync(1) { ts =>
           persistentProgress.persistLatestProcessedSnapshotTimestamp(ts).map(_ => ts)
         }

@@ -16,7 +16,6 @@ import com.digitalasset.canton.sequencing.{
 }
 import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.Status.Code
 import io.opentelemetry.api.trace.Tracer
@@ -28,7 +27,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryFor}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -36,7 +35,7 @@ class ReconcileSequencerConnectionsTrigger(
     baseContext: TriggerContext,
     participantAdminConnection: ParticipantAdminConnection,
     scanConnection: BftScanConnection,
-    domainConnector: DomainConnector,
+    synchronizerConnector: SynchronizerConnector,
     patience: NonNegativeFiniteDuration,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
     initialSynchronizerTimeO: Option[CantonTimestamp],
@@ -81,46 +80,46 @@ class ReconcileSequencerConnectionsTrigger(
             case _ => domainTime
           }
           for {
-            (sequencerConnections, _) <- domainConnector.getSequencerConnectionsFromScan(
-              Left(maxDomainTime),
-              psid.serial,
-            )
-            _ <- MonadUtil.sequentialTraverse_(sequencerConnections.toList) {
-              case (alias, connections) =>
-                val sequencerConnectionConfig = NonEmpty.from(connections) match {
-                  case None =>
-                    // We warn on repeated failures of a polling trigger so
-                    // it's safe to just treat it as a transient exception and retry without logging warnings.
-                    throw Status.NOT_FOUND
-                      .withDescription(
-                        "Dso Sequencer list from Scan is empty, not modifying sequencers connections. This can happen during initialization when domain time is lagging behind."
-                      )
-                      .asRuntimeException()
-                  case Some(nonEmptyConnections) =>
-                    SequencerConnections.tryMany(
-                      nonEmptyConnections.forgetNE,
-                      Thresholds.sequencerConnectionsSizeThreshold(nonEmptyConnections.size),
-                      sequencerLivenessMargin =
-                        Thresholds.sequencerConnectionsLivenessMargin(nonEmptyConnections.size),
-                      submissionRequestAmplification = SubmissionRequestAmplification(
-                        Thresholds.sequencerSubmissionRequestAmplification(
-                          nonEmptyConnections.size
-                        ),
-                        patience,
-                      ),
-                      sequencerConnectionPoolDelays = sequencerConnectionPoolDelays,
+            (alias, sequencerConnections, _) <- synchronizerConnector
+              .getSequencerConnectionsFromScan(
+                Left(maxDomainTime),
+                psid.serial,
+              )
+            _ <- {
+              val sequencerConnectionConfig = NonEmpty.from(sequencerConnections) match {
+                case None =>
+                  // We warn on repeated failures of a polling trigger so
+                  // it's safe to just treat it as a transient exception and retry without logging warnings.
+                  throw Status.NOT_FOUND
+                    .withDescription(
+                      "Dso Sequencer list from Scan is empty, not modifying sequencers connections. This can happen during initialization when domain time is lagging behind."
                     )
-                }
-                participantAdminConnection.modifyOrRegisterSynchronizerConnectionConfigAndReconnect(
-                  SynchronizerConnectionConfig(
-                    alias,
-                    sequencerConnectionConfig,
-                    synchronizerId = Some(psid),
-                  ),
-                  reconnectOnSynchronizerConfigurationChange,
-                  modifySequencerConnections(sequencerConnectionConfig),
-                  RetryFor.Automation,
-                )
+                    .asRuntimeException()
+                case Some(nonEmptyConnections) =>
+                  SequencerConnections.tryMany(
+                    nonEmptyConnections.forgetNE,
+                    Thresholds.sequencerConnectionsSizeThreshold(nonEmptyConnections.size),
+                    sequencerLivenessMargin =
+                      Thresholds.sequencerConnectionsLivenessMargin(nonEmptyConnections.size),
+                    submissionRequestAmplification = SubmissionRequestAmplification(
+                      Thresholds.sequencerSubmissionRequestAmplification(
+                        nonEmptyConnections.size
+                      ),
+                      patience,
+                    ),
+                    sequencerConnectionPoolDelays = sequencerConnectionPoolDelays,
+                  )
+              }
+              participantAdminConnection.modifyOrRegisterSynchronizerConnectionConfigAndReconnect(
+                SynchronizerConnectionConfig(
+                  alias,
+                  sequencerConnectionConfig,
+                  synchronizerId = Some(psid),
+                ),
+                reconnectOnSynchronizerConfigurationChange,
+                modifySequencerConnections(sequencerConnectionConfig),
+                RetryFor.Automation,
+              )
             }
           } yield ()
         case None =>

@@ -1,0 +1,54 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "SV Web UI"
+templates:
+  - sv-web-ui.yaml
+
+set:
+  auth:
+    audience: "mock-audience"
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+  defaultJvmOptions: "-Xmx1g"
+  imageRepo: "mock-repo"
+  scan:
+    publicUrl: "http://scan-public"
+    internalUrl: "http://scan-internal"
+  nodeIdentifier: "mock-node"
+  onboardingName: "mock-onboarding"
+  persistence:
+    databaseName: "cantonnet_sv"
+    schema: "sv"
+    host: "postgres"
+    port: 5432
+    user: "cnadmin"
+    secretName: "postgres-secrets"
+    initImageName: "postgres:14"
+  spliceInstanceNames:
+    networkName: MockNet
+    networkFaviconUrl: https://mock.net/favicon.ico
+    amuletName: Mocklet
+    amuletNameAcronym: MCK
+    nameServiceName: Mock Name Service
+    nameServiceNameAcronym: MNS
+  participantAddress: "mock-address"
+  domain:
+    sequencerPublicUrl: "http://mock-public"
+    sequencerAddress: "mock-seq-address"
+    mediatorAddress: "mock-med-address"
+
+tests:
+  - it: "allows overriding sv-web-ui secret env vars with raw strings"
+    set:
+      ui.secretOverrides.clientId: "vault:kv/data/sv-ui/client-id"
+      ui.secretOverrides.url: "vault:kv/data/sv-ui/url"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="sv-web-ui")].env[?(@.name=="SPLICE_APP_UI_AUTH_CLIENT_ID")].value
+          pattern: "vault:kv/data/sv-ui/client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="sv-web-ui")].env[?(@.name=="SPLICE_APP_UI_AUTH_URL")].value
+          pattern: "vault:kv/data/sv-ui/url"

@@ -4,6 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -Eeo pipefail
+
+export POSTGRES_INITDB_ARGS="--data-checksums ${POSTGRES_INITDB_ARGS:-}"
+
 docker-ensure-initdb.sh # provided by upstream image
 source docker-entrypoint.sh # provided by upstream image
 
