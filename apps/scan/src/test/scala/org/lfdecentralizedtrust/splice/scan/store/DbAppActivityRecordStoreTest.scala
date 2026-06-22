@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.scan.store
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
@@ -160,7 +161,7 @@ class DbAppActivityRecordStoreTest
         )
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(verdict1 -> noViews, verdict2 -> noViews),
+          NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews),
           appActivityRecords,
           lastArchivedRoundO = Some(9L),
         )
@@ -200,13 +201,15 @@ class DbAppActivityRecordStoreTest
 
         // First batch with activity records creates the meta row
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
+          NonEmptyList.of(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
           Seq(baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
           lastArchivedRoundO = Some(9L),
         )
         // A later batch without activity records still advances the round
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(mkVerdict(verdictStore, "update-mono-2", baseTs.plusSeconds(1L)) -> noViews),
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-mono-2", baseTs.plusSeconds(1L)) -> noViews
+          ),
           Seq.empty,
           lastArchivedRoundO = Some(10L),
         )
@@ -222,7 +225,7 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
+          NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
           Seq.empty,
           lastArchivedRoundO = Some(7L),
         )
@@ -244,7 +247,7 @@ class DbAppActivityRecordStoreTest
         verdict = mkVerdict(verdictStore, "update-no-activity", baseTs)
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(verdict -> noViews),
+          NonEmptyList.of(verdict -> noViews),
           Seq.empty,
         )
 
@@ -279,7 +282,7 @@ class DbAppActivityRecordStoreTest
         )
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(verdict1 -> noViews, verdict2 -> noViews, verdict3 -> noViews),
+          NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews, verdict3 -> noViews),
           appActivityRecords,
         )
 
@@ -325,7 +328,7 @@ class DbAppActivityRecordStoreTest
         )
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          Seq(verdict -> noViews),
+          NonEmptyList.of(verdict -> noViews),
           appActivityRecords,
         )
 

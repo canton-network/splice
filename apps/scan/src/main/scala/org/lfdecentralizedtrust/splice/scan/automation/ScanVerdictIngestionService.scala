@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
+import cats.data.NonEmptyList
 import com.daml.grpc.GrpcException
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.metrics.api.MetricsContext
@@ -264,7 +265,7 @@ class ScanVerdictIngestionService(
 
         _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
         _ <- store.insertVerdictsWithAppActivityRecords(
-          items,
+          NonEmptyList.fromListUnsafe(items.toList),
           appActivityRecords,
           lastArchivedRoundO,
         )

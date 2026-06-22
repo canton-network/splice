@@ -305,32 +305,27 @@ class DbAppActivityRecordStore(
     }
   }
 
-  /** DBIO action that inserts app activity records and ensures the meta row.
-    *
-    * @param items activity records to insert
-    * @param firstRecordTimeMicros record time of the first verdict in the batch,
-    *                              or `None` to skip the meta check
-    * @param lastArchivedRound the highest round number which has been archived as of
-    *                          the max record_time of the ingested verdicts
+  /** Insert activity records and ensure the meta row exists.
+    * Creates the meta row on first call even when `items` is empty,
+    * so that rounds with no featured-app activity are still considered
+    * complete.
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      firstRecordTimeMicros: Option[Long] = None,
+      firstRecordTimeMicros: Long,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
-    val ingestionStart = firstRecordTimeMicros.map { ts =>
-      val earliestRound = if (items.nonEmpty) {
-        items
-          .map(_.roundNumber)
-          .foldLeft(Long.MaxValue)(math.min)
-      } else {
-        // No activity records (e.g., no featured app providers).
-        // Use lastArchivedRound as earliest so rounds after it are
-        // considered to have complete (empty) activity.
-        lastArchivedRoundO.getOrElse(-1L)
-      }
-      (ts, earliestRound)
+    val earliestRound = if (items.nonEmpty) {
+      items
+        .map(_.roundNumber)
+        .foldLeft(Long.MaxValue)(math.min)
+    } else {
+      // No activity records (e.g., no featured app providers).
+      // Use lastArchivedRound as earliest so rounds after it are
+      // considered to have complete (empty) activity.
+      lastArchivedRoundO.getOrElse(-1L)
     }
+    val ingestionStart = Some((firstRecordTimeMicros, earliestRound))
     for {
       _ <-
         if (items.isEmpty) DBIO.successful(())
@@ -352,7 +347,8 @@ class DbAppActivityRecordStore(
     }
   }
 
-  /** Insert multiple app activity records in a single transaction.
+  /** Insert activity records only, without meta row management.
+    * Tests manage meta rows separately via `insertActivityRecordMeta`.
     */
   @VisibleForTesting
   def insertAppActivityRecords(
@@ -365,7 +361,7 @@ class DbAppActivityRecordStore(
       futureUnlessShutdownToFuture(
         storage
           .queryAndUpdate(
-            insertAppActivityRecordsDBIO(items).transactionally,
+            batchInsertAppActivityRecords(items).map(_ => ()).transactionally,
             "appActivity.insertAppActivityRecords.batch",
           )
       )
