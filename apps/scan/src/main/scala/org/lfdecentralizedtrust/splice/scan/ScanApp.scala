@@ -254,7 +254,9 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ =>
+      _ = logger.debug(s"ISEGALL. staging config: ${config.bulkStorage.staging}, committed config: ${config.bulkStorage.committed}")(tc)
+      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ => {
+        logger.debug("ISEGALL, initializing bulk storage")(tc)
         BulkStorage(
           scanStorageConfigV1,
           config.bulkStorage,
@@ -268,7 +270,7 @@ class ScanApp(
           retryProvider,
           loggerFactory,
         )
-      )
+      })
       // Conditionally create traffic summary ingestion dependencies
       appActivityRecordStoreO =
         if (config.enableAppActivityRecordAndTrafficIngestion) {

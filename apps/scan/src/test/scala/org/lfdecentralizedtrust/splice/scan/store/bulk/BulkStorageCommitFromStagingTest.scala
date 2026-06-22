@@ -43,23 +43,30 @@ class BulkStorageCommitFromStagingTest
     "skip previously copied objects" in {
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
-      // Pre-copy one object to the committed bucket
+      /* Pre-copy one object to the committed bucket to simulate the pipeline/app restarting during the copy process.
+       * The copy flow should skip this object and not attempt to copy it again.
+       */
       val preCopiedObject = objsWithDigests.head
-      committedS3Connection.copyObject(stagingS3Connection.bucketName, preCopiedObject.key).futureValue
+      committedS3Connection
+        .copyObject(stagingS3Connection.bucketName, preCopiedObject.key)
+        .futureValue
 
       loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
         {
           triggerCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
         },
-        logEntries =>
-          forExactly(1, logEntries)(_.message should include("Skipping copy")),
+        logEntries => forExactly(1, logEntries)(_.message should include("Skipping copy")),
       )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
   }
 
-  private def triggerCopyFlow(stagingS3Connection: S3BucketConnectionForUnitTests, committedS3Connection: S3BucketConnectionForUnitTests, objsWithDigests: Seq[ObjectKeyAndChecksum]) = {
+  private def triggerCopyFlow(
+      stagingS3Connection: S3BucketConnectionForUnitTests,
+      committedS3Connection: S3BucketConnectionForUnitTests,
+      objsWithDigests: Seq[ObjectKeyAndChecksum],
+  ) = {
     val flow = processFlow(
       stagingS3Connection,
       committedS3Connection,
@@ -77,7 +84,11 @@ class BulkStorageCommitFromStagingTest
     sub.expectNext("go")
   }
 
-  private def assertObjectsMoved(stagingS3Connection: S3BucketConnectionForUnitTests, committedS3Connection: S3BucketConnectionForUnitTests, objsWithDigests: Seq[ObjectKeyAndChecksum]) = {
+  private def assertObjectsMoved(
+      stagingS3Connection: S3BucketConnectionForUnitTests,
+      committedS3Connection: S3BucketConnectionForUnitTests,
+      objsWithDigests: Seq[ObjectKeyAndChecksum],
+  ) = {
     clue("All objects have been moved from staging to committed S3 bucket") {
       stagingS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
       committedS3Connection.listObjects.futureValue
