@@ -8,21 +8,19 @@ import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.AllocationFactory_Allocate
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.allocationinstructionresult_output.AllocationInstructionResult_Completed
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_ContractId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
-  allocationv2,
-  allocationinstructionv2,
-  holdingv2,
-  metadatav1,
-  transferinstructionv2,
-}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2.OTCTradeAllocationRequest
+import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2.settlementbatch.SettlementBatchV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.TSA_AllocationFactory_AllocateV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.TSAR_AllocationInstructionResultV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
   BatchingUtility,
   ChoiceCall,
@@ -350,7 +348,7 @@ class TestTokenV2SettlementIntegrationTest
         },
       )
 
-      clue(
+      val aliceAllocationCids = clue(
         "Alice uses the BatchingUtilityV2 to create two allocations and accept the allocation request in a single tx"
       ) {
         val batchingUtility = batchingUtilityIds(aliceParty)
@@ -376,10 +374,11 @@ class TestTokenV2SettlementIntegrationTest
         )
         val usdcContext = registry.getContext(Seq.empty)
         aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
-          .submitJava(
+          .submitWithResult(
+            userId = aliceValidatorBackend.config.ledgerApiUser,
             actAs = Seq(aliceParty),
             readAs = Seq(aliceParty),
-            commands = batchingUtility
+            update = batchingUtility
               .exerciseBatchingUtility_ExecuteBatch(
                 new HoldingMap(
                   Map(
@@ -421,16 +420,25 @@ class TestTokenV2SettlementIntegrationTest
                   ),
                 ),
                 true,
-              )
-              .commands()
-              .asScala
-              .toSeq,
+              ),
             disclosedContracts =
               amuletAllocationFactory.disclosedContracts ++ usdcContext.disclosedContracts,
           )
+          .exerciseResult
+          .actionResults
+          .asScala
+          .map {
+            case v: TSAR_AllocationInstructionResultV2 =>
+              v.allocationInstructionResultValue.output match {
+                case completed: AllocationInstructionResult_Completed => completed.allocationCid
+                case other => fail(s"Expected AllocationInstructionResult_Completed but got $other")
+              }
+            case other =>
+              fail(s"Expected TSAR_AllocationResultV2 but got $other")
+          }
       }
 
-      clue(
+      val bobAllocationCids = clue(
         "Bob uses the BatchingUtilityV2 to accept the request and create two allocations in a single tx"
       ) {
         val batchingUtility = batchingUtilityIds(bobParty)
@@ -469,10 +477,11 @@ class TestTokenV2SettlementIntegrationTest
           bobUsdcHoldings
         )
         bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
-          .submitJava(
+          .submitWithResult(
+            userId = bobValidatorBackend.config.ledgerApiUser,
             actAs = Seq(bobParty),
             readAs = Seq(bobParty),
-            commands = batchingUtility
+            update = batchingUtility
               .exerciseBatchingUtility_ExecuteBatch(
                 new HoldingMap(
                   Map(
@@ -512,14 +521,109 @@ class TestTokenV2SettlementIntegrationTest
                   ),
                 ),
                 true,
-              )
-              .commands()
-              .asScala
-              .toSeq,
+              ),
             disclosedContracts =
               amuletAllocationFactory.disclosedContracts ++ usdcContext.disclosedContracts,
           )
+          .exerciseResult
+          .actionResults
+          .asScala
+          .map {
+            case v: TSAR_AllocationInstructionResultV2 =>
+              v.allocationInstructionResultValue.output match {
+                case completed: AllocationInstructionResult_Completed => completed.allocationCid
+                case other => fail(s"Expected AllocationInstructionResult_Completed but got $other")
+              }
+            case other =>
+              fail(s"Expected TSAR_AllocationResultV2 but got $other")
+          }
       }
+
+      actAndCheck(
+        "Venue settles the trade", {
+          val allAllocations = {
+            // TODO: broken
+            venueValidator.participantClientWithAdminToken.ledger_api.state.acs.of_party(
+              party = venueParty,
+              filterTemplates = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+                TemplateId(
+                  templateId.getPackageId,
+                  templateId.getModuleName,
+                  templateId.getEntityName,
+                )
+              ),
+              includeCreatedEventBlob = true,
+            )
+          }
+          // sanity check
+          (bobAllocationCids ++ aliceAllocationCids).foreach { cid =>
+            allAllocations
+              .find(_.contractId == cid.contractId)
+              .valueOrFail(s"No allocation found for cid $cid")
+          }
+          val amuletAllocations =
+            allAllocations.filter(_.event.signatories.contains(dsoParty.toProtoPrimitive))
+          val usdAllocations =
+            allAllocations.filter(_.event.signatories.contains(ttAdminParty.toProtoPrimitive))
+          val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
+            new allocationv2.SettlementInfo(
+              java.util.List.of(venueParty.toProtoPrimitive),
+              "OTCTrade",
+              java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
+              emptyMetadata,
+            ),
+            transferLegsFromTrade(otcTrade).asJava,
+            allAllocations
+              .map(alloc =>
+                new allocationv2.FinalizedAllocation(
+                  new allocationv2.Allocation.ContractId(alloc.contractId),
+                  java.util.List.of(),
+                  java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+                )
+              )
+              .asJava,
+            /*actors = */ java.util.List.of(venueParty.toProtoPrimitive),
+            emptyExtraArgs,
+          )
+          val amuletContext = sv1ScanBackend.getSettlementFactoryV2(settleBatch)
+          val usdcContext = registry.getContext(Seq.empty)
+          venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitJava(
+              actAs = Seq(venueParty),
+              commands = otcTrade.id
+                .exerciseOTCTrade_Settle(
+                  // TODO: you can't just pass the allocations like that
+                  Map[String, tradingappv2.SettlementBatch](
+                    dsoParty.toProtoPrimitive -> new SettlementBatchV2(
+                      amuletAllocations
+                        .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
+                        .asJava,
+                      java.util.List.of(), // TODO: there's almost certainly missing allocations
+                      amuletContext.factoryId,
+                      amuletContext.args.extraArgs,
+                    ),
+                    ttAdminParty.toProtoPrimitive -> new SettlementBatchV2(
+                      usdAllocations
+                        .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
+                        .asJava,
+                      java.util.List.of(), // TODO: there's almost certainly missing allocations
+                      new allocationv2.SettlementFactory.ContractId(tokenRulesId.contractId),
+                      new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                    ),
+                  ).asJava,
+                  List(
+                    bobAllocationRequest.contract.contractId.contractId,
+                    aliceAllocationRequest.contract.contractId.contractId,
+                  ).map(cid => new OTCTradeAllocationRequest.ContractId(cid)).asJava,
+                )
+                .commands()
+                .asScala
+                .toSeq,
+              disclosedContracts =
+                usdcContext.disclosedContracts ++ amuletContext.disclosedContracts,
+            )
+        },
+      )("Foo", _ => {})
     }
   }
 
