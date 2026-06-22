@@ -502,7 +502,7 @@ class DbAppActivityRecordStoreTest
           // Version 1 meta row exists from prior run
           _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 0L, Some(1L))
           // Version 2 meta row added by ensureMeta
-          _ <- runEnsureMeta(store, Some((baseTs.toMicros + 1000000L, 10L)), Some(11L))
+          _ <- runEnsureMeta(store, (baseTs.toMicros + 1000000L, 10L), Some(11L))
           _ <- insertRecordsForRounds(
             store,
             historyId,
@@ -692,24 +692,15 @@ class DbAppActivityRecordStoreTest
 
   "ensureMetaDBIO" should {
 
-    "return NotReady when no meta row and no activity records" in {
-      for {
-        (store, _) <- newStore()
-        result <- runEnsureMeta(store, None)
-      } yield {
-        result shouldBe NotReady
-      }
-    }
-
     "insert meta on first call and resume on second" in {
       for {
         (store, _) <- newStore()
-        r1 <- runEnsureMeta(store, Some((1000000L, 10L)), Some(9L))
-        r2 <- runEnsureMeta(store, None)
+        r1 <- runEnsureMeta(store, (1000000L, 10L), Some(9L))
+        r2 <- runEnsureMeta(store, (1000000L, 10L))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        r1 shouldBe Checked(InsertMeta)
-        r2 shouldBe Checked(Resume)
+        r1 shouldBe InsertMeta
+        r2 shouldBe Resume
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
         meta.value.lastArchivedRound shouldBe Some(9L)
@@ -721,7 +712,7 @@ class DbAppActivityRecordStoreTest
         (store, _) <- newStore()
         // Before ensure, no meta row — startedIngestingAt returns None
         beforeO <- store.startedIngestingAt
-        _ <- runEnsureMeta(store, Some((1000000L, 10L)))
+        _ <- runEnsureMeta(store, (1000000L, 10L))
         // After ensure, the read path should load from DB
         afterO <- store.startedIngestingAt
       } yield {
@@ -734,10 +725,10 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L, None)
-        result <- runEnsureMeta(store, Some((2000000L, 20L)))
+        result <- runEnsureMeta(store, (2000000L, 20L))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        result shouldBe Checked(Resume)
+        result shouldBe Resume
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
       }
@@ -747,11 +738,11 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore(DbAppActivityRecordStore.IngestionVersions(2, 0))
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 10L, Some(15L))
-        result <- runEnsureMeta(store, Some((2000000L, 20L)), Some(19L))
+        result <- runEnsureMeta(store, (2000000L, 20L), Some(19L))
         meta <- store.lookupActivityRecordMeta(2, 0)
         oldMeta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        result shouldBe Checked(InsertMeta)
+        result shouldBe InsertMeta
         meta.value.codeVersion shouldBe 2
         meta.value.startedIngestingAt shouldBe 2000000L
         meta.value.earliestIngestedRound shouldBe 20L
@@ -764,10 +755,10 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMeta(2, 0, 1000000L, 10L, None)
-        result <- runEnsureMeta(store, Some((2000000L, 20L)))
+        result <- runEnsureMeta(store, (2000000L, 20L))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
-        result shouldBe Checked(DowngradeDetected(1, 0, 2, 0))
+        result shouldBe DowngradeDetected(1, 0, 2, 0)
         meta.value.codeVersion shouldBe 2
         meta.value.startedIngestingAt shouldBe 1000000L
         meta.value.earliestIngestedRound shouldBe 10L
@@ -777,10 +768,10 @@ class DbAppActivityRecordStoreTest
     "use earliestRound as provided by caller" in {
       for {
         (store, _) <- newStore()
-        r1 <- runEnsureMeta(store, Some((1000000L, 10L)))
+        r1 <- runEnsureMeta(store, (1000000L, 10L))
         meta <- store.lookupActivityRecordMeta(1, 0)
       } yield {
-        r1 shouldBe Checked(InsertMeta)
+        r1 shouldBe InsertMeta
         meta.value.earliestIngestedRound shouldBe 10L
       }
     }
@@ -791,10 +782,10 @@ class DbAppActivityRecordStoreTest
           versions = DbAppActivityRecordStore.IngestionVersions(2, 0)
         )
         _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, None)
-        r1 <- runEnsureMeta(store, Some((2000000L, 10L)))
+        r1 <- runEnsureMeta(store, (2000000L, 10L))
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
-        r1 shouldBe Checked(InsertMeta)
+        r1 shouldBe InsertMeta
         meta.value.earliestIngestedRound shouldBe 10L
       }
     }
@@ -963,9 +954,9 @@ class DbAppActivityRecordStoreTest
 
   private def runEnsureMeta(
       store: DbAppActivityRecordStore,
-      ingestionStart: Option[(Long, Long)],
+      ingestionStart: (Long, Long),
       lastArchivedRoundO: Option[Long] = None,
-  ): Future[EnsureResult] =
+  ): Future[MetaCheckResult] =
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(
         store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO),

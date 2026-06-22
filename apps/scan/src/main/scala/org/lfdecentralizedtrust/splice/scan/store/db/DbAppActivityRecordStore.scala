@@ -62,10 +62,6 @@ object DbAppActivityRecordStore {
 
   final case class IngestionVersions(code: Int, user: Int)
 
-  sealed trait EnsureResult
-  case class Checked(result: MetaCheckResult) extends EnsureResult
-  case object NotReady extends EnsureResult
-
   sealed trait MetaCheckResult
   case object InsertMeta extends MetaCheckResult
   case object Resume extends MetaCheckResult
@@ -324,7 +320,6 @@ class DbAppActivityRecordStore(
       // considered to have complete (empty) activity.
       lastArchivedRoundO.getOrElse(-1L)
     }
-    val ingestionStart = Some((firstRecordTimeMicros, earliestRound))
     for {
       _ <-
         if (items.isEmpty) DBIO.successful(())
@@ -332,14 +327,14 @@ class DbAppActivityRecordStore(
           batchInsertAppActivityRecords(items).map { _ =>
             logger.info(s"Inserted ${items.size} app activity records.")
           }
-      ensureResult <- ensureMetaDBIO(ingestionStart, lastArchivedRoundO)
+      ensureResult <- ensureMetaDBIO((firstRecordTimeMicros, earliestRound), lastArchivedRoundO)
       _ <- (ensureResult, lastArchivedRoundO) match {
         // We already have meta row, so do the update in place.
-        case (Checked(Resume), Some(round)) => updateLastArchivedRoundDBIO(round)
+        case (Resume, Some(round)) => updateLastArchivedRoundDBIO(round)
         case _ => DBIO.successful(0)
       }
     } yield ensureResult match {
-      case Checked(d: DowngradeDetected) =>
+      case d: DowngradeDetected =>
         logger.error(s"${d.message} Shutting down to prevent data corruption.")
         sys.exit(1)
       case _ => ()
@@ -452,12 +447,13 @@ class DbAppActivityRecordStore(
     *                           a new meta row
     */
   def ensureMetaDBIO(
-      ingestionStart: Option[(Long, Long)],
+      ingestionStart: (Long, Long),
       lastArchivedRoundO: Option[Long] = None,
-  ): DBIO[EnsureResult] = {
+  ): DBIO[MetaCheckResult] = {
     val codeVersion = ingestionVersions.code
     val userVersion = ingestionVersions.user
-    if (metaChecked.get()) DBIO.successful(Checked(Resume))
+    val (firstRecordTimeMicros, earliestRound) = ingestionStart
+    if (metaChecked.get()) DBIO.successful(Resume)
     else {
       for {
         maxVersions <- sql"""select max(activity_ingestion_code_version),
@@ -473,28 +469,23 @@ class DbAppActivityRecordStore(
           })
         result <- checkMetaVersions(maxVersions, codeVersion, userVersion) match {
           case InsertMeta =>
-            ingestionStart match {
-              case None =>
-                DBIO.successful(NotReady: EnsureResult)
-              case Some((firstRecordTimeMicros, earliestRound)) =>
-                insertActivityRecordMetaDBIO(
-                  codeVersion,
-                  userVersion,
-                  firstRecordTimeMicros,
-                  earliestRound,
-                  lastArchivedRoundO,
-                ).map { _ =>
-                  metaChecked.set(true)
-                  Checked(InsertMeta): EnsureResult
-                }
+            insertActivityRecordMetaDBIO(
+              codeVersion,
+              userVersion,
+              firstRecordTimeMicros,
+              earliestRound,
+              lastArchivedRoundO,
+            ).map { _ =>
+              metaChecked.set(true)
+              InsertMeta: MetaCheckResult
             }
           case Resume =>
             DBIO.successful {
               metaChecked.set(true)
-              Checked(Resume): EnsureResult
+              Resume: MetaCheckResult
             }
           case d: DowngradeDetected =>
-            DBIO.successful(Checked(d): EnsureResult)
+            DBIO.successful(d: MetaCheckResult)
         }
       } yield result
     }
