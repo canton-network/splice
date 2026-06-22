@@ -1,0 +1,70 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "Party Allocator values"
+templates:
+  - party-allocator.yaml
+release:
+  name: mock-party-allocator
+chart:
+  version: 0.1.1
+  appVersion: 0.1.0
+
+tests:
+  - it: "sets metadata labels and structures as expected"
+    set:
+      cluster:
+        fixedTokens: false
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: metadata.name
+          value: party-allocator
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: party-allocator
+
+  - it: "renders zero secretKeyRefs and injects raw override values when secretOverrides are provided"
+    set:
+      cluster:
+        fixedTokens: false
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/allocator/auth-user"
+          audience: "vault:kv/data/allocator/auth-aud"
+          token: "vault:kv/data/allocator/auth-token"
+          url: "vault:kv/data/allocator/auth-url"
+          clientId: "vault:kv/data/allocator/auth-client-id"
+          clientSecret: "vault:kv/data/allocator/auth-client-secret"
+          scope: "vault:kv/data/allocator/auth-scope"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/allocator/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/allocator/auth-aud"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_URL')].value
+          pattern: "vault:kv/data/allocator/auth-url"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_ID')].value
+          pattern: "vault:kv/data/allocator/auth-client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_SECRET')].value
+          pattern: "vault:kv/data/allocator/auth-client-secret"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='party-allocator')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_SCOPE')].value
+          pattern: "vault:kv/data/allocator/auth-scope"
