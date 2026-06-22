@@ -86,7 +86,7 @@ class ConfirmationMismatchReportTrigger(
           if (disagreeing.isEmpty)
             TaskSuccess(
               s"Confirmation ${confirmationContract.contractId} by ${confirmation.confirmer} " +
-                s"agrees with all other confirmations."
+                s"agrees with all other currently existing confirmations."
             )
           else {
             val others = disagreeing
@@ -97,7 +97,7 @@ class ConfirmationMismatchReportTrigger(
                 s"for the action on contract $targetCid " +
                 s"has a mismatch with confirmations submitted by the following SV(s) " +
                 s"$others"
-            if (isReportedAsWarning(action)) logger.warn(message) else logger.info(message)
+            logger.warn(message)
             TaskSuccess(
               s"Found ${disagreeing.size} confirmation(s) disagreeing with confirmation " +
                 s"${confirmationContract.contractId} by ${confirmation.confirmer}"
@@ -106,15 +106,4 @@ class ConfirmationMismatchReportTrigger(
         }
     }
   }
-
-  // TODO (tech-debt): report all mismatches as warnings.
-  private def isReportedAsWarning(action: ActionRequiringConfirmation): Boolean =
-    action match {
-      case arc: ARC_AmuletRules =>
-        arc.amuletRulesAction match {
-          case _: CRARC_StartProcessingRewardsV2 => true
-          case _ => false
-        }
-      case _ => false
-    }
 }
