@@ -8,6 +8,7 @@ import dayjs from 'dayjs';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
+import { useStore } from '@tanstack/react-form';
 import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
@@ -69,6 +70,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
   const initialEffectiveDate = dayjs(initialExpiration).add(1, 'day');
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [revokeRightOptions, setRevokeRightOptions] = useState<Option[]>([]);
+  const [providerSearched, setProviderSearched] = useState(false);
   const mutation = useProposalMutation();
 
   // TODO(#1819): use either search params or props and not both.
@@ -105,9 +107,11 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         value: contract.contract_id,
       }));
       setRevokeRightOptions(options);
+      setProviderSearched(true);
       return undefined;
     } catch {
       setRevokeRightOptions([]);
+      setProviderSearched(false);
       return 'Could not load featured app rights for this provider';
     }
   };
@@ -195,6 +199,10 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     form.setFieldValue('rightCid', nextRightCid);
   }, [form, formAction, revokeRightOptions]);
 
+  const partyId = useStore(form.store, state => state.values.partyId);
+  const providerHasNoRights =
+    providerSearched && revokeRightOptions.length === 0 && !validatePartyId(partyId);
+
   return (
     <>
       <FormLayout form={form} id={`${testIdPrefix}-form`}>
@@ -254,7 +262,10 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       title={providerFieldTitle}
                       id={`${testIdPrefix}-partyId`}
                       subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
-                      onChange={() => setRevokeRightOptions([])}
+                      onChange={() => {
+                        setRevokeRightOptions([]);
+                        setProviderSearched(false);
+                      }}
                     />
                   )}
                 </form.AppField>
@@ -272,6 +283,11 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       id={`${testIdPrefix}-rightCid`}
                       options={revokeRightOptions}
                       disabled={revokeRightOptions.length === 0}
+                      helperText={
+                        providerHasNoRights
+                          ? 'No featured application rights found for this provider'
+                          : undefined
+                      }
                     />
                   )}
                 </form.AppField>

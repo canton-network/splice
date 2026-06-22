@@ -20,10 +20,11 @@ export interface SelectFieldProps {
   id: string;
   onChange?: () => void;
   disabled?: boolean;
+  helperText?: string;
 }
 
 export const SelectField: React.FC<SelectFieldProps> = props => {
-  const { title, options, id, disabled = false } = props;
+  const { title, options, id, disabled = false, helperText } = props;
   const externalOnChange = props.onChange ?? (() => {});
   const field = useFieldContext<string>();
   const handleSelectValueChange = (value: string) => {
@@ -65,7 +66,9 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
             </MenuItem>
           ))}
         </Select>
-        <FormHelperText data-testid={`${id}-error`}>{field.state.meta.errors?.[0]}</FormHelperText>
+        <FormHelperText data-testid={`${id}-error`}>
+          {helperText ?? field.state.meta.errors?.[0]}
+        </FormHelperText>
       </FormControl>
     </Box>
   );

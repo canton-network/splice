@@ -281,6 +281,28 @@ describe('Revoke Featured App Form', () => {
     expect(rightCidDropdown).toBeDisabled();
   });
 
+  test('communicates when the provider has no featured app rights to unfeature', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_RevokeFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    const partyIdInput = screen.getByTestId('revoke-featured-app-partyId');
+    await user.type(partyIdInput, 'no-rights-party::1014912492');
+    fireEvent.blur(partyIdInput);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('revoke-featured-app-rightCid-error').textContent).toBe(
+        'No featured application rights found for this provider'
+      );
+    });
+
+    expect(screen.getByTestId('revoke-featured-app-rightCid-dropdown')).toBeDisabled();
+  });
+
   test('should render errors when submit button is clicked on new form', async () => {
     const user = userEvent.setup();
 
