@@ -135,11 +135,40 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
+              {field => <field.ProposalTypeField id="update-sv-reward-weight-action" />}
+            </form.AppField>
+
+            <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => {
+                  return validateSvSelection(value);
+                },
+              }}
+            >
+              {field => (
+                <field.SelectField
+                  title="Member"
+                  options={svOptions}
+                  id="update-sv-reward-weight-member"
+                  onChange={() => form.resetField('weight')}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="weight"
+              validators={{
+                onBlur: ({ value }) => validateWeight(value),
+                onChange: ({ value }) => validateWeight(value),
+              }}
+            >
               {field => (
                 <field.TextField
-                  title="Action"
-                  id="update-sv-reward-weight-action"
-                  muiTextFieldProps={{ disabled: true }}
+                  title="Weight"
+                  id="update-sv-reward-weight-weight"
+                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
                 />
               )}
             </form.AppField>
@@ -192,41 +221,6 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
               }}
             >
               {field => <field.TextField title="URL" id="update-sv-reward-weight-url" />}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => {
-                  return validateSvSelection(value);
-                },
-              }}
-            >
-              {field => (
-                <field.SelectField
-                  title="Member"
-                  options={svOptions}
-                  id="update-sv-reward-weight-member"
-                  onChange={() => form.resetField('weight')}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="weight"
-              validators={{
-                onBlur: ({ value }) => validateWeight(value),
-                onChange: ({ value }) => validateWeight(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Weight"
-                  id="update-sv-reward-weight-weight"
-                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
-                />
-              )}
             </form.AppField>
           </>
         )}

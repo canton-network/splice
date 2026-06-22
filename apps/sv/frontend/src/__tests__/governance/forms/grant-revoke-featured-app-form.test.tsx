@@ -45,11 +45,11 @@ describe('Grant Featured App Form', () => {
     );
 
     expect(screen.getByTestId('grant-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('grant-featured-app-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Feature Application');
+    expect(actionInput.textContent).toBe('Feature Application');
 
     const summaryInput = screen.getByTestId('grant-featured-app-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -254,11 +254,11 @@ describe('Revoke Featured App Form', () => {
     );
 
     expect(screen.getByTestId('revoke-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('revoke-featured-app-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Unfeature Application');
+    expect(actionInput.textContent).toBe('Unfeature Application');
 
     const summaryInput = screen.getByTestId('revoke-featured-app-summary');
     expect(summaryInput).toBeInTheDocument();
