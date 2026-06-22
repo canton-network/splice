@@ -27,8 +27,8 @@ class DsoDelegateBasedAutomationService(
     domainTimeSync: DomainTimeSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
@@ -167,6 +167,16 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+      )
+    )
+
+    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+
+    registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(
         triggerContext,
         svTaskContext,
@@ -177,16 +187,16 @@ class DsoDelegateBasedAutomationService(
       new ProcessRewardsTrigger(
         triggerContext,
         svTaskContext,
-        scanConnectionF,
-        bftScanConnectionF,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
       )
     )
     registerTrigger(
       new ProcessRewardsDryRunTrigger(
         triggerContext,
         svTaskContext,
-        scanConnectionF,
-        bftScanConnectionF,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
       )
     )
   }
@@ -227,6 +237,8 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
+    aTrigger[ExpireRewardCouponV2Trigger],
+    aTrigger[UnhideRewardCouponV2Trigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],

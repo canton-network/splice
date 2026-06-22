@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker, Te
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TreasuryConfig,
   WalletSweepConfig,
 }
@@ -49,6 +50,7 @@ class UserWalletService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
+    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
     params: SpliceParametersConfig,
 )(implicit
@@ -85,6 +87,7 @@ class UserWalletService(
         "treasury",
         params.circuitBreakers.mediumPriority,
         clock,
+        store.dsoPartyId,
         loggerFactory,
       ),
     ),
@@ -94,6 +97,7 @@ class UserWalletService(
     walletManager,
     retryProvider,
     scanConnection,
+    mintUnassignedRewardCouponsV2 = rewardSharingConfig.beneficiaries.isEmpty,
     loggerFactory,
   )
 
@@ -111,6 +115,7 @@ class UserWalletService(
     validatorTopupConfigO,
     walletSweep,
     autoAcceptTransfers,
+    rewardSharingConfig,
     dedupDuration,
     params,
   )

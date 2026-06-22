@@ -4,7 +4,6 @@
 package com.digitalasset.canton.platform.apiserver
 
 import com.daml.grpc.adapter.ExecutionSequencerFactory
-import com.daml.tracing.Telemetry
 import com.digitalasset.canton.auth.Authorizer
 import com.digitalasset.canton.config
 import com.digitalasset.canton.health.HealthChecks
@@ -45,7 +44,6 @@ import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.data.Ref.PackageId
 import com.digitalasset.daml.lf.engine.*
 import com.digitalasset.daml.lf.language.Ast
-import com.digitalasset.daml.lf.transaction.NextGenContractStateMachine as ContractStateMachine
 import io.grpc.BindableService
 import io.grpc.protobuf.services.ProtoReflectionServiceV1
 import io.opentelemetry.api.trace.Tracer
@@ -95,7 +93,6 @@ object ApiServices {
       partyRecordStore: PartyRecordStore,
       authorizer: Authorizer,
       engine: Engine,
-      contractStateMode: ContractStateMachine.Mode,
       timeProvider: TimeProvider,
       timeProviderType: TimeProviderType,
       transactionSubmissionTracker: SubmissionTracker,
@@ -116,8 +113,9 @@ object ApiServices {
       userManagementServiceConfig: UserManagementServiceConfig,
       partyManagementServiceConfig: PartyManagementServiceConfig,
       packageServiceConfig: PackageServiceConfig,
+      updateServiceConfig: UpdateServiceConfig,
+      stateServiceConfig: StateServiceConfig,
       contractAuthenticator: ContractAuthenticatorFn,
-      telemetry: Telemetry,
       loggerFactory: NamedLoggerFactory,
       dynParamGetter: DynamicSynchronizerParameterGetter,
       interactiveSubmissionServiceConfig: InteractiveSubmissionServiceConfig,
@@ -149,7 +147,6 @@ object ApiServices {
             new CommandInspectionServiceAuthorization(
               CommandInspectionServiceImpl.createApiService(
                 commandProgressTracker,
-                telemetry,
                 loggerFactory,
               ),
               authorizer,
@@ -160,30 +157,29 @@ object ApiServices {
         val apiTimeServiceOpt =
           optTimeServiceBackend.map(tsb =>
             new TimeServiceAuthorization(
-              new ApiTimeService(tsb, telemetry, loggerFactory),
+              new ApiTimeService(tsb, loggerFactory),
               authorizer,
             )
           )
         val apiCommandCompletionService = new ApiCommandCompletionService(
           completionsService,
           metrics,
-          telemetry,
           loggerFactory,
         )
         val apiEventQueryService =
-          new ApiEventQueryService(eventQueryService, telemetry, loggerFactory)
+          new ApiEventQueryService(eventQueryService, loggerFactory)
         val apiPackageService = new ApiPackageService(
           syncService,
           packageServiceConfig,
-          telemetry,
           loggerFactory,
         )
         val apiUpdateService =
           new ApiUpdateService(
-            updateService,
-            metrics,
-            telemetry,
-            loggerFactory,
+            updateService = updateService,
+            metrics = metrics,
+            loggerFactory = loggerFactory,
+            participantId = participantId,
+            updateServiceConfig = updateServiceConfig,
           )
         val apiStateService =
           new ApiStateService(
@@ -191,8 +187,8 @@ object ApiServices {
             syncService = syncService,
             updateService = updateService,
             participantId = participantId,
+            config = stateServiceConfig,
             metrics = metrics,
-            telemetry = telemetry,
             loggerFactory = loggerFactory,
           )
         val apiVersionService =
@@ -201,7 +197,6 @@ object ApiServices {
             userManagementServiceConfig,
             partyManagementServiceConfig,
             packageServiceConfig,
-            telemetry,
             loggerFactory,
           )
 
@@ -221,7 +216,7 @@ object ApiServices {
 
       val apiReflectionService = ProtoReflectionServiceV1.newInstance()
 
-      val apiHealthService = new GrpcHealthService(healthChecks, telemetry, loggerFactory)
+      val apiHealthService = new GrpcHealthService(healthChecks, loggerFactory)
 
       val userManagementServices: List[BindableService] =
         if (userManagementServiceConfig.enabled) {
@@ -232,13 +227,11 @@ object ApiServices {
               submissionIdGenerator = SubmissionIdGenerator.Random,
               identityProviderExists = new IdentityProviderExists(identityProviderConfigStore),
               partyRecordExist = new PartyRecordsExist(partyRecordStore),
-              telemetry = telemetry,
               loggerFactory = loggerFactory,
             )
           val identityProvider =
             new ApiIdentityProviderConfigService(
               identityProviderConfigStore,
-              telemetry,
               loggerFactory,
             )
           List(
@@ -283,7 +276,6 @@ object ApiServices {
       val commandInterpreter =
         new StoreBackedCommandInterpreter(
           engine = engine,
-          contractStateMode = contractStateMode,
           participant = participantId,
           packageResolver = packageResolver,
           contractStore = contractStore,
@@ -343,7 +335,6 @@ object ApiServices {
         partyRecordStore,
         syncService,
         managementServiceTimeout,
-        telemetry = telemetry,
         partyAllocationTracker = partyAllocationTracker,
         submissionIdGenerator =
           ApiPartyManagementService.CreateSubmissionId.forParticipant(participantId),
@@ -353,7 +344,6 @@ object ApiServices {
       val apiPackageManagementService =
         ApiPackageManagementService.createApiService(
           packageSyncService = syncService,
-          telemetry = telemetry,
           loggerFactory = loggerFactory,
         )
 
@@ -361,7 +351,6 @@ object ApiServices {
         indexService,
         syncService,
         metrics,
-        telemetry,
         safeToPruneCommitmentState,
         loggerFactory,
       )
@@ -376,7 +365,6 @@ object ApiServices {
         submissionIdGenerator = SubmissionIdGenerator.Random,
         tracker = commandProgressTracker,
         metrics = metrics,
-        telemetry = telemetry,
         loggerFactory = loggerFactory,
       )
       val updateServices = new CommandServiceImpl.UpdateServices(
@@ -393,7 +381,6 @@ object ApiServices {
         updateServices = updateServices,
         timeProvider = timeProvider,
         maxDeduplicationDuration = maxDeduplicationDuration,
-        telemetry = telemetry,
         loggerFactory = loggerFactory,
       )
 
@@ -424,7 +411,6 @@ object ApiServices {
           submissionIdGenerator = SubmissionIdGenerator.Random,
           tracker = commandProgressTracker,
           metrics = metrics,
-          telemetry = telemetry,
           loggerFactory = loggerFactory,
         )
       }

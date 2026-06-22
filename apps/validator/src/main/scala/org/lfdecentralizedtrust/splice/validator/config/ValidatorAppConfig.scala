@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TransferPreapprovalConfig,
   TreasuryConfig,
   WalletSweepConfig,
@@ -146,6 +147,7 @@ final case class MigrateValidatorPartyConfig(
 case class ValidatorAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     ledgerApiUser: String,
     // The hint to be used for the validator operator's party ID
     // Must be None for SV validators, Some(hint) for non-SV validators
@@ -184,6 +186,10 @@ case class ValidatorAppBackendConfig(
     /** The configuration for auto-accepting transfers from other parties
       */
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig] = Map.empty,
+
+    /** The configuration for sharing app reward coupons from traffic-based app rewards with beneficiaries
+      */
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig] = Map.empty,
     // We don't make this optional to encourage users to think about it at least. They
     // can always set it to an empty string.
     contactPoint: String,
@@ -214,6 +220,10 @@ case class ValidatorAppBackendConfig(
     latestPackagesOnly: Boolean = false,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]] = Map.empty,
+    // Set to false to disable the DB-level exclusive lock that prevents two validator instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
   override val nodeTypeName: String = "validator"

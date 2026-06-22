@@ -80,6 +80,8 @@ trait SvDsoStore
 
   def key: SvStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   def domainMigrationId: Long
 
   def lookupSvStatusReport(svPartyId: PartyId)(implicit
@@ -197,12 +199,12 @@ trait SvDsoStore
 
   /** List amulets that are expired and can never be used as transfer input. */
   def listExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet]
 
   /** List amulet transfer instructions that are expired */
   def listExpiredAmuletTransferInstructions(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amulettransferinstruction.AmuletTransferInstruction.ContractId,
     splice.amulettransferinstruction.AmuletTransferInstruction,
@@ -210,7 +212,7 @@ trait SvDsoStore
 
   /** List amulet allocations that are expired */
   def listExpiredAmuletAllocations(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amuletallocation.AmuletAllocation.ContractId,
     splice.amuletallocation.AmuletAllocation,
@@ -218,7 +220,7 @@ trait SvDsoStore
 
   /** List locked amulets that are expired and can never be used as transfer input. */
   def listLockedExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet]
 
   def listExpiredVoteRequests(): ListExpiredContracts[VoteRequest.ContractId, VoteRequest] =
@@ -425,12 +427,13 @@ trait SvDsoStore
   final def getExpiredCouponsInBatchesPerRoundAndCouponType(
       domain: SynchronizerId,
       enableExpireValidatorFaucet: Boolean,
-      ignoredExpiredRewardsPartyIds: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
       batchSize: Limit = PageLimit.tryCreate(100),
       numBatches: Limit = PageLimit.tryCreate(100),
   )(implicit
       tc: TraceContext
   ): Future[Seq[ExpiredRewardCouponsBatch]] = {
+    val ignoredExpiredRewardsPartyIds = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     def associateRoundContractWithBatch[T](
         batches: Seq[SvDsoStore.RoundBatch[T]],
         roundMap: Map[
@@ -737,6 +740,27 @@ trait SvDsoStore
     multiDomainAcsStore.listExpiredFromPayloadExpiry(
       splice.amulet.DevelopmentFundCoupon.COMPANION
     )
+
+  def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ]
+
+  /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
+    * Returns only the parties, not the coupons, to keep the query index-only.
+    */
+  def listNonObserverRewardCouponsV2ProvidersSample(
+      limit: Limit
+  )(implicit tc: TraceContext): Future[Seq[PartyId]]
+
+  def listNonObserverRewardCouponsV2ForProvider(
+      rewardParty: PartyId,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[
+    Seq[Contract[splice.amulet.RewardCouponV2.ContractId, splice.amulet.RewardCouponV2]]
+  ]
 
   def listSvOnboardingConfirmed(
       limit: Limit = defaultLimit
@@ -1078,7 +1102,7 @@ trait SvDsoStore
   /** Whether there are more than the given number of featured app activity markers. */
   def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Boolean]
@@ -1087,7 +1111,7 @@ trait SvDsoStore
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,
@@ -1322,6 +1346,7 @@ object SvDsoStore {
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
           rewardAmount = Some(contract.payload.amount),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          rewardBeneficiaryIsObserver = Some(contract.payload.providerIsObserver),
         )
       },
       mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(

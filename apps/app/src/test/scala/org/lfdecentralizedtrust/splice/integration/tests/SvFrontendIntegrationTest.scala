@@ -166,7 +166,6 @@ class SvFrontendIntegrationTest
           _ => {
             checkValidatorLicenseRow(
               licenseRows.size.toLong,
-              sv1Backend.getDsoInfo().svParty,
               newValidatorParty,
             )
           },

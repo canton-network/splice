@@ -69,6 +69,9 @@ class ExternalPartySetupProposalIntegrationTest
     amuletCodegen.ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID,
   )
 
+  // Set above transferPreapprovalLifetimeDuration to be able to test out of funds
+  val preapprovalLifetime = NonNegativeFiniteDuration.ofDays(100)
+
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -78,7 +81,12 @@ class ExternalPartySetupProposalIntegrationTest
         (_, config) =>
           ConfigTransforms.updateAllValidatorConfigs_(
             _.focus(_.transferPreapproval)
-              .modify(c => c.copy(renewalDuration = c.preapprovalLifetime))
+              .modify(c =>
+                c.copy(
+                  renewalDuration = preapprovalLifetime,
+                  preapprovalLifetime = preapprovalLifetime,
+                )
+              )
           )(config),
         // Disable renewal trigger till required in the test
         (_, config) =>
@@ -468,18 +476,6 @@ class ExternalPartySetupProposalIntegrationTest
           rewards.loneElement.data.featured shouldBe true
         },
       )
-
-      val txs = sv1ScanBackend.listActivity(None, 1000)
-      // Alice transfers twice (1000, and then 500 to bob)
-      forExactly(2, txs) { tx =>
-        // Test that the tx history for the TransferCommand_Send exercise gets parsed properly.
-        val transfer = tx.transfer.value
-        transfer.sender.party shouldBe aliceParty.toProtoPrimitive
-        transfer.transferKind shouldBe Some(
-          definitions.Transfer.TransferKind.members.PreapprovalSend
-        )
-        transfer.description shouldBe Some("transfer-command-description")
-      }
 
       // Check that transfer command gets archived if preapproval does not exist.
       val sv1Party = sv1Backend.getDsoInfo().svParty

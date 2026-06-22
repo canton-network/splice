@@ -3,7 +3,7 @@ groups:
   - orgId: 1
     name: traffic-based-rewards
     folder: canton-network
-    interval: 5m
+    interval: 1m
     rules:
       - uid: afht9v3djz2tcf
         title: Number of featured app rights
@@ -66,5 +66,76 @@ groups:
             (Note: bumping the alert limit may be OK, if the Scan app has enough memory available.)
           severity: warning
           summary: Scan rewards reference store on namespace {{ $labels.namespace }} has too many live rows.
+        labels: {}
+        isPaused: false
+      - uid: hn7pcll44xugj7
+        title: Number of active CalculateRewardsV2 contracts
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: max by (dryRun)(max_over_time(splice_scan_reward_computation_calculate_rewards_v2_active_contracts[5m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: "00000039"
+        panelId: 74
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          __dashboardUid__: cnx7gsn
+          __panelId__: 32
+          description: |
+            At least one of our scan instances observed more than one active CalculateRewardsV2 contract
+            for dryRun={{ $labels.dryRun }}.
+
+            CalculateRewardsV2 contracts are created when a round is closed, and represent a request
+            to vote on the root hash of app rewards for a round.
+            The contract is archived as soon as 2/3 of all SVs have voted for the same root hash,
+            which should typically happen within a minute after the contract is created.
+
+            Suggested actions:
+            - Check if enough SVs are healthy
+            - Investigate the status of traffic-based app rewards automation.
+              Look at the "Traffic-based app rewards (CIP-104)" dashboard in Grafana, in particular the
+              "Voting on root hash" section.
+            - Check what votes are being cast by other SVs.
+              Filter logs for "not yet executing" AND "CRARC_StartProcessingRewardsV2".
+              Look for missing SVs or SVs that are voting for a different root hash.
+          severity: critical
+          summary: Too many active CalculateRewardsV2 contracts for dryRun={{ $labels.dryRun }}.
         labels: {}
         isPaused: false

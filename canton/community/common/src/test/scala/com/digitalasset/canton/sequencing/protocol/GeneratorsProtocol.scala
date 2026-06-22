@@ -30,7 +30,7 @@ import com.digitalasset.canton.serialization.{
 }
 import com.digitalasset.canton.topology.{GeneratorsTopology, Member, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.version.{GeneratorsVersion, ProtocolVersion}
+import com.digitalasset.canton.version.ProtocolVersion
 import com.google.protobuf.ByteString
 import magnolify.scalacheck.auto.*
 import org.scalacheck.{Arbitrary, Gen}
@@ -100,7 +100,7 @@ final class GeneratorsProtocol(
       for {
         threshold <- Arbitrary.arbitrary[PositiveInt]
         eligibleMembers <- Generators.nonEmptyListGen[Member]
-      } yield AggregationRule(eligibleMembers, threshold, protocolVersion)
+      } yield AggregationRule.testing(eligibleMembers, threshold, protocolVersion)
     )
 
   implicit val closedUncompressedEnvelopeArb: Arbitrary[ClosedUncompressedEnvelope] = Arbitrary(
@@ -162,11 +162,7 @@ final class GeneratorsProtocol(
         batch = Batch(envelopes.map(_.toClosedUncompressedEnvelopeUnsafe), protocolVersion)
         maxSequencingTime <- Arbitrary.arbitrary[CantonTimestamp]
         aggregationRule <- Gen.option(Arbitrary.arbitrary[AggregationRule])
-        submissionCost <- GeneratorsVersion.defaultValueGen(
-          protocolVersion,
-          SubmissionRequest.submissionCostDefaultValue,
-          Gen.option(Arbitrary.arbitrary[SequencingSubmissionCost]),
-        )
+        submissionCost <- Gen.option(Arbitrary.arbitrary[SequencingSubmissionCost])
         topologyTimestamp <-
           if (aggregationRule.nonEmpty)
             Arbitrary.arbitrary[CantonTimestamp].map(Some(_))
@@ -185,12 +181,17 @@ final class GeneratorsProtocol(
 
   implicit val submissionRequestArb: Arbitrary[SubmissionRequest] =
     if (protocolVersion >= ProtocolVersion.v35) {
-      Arbitrary(for {
-        submissionRequest <- submissionRequestV30Arb.arbitrary
-        closedCompressedEnvelopes <- Generators.nonEmptyListGen[ClosedCompressedEnvelope](
-          closedCompressedEnvelopeArb
+      Arbitrary(
+        for {
+          submissionRequest <- submissionRequestV30Arb.arbitrary
+          closedCompressedEnvelopes <- Generators.nonEmptyListGen[ClosedCompressedEnvelope](
+            closedCompressedEnvelopeArb
+          )
+        } yield submissionRequest.copy(
+          batch = Batch(closedCompressedEnvelopes, protocolVersion),
+          topologyTimestamp = None,
         )
-      } yield submissionRequest.copy(batch = Batch(closedCompressedEnvelopes, protocolVersion)))
+      )
     } else submissionRequestV30Arb
 
   implicit val topologyStateForInitRequestArb: Arbitrary[TopologyStateForInitRequest] = Arbitrary(

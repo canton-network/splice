@@ -47,8 +47,8 @@ class RestartDsoDelegateBasedAutomationTrigger(
     appLevelRetryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
     packageVettingService: PackageVettingLookupService,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     override val ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -160,8 +160,8 @@ class RestartDsoDelegateBasedAutomationTrigger(
          domainTimeSync,
          config,
          svTaskContext,
-         scanConnectionF,
-         bftScanConnectionF,
+         getOwnScanConnection,
+         getPeerBftScanConnection,
          retryProvider,
          loggerFactory,
        )

@@ -21,13 +21,27 @@
     {
       "required": [
         "spliceInstanceNames",
-        "migration",
         "persistence",
-        "participantAddress"
+        "participantAddress",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
           "type": "string"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "ui": {
+          "type": "object",
+          "required": [
+            "imageName"
+          ],
+          "properties": {
+            "imageName": {
+              "type": "string"
+            }
+          }
         },
         "imageDigests": {
           "type": "object"
@@ -91,7 +105,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -117,17 +132,23 @@
             },
             "txLogStoreDescriptorUserVersion": {
               "type": "integer"
+            },
+            "initImageName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
-        "migration": {
-          "type": "object",
-          "required": ["id"],
-          "properties": {
-            "id": {
-              "description": "The migration id of the synchronizer"
-            }
-          }
+        "sponsorScanUrl": {
+          "type": "string",
+          "description": "URL of the sponsor scan from which a freshly joining scan bootstraps its migration id"
         },
         "failOnAppVersionMismatch": {
           "type": "boolean"

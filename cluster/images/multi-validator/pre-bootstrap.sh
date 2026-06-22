@@ -124,7 +124,6 @@ canton.validator-apps.validator_backend_$index = {
         }
     }
 
-    domain-migration-id =\${SPLICE_APP_VALIDATOR_MIGRATION_ID}
 
     sv-validator = \${?SPLICE_APP_VALIDATOR_SV_VALIDATOR}
 

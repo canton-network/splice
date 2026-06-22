@@ -59,3 +59,5 @@ export const EnvVarConfigSchema = z.object({
   name: z.string(),
   value: z.string(),
 });
+
+export type EnvVarConfig = z.infer<typeof EnvVarConfigSchema>;

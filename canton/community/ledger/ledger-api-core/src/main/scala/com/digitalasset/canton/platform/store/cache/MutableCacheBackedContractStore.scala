@@ -28,6 +28,7 @@ private[platform] class MutableCacheBackedContractStore(
     private[cache] val contractStateCaches: ContractStateCaches,
     contractStore: LedgerApiContractStore,
     ledgerEndCache: LedgerEndCache,
+    maxLookupLimit: Int,
 )(implicit executionContext: ExecutionContext)
     extends ContractStore
     with NamedLogging {
@@ -76,24 +77,27 @@ private[platform] class MutableCacheBackedContractStore(
       key: GlobalKey,
       pageToken: Option[Long],
       limit: Int,
-  )(implicit loggingContext: LoggingContextWithTrace): Future[ContractKeyPage] =
+  )(implicit loggingContext: LoggingContextWithTrace): Future[ContractKeyPage] = {
+    val cappedLimit = if (limit > maxLookupLimit) {
+      logger.info(
+        s"Lookup limit $limit exceeds configured cap of $maxLookupLimit, using cap instead"
+      )
+      maxLookupLimit
+    } else limit
     for {
-      keyPageResult <- contractsReader.lookupNonUniqueKey(
+      (contractIds, nextPageToken) <- contractsReader.lookupNonUniqueKey(
         key = key,
-        validAtEventSeqId = ledgerEndCache().map(_.lastEventSeqId).getOrElse(0L),
+        notEarlierThanEventSeqId = ledgerEndCache().map(_.lastEventSeqId).getOrElse(0L),
         nextPageToken = pageToken,
-        limit = limit,
+        limit = cappedLimit,
       )
-      contractIdLookup <- contractStore.lookupBatchedContractIdsNonReadThrough(
-        keyPageResult.internalContractIds
-      )
-      contractIds = keyPageResult.internalContractIds.flatMap(contractIdLookup.get)
       contracts <- Future.sequence(contractIds.map(contractStore.lookupPersisted))
       filteredContracts = contracts.view.flatten.map(_.inst).filter(visibleFor(readers)).toVector
     } yield ContractKeyPage(
       contracts = filteredContracts,
-      nextPageToken = keyPageResult.nextPageToken,
+      nextPageToken = nextPageToken,
     )
+  }
 
   private def readThroughContractsCache(contractId: ContractId)(implicit
       loggingContext: LoggingContextWithTrace

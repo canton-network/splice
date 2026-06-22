@@ -84,7 +84,7 @@ sealed trait PackageVettingIntegrationTest
           _.focus(_.parameters.reassignmentsConfig.targetTimestampForwardTolerance)
             .replace(config.NonNegativeFiniteDuration.ofMinutes(10))
         ),
-        ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag,
+        ConfigTransforms.enableAlphaMultiSynchronizerTopologyFeatureFlag,
       )
       .withSetup { implicit env =>
         import env.*
@@ -295,7 +295,6 @@ sealed trait PackageVettingIntegrationTest
   }
 
   // TODO(#20873): test the interaction between package vetting and package version selection for upgrading
-
   "rolls back a view referring to a package that has not been vetted by an informee participant" taggedAs ledgerIntegrity
     .setAttack(
       Attack(

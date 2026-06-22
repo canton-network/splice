@@ -2,7 +2,9 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import com.daml.ledger.api.v2.{CommandsOuterClass, TraceContextOuterClass}
 import com.daml.ledger.javaapi.data as javaApi
+import com.daml.metrics.api.MetricsContext
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.testing.{InMemoryMetricsFactory, MetricValues}
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -32,8 +34,12 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ErrorResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
+  RewardAccountingActivityTotalsCannotProvide,
+  RewardAccountingActivityTotalsOk,
+  RewardAccountingActivityTotalsUndetermined,
   RewardAccountingBatchOfBatches,
   RewardAccountingRootHashCannotProvide,
   RewardAccountingRootHashOk,
@@ -46,6 +52,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
   DsoScan,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -72,7 +79,8 @@ class BftScanConnectionTest
     extends AsyncWordSpec
     with BaseTest
     with HasExecutionContext
-    with HasActorSystem {
+    with HasActorSystem
+    with MetricValues {
 
   val retryProvider =
     RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
@@ -270,6 +278,54 @@ class BftScanConnectionTest
       Future.successful(
         GetRewardAccountingRootHashResponse(
           RewardAccountingRootHashCannotProvide(status = "CannotProvide")
+        )
+      )
+    )
+  private def activityTotalsOk(
+      round: Long,
+      totalAppActivityWeight: Long,
+      activePartiesCount: Long,
+      activityRecordsCount: Long,
+  ): GetRewardAccountingActivityTotalsResponse =
+    GetRewardAccountingActivityTotalsResponse(
+      RewardAccountingActivityTotalsOk(
+        status = "Ok",
+        roundNumber = round,
+        totalAppActivityWeight = totalAppActivityWeight,
+        activePartiesCount = activePartiesCount,
+        activityRecordsCount = activityRecordsCount,
+        totalAppRewardMintingAllowance = "0",
+        totalAppRewardThresholded = "0",
+        totalAppRewardUnclaimed = "0",
+        rewardedAppProviderPartiesCount = 0L,
+      )
+    )
+  def makeMockReturnActivityTotalsOk(
+      mock: SingleScanConnection,
+      round: Long,
+      totalAppActivityWeight: Long,
+      activePartiesCount: Long,
+      activityRecordsCount: Long,
+  ): Unit =
+    when(mock.getRewardAccountingActivityTotals(round))
+      .thenReturn(
+        Future.successful(
+          activityTotalsOk(round, totalAppActivityWeight, activePartiesCount, activityRecordsCount)
+        )
+      )
+  def makeMockReturnActivityTotalsUndetermined(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingActivityTotals(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingActivityTotalsResponse(
+          RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+        )
+      )
+    )
+  def makeMockReturnActivityTotalsCannotProvide(mock: SingleScanConnection, round: Long): Unit =
+    when(mock.getRewardAccountingActivityTotals(round)).thenReturn(
+      Future.successful(
+        GetRewardAccountingActivityTotalsResponse(
+          RewardAccountingActivityTotalsCannotProvide(status = "CannotProvide")
         )
       )
     )
@@ -1033,6 +1089,147 @@ class BftScanConnectionTest
     }
   }
 
+  "BftScanConnection.executeCall consensus outcome reporting" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "record per-connection agreement and disagreement with the consensus result" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockReturn(connections(2), partyIdB)
+
+      def recordedLabels: Seq[(Map[String, String], Long)] =
+        metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+          context.labels -> value
+        }
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          recordedLabels should contain allOf (
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "0.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "1.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            // The disagreeing connection returned a successful (2xx) response.
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "disagree",
+              "success" -> "true",
+            ) -> 1L
+          )
+        }
+      }
+    }
+
+    "record the http status and success=false for a disagreeing error response" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      // notFoundFailure is an UnexpectedHttpJsonResponse(404), i.e. a non-successful response.
+      makeMockFail(connections(2), notFoundFailure)
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+            context.labels -> value
+          } should contain(
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "disagree",
+              "success" -> "false",
+              "http_status" -> "404",
+            ) -> 1L
+          )
+        }
+      }
+    }
+
+    "record agreements for every connection when all return the same successful response" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+        makeMockReturn(c, partyIdA)
+      }
+
+      for {
+        result <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          connectionMetrics = Some(metrics),
+        )
+      } yield {
+        result should be(partyIdA)
+        eventually() {
+          // All three connections agreed; no disagreement (and thus no success/http_status
+          // labels) should be recorded.
+          metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map { case (context, value) =>
+            context.labels -> value
+          } should contain theSameElementsAs Seq(
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "0.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "1.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+            Map(
+              "request" -> "getDsoPartyId",
+              "scan_connection" -> "2.example.com",
+              "consensus" -> "agree",
+            ) -> 1L,
+          )
+        }
+      }
+    }
+  }
+
   "BftScanConnection.getRewardAccountingRootHash" should {
 
     // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
@@ -1051,7 +1248,9 @@ class BftScanConnectionTest
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           {
-            eventually() {
+            // TODO(tech-debt): make the retry params configurable so that we
+            // don't spend time waiting in long backoffs
+            eventually(timeUntilSuccess = 40.seconds) {
               inside(bft.getRewardAccountingRootHash(round).futureValue) {
                 case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
                   ok.rootHash should be("aabb")
@@ -1135,6 +1334,125 @@ class BftScanConnectionTest
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
           bft.getRewardAccountingRootHash(round),
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
+  }
+
+  "BftScanConnection.getRewardAccountingActivityTotals" should {
+
+    // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
+    "reaches consensus when f+1 scans agree on the same totals" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      when(connections(1).getRewardAccountingActivityTotals(round))
+        .thenReturn(
+          Future.failed(notFoundFailure),
+          Future.successful(activityTotalsOk(round, 100L, 10L, 5L)),
+        )
+      makeMockReturnActivityTotalsUndetermined(connections(2), round)
+      makeMockFail(connections(3), notFoundFailure)
+      val bft = getBft(connections)
+
+      // With n=4, we query only two connections randomly, and even with
+      // retries it can sometimes fail. This eventually is here to avoid flakyness.
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          {
+            eventually(timeUntilSuccess = 40.seconds) {
+              inside(bft.getRewardAccountingActivityTotals(round).futureValue) {
+                case GetRewardAccountingActivityTotalsResponse.members
+                      .RewardAccountingActivityTotalsOk(ok) =>
+                  ok.roundNumber should be(round)
+                  ok.totalAppActivityWeight should be(100L)
+                  ok.activePartiesCount should be(10L)
+                  ok.activityRecordsCount should be(5L)
+              }
+            }
+            Future.unit
+          },
+          logs =>
+            logs.exists(l =>
+              l.level == Level.INFO && l.message.contains("Reached consensus from")
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
+
+    "returns Undetermined when no quorum agrees on the totals" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, i) =>
+        makeMockReturnActivityTotalsOk(c, round, 100L + i, 10L + i, 5L + i)
+      }
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotals(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on CannotProvide as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnActivityTotalsCannotProvide(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotals(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
+          succeed
+      }
+    }
+
+    "never treats agreement on Undetermined as consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      connections.foreach(makeMockReturnActivityTotalsUndetermined(_, round))
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotals(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
+          succeed
+      }
+    }
+
+    "returns Undetermined when there are no peer scans" in {
+      val bft = getBft(Seq.empty)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotals(1L)
+      } yield inside(resp) {
+        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
+          succeed
+      }
+    }
+
+    "logs disagreements at WARN level" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsOk(connections(1), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsOk(connections(2), round, 200L, 20L, 9L)
+      makeMockReturnActivityTotalsOk(connections(3), round, 200L, 20L, 9L)
+      val bft = getBft(connections)
+
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          bft.getRewardAccountingActivityTotals(round),
           logs =>
             logs.exists(log =>
               log.level == Level.WARN && log.message.contains(

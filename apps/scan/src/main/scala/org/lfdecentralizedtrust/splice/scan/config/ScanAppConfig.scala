@@ -16,7 +16,9 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
+
 import org.lfdecentralizedtrust.splice.store.Limit
 
 import java.time.Instant
@@ -50,6 +52,7 @@ final case class BulkStorageConfig(
 case class ScanAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     svUser: String,
     override val participantClient: ParticipantClientConfig,
     synchronizerNodes: ScanSynchronizerNodesConfig,
@@ -58,12 +61,17 @@ case class ScanAppBackendConfig(
     enableAppActivityRecordAndTrafficIngestion: Boolean = true,
     serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
+    // Max rounding error tolerated wrt actual total of minting allowances
+    // and the per-round minting allowance from the CC whitepaper.
+    rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the
-    // update history). It only needs to be configured to bootstrap a node that does not yet
-    // have any migration id in its DB (e.g. the network-founding scan or a freshly joining scan).
-    domainMigrationId: Option[Long] = None,
+    // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
+    // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
+    // migration id is fetched from the sponsor scan configured via `sponsorScanUrl`, the same way
+    // a joining SV fetches it from its sponsoring SV.
+    sponsorScanUrl: Option[NetworkAppClientConfig] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     spliceInstanceNames: SpliceInstanceNamesConfig,
     updateHistoryBackfillEnabled: Boolean = true,
@@ -84,6 +92,10 @@ case class ScanAppBackendConfig(
       ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
     globalSynchronizerAlias: SynchronizerAlias = SynchronizerAlias.tryCreate("global"),
     rollForwardLsu: Option[ScanRollForwardLsuConfig] = None,
+    // Set to false to disable the DB-level exclusive lock that prevents two scan instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
     with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {

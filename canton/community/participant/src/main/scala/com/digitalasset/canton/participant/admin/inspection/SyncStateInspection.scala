@@ -3,11 +3,13 @@
 
 package com.digitalasset.canton.participant.admin.inspection
 
+import anorm.SqlStringInterpolation
 import cats.Eval
 import cats.data.{EitherT, OptionT}
 import cats.syntax.either.*
 import cats.syntax.functorFilter.*
 import cats.syntax.traverse.*
+import com.daml.metrics.DatabaseMetrics
 import com.daml.nameof.NameOf.functionFullName
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -23,7 +25,7 @@ import com.digitalasset.canton.data.{
 import com.digitalasset.canton.ledger.participant.state.SynchronizerIndex
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, UnlessShutdown}
 import com.digitalasset.canton.logging.pretty.PrettyPrinting
-import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.logging.{LoggingContextWithTrace, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.GrpcUSExtended
 import com.digitalasset.canton.participant.admin.inspection.SyncStateInspection.{
   InFlightCount,
@@ -74,6 +76,7 @@ import com.digitalasset.canton.{
   SequencerCounter,
   SynchronizerAlias,
 }
+import com.digitalasset.daml.lf.value.Value.ContractId
 import com.google.common.annotations.VisibleForTesting
 
 import java.time.Instant
@@ -905,6 +908,32 @@ final class SyncStateInspection(
           .moveLedgerEndBackToScratch()
       )
       .onShutdown(throw new RuntimeException("onlyForTestingMoveLedgerEndBackToScratch"))
+
+  @VisibleForTesting
+  def deleteContract(internalContractId: Long)(implicit traceContext: TraceContext): Int =
+    timeouts.inspection.await(functionFullName) {
+      val removedContracts =
+        participantNodePersistentState.value.ledgerApiStore.ledgerApiDbSupport.dbDispatcher
+          .executeSql(DatabaseMetrics.ForTesting("deleteContract"))(conn =>
+            SQL"DELETE FROM par_contracts WHERE internal_contract_id=$internalContractId"
+              .executeUpdate()(conn)
+          )(LoggingContextWithTrace.ForTesting)
+      participantNodePersistentState.value.contractStore.contractsPruned(List(internalContractId))
+      removedContracts
+    }
+
+  @VisibleForTesting
+  def internalContractIdOf(
+      contractId: ContractId
+  )(implicit traceContext: TraceContext): Option[Long] =
+    timeouts.inspection
+      .awaitUS(functionFullName) {
+        participantNodePersistentState.value.contractStore
+          .lookupBatchedInternalIdsNonReadThrough(List(contractId))
+      }
+      .onShutdown(Map.empty)
+      .headOption
+      .map(_._2)
 
   def lastSynchronizerOffset(
       synchronizerId: SynchronizerId

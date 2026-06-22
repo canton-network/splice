@@ -32,17 +32,25 @@ spec:
       containers:
         - env:
             - name: SPLICE_APP_UI_AUTH_CLIENT_ID
+              {{- if ((.Values.ui).secretOverrides).clientId }}
+              value: {{ .Values.ui.secretOverrides.clientId | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: client-id
                   name: splice-app-sv-ui-auth
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_UI_AUTH_URL
+              {{- if ((.Values.ui).secretOverrides).url }}
+              value: {{ .Values.ui.secretOverrides.url | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: url
                   name: splice-app-sv-ui-auth
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_UI_AUTH_AUDIENCE
               value: {{ .Values.auth.audience | quote }}
             - name: SPLICE_APP_UI_NETWORK_NAME
@@ -59,7 +67,7 @@ spec:
               value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
             - name: SPLICE_APP_UI_POLL_INTERVAL
               value: {{ .Values.uiPollInterval | quote }}
-          image: "{{ .Values.imageRepo }}/sv-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).sv_web_ui) }}"
+          image: {{ .Values.imageRepo }}/{{ .Values.ui.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).sv_web_ui) }}
           {{- with .Values.imagePullPolicy }}
           imagePullPolicy: {{ . }}
           {{- end }}

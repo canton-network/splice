@@ -5,6 +5,7 @@ package com.digitalasset.canton.synchronizer.block.update
 
 import cats.data.EitherT
 import cats.syntax.functor.*
+import com.digitalasset.canton.crypto.SyncCryptoApi
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -17,7 +18,6 @@ import com.digitalasset.canton.sequencing.protocol.{
 import com.digitalasset.canton.synchronizer.sequencer.*
 import com.digitalasset.canton.synchronizer.sequencer.Sequencer.SignedSubmissionRequest
 import com.digitalasset.canton.topology.SequencerId
-import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.collection.MapsUtil
 import com.digitalasset.canton.util.{ErrorUtil, MonadUtil}
@@ -115,13 +115,13 @@ private[update] final class SequencedSubmissionsValidator(
           s"At block $height, the submission request ${signedSubmissionRequest.content.messageId} " +
             s"at $sequencingTimestamp validated to: ${SubmissionOutcome.prettyString(outcome)}"
         )
-      // Note, this will include subsequently rejected events. However,
-      // we only track this timestamp for ticking topology time ticks. So worst case,
-      // we just tick a few ms too late.
+      // Only consider delivered requests when updating latest pending topology transaction ts
       val updatedLatestPendingTopologyTransactionTimestamp =
-        if (signedSubmissionRequest.content.requestType == TopologyTransaction)
-          Some(sequencingTimestamp)
-        else latestPendingTopologyTransactionTimestamp
+        (outcome, signedSubmissionRequest.content.requestType) match {
+          case (_: SubmissionOutcome.Deliver, TopologyTransaction) =>
+            Some(sequencingTimestamp)
+          case _ => latestPendingTopologyTransactionTimestamp
+        }
       updateSequencedSubmissionsWithNewResult(
         inFlightAggregations = inFlightAggregations,
         outcome = outcome,
@@ -147,7 +147,7 @@ private[update] final class SequencedSubmissionsValidator(
       trafficConsumption: TrafficConsumption,
       errorOrPrevalidationOutcome: Either[SubmissionOutcome, PrevalidationOutcome],
       latestSequencerEventTimestamp: Option[CantonTimestamp],
-      sequencingTopologySnapshot: TopologySnapshot,
+      sequencingTopologySnapshot: SyncCryptoApi,
   )(implicit
       traceContext: TraceContext,
       executionContext: ExecutionContext,
@@ -159,6 +159,7 @@ private[update] final class SequencedSubmissionsValidator(
             prevalidationOutcome,
             inFlightAggregations,
             sequencingTimestamp,
+            latestSequencerEventTimestamp,
             signedSubmissionRequest.content,
             sequencingTopologySnapshot,
           ).leftMap { errorSubmissionOutcome =>
@@ -181,7 +182,7 @@ private[update] final class SequencedSubmissionsValidator(
       orderingSequencerId,
       sequencingTimestamp,
       latestSequencerEventTimestamp,
-      sequencingTopologySnapshot,
+      sequencingTopologySnapshot.ipsSnapshot,
     )
   }
 
@@ -192,8 +193,9 @@ private[update] final class SequencedSubmissionsValidator(
       prevalidationOutcome: PrevalidationOutcome,
       inFlightAggregations: InFlightAggregations,
       sequencingTimestamp: CantonTimestamp,
+      latestSequencerEventTimestamp: Option[CantonTimestamp],
       submissionRequest: SubmissionRequest,
-      sequencingTopologySnapshot: TopologySnapshot,
+      sequencingTopologySnapshot: SyncCryptoApi,
   )(implicit
       traceContext: TraceContext,
       executionContext: ExecutionContext,
@@ -205,6 +207,7 @@ private[update] final class SequencedSubmissionsValidator(
     .computeAggregationUpdateAndSubmissionOutcome(
       submissionRequest,
       sequencingTimestamp,
+      latestSequencerEventTimestamp,
       sequencingTopologySnapshot,
       aggregationInfo = prevalidationOutcome.aggregationInfo,
       inFlightAggregations = inFlightAggregations,

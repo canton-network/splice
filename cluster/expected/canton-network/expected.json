@@ -1607,8 +1607,8 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -1838,8 +1838,8 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -2809,9 +2809,6 @@
         "logLevel": "WARN",
         "metrics": {
           "enable": true
-        },
-        "migration": {
-          "id": 2
         },
         "participantAddress": "participant",
         "persistence": {
@@ -3926,9 +3923,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
@@ -3956,6 +3950,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",

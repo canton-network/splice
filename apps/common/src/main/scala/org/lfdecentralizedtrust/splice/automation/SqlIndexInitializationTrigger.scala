@@ -221,7 +221,7 @@ object SqlIndexInitializationTrigger {
     /** Create this index if it does not exist. */
     final case class Create(
         indexName: String,
-        createAction: DBIOAction[?, NoStream, Effect.Write & Effect.Transactional],
+        createAction: DBIOAction[Int, NoStream, Effect.Write & Effect.Transactional],
     ) extends IndexAction
   }
 
@@ -253,6 +253,15 @@ object SqlIndexInitializationTrigger {
           create index concurrently if not exists scan_txlog_store_sid_en_vot
           on scan_txlog_store (store_id, entry_number desc)
           where entry_type = 'vot'
+        """,
+      ),
+    IndexAction
+      .Create(
+        indexName = "dso_acs_store_sid_mid_pn_tid_rbio",
+        createAction = sqlu"""
+          create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_rbio
+          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, reward_party)
+          where reward_beneficiary_is_observer = false
         """,
       ),
   )

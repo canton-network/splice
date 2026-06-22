@@ -12,7 +12,7 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{BatchingConfig, ProcessingTimeout}
 import com.digitalasset.canton.crypto.Hash
 import com.digitalasset.canton.crypto.topology.TopologyStateHash
-import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerPredecessor}
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, PromiseUnlessShutdown}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.resource.DbStorage.{DbAction, Profile, SQLActionBuilderChain}
@@ -60,6 +60,7 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
     override protected val storage: DbStorage,
     val storeId: StoreId,
     val storeIndex: IndexedTopologyStoreId,
+    val predecessor: Option[SynchronizerPredecessor],
     override val protocolVersion: ProtocolVersion,
     override protected val timeouts: ProcessingTimeout,
     protected val batchingConfig: BatchingConfig,
@@ -75,6 +76,8 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
   private implicit val getResultSignedTopologyTransaction
       : GetResult[GenericSignedTopologyTransaction] =
     SignedTopologyTransaction.createGetResultSynchronizerTopologyTransaction
+
+  override def onClosed(): Unit = super.onClosed()
 
   override def fetchAllDescending(
       items: Seq[StateKeyFetch]
@@ -311,7 +314,11 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
 
   }
 
-  override def copyFromPredecessorSynchronizerStore(
+  /** Insert topology transactions by reading a predecessor synchronizer store. Do the insert by
+    * batches and in source id order, so that on crash recovery we can resume from the last source
+    * id present in the target store.
+    */
+  override protected def doCopyFromPredecessorSynchronizerStore(
       sourceStore: TopologyStore[SynchronizerStore]
   )(implicit
       ev: StoreId <:< SynchronizerStore,
@@ -320,15 +327,11 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
     implicit val tc = errorLoggingContext.traceContext
     val targetPsid = ev(storeId).psid
     val sourcePsid = sourceStore.storeId.psid
-
     for {
       _ <- ErrorUtil.requireArgumentAsyncShutdown(
-        targetPsid.logical == sourcePsid.logical,
-        s"unexpected logical synchronizer id: expected=${targetPsid.logical}, actual=${sourcePsid.logical}",
-      )
-      _ <- ErrorUtil.requireArgumentAsyncShutdown(
-        sourcePsid < targetPsid,
-        s"source synchronizer [$targetPsid] is not a predecessor of the target synchronizer [$targetPsid]",
+        predecessor.exists(_.psid == sourcePsid),
+        s"source synchronizer [$sourcePsid] does not match the configured predecessor [${predecessor
+            .map(_.psid)}] of the target synchronizer [$targetPsid]",
       )
       sourceDbStore <- sourceStore match {
         case dbStore: DbTopologyStore[SynchronizerStore] => FutureUnlessShutdown.pure(dbStore)
@@ -337,30 +340,82 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
             s"cannot transfer topology from a topology store of type ${store.getClass} to $this"
           )
       }
-      mappingTypeInClause = DbStorage.toInClause(
-        "transaction_type",
-        TopologyMapping.Code.lsuMappingsExcludedFromUpgrade,
+
+      // Resume point: max source id whose row is already present in the target.
+      // Each chunk is written atomically and chunks are processed sequentially in
+      // ascending source-id order, so on crash recovery we can safely restart from
+      // the last id present in the target — every smaller eligible id is guaranteed
+      // to have been copied.
+      resumeFromId <- storage.query(
+        sql"""select coalesce(max(src.id), -1)
+            from common_topology_transactions src
+            join common_topology_transactions tgt
+              on tgt.store_id = $storeIndex
+             and tgt.valid_from = src.valid_from
+             and tgt.batch_idx = src.batch_idx
+           where src.store_id = ${sourceDbStore.storeIndex}""".as[Long].head,
+        functionFullName,
       )
 
-      // The filters here must be kept in sync with the filters in
-      // - GrpcTopologyManagerReadService.logicalUpgradeState
-      // - InMemoryTopologyStore.copyFromPredecessorSynchronizerStore
-      insert = sql"""
-               insert into common_topology_transactions (store_id, sequenced, valid_from, batch_idx, valid_until, transaction_type, namespace, identifier,
-                  mapping_key_hash, serial_counter, operation, instance, tx_hash, is_proposal, representative_protocol_version, hash_of_signatures)
-               select $storeIndex as store_id, sequenced, valid_from, batch_idx, valid_until, transaction_type, namespace,
-                  identifier, mapping_key_hash, serial_counter, operation, instance, tx_hash, is_proposal, representative_protocol_version, hash_of_signatures
-               from common_topology_transactions
-               where store_id = ${sourceDbStore.storeIndex} and (is_proposal = false or valid_until is null) and rejection_reason is null and not """ ++ mappingTypeInClause ++ sql" order by id" ++
-        sql" ON CONFLICT DO NOTHING" // idempotency-"conflict" based on common_topology_transactions unique constraint
-      numInserted <- storage.update(insert.asUpdate, functionFullName)
+      _ = if (resumeFromId >= 0)
+        logger.info(
+          s"Resuming topology transfer from $sourcePsid to $targetPsid after source id $resumeFromId"
+        )
+
+      numInserted <- copyFromPredecessorBatched(
+        sourceDbStore,
+        batchSize = batchingConfig.maxTopologyWriteBatchSize.value,
+        lastId = resumeFromId,
+        totalInserted = 0,
+      )
     } yield {
       logger.info(s"Transferred $numInserted topology transactions from $sourcePsid to $targetPsid")
     }
   }
 
+  private def copyFromPredecessorBatched(
+      sourceDbStore: DbTopologyStore[SynchronizerStore],
+      batchSize: Int,
+      lastId: Long,
+      totalInserted: Int,
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Int] = {
+
+    val mappingTypeInClause = DbStorage.toInClause(
+      "transaction_type",
+      TopologyMapping.Code.lsuMappingsExcludedFromUpgrade,
+    )
+
+    // The filters here must be kept in sync with the filters in
+    // - GrpcTopologyManagerReadService.logicalUpgradeState
+    // - InMemoryTopologyStore.copyFromPredecessorSynchronizerStore
+    val filters =
+      sql"store_id = ${sourceDbStore.storeIndex} and (is_proposal = false or valid_until is null) and rejection_reason is null and not " ++ mappingTypeInClause
+
+    val selectMaxId =
+      sql"select max(id) from (select id from common_topology_transactions where id > $lastId and " ++
+        filters ++ sql" order by id " ++ storage.limitSql(batchSize) ++ sql") as next_window"
+
+    storage.query(selectMaxId.as[Option[Long]].head, functionFullName).flatMap {
+      case None => FutureUnlessShutdown.pure(totalInserted)
+      case Some(maxId) =>
+        val insert =
+          sql"""
+              insert into common_topology_transactions (store_id, sequenced, valid_from, batch_idx, valid_until, transaction_type, namespace, identifier,
+                   mapping_key_hash, serial_counter, operation, instance, tx_hash, is_proposal, representative_protocol_version, hash_of_signatures)
+                select $storeIndex as store_id, sequenced, valid_from, batch_idx, valid_until, transaction_type, namespace,
+                   identifier, mapping_key_hash, serial_counter, operation, instance, tx_hash, is_proposal, representative_protocol_version, hash_of_signatures
+                from common_topology_transactions
+               where id > $lastId and id <= $maxId and """ ++ filters ++ sql" order by id" ++
+            sql" ON CONFLICT DO NOTHING" // idempotency-"conflict" based on common_topology_transactions unique constraint
+
+        storage.update(insert.asUpdate, functionFullName).flatMap { numInserted =>
+          copyFromPredecessorBatched(sourceDbStore, batchSize, maxId, totalInserted + numInserted)
+        }
+    }
+  }
+
   @VisibleForTesting
-  override protected[topology] def dumpStoreContent()(implicit
+  override protected[canton] def dumpStoreContent()(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[GenericStoredTopologyTransactions] = {
     // Helper case class to produce comparable output to the InMemoryStore
@@ -1360,6 +1415,50 @@ class DbTopologyStore[+StoreId <: TopologyStoreId](
         )
       }
   }
+
+  override def deleteDataChunk(
+      chunkSize: PositiveInt
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Boolean] =
+    for {
+      // There can be at most one of these rows, so we don't include it in our chunking.
+      _ <- storage.update(
+        sql"delete from common_topology_dispatching where store_id = $storeIndex".asUpdate,
+        functionFullName,
+      )
+
+      // We materialize the last chunk key rather than using a subquery within the delete statement, as the update must
+      // be idempotent. We use `(store_id, valid_from, batch_idx)` as the key because the table has this as a unique
+      // constraint which implies an internal index allowing efficient range access. The primary key, `id` did not share
+      // any index with `store_id` so would not have had an efficient lookup.
+      lastKeyInChunk <- storage.query(
+        sql"""
+        select valid_from, batch_idx from (
+          select valid_from, batch_idx from common_topology_transactions where store_id = $storeIndex
+          order by valid_from ASC, batch_idx ASC #${storage.limit(chunkSize.value)}
+        ) as chunk
+        order by valid_from DESC, batch_idx DESC #${storage.limit(1)}
+        """.as[(Long, Int)].headOption,
+        functionFullName,
+      )
+      deleted <-
+        lastKeyInChunk match {
+          case Some((validFrom, batchIdx)) =>
+            storage.update(
+              sql"""delete from common_topology_transactions
+                    where store_id = $storeIndex
+                    and (valid_from, batch_idx) <= ( $validFrom, $batchIdx )
+                    """.asUpdate,
+              functionFullName,
+            )
+          case None => FutureUnlessShutdown.pure(0)
+        }
+    } yield {
+      logger.info(
+        if (deleted > 0) s"Deleted chunk of $deleted from topology store $storeId."
+        else s"No chunk to delete from topology store $storeId."
+      )
+      deleted > 0
+    }
 
   override def findEffectiveStateChanges(
       fromEffectiveInclusive: CantonTimestamp,

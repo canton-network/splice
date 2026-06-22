@@ -37,6 +37,7 @@ import io.scalaland.chimney.dsl.*
 
 import java.util.UUID
 import scala.annotation.{nowarn, tailrec}
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
@@ -65,7 +66,7 @@ class NextGenTransactionTreeFactory(
       transactionUuid: UUID,
       topologySnapshot: TopologySnapshot,
       contractOfId: ContractInstanceOfId,
-      keyResolver: LfKeyResolver,
+      legacyKeyResolver: LfGlobalKeyMapping,
       maxSequencingTime: CantonTimestamp,
       validatePackageVettings: Boolean,
   )(implicit
@@ -292,16 +293,32 @@ class NextGenTransactionTreeFactory(
 
     // Process core nodes and subviews
     val coreCreatedBuilder =
-      List.newBuilder[(LfNodeCreate, RollbackScope)] // contract IDs have already been suffixed
+      List.newBuilder[LfNodeCreate] // contract IDs have already been suffixed
 
     // contract IDs have not yet been suffixed
     val coreOtherBuilder = List.newBuilder[((LfNodeId, LfActionNode), RollbackScope)]
 
     val childViewsBuilder = Seq.newBuilder[TransactionView]
 
-    // KeyResolutionWithMaintainers will always have maintainers but never contract ids
     @SuppressWarnings(Array("org.wartremover.warts.Var"))
-    var viewKeyMaintainers = Map.empty[LfGlobalKey, LfVersioned[KeyResolutionWithMaintainers]]
+    var viewKeyMaintainers = Map.empty[LfGlobalKey, LfVersioned[Set[LfPartyId]]]
+
+    // TODO(#31527): SPM can this be made a mutable.Map
+    val observedKeyContractIds = TrieMap.empty[LfGlobalKey, mutable.LinkedHashSet[LfContractId]]
+
+    def buildResolvedKeys(
+        createdContractIds: Set[LfContractId]
+    ): Map[LfGlobalKey, LfVersioned[KeyResolutionWithMaintainers]] =
+      // TODO(#31527): SPM will need to consider whether this is sufficient for NUCK
+      viewKeyMaintainers.transform { (key, versioned) =>
+        versioned.map { maintainers =>
+          val cids = observedKeyContractIds
+            .get(key)
+            .map(observed => observed.iterator.filterNot(createdContractIds.contains).toSeq)
+            .getOrElse(Seq.empty)
+          KeyResolutionWithMaintainers(cids, maintainers)
+        }
+      }
 
     @SuppressWarnings(Array("org.wartremover.warts.Var"))
     var createIndex = 0
@@ -311,7 +328,6 @@ class NextGenTransactionTreeFactory(
       case _ => false
     }
     val subviewIndex = TransactionSubviews.indices(nbSubViews).iterator
-    val createdInView = mutable.Set.empty[LfContractId]
 
     for {
       // Compute salts
@@ -330,9 +346,13 @@ class NextGenTransactionTreeFactory(
           )
             .map { v =>
               childViewsBuilder += v
-              // TODO(#31527): SPM review this use
-              createdInView ++= state.createdContractsInView
-              viewKeyMaintainers = viewKeyMaintainers ++ v.keyMaintainers
+              // TODO(#31527): SPM consider what to do when different nodes have different serialization versions
+              v.viewParticipantData.tryUnwrap.keyResolution.foreach { case (key, resolution) =>
+                viewKeyMaintainers = viewKeyMaintainers + (key -> resolution.map(_.maintainers))
+                val observed =
+                  observedKeyContractIds.getOrElseUpdate(key, mutable.LinkedHashSet.empty)
+                observed ++= resolution.unversioned.contracts
+              }
             }
 
         case TransactionViewDecomposition.SameView(lfActionNode, nodeId, rbContext) =>
@@ -351,8 +371,7 @@ class NextGenTransactionTreeFactory(
                   state,
                   topologySnapshot,
                 ).map { suffixedNode =>
-                  coreCreatedBuilder += (suffixedNode -> rbScope)
-                  createdInView += suffixedNode.coid
+                  coreCreatedBuilder += suffixedNode
                   createIndex += 1
                   suffixedNode
                 }
@@ -365,8 +384,12 @@ class NextGenTransactionTreeFactory(
             _ = suffixedNode.keyOpt.foreach { case LfGlobalKeyWithMaintainers(key, maintainers) =>
               viewKeyMaintainers += (key -> LfVersioned(
                 suffixedNode.version,
-                KeyResolutionWithMaintainers(Seq.empty, maintainers),
+                maintainers,
               ))
+              val observed =
+                observedKeyContractIds.getOrElseUpdate(key, mutable.LinkedHashSet.empty)
+              // The returned order is most recently observed first
+              observed ++= LfTransactionUtil.queriedContractIds(suffixedNode)
             }
 
           } yield ()
@@ -383,12 +406,16 @@ class NextGenTransactionTreeFactory(
       }
       childViews = childViewsBuilder.result()
 
-      suffixedRootNode = coreOtherNodes.headOption
+      suffixedRootNode: LfActionNode = coreOtherNodes.headOption
+        .map(_._1)
         .orElse(coreCreatedNodes.headOption)
-        .map { case (node, _) => node }
         .getOrElse(
           throw new IllegalArgumentException(s"The received view has no core nodes. $view")
         )
+
+      createdContractIds: Set[LfContractId] = childViews.foldLeft(
+        coreCreatedNodes.map(_.coid).toSet
+      )((acc, tv) => acc ++ tv.createdContracts.keySet)
 
       // Compute the parameters of the view
       seed = view.rootSeed
@@ -398,12 +425,13 @@ class NextGenTransactionTreeFactory(
         ErrorUtil.internalError,
         identity,
       )
+
       viewParticipantData <- createViewParticipantData(
         coreCreatedNodes,
         coreOtherNodes,
         childViews,
         state.createdContractInfo,
-        viewKeyMaintainers,
+        buildResolvedKeys(createdContractIds),
         actionDescription,
         viewParticipantDataSalt,
         contractOfId,
@@ -420,10 +448,6 @@ class NextGenTransactionTreeFactory(
           subviews,
           protocolVersion,
         )
-
-      // Update the out parameters in the `State`
-      state.createdContractsInView = createdInView
-
       transactionView
     }
   }
@@ -585,7 +609,7 @@ class NextGenTransactionTreeFactory(
     )
 
   private def createViewParticipantData(
-      coreCreatedNodes: List[(LfNodeCreate, RollbackScope)],
+      coreCreatedNodes: List[LfNodeCreate],
       coreOtherNodes: List[(LfActionNode, RollbackScope)],
       childViews: Seq[TransactionView],
       createdContractInfo: collection.Map[LfContractId, NewContractInstance],
@@ -600,7 +624,7 @@ class NextGenTransactionTreeFactory(
       coreOtherNodes.flatMap { case (an, _) =>
         LfTransactionUtil.consumedContractId(an)
       }.toSet
-    val created = coreCreatedNodes.map { case (n, rbScopeCreate) =>
+    val created = coreCreatedNodes.map { n =>
       val cid = n.coid
       // The preconditions of tryCreate are met as we have created all contract IDs of created contracts in this class.
       checked(
@@ -608,7 +632,7 @@ class NextGenTransactionTreeFactory(
           .tryCreate(
             createdContractInfo(cid),
             consumedInCore = consumedInCore.contains(cid),
-            rolledBack = rbScopeCreate != rbContextCore.rollbackScope,
+            rolledBack = false,
           )
       )
     }
@@ -665,7 +689,7 @@ class NextGenTransactionTreeFactory(
 
   @SuppressWarnings(Array("org.wartremover.warts.IterableOps"))
   override def tryReconstruct(
-      subaction: WellFormedTransaction[WithoutSuffixes],
+      transaction: WellFormedTransaction[WithoutSuffixes],
       rootPosition: ViewPosition,
       mediator: MediatorGroupRecipient,
       submittingParticipantO: Option[ParticipantId],
@@ -674,7 +698,7 @@ class NextGenTransactionTreeFactory(
       topologySnapshot: TopologySnapshot,
       contractOfId: ContractInstanceOfId,
       rbContext: RollbackContext,
-      keyResolver: LfKeyResolver,
+      legacyKeyResolver: LfGlobalKeyMapping,
       absolutizer: ContractIdAbsolutizer,
   )(implicit traceContext: TraceContext): EitherT[
     FutureUnlessShutdown,
@@ -689,11 +713,11 @@ class NextGenTransactionTreeFactory(
      */
 
     ErrorUtil.requireArgument(
-      subaction.unwrap.roots.length == 1,
-      s"Subaction must have a single root node, but has ${subaction.unwrap.roots.iterator.mkString(", ")}",
+      transaction.unwrap.roots.length == 1,
+      s"Sub-action must have a single root node, but has ${transaction.unwrap.roots.iterator.mkString(", ")}",
     )
 
-    val metadata = subaction.metadata
+    val metadata = transaction.metadata
     val state = stateForValidation(
       mediator,
       transactionUuid,
@@ -704,11 +728,19 @@ class NextGenTransactionTreeFactory(
     val decompositionsF =
       transactionViewDecompositionFactory.fromTransaction(
         topologySnapshot,
-        subaction,
+        transaction,
         rbContext,
         submittingParticipantO.map(_.adminParty.toLf),
       )
+
+    val rolledBackEffect = rbContext.inRollback && transactionEffectful(transaction.unwrap)
+
     for {
+      _ <- EitherT.cond[FutureUnlessShutdown](
+        !rolledBackEffect,
+        (),
+        RolledBackEffect(rbContext, rootPosition),
+      )
       decompositions <- EitherT.right(decompositionsF)
       decomposition = checked(decompositions.head)
       view <- createTransactionView(
@@ -721,7 +753,7 @@ class NextGenTransactionTreeFactory(
       suffixedNodes = state.suffixedNodes() transform {
         // Recover the children
         case (nodeId, ne: LfNodeExercises) =>
-          checked(subaction.unwrap.nodes(nodeId)) match {
+          checked(transaction.unwrap.nodes(nodeId)) match {
             case ne2: LfNodeExercises =>
               ne.copy(children = ne2.children)
             case _: LfNode =>
@@ -733,14 +765,14 @@ class NextGenTransactionTreeFactory(
       }
 
       // keep around the rollback nodes (not suffixed as they don't have a contract id), so that we don't orphan suffixed nodes.
-      rollbackNodes = subaction.unwrap.nodes.collect { case tuple @ (_, _: LfNodeRollback) =>
+      rollbackNodes = transaction.unwrap.nodes.collect { case tuple @ (_, _: LfNodeRollback) =>
         tuple
       }
 
       suffixedTx = LfVersionedTransaction(
-        subaction.unwrap.version,
+        transaction.unwrap.version,
         suffixedNodes ++ rollbackNodes,
-        subaction.unwrap.roots,
+        transaction.unwrap.roots,
       )
       absolutizedTx <- EitherT
         .fromEither[FutureUnlessShutdown](absolutizer.absolutizeTransaction(suffixedTx))
@@ -788,12 +820,25 @@ class NextGenTransactionTreeFactory(
 
 object NextGenTransactionTreeFactory {
 
+  // TODO(#31527): SPM add test for RolledBackEffect
+  private def transactionEffectful(tx: LfVersionedTransaction): Boolean =
+    tx.nodes.values.exists {
+      case n: LfActionNode => LfTransactionUtil.isEffectful(n)
+      case _: LfNodeRollback => false
+    }
+
   private class State(
       val mediator: MediatorGroupRecipient,
       val transactionUUID: UUID,
       val ledgerTime: CantonTimestamp,
       val salts: Iterator[Salt],
   ) {
+
+    private val suffixedNodesBuilder
+        : mutable.Builder[(LfNodeId, LfActionNode), Map[LfNodeId, LfActionNode]] =
+      Map.newBuilder[LfNodeId, LfActionNode]
+
+    val createdContractInfo: mutable.Map[LfContractId, NewContractInstance] = mutable.Map.empty
 
     def nextSalt(): Either[TransactionTreeFactory.TooFewSalts, Salt] =
       Either.cond(salts.hasNext, salts.next(), TooFewSalts)
@@ -802,10 +847,6 @@ object NextGenTransactionTreeFactory {
       nextSalt().valueOr { case TooFewSalts =>
         ErrorUtil.internalError(new IllegalStateException("No more salts available"))
       }
-
-    private val suffixedNodesBuilder
-        : mutable.Builder[(LfNodeId, LfActionNode), Map[LfNodeId, LfActionNode]] =
-      Map.newBuilder[LfNodeId, LfActionNode]
 
     def suffixedNodes(): Map[LfNodeId, LfActionNode] = suffixedNodesBuilder.result()
 
@@ -827,10 +868,6 @@ object NextGenTransactionTreeFactory {
         )
       }
 
-    /** All contracts created by a node that has already been processed. */
-    val createdContractInfo: mutable.Map[LfContractId, NewContractInstance] =
-      mutable.Map.empty
-
     def setCreatedContractInfo(
         contractId: LfContractId,
         createdInfo: NewContractInstance,
@@ -842,10 +879,6 @@ object NextGenTransactionTreeFactory {
           )
         )
       }
-
-    /** Out parameter for contracts created in the view (including subviews). */
-    @SuppressWarnings(Array("org.wartremover.warts.Var"))
-    var createdContractsInView: collection.Set[LfContractId] = Set.empty
 
   }
 }

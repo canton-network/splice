@@ -13,6 +13,7 @@ import com.digitalasset.canton.integration.plugins.UseReferenceBlockSequencer.Mu
 import com.digitalasset.canton.integration.plugins.{UseBftSequencer, UsePostgres}
 import com.digitalasset.canton.integration.tests.upgrade.lsu.LogicalUpgradeUtils.SynchronizerNodes
 import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.Fixture
+import com.digitalasset.canton.integration.util.TestUtils.waitForTargetTimeOnSequencer
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
@@ -108,7 +109,22 @@ final class LsuTopologyExportImportIntegrationTest extends LsuBase {
 
       participant1.health.ping(participant1)
 
-      performSynchronizerNodesLsu(fixture)
+      // the assertion below verifies that the topology state is copied locally during the handshake
+      // with the successor synchronizer (triggered by the sequencer connection successor announcement).
+      loggerFactory.assertEventuallyLogsSeq(
+        SuppressionRule.forLogger[DbTopologyStore[?]] && SuppressionRule.Level(Level.INFO)
+      )(
+        performSynchronizerNodesLsu(fixture),
+        entries => {
+          // all participants must log that the state was copied locally
+          forAll(participants.all)(participant =>
+            forExactly(1, entries) { msg =>
+              msg.infoMessage should include regex (raw"Transferred \d+ topology transactions from ${fixture.currentPsid} to ${fixture.newPsid}".r)
+              msg.loggerName should include(s"participant=${participant.name}")
+            }
+          )
+        },
+      )
 
       // We keep the announcement to check its presence on the new synchronizer
       val oldSynchronizerAnnouncement =
@@ -174,30 +190,15 @@ final class LsuTopologyExportImportIntegrationTest extends LsuBase {
       val firstUpgradeStateLsuEndpoint =
         getSequencerLsuStateBytes(participant1, topologyStoreId = Some(synchronizer1Id))
 
-      // the assertion below verifies that the topology state id indeed locally upon first connect to the successor.
-      // unfortunately, the least effort way of doing this is to assert on the log message
-      // emitted by the local copy process.
-      loggerFactory.assertEventuallyLogsSeq(
-        SuppressionRule.forLogger[DbTopologyStore[?]] && SuppressionRule.Level(Level.INFO)
-      )(
-        {
-          // advance the time past the upgrade time, so that the participant connects to the new physical synchronizer
-          environment.simClock.value.advanceTo(upgradeTime.immediateSuccessor)
+      // advance the time past the upgrade time, so that the participant connects to the new physical synchronizer
+      environment.simClock.value.advanceTo(upgradeTime.immediateSuccessor)
 
-          eventually() {
-            participants.all.forall(_.synchronizers.is_connected(fixture.newPsid)) shouldBe true
-          }
-        },
-        entries => {
-          // all participants must log that the state was copied locally
-          forAll(participants.all)(participant =>
-            forExactly(1, entries) { msg =>
-              msg.infoMessage should include regex (raw"Transferred \d+ topology transactions from ${fixture.currentPsid} to ${fixture.newPsid}".r)
-              msg.loggerName should include(s"participant=${participant.name}")
-            }
-          )
-        },
-      )
+      eventually() {
+        participant1.synchronizers.is_connected(fixture.currentPsid) shouldBe false
+        participant1.synchronizers.is_connected(fixture.newPsid) shouldBe true
+      }
+
+      waitForTargetTimeOnSequencer(sequencer2, upgradeTime.immediateSuccessor, logger)
 
       // fetching the topology state after the upgrade should contain exactly the same state
       // as the upgrade state before the migration

@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
+import com.daml.metrics.api.MetricHandle.{Gauge, LabeledMetricsFactory, Meter, Timer}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency, Saturation}
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -22,14 +24,15 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_StartProcessingRewardsV2
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerConnection, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.sv.automation.RewardProcessingMetrics
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
+import com.daml.metrics.api.MetricsContext.Implicits.empty
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -41,8 +44,8 @@ abstract class CalculateRewardsTriggerBase(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     isDryRun: Boolean,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -54,14 +57,15 @@ abstract class CalculateRewardsTriggerBase(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
-  private val rewardMetrics = new RewardProcessingMetrics(context.metricsFactory)
+  private val rewardMetrics = new CalculateRewardsMetrics(context.metricsFactory, isDryRun)
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     // These are ordered by round, so we process the oldest first
     calculateRewards <- store.listCalculateRewardsV2()
+    calculateRewardsForThisTrigger = calculateRewards.filter(_.payload.dryRun == isDryRun)
+    _ = rewardMetrics.calculateRewardsContractCount.updateValue(calculateRewardsForThisTrigger.size)
     confirmedCids <- listConfirmedCalculateRewardsCids()
-  } yield calculateRewards
-    .filter(_.payload.dryRun == isDryRun)
+  } yield calculateRewardsForThisTrigger
     .filterNot(c => confirmedCids.contains(c.contractId))
     .map(Task(_))
 
@@ -107,9 +111,7 @@ abstract class CalculateRewardsTriggerBase(
               task.calculateRewards.payload.roundClosedAt,
               context.clock.now.toInstant,
             )
-            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)(
-              MetricsContext.Empty.withExtraLabels("dryRun" -> isDryRun.toString)
-            )
+            _ = rewardMetrics.calculateRewardsProcessingDelay.update(delay)
           } yield TaskSuccess(
             s"created confirmation for CalculateRewardsV2 round $round, processingDelay=$delay"
           )
@@ -154,8 +156,9 @@ abstract class CalculateRewardsTriggerBase(
         .asRuntimeException()
 
     def bftReadRootHash: Future[Hash] = {
+      rewardMetrics.calculateRewardsRootHashBftReads.mark()
       for {
-        bftScan <- bftScanConnectionF
+        bftScan <- getPeerBftScanConnection()
         response <- bftScan.getRewardAccountingRootHash(round)
       } yield response match {
         case RewardAccountingRootHashOk(ok) =>
@@ -166,7 +169,7 @@ abstract class CalculateRewardsTriggerBase(
     }
 
     for {
-      ownScan <- scanConnectionF
+      ownScan <- getOwnScanConnection()
       response <- ownScan.getRewardAccountingRootHash(round)
       rootHash <- response match {
         case RewardAccountingRootHashOk(ok) => Future.successful(new Hash(ok.rootHash))
@@ -190,14 +193,22 @@ abstract class CalculateRewardsTriggerBase(
       )
     )
 
+  override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
+    Seq(
+      SyncCloseable(
+        "rewardMetrics",
+        rewardMetrics.close(),
+      )
+    )
+  }
 }
 
 class CalculateRewardsTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -206,8 +217,8 @@ class CalculateRewardsTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = false,
     )
 
@@ -215,8 +226,8 @@ class CalculateRewardsDryRunTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
-    scanConnectionF: Future[ScanConnection],
-    bftScanConnectionF: Future[BftScanConnection],
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -225,8 +236,8 @@ class CalculateRewardsDryRunTrigger(
       context,
       store,
       connection,
-      scanConnectionF,
-      bftScanConnectionF,
+      getOwnScanConnection,
+      getPeerBftScanConnection,
       isDryRun = true,
     )
 
@@ -243,5 +254,50 @@ object CalculateRewardsTriggerBase {
         param("round", _.calculateRewards.payload.round.number),
         param("dryRun", _.calculateRewards.payload.dryRun.toString.unquoted),
       )
+  }
+
+  class CalculateRewardsMetrics(metricsFactory: LabeledMetricsFactory, dryRun: Boolean)
+      extends AutoCloseable {
+
+    private val metricsContext = MetricsContext.Empty.withExtraLabels("dryRun" -> dryRun.toString)
+
+    private val prefix: MetricName = SpliceMetrics.MetricsPrefix
+
+    val calculateRewardsProcessingDelay: Timer =
+      metricsFactory.timer(
+        MetricInfo(
+          name = prefix :+ "calculate_rewards_v2" :+ "processing_delay",
+          summary = "Delay between round close and CalculateRewardsV2 confirmation creation",
+          description =
+            "This metric captures the time it took between the closing of a round, and this SV's confirmation for the CalculateRewardsV2 contract's processing. Labeled with dryRun.",
+          qualification = Latency,
+        )
+      )(metricsContext)
+
+    val calculateRewardsRootHashBftReads: Meter =
+      metricsFactory.meter(
+        MetricInfo(
+          name = prefix :+ "calculate_rewards_v2" :+ "root_hash_bft_reads",
+          summary = "Count of BFT reads of the reward-accounting root-hash",
+          description =
+            "This metric counts the BFT reads of the reward-accounting root-hash performed by the CalculateRewardsV2 trigger, i.e., the cases where this SV's own Scan could not provide the root-hash and it had to be obtained via a BFT read against peer Scans. Labeled with dryRun.",
+          qualification = Errors,
+        )
+      )(metricsContext)
+
+    val calculateRewardsContractCount: Gauge[Int] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = prefix :+ "calculate_rewards_v2" :+ "active_contracts",
+          summary =
+            "The number of active CalculateRewardsV2 contracts, as seen by the CalculateRewardsTrigger",
+          Saturation,
+        ),
+        initial = -1,
+      )(metricsContext)
+
+    override def close(): Unit = {
+      calculateRewardsContractCount.close()
+    }
   }
 }

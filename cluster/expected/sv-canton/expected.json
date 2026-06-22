@@ -2362,8 +2362,8 @@
               "value": "canton.sequencers.sequencer.sequencer.block.throughput-cap.messages.confirmation-request {\n  global-tps-cap = 2\n  per-client-tps-cap = 1\n  global-kbps-cap = 200\n  per-client-kbps-cap = 100\n}\ncanton.sequencers.sequencer.sequencer.block.throughput-cap.messages.topology {\n  global-tps-cap = 4\n  per-client-tps-cap = 3\n  global-kbps-cap = 400\n  per-client-kbps-cap = 300\n}"
             },
             {
-              "name": "CUSTOM_MOCK_ENV_VAR_NAME",
-              "value": "CUSTOM_MOCK_ENV_VAR_VALUE"
+              "name": "PS9_SEQUENCER_ENV_VAR_NAME",
+              "value": "PS9_SEQUENCER_ENV_VAR_VALUE"
             }
           ],
           "driver": {
@@ -3865,7 +3865,7 @@
           "hour": 8
         },
         "protected": true,
-        "tier": "sequencer-override-tier"
+        "tier": "db-custom-2-7680"
       },
       "defaultUserName": "cnadmin",
       "deletionProtection": true,
@@ -3951,7 +3951,7 @@
           "day": 2,
           "hour": 8
         },
-        "tier": "sequencer-override-tier",
+        "tier": "db-custom-2-7680",
         "userLabels": {
           "cluster": "mock",
           "migration_id": "9"

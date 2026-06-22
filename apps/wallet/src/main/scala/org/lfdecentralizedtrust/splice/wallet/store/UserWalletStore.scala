@@ -63,6 +63,8 @@ trait UserWalletStore extends TxLogAppStore[TxLogEntry] with TransferInputStore 
   /** The key identifying the parties considered by this store. */
   def key: UserWalletStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   def domainMigrationId: Long
 
   final def lookupInstall()(implicit tc: TraceContext): Future[
@@ -671,6 +673,21 @@ object UserWalletStore {
             None,
             rewardCouponRound = Some(co.payload.round.number),
             rewardCouponWeight = Some(co.payload.weight),
+          )
+        ),
+        mkFilter(amuletCodegen.RewardCouponV2.COMPANION)(
+          co =>
+            co.payload.dso == dso &&
+              (co.payload.provider == endUser ||
+                co.payload.beneficiary == java.util.Optional.of(endUser)),
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.endUserParty), now)(tc)
+          },
+        )(co =>
+          UserWalletAcsStoreRowData(
+            co,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(co.payload.expiresAt)),
+            rewardCouponRound = Some(co.payload.round.number),
           )
         ),
         mkFilter(amuletCodegen.UnclaimedActivityRecord.COMPANION)(co =>

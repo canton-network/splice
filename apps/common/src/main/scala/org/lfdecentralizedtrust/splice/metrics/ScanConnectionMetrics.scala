@@ -78,4 +78,24 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
       )
     )
 
+  val bftPerConnectionConsensus: Meter =
+    metricsFactory.meter(
+      MetricInfo(
+        name = prefix :+ "bft_per_connection_consensus",
+        summary = "Count of per-connection agreements/disagreements with the BFT consensus result",
+        qualification = Traffic,
+        labelsWithDescription = Map(
+          "scan_connection" -> "The scan connection that responded",
+          "request" -> "Name of the scan request being called",
+          "consensus" -> ("Whether the connection's response matched the consensus result: " +
+            "agree (matched the consensus response), " +
+            "disagree (differed from the consensus response, including error responses)"),
+          "success" -> ("For disagreements, whether the disagreeing response was itself a " +
+            "successful (2xx) response (true) or an error response (false)"),
+          "http_status" -> ("For disagreements, the HTTP status code of the disagreeing response " +
+            "when available (absent for successful responses and transport-level failures)"),
+        ),
+      )
+    )
+
 }

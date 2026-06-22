@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.config
 
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.BlacklistLeaderSelectionPolicyConfig
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
@@ -14,6 +15,7 @@ import com.digitalasset.canton.config.RequireTypes.{
   NonNegativeLong,
   NonNegativeNumeric,
   PositiveInt,
+  PositiveLong,
   PositiveNumeric,
 }
 import com.digitalasset.canton.synchronizer.mediator.RemoteMediatorConfig
@@ -36,6 +38,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
@@ -323,9 +326,24 @@ final case class SvParticipantClientConfig(
       SequencerConnectionPoolDelays.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
+final case class BftSequencingParameters(
+    pbftViewChangeTimeout: PositiveFiniteDuration,
+    segmentLength: PositiveLong,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+) {
+  import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+  def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
+    SequencingParameters.create(
+      pbftViewChangeTimeout.toInternal,
+      SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig,
+    )(protocolVersion)
+}
+
 case class SvAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     ledgerApiUser: String,
     // The SV app shares the primary party with the validator app. To discover it we query the
     // validator user. Additionally, sv1 app is expected to create that user,
@@ -391,6 +409,11 @@ case class SvAppBackendConfig(
     delegatelessAutomationExpiredAmuletBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletTransferInstructionBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletAllocationBatchSize: Int = 100,
+    delegatelessAutomationExpiredRewardCouponV2BatchSize: Int = 100,
+    delegatelessAutomationUnhideRewardCouponV2SampleSize: Int = 100,
+    // As RewardCouponV2 have default TTL of 36h, at max 216 (36*6) should be active
+    // So try to unhide all in single batch and avoid race among SVs
+    delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 220,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,
@@ -432,6 +455,11 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    bftSequencingParameters: Option[BftSequencingParameters],
+    // Set to false to disable the DB-level exclusive lock that prevents two SV instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =

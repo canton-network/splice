@@ -10,3 +10,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 8Gi
+
+  - it: "allows overriding load tester image name"
+    set:
+      imageRepo: "secure-registry.example.com"
+      imageName: "custom-load-tester"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^secure-registry\\.example\\.com/custom-load-tester:"

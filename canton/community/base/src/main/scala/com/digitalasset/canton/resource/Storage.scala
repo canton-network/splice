@@ -13,6 +13,7 @@ import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.CantonRequireTypes.String255
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.Salt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.health.{
   AtomicHealthComponent,
   CloseableHealthComponent,
@@ -56,8 +57,9 @@ import slick.lifted.Aliases
 import slick.util.{AsyncExecutor, AsyncExecutorWithMetrics, ClassLoaderUtil, QueryCostTrackerImpl}
 
 import java.sql.{Blob, Connection, SQLException, SQLTransientException, Statement}
+import java.time
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import javax.sql.rowset.serial.SerialBlob
 import scala.collection.immutable
@@ -299,7 +301,11 @@ trait DbStorage extends Storage { self: NamedLogging =>
       action: DbAction.All[A],
       operationName: String,
       maxRetries: Int,
-  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[A]
+  )(implicit
+      traceContext: TraceContext,
+      closeContext: CloseContext,
+      rowsAltered: DbStorage.RowsAltered[A],
+  ): FutureUnlessShutdown[A]
 
   def query[A](
       action: DbAction.ReadTransactional[A],
@@ -329,17 +335,25 @@ trait DbStorage extends Storage { self: NamedLogging =>
       action: DBIOAction[A, NoStream, Effect.Write with Effect.Transactional],
       operationName: String,
       maxRetries: Int = defaultMaxRetries,
-  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[A] =
+  )(implicit
+      traceContext: TraceContext,
+      closeContext: CloseContext,
+      rowsAltered: DbStorage.RowsAltered[A],
+  ): FutureUnlessShutdown[A] =
     runWrite(action, operationName, maxRetries)
 
   /** Write-only action, possibly transactional The action must be idempotent because it may be
     * retried multiple times.
     */
-  def update_(
-      action: DBIOAction[?, NoStream, Effect.Write with Effect.Transactional],
+  def update_[A](
+      action: DBIOAction[A, NoStream, Effect.Write with Effect.Transactional],
       operationName: String,
       maxRetries: Int = defaultMaxRetries,
-  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[Unit] =
+  )(implicit
+      traceContext: TraceContext,
+      closeContext: CloseContext,
+      rowsAltered: DbStorage.RowsAltered[A],
+  ): FutureUnlessShutdown[Unit] =
     runWrite(action, operationName, maxRetries).map(_ => ())
 
   /** Query and update in a single action.
@@ -356,13 +370,32 @@ trait DbStorage extends Storage { self: NamedLogging =>
       action: DBIOAction[A, NoStream, Effect.All],
       operationName: String,
       maxRetries: Int = defaultMaxRetries,
-  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[A] =
+  )(implicit
+      traceContext: TraceContext,
+      closeContext: CloseContext,
+      rowsAltered: DbStorage.RowsAltered[A],
+  ): FutureUnlessShutdown[A] =
     runWrite(action, operationName, maxRetries)
 
   def runJdbcWrite[T](traceContext: TraceContext, body: Connection => T): FutureUnlessShutdown[T]
 }
 
 object DbStorage {
+  // Type class for return types that allows us know whether any rows were altered,
+  // i.e. updated, inserted or deleted.
+  trait RowsAltered[A] { def apply(a: A): Boolean }
+
+  object RowsAltered {
+    implicit val ofInt: RowsAltered[Int] = _ > 0
+    implicit val ofUnit: RowsAltered[Unit] = (_ => false)
+
+    implicit def ofSeq[A](implicit r: RowsAltered[A]): RowsAltered[Seq[A]] = _.exists(r(_))
+    implicit def ofArray[A](implicit r: RowsAltered[A]): RowsAltered[Array[A]] = _.exists(r(_))
+
+    implicit def ofEither[Err, A](implicit r: RowsAltered[A]): RowsAltered[Either[Err, A]] =
+      _.fold(_ => false, r(_))
+  }
+
   val healthName: String = "db-storage"
 
   // sql prepared statement have a limit of 65535 parameters
@@ -866,6 +899,31 @@ object DbStorage {
       retryWaitingTime = Duration(1, TimeUnit.SECONDS),
       maxRetries = Int.MaxValue,
     )
+  }
+
+  private[resource] class DatabaseFailureDurationTracker(
+      failedToFatalDelay: time.Duration,
+      logger: TracedLogger,
+      failureLogMessage: (CantonTimestamp, time.Duration) => String = (
+          timeWhenFailureStarted,
+          failureDuration,
+      ) =>
+        s"Storage has been failing since $timeWhenFailureStarted (${LoggerUtil.roundDurationForHumans(failureDuration)} ago)",
+  ) {
+    private val timeWhenFailureStartedRef = new AtomicReference[Option[CantonTimestamp]](None)
+    def failureDurationExceededDelay(
+        now: CantonTimestamp
+    )(implicit tc: TraceContext): Boolean = timeWhenFailureStartedRef.getAndUpdate {
+      case previous @ Some(_) => previous
+      case None => Some(now)
+    } match {
+      case None => false
+      case Some(timeWhenFailureStarted) =>
+        val failureDuration = now - timeWhenFailureStarted
+        logger.debug(failureLogMessage(timeWhenFailureStarted, failureDuration))
+        failureDuration.compareTo(failedToFatalDelay) > 0
+    }
+    def reset(): Unit = timeWhenFailureStartedRef.set(None)
   }
 }
 

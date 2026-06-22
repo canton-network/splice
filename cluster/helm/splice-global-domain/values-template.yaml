@@ -10,7 +10,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
 resources:
   limits:
     memory: 8Gi
@@ -19,11 +19,17 @@ resources:
     memory: 3Gi
 
 sequencer:
+  imageName: "canton-sequencer"
+  cometbft:
+    imageName: "canton-cometbft-sequencer"
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
     databaseName: cantonnet_sequencer
     port: 5432
+    initImageName: "postgres:14"
+#    secretOverrides:
+#      postgresPassword: ""
   resources:
     limits:
       memory: 8Gi
@@ -32,11 +38,16 @@ sequencer:
       memory: 4Gi
 
 mediator:
+  imageName: "canton-mediator"
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
     databaseName: cantonnet_mediator
     port: 5432
+    initImageName: "postgres:14"
+#    secretOverrides:
+#      postgresPassword: ""
+
 
 metrics:
   enable: false

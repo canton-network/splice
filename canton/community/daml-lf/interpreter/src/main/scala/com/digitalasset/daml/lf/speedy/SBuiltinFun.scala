@@ -25,6 +25,7 @@ import com.digitalasset.daml.lf.transaction.{
   FatContractInstance,
   GlobalKeyWithMaintainers,
   KeyMapping,
+  MaxContractKeyFetches,
   NeedKey,
   SerializationVersion,
   TransactionError,
@@ -1445,10 +1446,8 @@ private[lf] object SBuiltinFun {
         templateId,
         templateArg,
       ) { contract =>
-        val templateVersion = machine.tmplId2TxVersion(templateId)
         val pkgName = machine.tmplId2PackageName(templateId)
-        val interfaceVersion = interfaceId.map(machine.tmplId2TxVersion)
-        val exerciseVersion = interfaceVersion.fold(templateVersion)(_.max(templateVersion))
+        val exerciseVersion = machine.assignSerializationVersion(hasKey = contract.keyOpt.isDefined)
         val chosenValue = args(0).toNormalizedValue
         val controllers = extractParties(NameOf.qualifiedNameOfCurrentFunc, args(2))
         machine.enforceChoiceControllersLimit(
@@ -1982,7 +1981,7 @@ private[lf] object SBuiltinFun {
           templateId,
           templateArg,
         ) { contract =>
-          val version = machine.tmplId2TxVersion(templateId)
+          val version = machine.assignSerializationVersion(hasKey = contract.keyOpt.isDefined)
           machine.ptx.insertFetch(
             coid = coid,
             contract = contract,
@@ -2005,10 +2004,11 @@ private[lf] object SBuiltinFun {
   }
 
   private[this] abstract class KeyOperation(
-                                             final val name: String,
-                                             // if false, feed n with 1
-                                             // if true, take n as snd argument on the stack
-                                             final val needN: Boolean) {
+      final val name: String,
+      // if false, feed n with 1
+      // if true, take n as snd argument on the stack
+      final val needN: Boolean,
+  ) {
     val templateId: TypeConId
 
     final val arity: Int = if (needN) 2 else 1
@@ -2019,6 +2019,12 @@ private[lf] object SBuiltinFun {
         result: KeyMapping,
         payloads: List[SValue],
     ): Control[Nothing]
+
+    def authorizeLookup(
+        machine: UpdateMachine,
+        key: CachedKey,
+    ): Either[IE, Unit]
+
   }
 
   object SPair {
@@ -2034,9 +2040,10 @@ private[lf] object SBuiltinFun {
   }
 
   private[this] object KeyOperation {
-    final class Fetch(override val templateId: TypeConId) extends KeyOperation("FetchByKey", needN = false) {
+    final class Fetch(override val templateId: TypeConId)
+        extends KeyOperation("FetchByKey", needN = false) {
 
-      override final def handleKnownInputKey(
+      override def handleKnownInputKey(
           machine: UpdateMachine,
           cachedKey: CachedKey,
           result: KeyMapping,
@@ -2048,6 +2055,12 @@ private[lf] object SBuiltinFun {
           case None =>
             Control.Error(IE.ContractKeyNotFound(cachedKey.globalKey))
         }
+
+      override def authorizeLookup(
+        machine: UpdateMachine,
+        key: CachedKey,
+      ): Right[Nothing, Unit] =
+        Right(())
     }
 
     final class Lookup(override val templateId: TypeConId) extends KeyOperation("LookupByKey", needN = false) {
@@ -2059,50 +2072,54 @@ private[lf] object SBuiltinFun {
           result: KeyMapping,
           payloads: List[SValue],
       ): Control[Nothing] = {
-        machine.ptx.insertQueryByKey(
+        machine.ptx = machine.ptx.insertQueryByKey(
           optLocation = machine.getLastLocation,
           key = cachedKey,
           result = result,
-          keyVersion = machine.tmplId2TxVersion(templateId),
-        ) match {
-          case Right(ptx) =>
-            machine.ptx = ptx
-            machine.metrics.incrCount[TxNodeCount]()
-            Control.Value(SOptional(result.queue.asCidOption.map(SContractId(_))))
-          case Left(err) =>
-            Control.Error(err)
-        }
+          keyVersion = machine.assignSerializationVersion(hasKey = true),
+        )
+        Control.Value(SOptional(result.queue.asCidOption.map(SContractId(_))))
       }
+
+      override def authorizeLookup(
+        machine: UpdateMachine,
+        key: CachedKey,
+      ): Either[IE, Unit] =
+        machine.ptx.authorizeQueryByKey(machine.getLastLocation, key)
     }
 
     final class QueryNByKey(override val templateId: TypeConId)
-        extends KeyOperation("QueryNByKey",  needN = true) {
+        extends KeyOperation("QueryNByKey", needN = true) {
 
-      override final def handleKnownInputKey(
+      override def handleKnownInputKey(
           machine: UpdateMachine,
           cachedKey: CachedKey,
           result: KeyMapping,
           payloads: List[SValue],
-      ): Control[Nothing] =
-        machine.ptx.insertQueryByKey(
+      ): Control[Nothing] = {
+        machine.ptx = machine.ptx.insertQueryByKey(
           optLocation = machine.getLastLocation,
           key = cachedKey,
           result = result,
-          keyVersion = machine.tmplId2TxVersion(templateId),
-        ) match {
-          case Right(ptx) =>
-            machine.ptx = ptx
-            machine.metrics.incrCount[TxNodeCount]()
-            Control.Value(
-              SList(
-                (result.queue.view.map(SContractId(_)) zip payloads)
-                  .map { case (cid, payload) => SValue.SPair(cid, payload) }
-                  .to(FrontStack)
-              )
+          keyVersion = machine.assignSerializationVersion(hasKey = true),
+        )
+        machine.metrics.incrCount[TxNodeCount]()
+        Control.Value(
+          SOptional(Some(
+            SList(
+              (result.queue.view.map(SContractId(_)) zip payloads)
+                .map { case (cid, payload) => SValue.SPair(cid, payload) }
+                .to(FrontStack)
             )
-          case Left(err) =>
-            Control.Error(err)
-        }
+          ))
+        )
+      }
+
+      override def authorizeLookup(
+          machine: UpdateMachine,
+          key: CachedKey,
+      ): Either[IE, Unit] =
+        machine.ptx.authorizeQueryByKey(machine.getLastLocation, key)
     }
   }
 
@@ -2122,10 +2139,13 @@ private[lf] object SBuiltinFun {
       val keyValue = args(0)
 
       val n =
-        if (operation.needN) (getSInt64(args, 1) min Int.MaxValue).toInt else 1
+        if (operation.needN)
+          (getSInt64(args, 1) min MaxContractKeyFetches.toLong).toInt
+        else
+          1
 
       if (n < 1) {
-        // TODO (#30398): add a proper error
+        // TODO (#31849): add a proper error
         crash(s"Invalid argument n for ${operation.name}: $n. Expected a positive integer.")
       } else {
 
@@ -2180,8 +2200,13 @@ private[lf] object SBuiltinFun {
                 ContU.throwError(convTxError(machine.ptx.nodes, operation.name, error))
             }
 
-          loop(machine.ptx.contractState.queryNByKey(gkey, n)).run { case (keyMapping, payloads) =>
-            operation.handleKnownInputKey(machine, cachedKey, keyMapping, payloads)
+          operation.authorizeLookup(machine, cachedKey) match {
+            case Left(err) =>
+              Control.Error(err)
+            case Right(_) =>
+              loop(machine.ptx.contractState.queryNByKey(gkey, n)).run { case (keyMapping, payloads) =>
+                operation.handleKnownInputKey(machine, cachedKey, keyMapping, payloads)
+              }
           }
         }
       }
@@ -2620,7 +2645,7 @@ private[lf] object SBuiltinFun {
     SBuiltinFun.SBStructCon(contractInfoPositionStruct)
 
   private def extractContractInfo(
-      tmplId2TxVersion: TypeConId => SerializationVersion,
+      assignSerializationVersion: Boolean => SerializationVersion,
       tmplId2PackageName: TypeConId => PackageName,
       contractInfoStruct: SValue,
   ): ContractInfo = {
@@ -2634,7 +2659,6 @@ private[lf] object SBuiltinFun {
               s"Invalid contract info struct: $v",
             )
         }
-        val version = tmplId2TxVersion(templateId)
         val pkgName = tmplId2PackageName(templateId)
         val mbKey = vals(contractInfoStructKeyIdx) match {
           case SOptional(mbKey) =>
@@ -2648,7 +2672,7 @@ private[lf] object SBuiltinFun {
             )
         }
         ContractInfo(
-          version = version,
+          version = assignSerializationVersion(mbKey.isDefined),
           packageName = pkgName,
           templateId = templateId,
           value = vals(contractInfoStructArgIdx),
@@ -3064,7 +3088,7 @@ private[lf] object SBuiltinFun {
     executeExpression(machine, if (allowCatchingContractInfoErrors) e else SEPreventCatch(e)) {
       contractInfoStruct =>
         val contract = extractContractInfo(
-          machine.tmplId2TxVersion,
+          machine.assignSerializationVersion,
           machine.tmplId2PackageName,
           contractInfoStruct,
         )

@@ -5,6 +5,7 @@ package com.digitalasset.canton.util.retry
 
 import cats.Eval
 import com.digitalasset.canton.concurrent.DirectExecutionContext
+import com.digitalasset.canton.config.ExponentialBackoffConfig
 import com.digitalasset.canton.lifecycle.UnlessShutdown.{AbortedDueToShutdown, Outcome}
 import com.digitalasset.canton.lifecycle.{
   FutureUnlessShutdown,
@@ -479,8 +480,9 @@ final case class Pause(
   *  val future = policy(issueRequest)
   * }}}
   *
-  * If a jitter policy isn't in scope, it will use [[Jitter.full]] by default which tends to cause
-  * clients slightly less work at the cost of slightly more time.
+  * If a jitter policy isn't in scope, it will use [[Jitter.equal]] by default, which uses a delay
+  * between 50%-100% of the raw wait time for that attempt. This gives a somewhat smooth relative
+  * dispersion between successive delays, with a fixed logarithmic variance.
   *
   * For more information about the algorithms, see the following article:
   *
@@ -500,7 +502,7 @@ final case class Backoff(
     actionable: Option[String] = None,
     retryLogLevel: Option[Level] = None,
     suspendRetries: Eval[FiniteDuration] = Eval.now(Duration.Zero),
-)(implicit jitter: Jitter = Jitter.full(maxDelay))
+)(implicit jitter: Jitter = Jitter.equal(maxDelay))
     extends RetryWithDelay(
       logger,
       operationName,
@@ -516,6 +518,31 @@ final case class Backoff(
 
   override def nextDelay(nextCount: Int, delay: FiniteDuration): FiniteDuration =
     jitter(initialDelay, delay, nextCount)
+}
+
+object Backoff {
+  def fromConfig(
+      logger: TracedLogger,
+      hasSynchronizeWithClosing: HasSynchronizeWithClosing,
+      config: ExponentialBackoffConfig,
+      operationName: String,
+      longDescription: String = "",
+      actionable: Option[String] = None,
+      retryLogLevel: Option[Level] = None,
+      suspendRetries: Eval[FiniteDuration] = Eval.now(Duration.Zero),
+  )(implicit jitter: Jitter = Jitter.equal(config.maxDelay.unwrap)): Backoff = Backoff(
+    logger,
+    hasSynchronizeWithClosing,
+    config.maxRetries,
+    config.initialDelay.underlying,
+    config.maxDelay.unwrap,
+    operationName,
+    None,
+    longDescription,
+    actionable,
+    retryLogLevel,
+    suspendRetries,
+  )(jitter)
 }
 
 /** A retry policy in which the failure determines the way a future should be retried. The partial

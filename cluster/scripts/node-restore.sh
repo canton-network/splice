@@ -198,7 +198,7 @@ function await_confirmation() {
 function restore_cloudsql_postgres() {
   local -r namespace=$1
   local -r component=$2
-  local -r run_id=$3
+  local -r backup_id=$3
   local -r migration_id=$4
   local -r restore_cluster=$5 # optional, cluster to restore into (if different than current)
   MAX_RETRIES=20
@@ -217,8 +217,6 @@ function restore_cloudsql_postgres() {
     _info "Using restoring from $cloudsql_backup_instance_id into $cloudsql_restore_instance_id"
   fi
 
-  backup_id=$(gcloud sql backups list --instance "$cloudsql_backup_instance_id" --filter="description=\"$run_id\"" --format=json | jq -r '.[].id')
-
   _warning "This operation will restore the CloudSQL DB instance $cloudsql_restore_instance_id from backup, overwriting its current data."
   _warning "Please consider backing up and/or cloning the DB instance before continuing."
   await_confirmation
@@ -235,7 +233,7 @@ function restore_cloudsql_postgres() {
   until [ $retry_count -gt $MAX_RETRIES ]; do
     # disabling exit on error to allow for retries
     set +e
-    output=$(gcloud sql backups restore "$backup_id" --restore-instance="$cloudsql_restore_instance_id" --backup-instance="$cloudsql_backup_instance_id" --quiet 2>&1)
+    output=$(gcloud sql backups restore "$backup_id" --restore-instance="$cloudsql_restore_instance_id" --backup-instance="$cloudsql_backup_instance_id" --quiet --async 2>&1)
     restore_exit_code=$?
     set -e
 
@@ -248,10 +246,9 @@ function restore_cloudsql_postgres() {
       retry_count=$((retry_count+1))
       sleep 10
     else
-      echo "Restore succeeded"
+      _info "Restore initiated for $cloudsql_restore_instance_id (async)"
       return 0
     fi
-
 
     if [ $retry_count -gt $MAX_RETRIES ]; then
       _error "Restore of DB instance $cloudsql_restore_instance_id from backup $backup_id ($cloudsql_backup_instance_id) exceeded max retries"
@@ -382,8 +379,28 @@ function wait_restore_component() {
   fi
 }
 
+function get_component_run_id() {
+  local run_id_or_map=$1
+  local component=$2
+
+  if [[ "$run_id_or_map" == *","* ]]; then
+    # Map format: extract value for this component
+    local value
+    value=$(echo "$run_id_or_map" | tr ',' '\n' | grep "^${component}:" | cut -d: -f2)
+    if [ -z "$value" ]; then
+      _error "No backup ID found for component '$component' in map: $run_id_or_map"
+    fi
+    echo "$value"
+  else
+    echo "$run_id_or_map"
+  fi
+}
+
 function usage() {
-  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <run_id> <component>..."
+  echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <component1:backup_id1,component2:backup_id2,...|run_id> <component1> <component2>..."
+  echo " Examples: "
+  echo "  $0 sv-2 0 1780988400000 cometbft sequencer participant mediator cn-apps"
+  echo "  $0 sv-2 0 \"cn-apps:42,sequencer:51,participant:63,mediator:71\" sequencer participant mediator cn-apps"
 }
 
 function main() {
@@ -425,6 +442,17 @@ function main() {
   local hyperdisk_enabled
   hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
 
+  if [[ "$run_id" == *","* ]]; then
+    _info " ** Validate backup ids ** "
+    local map_keys
+    map_keys=$(echo "$run_id" | tr ',' '\n' | cut -d: -f1 | sort)
+    local req_components
+    req_components=$(printf '%s\n' "${@:4}" | sort)
+    if [ "$map_keys" != "$req_components" ]; then
+      _error "Backup map keys ($map_keys) do not match requested components (${*:4})"
+    fi
+  fi
+
   for component in "${@:4}"; do
     component_to_deployments "$component" "$migration_id" "$namespace"
   done
@@ -440,7 +468,9 @@ function main() {
 
   _info " ** Restoring ** "
   for component in "${@:4}"; do
-    restore_component "$namespace" "$component" "$migration_id" "$run_id" "$restore_cluster" "$hyperdisk_enabled"
+    local component_run_id
+    component_run_id=$(get_component_run_id "$run_id" "$component")
+    restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster" "$hyperdisk_enabled"
   done
 
   _info " ** Waiting for all restore operations to finish ** "

@@ -102,6 +102,117 @@ abstract class TransferInputStoreTest extends StoreTestBase {
     }
   }
 
+  "listRewardCouponsV2" should {
+    "filter by assignment status and sort correctly" in {
+      for {
+        store <- mkTransferInputStore(user)
+        // for each round i, create 2 assigned coupons with amount i and 2i
+        _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
+          for {
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(
+              rewardCouponV2(
+                round = n,
+                provider = user,
+                amount = numeric(2 * n),
+                beneficiary = Some(user),
+              ),
+              createdEventSignatories = Seq(dsoParty),
+              createdEventObservers = Seq(user),
+            )(store.multiDomainAcsStore)
+          } yield ()
+        )
+        // unassigned coupon in round 2
+        _ <- dummyDomain.create(
+          rewardCouponV2(round = 2, provider = user, amount = numeric(20), beneficiary = None),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        // AssignedOnly: unassigned coupon excluded
+        store
+          .listRewardCouponsV2(includeUnassigned = false, includeAssigned = true)
+          .futureValue
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          1.0, 2.0, 2.0, 4.0, 3.0, 6.0, 4.0, 8.0,
+        )
+        // All: unassigned coupon included
+        store
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = true)
+          .futureValue
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          1.0, 2.0, 2.0, 4.0, 3.0, 6.0, 4.0, 8.0, 20.0,
+        )
+        // UnassignedOnly: only the unassigned coupon
+        store
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+          .futureValue
+          .map(_.payload.amount.doubleValue()) should contain theSameElementsAs Seq(
+          20.0
+        )
+      }
+    }
+
+    "sort by expiresAt when requested" in {
+      val now = java.time.Instant.now()
+      for {
+        store <- mkTransferInputStore(user)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 1,
+            provider = user,
+            amount = numeric(5),
+            beneficiary = Some(user),
+            expiresAt = now.plusSeconds(100),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 2,
+            provider = user,
+            amount = numeric(10),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(300),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(
+          rewardCouponV2(
+            round = 3,
+            provider = user,
+            amount = numeric(20),
+            beneficiary = None,
+            expiresAt = now.plusSeconds(200),
+          ),
+          createdEventSignatories = Seq(dsoParty),
+          createdEventObservers = Seq(user),
+        )(store.multiDomainAcsStore)
+      } yield {
+        val results = store
+          .listRewardCouponsV2(includeUnassigned = true, includeAssigned = false)
+          .futureValue
+        results should have size 2
+        // ordered by expiresAt ascending: 200s before 300s
+        results.map(_.payload.amount.doubleValue()) should contain theSameElementsInOrderAs Seq(
+          20.0,
+          10.0,
+        )
+      }
+    }
+  }
+
   /** A AmuletRules_Mint exercise event with one child Amulet create event */
   protected def mintTransaction(
       receiver: PartyId,

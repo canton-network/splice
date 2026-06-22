@@ -199,6 +199,12 @@ svs:
     validatorApp:
       sweep:
         fromEnv: SV1
+    physicalSynchronizerOverrides:
+      9:
+        sequencer:
+          additionalEnvVars:
+            - name: PS9_SEQUENCER_ENV_VAR_NAME
+              value: PS9_SEQUENCER_ENV_VAR_VALUE
   sv-2: !include(sv.yaml) {}
   sv-da-1: !include(sv.yaml) # non "sv-X" key => additional SV that is always deployed (key == node name == k8s namespace)
     publicName: Digital-Asset-1

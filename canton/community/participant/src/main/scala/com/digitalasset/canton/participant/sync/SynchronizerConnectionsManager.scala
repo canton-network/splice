@@ -12,17 +12,11 @@ import cats.syntax.parallel.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.RpcError
 import com.digitalasset.canton.*
-import com.digitalasset.canton.common.sequencer.SequencerConnectClient
-import com.digitalasset.canton.common.sequencer.SequencerConnectClient.SynchronizerClientBootstrapInfo
 import com.digitalasset.canton.common.sequencer.grpc.SequencerInfoLoader
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.{ProcessingTimeout, TestingConfigInternal}
 import com.digitalasset.canton.crypto.SyncCryptoApiParticipantProvider
-import com.digitalasset.canton.data.{
-  CantonTimestamp,
-  SynchronizerPredecessor,
-  SynchronizerSuccessor,
-}
+import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.health.{HealthQuasiComponent, HealthStatus, MutableHealthComponent}
@@ -50,6 +44,7 @@ import com.digitalasset.canton.participant.pruning.AcsCommitmentProcessor
 import com.digitalasset.canton.participant.store.*
 import com.digitalasset.canton.participant.store.SynchronizerConnectionConfigStore.UnknownAlias
 import com.digitalasset.canton.participant.sync.ConnectedSynchronizer.SubmissionReady
+import com.digitalasset.canton.participant.sync.LogicalSynchronizerUpgrade.FullAutomaticLsuRequest
 import com.digitalasset.canton.participant.sync.SyncServiceError.{
   SyncServiceBecamePassive,
   SyncServiceFailedSynchronizerConnection,
@@ -66,17 +61,15 @@ import com.digitalasset.canton.participant.sync.SynchronizerConnectionsManager.{
   PerformLsuHandler,
 }
 import com.digitalasset.canton.participant.synchronizer.*
-import com.digitalasset.canton.participant.synchronizer.PendingHandshakeWithLsuSuccessor.PendingHandshakesWithSuccessorsStore
 import com.digitalasset.canton.participant.topology.*
 import com.digitalasset.canton.participant.topology.client.MissingKeysAlerter
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
+import com.digitalasset.canton.protocol.StaticSynchronizerParameters
+import com.digitalasset.canton.resource.DbExceptionRetryPolicy
+import com.digitalasset.canton.sequencing.SequencerConnectionValidation
 import com.digitalasset.canton.sequencing.client.SequencerClient
 import com.digitalasset.canton.sequencing.client.SequencerClient.CloseReason
-import com.digitalasset.canton.sequencing.{
-  SequencerConnection,
-  SequencerConnectionValidation,
-  SequencerConnections,
-}
+import com.digitalasset.canton.store.PendingOperation
 import com.digitalasset.canton.store.SequencedEventStore.SearchCriterion
 import com.digitalasset.canton.time.{Clock, SynchronizerTimeTracker}
 import com.digitalasset.canton.topology.*
@@ -87,15 +80,19 @@ import com.digitalasset.canton.topology.client.{
 import com.digitalasset.canton.tracing.{Spanning, TraceContext, Traced}
 import com.digitalasset.canton.util.*
 import com.digitalasset.canton.util.OptionUtils.OptionExtension
+import com.digitalasset.canton.util.Thereafter.syntax.*
+import com.digitalasset.canton.util.retry.Backoff
 import com.digitalasset.daml.lf.engine.Engine
 import com.google.common.collect.{BiMap, HashBiMap}
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
+import io.scalaland.chimney.dsl.*
 import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
@@ -137,7 +134,7 @@ private[sync] class SynchronizerConnectionsManager(
     resourceManagementService: ResourceManagementService,
     parameters: ParticipantNodeParameters,
     connectedSynchronizerFactory: ConnectedSynchronizer.Factory[ConnectedSynchronizer],
-    pendingHandshakesWithSuccessorsStore: PendingHandshakesWithSuccessorsStore,
+    pendingLsuOperationsStore: PendingLsuOperation.Store,
     metrics: ParticipantMetrics,
     sequencerInfoLoader: SequencerInfoLoader,
     isActive: () => Boolean,
@@ -176,32 +173,6 @@ private[sync] class SynchronizerConnectionsManager(
   protected def timeouts: ProcessingTimeout = parameters.processingTimeouts
 
   val connectedSynchronizers: ConnectedSynchronizers = new ConnectedSynchronizers()
-
-  lazy val automaticLogicalSynchronizerUpgrade: AutomaticLogicalSynchronizerUpgrade =
-    new AutomaticLogicalSynchronizerUpgrade(
-      synchronizerConnectionConfigStore,
-      ledgerApiIndexer,
-      syncPersistentStateManager,
-      connectQueue,
-      connectedSynchronizers,
-      connectSynchronizer = (alias: Traced[SynchronizerAlias]) =>
-        connectSynchronizer(
-          alias.value,
-          keepRetrying = true,
-          connectSynchronizer = ConnectSynchronizer.Connect,
-          /*
-          After LSU, the likelihood of a failure of the first connection attempt is higher than
-          with normal connects. Sequencers might not be ready yet and/or be hammered with request.
-          Hence, we decrease the level from WARN to INFO.
-           */
-          logLevelFailureInitialAttempt = Level.INFO,
-        )(alias.traceContext),
-      disconnectSynchronizer = (alias: Traced[SynchronizerAlias]) =>
-        disconnectSynchronizer(alias.value)(alias.traceContext),
-      pendingHandshakesWithSuccessorsStore,
-      timeouts,
-      loggerFactory,
-    )
 
   connectedSynchronizersLookupContainer.registerDelegate(connectedSynchronizers)
 
@@ -549,7 +520,7 @@ private[sync] class SynchronizerConnectionsManager(
   /** Attempt to connect to the synchronizer
     * @return
     *   - Left if connection failed in a non-retriable way
-    *   - Right(None)) if connection failed and can be retried
+    *   - Right(None) if connection failed and can be retried
     *   - Right(Some(psid)) if connection succeeded
     */
   private def attemptSynchronizerConnection(
@@ -645,7 +616,9 @@ private[sync] class SynchronizerConnectionsManager(
   }
 
   /** Get the synchronizer connection corresponding to the alias. Fail if no connection can be
-    * found. If more than one connections are found, takes the highest one.
+    * found. If `onlyActive` is true, enforces that exactly one active connection exists, otherwise
+    * throws an invalid state exception. If `onlyActive` is false and multiple connections exist,
+    * takes the one with the highest PSID.
     *
     * @param synchronizerAlias
     *   Synchronizer alias
@@ -663,36 +636,27 @@ private[sync] class SynchronizerConnectionsManager(
         SyncServiceError.SyncServiceUnknownSynchronizer.Error(synchronizerAlias).asLeft
 
       case Right(configs) =>
-        val filteredConfigs = if (onlyActive) {
+        if (onlyActive) {
           val (active, inactive) = configs.partition(_.status.isActive)
 
-          NonEmpty
-            .from(active)
-            .toRight(
-              SyncServiceError.SyncServiceSynchronizerIsNotActive
-                .Error(synchronizerAlias, inactive.map(c => (c.configuredPsid, c.status)))
-            )
-        } else configs.asRight
-
-        filteredConfigs.map(_.maxBy1(_.configuredPsid))
+          active.toList match {
+            case Nil =>
+              Left(
+                SyncServiceError.SyncServiceSynchronizerIsNotActive
+                  .Error(synchronizerAlias, inactive.map(c => (c.configuredPsid, c.status)))
+              )
+            case single :: Nil =>
+              Right(single)
+            case multiple =>
+              ErrorUtil.invalidState(
+                s"Store invariant violated: Multiple physical synchronizers marked as Active for alias $synchronizerAlias: ${multiple
+                    .map(_.configuredPsid)}"
+              )
+          }
+        } else {
+          Right(configs.maxBy1(_.configuredPsid))
+        }
     }
-
-  /** Sets the sequencer ids in the synchronizer connection config store.
-    */
-  private def updateSequencerIds(
-      psid: PhysicalSynchronizerId,
-      alias: SynchronizerAlias,
-      connections: SequencerConnections,
-  )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] =
-    synchronizerConnectionConfigStore
-      .setSequencerIds(
-        psid,
-        connections.aliasToConnection.forgetNE.mapFilter(_.sequencerId),
-      )
-      .leftMap[SyncServiceError](err =>
-        SyncServiceError.SyncServicePhysicalIdRegistration
-          .Error(alias, psid, err.message)
-      )
 
   /** MUST be synchronized using the [[connectQueue]]
     */
@@ -760,16 +724,12 @@ private[sync] class SynchronizerConnectionsManager(
           _ = logger.debug(
             s"Performing handshake with synchronizer with id ${synchronizerConnectionConfig.configuredPsid} and config: ${synchronizerConnectionConfig.config}"
           )
-          synchronizerHandleAndUpdatedConfig <- EitherT(
-            synchronizerRegistry.connect(
-              synchronizerConnectionConfig.config,
-              synchronizerConnectionConfig.predecessor,
-            )
+          synchronizerHandle <- EitherT(
+            synchronizerRegistry.connect(synchronizerConnectionConfig)
           )
             .leftMap[SyncServiceError](err =>
               SyncServiceError.SyncServiceFailedSynchronizerConnection(synchronizerAlias, err)
             )
-          (synchronizerHandle, updatedSequencerConnections) = synchronizerHandleAndUpdatedConfig
 
           psid = synchronizerHandle.psid
           _ = logger.debug(
@@ -782,11 +742,6 @@ private[sync] class SynchronizerConnectionsManager(
                 .Error(synchronizerAlias, psid, err.message)
             )
 
-          _ <- updateSequencerIds(psid, synchronizerAlias, updatedSequencerConnections)
-
-          // Attempt to grab and store *all* the sequencer ids to increase chances to have them all
-          _ <- retrieveAndStoreMissingSequencerIds(psid)
-
           _ = syncCrypto.remove(psid)
           _ = synchronizerHandle.close()
         } yield psid
@@ -798,129 +753,222 @@ private[sync] class SynchronizerConnectionsManager(
     *
     * @param psid
     *   the physical synchronizer id of the synchronizer.
+    * @param isLsu
+    *   True if the handshake is part of LSU
     */
   def performPureHandshake(
-      psid: PhysicalSynchronizerId
+      psid: PhysicalSynchronizerId,
+      isLsu: Boolean,
   )(implicit
       traceContext: TraceContext
-  ): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] =
+  ): EitherT[FutureUnlessShutdown, SyncServiceError, StaticSynchronizerParameters] =
     connectQueue.executeEUS(
-      if (connectedSynchronizers.isConnected(psid)) {
-        logger.debug(s"Already connected to $psid, no need to register $psid")
-        EitherT.rightT(())
-      } else {
-        logger.debug(s"About to perform handshake with synchronizer: $psid")
+      connectedSynchronizers.get(psid) match {
+        case Some(sync) =>
+          logger.debug(
+            s"Already connected to $psid, skipping pure handshake and returning cached static parameters."
+          )
+          EitherT.rightT[FutureUnlessShutdown, SyncServiceError](sync.staticSynchronizerParameters)
+        case None =>
+          logger.debug(s"About to perform pure handshake with synchronizer: $psid")
 
-        for {
-          synchronizerConnectionConfig <- EitherT.fromEither[FutureUnlessShutdown](
-            synchronizerConnectionConfigStore
-              .get(psid)
-              .leftMap(e =>
-                SyncServiceError.SynchronizerRegistration
-                  .SuccessorInitializationError(psid, e.message): SyncServiceError
-              )
-          )
-
-          _ = logger.debug(
-            s"Performing handshake with synchronizer with id ${synchronizerConnectionConfig.configuredPsid} and config: ${synchronizerConnectionConfig.config}"
-          )
-          _ <- EitherT(
-            synchronizerRegistry.pureHandshake(synchronizerConnectionConfig.config)
-          )
-            .leftMap[SyncServiceError](err =>
-              SyncServiceError.SyncServiceFailedSynchronizerConnection(
-                synchronizerConnectionConfig.config.synchronizerAlias,
-                err,
-              )
+          for {
+            synchronizerConnectionConfig <- EitherT.fromEither[FutureUnlessShutdown](
+              synchronizerConnectionConfigStore
+                .get(psid)
+                .leftMap(e =>
+                  SyncServiceError.SynchronizerRegistration
+                    .SuccessorInitializationError(psid, e.message): SyncServiceError
+                )
             )
 
-          _ <- synchronizerConnectionConfig.predecessor.map(_.psid) match {
-            case Some(predecessorPsid) =>
-              EitherT.rightT[FutureUnlessShutdown, SyncServiceError](
-                pendingHandshakesWithSuccessorsStore.delete(
-                  predecessorPsid,
-                  PendingHandshakeWithLsuSuccessor.operationKey,
-                  PendingHandshakeWithLsuSuccessor.operationName,
+            _ = logger.debug(
+              s"Performing handshake with synchronizer with id ${synchronizerConnectionConfig.configuredPsid} and config: ${synchronizerConnectionConfig.config}"
+            )
+            connectionInfo <- EitherT(
+              synchronizerRegistry.pureHandshake(synchronizerConnectionConfig)
+            )
+              .leftMap[SyncServiceError](err =>
+                SyncServiceError.SyncServiceFailedSynchronizerConnection(
+                  synchronizerConnectionConfig.config.synchronizerAlias,
+                  err,
                 )
               )
-            case None => EitherTUtil.unitUS[SyncServiceError]
-          }
-        } yield ()
+
+            _ = if (isLsu) metrics.setLsuStatus(ParticipantMetrics.LsuStatus.HandshakeDone, psid)
+
+          } yield connectionInfo.staticSynchronizerParameters
       },
       s"handshake with physical synchronizer $psid",
     )
 
-  /** Try to retrieve and store the missing sequencer IDs for the synchronizer:
-    *   - IDs that can be retrieved will be stored.
-    *   - Failure for a sequencer does not interrupt the process.
-    *
-    * This method is "best effort" and network errors are converted to success. Therefore, failures
-    * can be logged and reported.
-    *
-    * @return
-    *   - Failed future for failed DB operations
-    *   - Left if (1) the config cannot be found or (2) if synchronizer config cannot be stored or
-    *     (3) if ids cannot be stored
-    *   - Right in case of success
+  /** Recovery path for a pending LSU operation after a crash: handshake, copy topology, clear the
+    * pending operation.
     */
-  def retrieveAndStoreMissingSequencerIds(
-      psid: PhysicalSynchronizerId
-  )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] = {
-    // Turn Left and failed future into a None
-    def recoverFromFailures(
-        conn: SequencerConnection,
-        res: EitherT[FutureUnlessShutdown, String, SynchronizerClientBootstrapInfo],
-    ): FutureUnlessShutdown[Option[(SequencerAlias, SequencerId)]] = res
-      .fold(
-        err => {
-          logger.info(s"Unable to get sequencer id for sequencer ${conn.sequencerAlias}: $err")
-          None
-        },
-        info => Some((conn.sequencerAlias, info.sequencerId)),
-      )
-      .recover { case ex =>
-        logger.info(s"Unable to get sequencer id for sequencer ${conn.sequencerAlias}", ex)
-        UnlessShutdown.Outcome(None)
-      }
+  def resumePendingLsuOperation(
+      initialPendingOperation: PendingOperation[PendingLsuOperation, PhysicalSynchronizerId]
+  )(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] = {
+    val successorPsid = initialPendingOperation.operation.successorPsid
+    logger.info(s"Resuming pending LSU operations for $successorPsid")
 
-    for {
-      storedConfig <- EitherT
-        .fromEither[FutureUnlessShutdown](synchronizerConnectionConfigStore.get(psid))
-        .leftMap(err =>
-          SyncServiceError.SyncServiceInternalError
-            .SynchronizerIsMissingInternally(psid.toProtoPrimitive, err.message)
-        )
-
-      alias = storedConfig.config.synchronizerAlias
-      sequencerConnectionsWithoutId = storedConfig.config.sequencerConnections.connections
-        .filter(_.sequencerId.isEmpty)
-
-      retrievedSequencerIds <- EitherT.liftF(
-        sequencerConnectionsWithoutId
-          .map(conn =>
-            SequencerConnectClient(
-              alias,
-              conn,
-              timeouts,
-              parameters.sequencerClient.clientChannelParams(parameters.tracing.propagation),
-              loggerFactory,
-            ).getSynchronizerClientBootstrapInfo()
-              .leftMap(_.message)
-              .pipe(recoverFromFailures(conn, _))
-          )
-          .parSequenceFilter
-      )
-
-      _ <- synchronizerConnectionConfigStore
-        .setSequencerIds(psid, retrievedSequencerIds.toMap)
-        .leftMap[SyncServiceError](err =>
-          SyncServiceError.SyncServiceInternalError
-            .Failure(
-              psid.toString,
-              new RuntimeException(s"Unable to store missing sequencer ids: $err"),
+    // return the predecessor psid
+    def performTopologyCopy(
+        staticParams: StaticSynchronizerParameters
+    ): EitherT[FutureUnlessShutdown, SyncServiceError, PhysicalSynchronizerId] =
+      for {
+        synchronizerConnectionConfig <- EitherT.fromEither[FutureUnlessShutdown](
+          synchronizerConnectionConfigStore
+            .get(successorPsid)
+            .leftMap(e =>
+              SyncServiceError.SynchronizerRegistration
+                .SuccessorInitializationError(successorPsid, e.message): SyncServiceError
             )
         )
-    } yield ()
+
+        predecessor <- EitherT.fromOption[FutureUnlessShutdown](
+          synchronizerConnectionConfig.predecessor,
+          SyncServiceError.SynchronizerRegistration
+            .SuccessorInitializationError(
+              successorPsid,
+              s"No predecessor configured for $successorPsid",
+            ): SyncServiceError,
+        )
+
+        successorPersistentState <- syncPersistentStateManager
+          .lookupOrCreatePersistentState(successorPsid, staticParams, Some(predecessor))
+          .leftMap[SyncServiceError](err =>
+            SyncServiceError.SynchronizerRegistration
+              .SuccessorInitializationError(successorPsid, err.toString)
+          )
+
+        _ <- SynchronizerRegistryHelpers
+          .copyTopologyStateFromLocalPredecessorIfNeeded(
+            Some(predecessor),
+            successorPersistentState,
+            syncPersistentStateManager,
+            metrics,
+          )
+          .leftMap[SyncServiceError](err =>
+            SyncServiceError.SynchronizerRegistration
+              .SuccessorInitializationError(successorPsid, err.toString)
+          )
+
+      } yield predecessor.psid
+
+    for {
+      staticParamsO <- performLsuHandshakeWithRetries(initialPendingOperation)
+
+      _ <- staticParamsO match {
+        case Some(staticParams) =>
+          logger.info("Preparing to perform topology copy")
+          for {
+            predecessorPsid <- performTopologyCopy(staticParams)
+            _ <- EitherT.right[SyncServiceError](
+              pendingLsuOperationsStore.delete(
+                predecessorPsid,
+                PendingLsuOperation.operationKey,
+                PendingLsuOperation.operationName,
+              )
+            )
+          } yield ()
+
+        case None => EitherTUtil.unitUS[SyncServiceError]
+      }
+
+    } yield logger.info(s"Successfully performed pending LSU operation for $successorPsid")
+  }
+
+  /** Used to synchronize handshake loops per successor physical synchronizer id */
+  private val lsuHandshakeLoops = new TrieMap[PhysicalSynchronizerId, PromiseUnlessShutdown[
+    Either[SyncServiceError, Option[StaticSynchronizerParameters]]
+  ]]()
+
+  /** Performs handshake with the successor synchronizer. Retry until the handshake is successful.
+    */
+  def performLsuHandshakeWithRetries(
+      initialPendingOperation: PendingOperation[PendingLsuOperation, PhysicalSynchronizerId]
+  )(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, SyncServiceError, Option[StaticSynchronizerParameters]] = {
+    val successorPsid = initialPendingOperation.operation.successorPsid
+
+    syncPersistentStateManager.get(successorPsid) match {
+      case Some(state) =>
+        logger.info("Static synchronizer parameters found. Handshake is not needed.")
+        EitherT.pure(Some(state.staticSynchronizerParameters))
+
+      case None =>
+        val newPromise = PromiseUnlessShutdown
+          .unsupervised[Either[SyncServiceError, Option[StaticSynchronizerParameters]]]()
+        lsuHandshakeLoops.putIfAbsent(successorPsid, newPromise) match {
+          case Some(existingPromise) =>
+            EitherT(existingPromise.futureUS)
+
+          case None =>
+            Backoff
+              .fromConfig(
+                logger = logger,
+                hasSynchronizeWithClosing = this,
+                config = parameters.lsuConfig.handshakeRetry,
+                operationName = s"lsu-handshake-with-$successorPsid",
+              )
+              .unlessShutdown(
+                performPureHandshake(successorPsid, isLsu = true)
+                  .map(Some(_))
+                  /*
+                  Transform the result to abort if the operation is not needed anymore.
+                  Recall that retries are stopped on a Right
+                   */
+                  .leftFlatMap { error =>
+                    pendingLsuOperationsStore
+                      .get(
+                        initialPendingOperation.synchronizer,
+                        initialPendingOperation.key,
+                        initialPendingOperation.name,
+                      )
+                      .value
+                      .map {
+                        case Some(`initialPendingOperation`) =>
+                          val isRetryable = error.retryable.isDefined
+
+                          // e.g., transient network or pool errors
+                          if (isRetryable) {
+                            logger.info(
+                              s"Unable to perform handshake with $successorPsid: $error. Will retry."
+                            )
+                            Left(error) // Retry
+                          } else {
+                            logger.warn(
+                              s"Unable to perform handshake with $successorPsid: $error. Error is not retryable."
+                            )
+                            Right(Option.empty[StaticSynchronizerParameters])
+                          }
+
+                        case Some(other) => // The pending operation is different. Possibly a cancellation followed by a new LSU.
+                          logger.info(
+                            s"Found $other pending LSU operation that is different from the initial $initialPendingOperation. Not retrying."
+                          )
+
+                          Right(Option.empty[StaticSynchronizerParameters])
+
+                        case None => // LSU was cancelled or the operation was completed elsewhere
+                          logger.info(
+                            s"No pending LSU operation found for ${initialPendingOperation.synchronizer}. Not retrying."
+                          )
+
+                          Right(Option.empty[StaticSynchronizerParameters])
+                      }
+                      .pipe(EitherT(_))
+                  }
+                  .value,
+                DbExceptionRetryPolicy,
+              )
+              .pipe(EitherT(_))
+              .thereafter(_ => lsuHandshakeLoops.remove(successorPsid).discard)
+        }
+    }
   }
 
   /** Connect the sync service to the given synchronizer. */
@@ -932,14 +980,13 @@ private[sync] class SynchronizerConnectionsManager(
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SyncServiceError, PhysicalSynchronizerId] = {
     def connect(
-        config: SynchronizerConnectionConfig,
-        synchronizerPredecessor: Option[SynchronizerPredecessor],
+        config: StoredSynchronizerConnectionConfig
     ): EitherT[
       FutureUnlessShutdown,
       SyncServiceFailedSynchronizerConnection,
-      (SynchronizerHandle, SequencerConnections),
+      SynchronizerHandle,
     ] =
-      EitherT(synchronizerRegistry.connect(config, synchronizerPredecessor)).leftMap(err =>
+      EitherT(synchronizerRegistry.connect(config)).leftMap(err =>
         SyncServiceError.SyncServiceFailedSynchronizerConnection(synchronizerAlias, err)
       )
 
@@ -975,12 +1022,7 @@ private[sync] class SynchronizerConnectionsManager(
           _ = logger.debug(
             s"Connecting to synchronizer with id ${synchronizerConnectionConfig.configuredPsid} config: ${synchronizerConnectionConfig.config}"
           )
-          synchronizerHandleAndUpdatedConnnections <- connect(
-            synchronizerConnectionConfig.config,
-            synchronizerConnectionConfig.predecessor,
-          )
-          (synchronizerHandle, updatedSequencerConnections) =
-            synchronizerHandleAndUpdatedConnnections
+          synchronizerHandle <- connect(synchronizerConnectionConfig)
           psid = synchronizerHandle.psid
 
           _ = logger.debug(
@@ -992,10 +1034,6 @@ private[sync] class SynchronizerConnectionsManager(
               SyncServiceError.SyncServicePhysicalIdRegistration
                 .Error(synchronizerAlias, psid, err.message)
             )
-          _ <- updateSequencerIds(psid, synchronizerAlias, updatedSequencerConnections)
-
-          // Attempt to grab and store *all* the sequencer ids to increase chances to have them all
-          _ <- retrieveAndStoreMissingSequencerIds(psid)
 
           synchronizerLoggerFactory = loggerFactory.append("psid", psid.toString)
           persistent = synchronizerHandle.syncPersistentState
@@ -1010,21 +1048,33 @@ private[sync] class SynchronizerConnectionsManager(
           promiseUSFactory: DefaultPromiseUnlessShutdownFactory =
             new DefaultPromiseUnlessShutdownFactory(timeouts, loggerFactory)
 
+          partyReplicationWorkflow = new PartyReplicationTopologyWorkflow(
+            participantId,
+            parameters.processingTimeouts,
+            loggerFactory,
+          )
+
+          clearanceWorkflowContext =
+            new PartyReplicationTopologyWorkflow.TopologyWorkflowContext {
+              override val psid: PhysicalSynchronizerId = synchronizerHandle.psid
+              override val workflow: PartyReplicationTopologyWorkflow = partyReplicationWorkflow
+
+              override def synchronizerContext
+                  : Option[PartyReplicationTopologyWorkflow.SynchronizerTopologyContext] =
+                readyConnectedSynchronizerById(synchronizerHandle.psid.logical)
+                  .map(PartyReplicationTopologyWorkflow.SynchronizerTopologyContext.apply)
+            }
+
           onboardingClearanceScheduler = new OnboardingClearanceScheduler(
             participantId,
-            psid,
-            () => this.readyConnectedSynchronizerById(psid.logical),
+            clearanceWorkflowContext,
             loggerFactory,
-            new PartyReplicationTopologyWorkflow(
-              participantId,
-              parameters.processingTimeouts,
-              loggerFactory,
-            ),
+            persistent.pendingOnboardingClearanceStore,
             timeouts,
           )
 
           lsuHandler =
-            if (parameters.automaticallyPerformLsu) {
+            if (parameters.lsuConfig.automaticallyPerformLsu) {
               this
             } else {
               NoAutomaticLsuHandler(logger)
@@ -1071,15 +1121,20 @@ private[sync] class SynchronizerConnectionsManager(
           sequencerConnectionSuccessorListener = new SequencerConnectionSuccessorListener(
             synchronizerAlias,
             synchronizerHandle.topologyClient,
-            synchronizerConnectionConfigStore,
             new HandshakeWithSuccessor {
-              override def handshakeWithSuccessor(successorPsid: PhysicalSynchronizerId)(implicit
+              override def handshakeWithSuccessor(
+                  pendingOperation: PendingOperation[PendingLsuOperation, PhysicalSynchronizerId]
+              )(implicit
                   traceContext: TraceContext
-              ): EitherT[FutureUnlessShutdown, SyncServiceError, Unit] =
-                performPureHandshake(successorPsid)
+              ): EitherT[FutureUnlessShutdown, SyncServiceError, Option[
+                StaticSynchronizerParameters
+              ]] =
+                performLsuHandshakeWithRetries(pendingOperation)
             },
-            automaticallyConnectToUpgradedSynchronizer = parameters.automaticallyPerformLsu,
-            pendingHandshakesWithSuccessorsStore,
+            syncPersistentStateManager,
+            parameters.lsuConfig,
+            pendingLsuOperationsStore,
+            metrics,
             loggerFactory,
           )
 
@@ -1089,6 +1144,7 @@ private[sync] class SynchronizerConnectionsManager(
               participantId,
               engine,
               parameters,
+              synchronizerConnectionConfigStore,
               participantNodePersistentState,
               persistent,
               ephemeral,
@@ -1102,13 +1158,12 @@ private[sync] class SynchronizerConnectionsManager(
                   onboardingClearanceScheduler,
                   synchronizerHandle.topologyClient,
                   ephemeral.recordOrderPublisher,
-                  pendingHandshakesWithSuccessorsStore = pendingHandshakesWithSuccessorsStore,
+                  pendingLsuOperationsStore = pendingLsuOperationsStore,
                   persistent.pendingOnboardingClearanceStore,
-                  retrieveAndStoreMissingSequencerIds = traceContext =>
-                    retrieveAndStoreMissingSequencerIds(psid)(traceContext).leftMap(_.toString),
                   synchronizerHandle.syncPersistentState.sequencedEventStore,
                   synchronizerConnectionConfig.predecessor,
                   ledgerApiIndexer.asEval.value.ledgerApiStore.value,
+                  metrics,
                 ),
               missingKeysAlerter,
               sequencerConnectionSuccessorListener,
@@ -1347,7 +1402,32 @@ private[sync] class SynchronizerConnectionsManager(
         s"Upgrade time ${synchronizerSuccessor.upgradeTime} not reached: last event in the sequenced event store has timestamp ${event.timestamp}",
       )
 
-      _ <- automaticLogicalSynchronizerUpgrade.upgrade(alias, currentPsid, synchronizerSuccessor)
+      upgrader = new AutomaticLogicalSynchronizerUpgrade(
+        synchronizerConnectionConfigStore,
+        ledgerApiIndexer,
+        syncPersistentStateManager,
+        connectQueue,
+        connectedSynchronizers,
+        connectSynchronizer = tc =>
+          connectSynchronizer(
+            alias,
+            keepRetrying = true,
+            connectSynchronizer = ConnectSynchronizer.Connect,
+            /*
+            After LSU, the likelihood of a failure of the first connection attempt is higher than
+            with normal connects. Sequencers might not be ready yet and/or be hammered with requests.
+            Hence, we decrease the level from WARN to INFO.
+             */
+            logLevelFailureInitialAttempt = Level.INFO,
+          )(tc),
+        disconnectSynchronizer = disconnectSynchronizer(alias)(_),
+        metrics,
+        pendingLsuOperationsStore,
+        parameters.lsuConfig,
+        loggerFactory.append("lsu", synchronizerSuccessor.psid.suffix),
+      )(FullAutomaticLsuRequest(alias, currentPsid, synchronizerSuccessor))
+
+      _ <- upgrader.upgrade()
     } yield ()
   }
 
@@ -1373,15 +1453,19 @@ private[sync] class SynchronizerConnectionsManager(
           synchronizerConnectionConfigStore,
           connectQueue,
           connectedSynchronizers,
-          disconnectSynchronizer = (alias: Traced[SynchronizerAlias]) =>
-            disconnectSynchronizer(alias.value)(alias.traceContext),
-          pendingHandshakesWithSuccessorsStore,
-          timeouts,
-          loggerFactory,
-        ).upgrade(request)
+          disconnectSynchronizer =
+            disconnectSynchronizer(request.successorConfig.synchronizerAlias)(_),
+          metrics,
+          pendingLsuOperationsStore,
+          parameters.lsuConfig,
+          loggerFactory.append("lsu", request.successorPsid.suffix),
+        )(request.into[LogicalSynchronizerUpgrade.LateLsuRequest].enableMethodAccessors.transform)
+          .upgrade()
     } yield ()
 
-  def performManualLsu(manualLsuRequest: ManualLsuRequest)(implicit traceContext: TraceContext) =
+  def performManualLsu(
+      manualLsuRequest: ManualLsuRequest
+  )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, String, Unit] =
     for {
       alias <- EitherT.fromEither[FutureUnlessShutdown](
         syncPersistentStateManager
@@ -1389,24 +1473,23 @@ private[sync] class SynchronizerConnectionsManager(
           .toRight(s"Unable to find alias for synchronizer ${manualLsuRequest.lsid}")
       )
 
-      _ <- new ManualLogicalSynchronizerUpgrade(
+      _ <- ManualLogicalSynchronizerUpgrade.upgrade(
         synchronizerConnectionConfigStore,
         ledgerApiIndexer,
-        syncPersistentStateManager,
         connectQueue,
         connectedSynchronizers,
-        connectSynchronizer = (alias: Traced[SynchronizerAlias]) =>
+        connectSynchronizer = tc =>
           connectSynchronizer(
-            alias.value,
+            alias,
             keepRetrying = true,
             connectSynchronizer = ConnectSynchronizer.Connect,
-          )(alias.traceContext),
-        disconnectSynchronizer = (alias: Traced[SynchronizerAlias]) =>
-          disconnectSynchronizer(alias.value)(alias.traceContext),
-        pendingHandshakesWithSuccessorsStore,
-        timeouts,
+          )(tc),
+        disconnectSynchronizer = disconnectSynchronizer(alias)(_),
+        metrics,
+        pendingLsuOperationsStore,
+        parameters.lsuConfig,
         loggerFactory,
-      ).upgrade(alias, manualLsuRequest)
+      )(alias, manualLsuRequest)
     } yield ()
 
   // Write health requires the ability to transact, i.e. connectivity to at least one synchronizer and HA-activeness.
@@ -1440,12 +1523,6 @@ private[sync] class SynchronizerConnectionsManager(
     }
     resourceManagementService.checkOverloaded(load)
   }
-
-  def refreshCaches()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
-    for {
-      _ <- synchronizerConnectionConfigStore.refreshCache()
-      _ <- resourceManagementService.refreshCache()
-    } yield ()
 
   override def onClosed(): Unit = {
     val instances = (connectQueue +: connectedSynchronizers.snapshot.values.toSeq) ++ Seq(
@@ -1491,9 +1568,7 @@ private[sync] class SynchronizerConnectionsManager(
                   Set(party),
                   participantId = request.participantId.getOrElse(participantId),
                 )
-                .map(
-                  _.get(party)
-                )
+                .map(_.get(party))
             )
           } yield attributesO
             .map(attributes =>
@@ -1582,45 +1657,50 @@ object SynchronizerConnectionsManager {
 
     /** These two maps should stay private. Read-only interface is provided by
       * [[ConnectedSynchronizersLookup]]
+      *
+      * Reads and writes are synchronized using the logs. As such, we don't use thread safe
+      * collections.
       */
-    private val connected: TrieMap[PhysicalSynchronizerId, ConnectedSynchronizer] = TrieMap()
+    private val connected: mutable.HashMap[PhysicalSynchronizerId, ConnectedSynchronizer] =
+      mutable.HashMap.empty
     private val lsidToPsid: BiMap[SynchronizerId, PhysicalSynchronizerId] = HashBiMap.create
     private val lock = new Mutex()
 
-    def get(psid: PhysicalSynchronizerId): Option[ConnectedSynchronizer] = connected.get(psid)
+    def get(psid: PhysicalSynchronizerId): Option[ConnectedSynchronizer] =
+      lock.exclusive(connected.get(psid))
+
     def get(lsid: SynchronizerId): Option[ConnectedSynchronizer] =
-      Option(lsidToPsid.get(lsid)).flatMap(connected.get)
+      lock.exclusive(Option(lsidToPsid.get(lsid)).flatMap(connected.get))
 
     override def getAcsInspection(synchronizerId: SynchronizerId): Option[AcsInspection] =
       get(synchronizerId).map(_.persistent.acsInspection)
 
     override def isConnected(synchronizerId: SynchronizerId): Boolean = get(synchronizerId).nonEmpty
 
-    override def isConnectedToAny: Boolean = connected.nonEmpty
+    override def isConnectedToAny: Boolean = lock.exclusive(connected.nonEmpty)
 
-    def lsids: Set[SynchronizerId] = lsidToPsid.keySet().asScala.toSet
-    def psids: Set[PhysicalSynchronizerId] = lsidToPsid.values().asScala.toSet
-    def snapshot: Map[PhysicalSynchronizerId, ConnectedSynchronizer] = connected.toMap
+    def lsids: Set[SynchronizerId] = lock.exclusive(lsidToPsid.keySet().asScala.toSet)
+    def psids: Set[PhysicalSynchronizerId] = lock.exclusive(lsidToPsid.values().asScala.toSet)
+    def snapshot: Map[PhysicalSynchronizerId, ConnectedSynchronizer] =
+      lock.exclusive(connected.toMap)
 
     def tryAdd(connectedSynchronizer: ConnectedSynchronizer): Unit = {
       val lsid = connectedSynchronizer.psid.logical
       val psid = connectedSynchronizer.psid
 
-      {
-        lock.exclusive {
-          if (connected.isDefinedAt(psid))
-            throw new IllegalArgumentException(
-              s"Cannot add $psid because the node is already connected to it"
-            )
+      lock.exclusive {
+        if (connected.isDefinedAt(psid))
+          throw new IllegalArgumentException(
+            s"Cannot add $psid because the node is already connected to it"
+          )
 
-          if (lsidToPsid.containsKey(lsid))
-            throw new IllegalArgumentException(
-              s"Cannot add $psid because the node is already connected to $lsid"
-            )
+        if (lsidToPsid.containsKey(lsid))
+          throw new IllegalArgumentException(
+            s"Cannot add $psid because the node is already connected to $lsid"
+          )
 
-          connected.addOne(psid -> connectedSynchronizer)
-          lsidToPsid.put(lsid, psid).discard
-        }
+        connected.addOne(psid -> connectedSynchronizer)
+        lsidToPsid.put(lsid, psid).discard
       }
     }
 

@@ -32,6 +32,8 @@ trait ScanRewardsReferenceStore extends AppStore {
 
   def key: ScanRewardsReferenceStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   /** Waits for this store to be initialized.
     * All other methods on this store will independently wait for initialization
     * to complete before returning results, this method is useful for cases where
@@ -77,6 +79,14 @@ trait ScanRewardsReferenceStore extends AppStore {
   )(implicit
       tc: TraceContext
   ): Future[Option[Contract[OpenMiningRound.ContractId, OpenMiningRound]]]
+
+  /** The highest OpenMiningRound round number archived at or before asOf.
+    * Returns None without waiting when asOf is before the earliest observed
+    * archival, otherwise waits until the store's ingestion has reached asOf.
+    */
+  def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]]
 
   /** List active CalculateRewardsV2 contracts, sorted by round number ascending.
     */

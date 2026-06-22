@@ -52,6 +52,7 @@ export class Dso extends pulumi.ComponentResource {
     return {
       type: 'join-with-key',
       sponsorApiUrl: `http://sv-app.sv-1:5014`,
+      sponsorScanUrl: `http://scan-app.sv-1:5012`,
       sponsorRelease: sv1,
       keys,
     };

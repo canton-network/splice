@@ -518,6 +518,29 @@ abstract class StoreTestBase
       ),
     )
 
+  protected def rewardCouponV2(
+      round: Int,
+      provider: PartyId,
+      amount: Numeric.Numeric = numeric(1.0),
+      beneficiary: Option[PartyId] = None,
+      expiresAt: Instant = Instant.now().plusSeconds(3600),
+      providerIsObserver: Boolean = true,
+      contractId: String = nextCid(),
+  ): Contract[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2] =
+    contract(
+      identifier = amuletCodegen.RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new amuletCodegen.RewardCouponV2.ContractId(contractId),
+      payload = new amuletCodegen.RewardCouponV2(
+        dsoParty.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new Round(round),
+        amount,
+        expiresAt,
+        providerIsObserver,
+        beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
+      ),
+    )
+
   protected def appActivityMarker(
       provider: PartyId,
       weight: Numeric.Numeric = numeric(1.0),
