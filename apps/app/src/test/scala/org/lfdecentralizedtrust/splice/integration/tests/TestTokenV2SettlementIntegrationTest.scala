@@ -542,10 +542,9 @@ class TestTokenV2SettlementIntegrationTest
       actAndCheck(
         "Venue settles the trade", {
           val allAllocations = {
-            // TODO: broken
             venueValidator.participantClientWithAdminToken.ledger_api.state.acs.of_party(
               party = venueParty,
-              filterTemplates = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+              filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
                 TemplateId(
                   templateId.getPackageId,
                   templateId.getModuleName,
@@ -586,7 +585,24 @@ class TestTokenV2SettlementIntegrationTest
             emptyExtraArgs,
           )
           val amuletContext = sv1ScanBackend.getSettlementFactoryV2(settleBatch)
-          val usdcContext = registry.getContext(Seq.empty)
+          val bobUsdcHoldings =
+            bobValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
+              .of_party(
+                party = bobParty,
+                filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+                  TemplateId(
+                    templateId.getPackageId,
+                    templateId.getModuleName,
+                    templateId.getEntityName,
+                  )
+                ),
+                includeCreatedEventBlob = true,
+              )
+              .map(_.contractId)
+              .map(id => new holdingv2.Holding.ContractId(id))
+          val usdcContext = registry.getContext(
+            bobUsdcHoldings
+          )
           venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
             .submitJava(
               actAs = Seq(venueParty),
@@ -598,7 +614,7 @@ class TestTokenV2SettlementIntegrationTest
                       amuletAllocations
                         .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
                         .asJava,
-                      java.util.List.of(), // TODO: there's almost certainly missing allocations
+                      java.util.List.of(),
                       amuletContext.factoryId,
                       amuletContext.args.extraArgs,
                     ),
@@ -606,7 +622,47 @@ class TestTokenV2SettlementIntegrationTest
                       usdAllocations
                         .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
                         .asJava,
-                      java.util.List.of(), // TODO: there's almost certainly missing allocations
+                      // (Account {owner = Some 'splitwell-validator24e329e9-1::1220b953443037009f7ef58a3421728329a96a37ad53c63a027bb7dff32b13c992f7', provider = None, id = ""},TransferLegSide {transferLegId = "alicetovenue0.2USDC", side = ReceiverSide, otherside = Account {owner = Some 'alice__wallet__user-24e329e9__tc0::122062c1..."
+                      java.util.List.of(
+                        new tradingappv2.MissingAllocation(
+                          java.util.Optional.empty(),
+                          tokenRulesId.toInterface(
+                            allocationinstructionv2.AllocationFactory.INTERFACE
+                          ),
+                          new allocationinstructionv2.AllocationFactory_Allocate(
+                            new allocationv2.SettlementInfo(
+                              java.util.List.of(venueParty.toProtoPrimitive),
+                              "OTCTradeProposal",
+                              java.util.Optional.of(
+                                new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)
+                              ),
+                              emptyMetadata,
+                            ),
+                            new allocationv2.AllocationSpecification(
+                              ttAdminParty.toProtoPrimitive,
+                              basicAccount(venueParty),
+                              java.util.List.of(
+                                new allocationv2.TransferLegSide(
+                                  "alicetovenue0.2USDC",
+                                  allocationv2.TransferSide.RECEIVERSIDE,
+                                  basicAccount(aliceParty),
+                                  BigDecimal(0.2).bigDecimal,
+                                  usdcInstrumentName,
+                                  emptyMetadata,
+                                )
+                              ),
+                              java.util.Optional.empty(),
+                              java.util.Optional.empty(),
+                              false,
+                              emptyMetadata,
+                            ),
+                            Instant.now(),
+                            java.util.List.of(),
+                            new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                            java.util.List.of(venueParty.toProtoPrimitive),
+                          ),
+                        )
+                      ),
                       new allocationv2.SettlementFactory.ContractId(tokenRulesId.contractId),
                       new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
                     ),
@@ -623,7 +679,7 @@ class TestTokenV2SettlementIntegrationTest
                 usdcContext.disclosedContracts ++ amuletContext.disclosedContracts,
             )
         },
-      )("Foo", _ => {})
+      )("The balances are updated", _ => {})
     }
   }
 
