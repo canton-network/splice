@@ -1,19 +1,28 @@
+{{- define "splice-util-lib.secret" -}}
+{{- $overrideValue := "" -}}
+{{- if .overrides -}}
+  {{- if hasKey .overrides .overrideKey -}}
+    {{- $overrideValue = index .overrides .overrideKey -}}
+  {{- end -}}
+{{- end -}}
+{{- if $overrideValue -}}
+value: {{ $overrideValue | quote }}
+{{- else -}}
+valueFrom:
+  secretKeyRef:
+    key: {{ .secretKey }}
+    name: {{ .secretName }}
+    optional: {{ if hasKey . "optional" }}{{ .optional }}{{ else }}false{{ end }}
+{{- end -}}
+{{- end -}}
 {{- define "splice-util-lib.auth0-env-vars" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}
 {{- $fixedTokens := .fixedTokens }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_USER_NAME"
-  valueFrom:
-    secretKeyRef:
-      key: ledger-api-user
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "ledgerApiUser" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "ledger-api-user" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_AUDIENCE"
-  valueFrom:
-    secretKeyRef:
-      key: audience
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "audience" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "audience" "optional" false) | indent 2 }}
 {{- if .fixedTokens }}
 - name: ADDITIONAL_CONFIG_AUTH
   value: |
@@ -23,47 +32,23 @@
       token = ${SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_TOKEN}
     }
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_TOKEN"
-  valueFrom:
-    secretKeyRef:
-      key: token
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "token" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "token" "optional" false) | indent 2 }}
 {{ else }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_URL"
-  valueFrom:
-    secretKeyRef:
-      key: url
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "url" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "url" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_CLIENT_ID"
-  valueFrom:
-    secretKeyRef:
-      key: client-id
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientId" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "client-id" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_CLIENT_SECRET"
-  valueFrom:
-    secretKeyRef:
-      key: client-secret
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientSecret" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "client-secret" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_SCOPE"
-  valueFrom:
-    secretKeyRef:
-      key: scope
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: true
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "scope" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "scope" "optional" true) | indent 2 }}
 {{- end }}
 {{- end -}}
 {{- define "splice-util-lib.auth0-user-env-var" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_USER_NAME"
-  valueFrom:
-    secretKeyRef:
-      key: ledger-api-user
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "ledgerApiUser" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "ledger-api-user" "optional" false) | indent 2 }}
 {{- end -}}
 {{- define "splice-util-lib.additional-env-vars" -}}
 {{- range $var := . }}
@@ -133,10 +118,7 @@ spec:
         image: postgres:14
         env:
           - name: PGPASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: postgresPassword
-                name: {{ $persistence.secretName }}
+{{ include "splice-util-lib.secret" (dict "overrides" $persistence.secretOverrides "overrideKey" "postgresPassword" "secretName" $persistence.secretName "secretKey" "postgresPassword") | indent 12 }}
         command:
           - 'bash'
           - '-c'
