@@ -50,3 +50,11 @@
 
           - Support passing client-id and secret through Http Basic Authentication instead of in the request body. For backwards compatibility this is disabled by default.
             To enable it set an environment variable ``ADDITIONAL_CONFIG_HTTP_BASIC_AUTH=canton.validator-apps.sv.participant-client.ledger-api.auth-config.http-basic-auth = true``.
+
+
+      - SV app
+
+        - Now reports a warning if a mismatch is detected in ``Confirmation``
+          for the following actions, as these are submitted by automations and no disagreement is expected:
+          ``CRARC_MiningRound_Archive``, ``CRARC_MiningRound_StartIssuing`` and
+          ``CRARC_StartProcessingRewardsV2``
