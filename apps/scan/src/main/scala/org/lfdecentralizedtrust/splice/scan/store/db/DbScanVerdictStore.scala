@@ -497,9 +497,7 @@ class DbScanVerdictStore(
       }
       _ <- insertAppActivityRecordsDBIO(
         resolvedAppActivityRecords,
-        if (appActivityRecords.nonEmpty)
-          Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
-        else None,
+        Some(items.headOption.fold(0L)(_._1.recordTime.toMicros)),
         lastArchivedRoundO,
       )
     } yield ()

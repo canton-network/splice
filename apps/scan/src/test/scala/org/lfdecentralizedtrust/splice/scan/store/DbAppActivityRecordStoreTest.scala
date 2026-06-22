@@ -216,7 +216,7 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "not write last_archived_round when no meta row exists" in {
+    "create meta row even when appActivityRecords is empty" in {
       for {
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
@@ -228,7 +228,11 @@ class DbAppActivityRecordStoreTest
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
-        meta shouldBe None
+        // Meta row is created with earliestRound = lastArchivedRound
+        // because verdict ingestion is active even without activity records
+        meta shouldBe defined
+        meta.value.earliestIngestedRound shouldBe 7L
+        meta.value.lastArchivedRound shouldBe Some(7L)
       }
     }
 
@@ -251,7 +255,11 @@ class DbAppActivityRecordStoreTest
       } yield {
         v shouldBe defined
         countAfter shouldBe 0L
-        meta shouldBe None
+        // Meta row is created with earliestRound = -1 (no lastArchivedRound)
+        // because verdict ingestion is active even without activity records
+        meta shouldBe defined
+        meta.value.earliestIngestedRound shouldBe -1L
+        meta.value.lastArchivedRound shouldBe None
       }
     }
 
@@ -791,6 +799,33 @@ class DbAppActivityRecordStoreTest
           r1 shouldBe Checked(InsertMeta)
           meta.value.earliestIngestedRound shouldBe 10L
         }
+      }
+    }
+  }
+
+  "earliestRoundWithCompleteAppActivity with empty-activity meta" should {
+
+    "return earliestRound + 1 when lastArchivedRound covers it" in {
+      for {
+        (store, _) <- newStore()
+        // Simulate: meta created with earliestRound = 5 (from lastArchivedRound),
+        // then lastArchivedRound advances to 7
+        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, 5L, Some(7L))
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        result.value shouldBe 6L
+      }
+    }
+
+    "return round 0 on fresh network bootstrap" in {
+      for {
+        (store, _) <- newStore()
+        // Fresh network: earliestRound = -1 (no lastArchivedRound at meta creation),
+        // then lastArchivedRound advances to 0 after first round closes
+        _ <- store.insertActivityRecordMeta(1, 0, 1000000L, -1L, Some(0L))
+        result <- store.earliestRoundWithCompleteAppActivity()
+      } yield {
+        result.value shouldBe 0L
       }
     }
   }

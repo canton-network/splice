@@ -318,13 +318,18 @@ class DbAppActivityRecordStore(
       firstRecordTimeMicros: Option[Long] = None,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
-    val ingestionStart = firstRecordTimeMicros.flatMap { ts =>
-      if (items.nonEmpty) {
-        val earliestRound = items
+    val ingestionStart = firstRecordTimeMicros.map { ts =>
+      val earliestRound = if (items.nonEmpty) {
+        items
           .map(_.roundNumber)
           .foldLeft(Long.MaxValue)(math.min)
-        Some((ts, earliestRound))
-      } else None
+      } else {
+        // No activity records (e.g., no featured app providers).
+        // Use lastArchivedRound as earliest so rounds after it are
+        // considered to have complete (empty) activity.
+        lastArchivedRoundO.getOrElse(-1L)
+      }
+      (ts, earliestRound)
     }
     for {
       _ <-
