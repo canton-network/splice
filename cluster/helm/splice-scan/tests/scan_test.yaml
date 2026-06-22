@@ -427,6 +427,17 @@ tests:
           secretOverrides:
             accessKey: "vault:kv/data/scan/s3-access-key"
             secretAccessKey: "vault:kv/data/scan/s3-secret-key"
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/scan/auth-user"
+          audience: "vault:kv/data/scan/auth-aud"
+          token: "vault:kv/data/scan/auth-token"
+          url: "vault:kv/data/scan/auth-url"
+          clientId: "vault:kv/data/scan/auth-client-id"
+          clientSecret: "vault:kv/data/scan/auth-client-secret"
+          scope: "vault:kv/data/scan/auth-scope"
     documentIndex: 0
     asserts:
       - matchRegex:
@@ -441,3 +452,11 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY')].value
           pattern: "vault:kv/data/scan/s3-secret-key"
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_SCAN_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/scan/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_SCAN_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/scan/auth-aud"
