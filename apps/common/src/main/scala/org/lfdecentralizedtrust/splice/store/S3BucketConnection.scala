@@ -9,6 +9,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
+import com.digitalasset.canton.util.FutureUtil
 import org.lfdecentralizedtrust.splice.config.S3Config
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCredentialsProvider}
@@ -154,23 +155,34 @@ class S3BucketConnection(
       .map { _.map(ByteString.fromByteBuffer) }
   }
 
-  def doesObjectExist(key: String)(implicit ec: ExecutionContext): Future[Boolean] = {
+  def doesObjectExist(
+      key: String
+  )(implicit ec: ExecutionContext): Future[Boolean] = {
     val request = HeadObjectRequest.builder().bucket(bucketName).key(key).build()
-    s3Client.headObject(request).asScala.map(_ => true).recover { case _: NoSuchKeyException =>
-      false
-    }
+    FutureUtil
+      .unwrapCompletionException(
+        s3Client.headObject(request).asScala
+      )
+      .map(_ => true)
+      .recover { case _: NoSuchKeyException =>
+        false
+      }
   }
 
   // Should be called on the bucket connection of the destination bucket. Assumes that that service account has permissions to read the source object.
-  def copyObject(sourceBucket: String, sourceKey: String, destinationKey: String)(implicit
-      ec: ExecutionContext
+  def copyObject(sourceBucket: String, key: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
   ): Future[Unit] = {
+    logger.trace(
+      s"Copying object $key from bucket $sourceBucket to bucket $bucketName"
+    )
     val copyReq = CopyObjectRequest
       .builder()
       .destinationBucket(bucketName)
-      .destinationKey(destinationKey)
+      .destinationKey(key)
       .sourceBucket(sourceBucket)
-      .sourceKey(sourceKey)
+      .sourceKey(key)
       .build()
 
     s3Client.copyObject(copyReq).asScala.map(_ => ())

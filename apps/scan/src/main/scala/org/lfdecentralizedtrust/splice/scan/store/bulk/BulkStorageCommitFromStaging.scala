@@ -1,3 +1,6 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.NamedLogging
@@ -69,7 +72,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
         Future.unit
       case false =>
         logger.debug(s"Copying object ${obj.key} from staging to committed storage")
-        stagingS3Connection.copyObject(obj.key, committedS3Connection.bucketName, obj.key)
+        committedS3Connection.copyObject(stagingS3Connection.bucketName, obj.key)
     }
   }
 
