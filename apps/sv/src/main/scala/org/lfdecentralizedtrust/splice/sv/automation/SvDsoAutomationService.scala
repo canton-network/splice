@@ -531,6 +531,13 @@ class SvDsoAutomationService(
       )
     )
 
+    registerTrigger(
+      new ConfirmationMismatchReportTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+
     registerTrigger(restartDsoDelegateBasedAutomationTrigger)
 
     registerTrigger(
@@ -723,6 +730,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[ArchiveClosedMiningRoundsTrigger],
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
+      aTrigger[ConfirmationMismatchReportTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],

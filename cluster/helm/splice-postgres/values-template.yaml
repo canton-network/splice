@@ -32,6 +32,8 @@ db:
 
 persistence:
   secretName: "postgres-secrets"
+#  secretOverrides:
+#    postgresPassword: ""
 # k8s affinity for all deployed pods (optional)
 # affinity:
 

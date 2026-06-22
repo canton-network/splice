@@ -32,6 +32,8 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   initImageName: "postgres:14"
+#  secretOverrides:
+#    postgresPassword: ""
   # The user version of the ACS store (optional), a positive integer,
   # set to 1 if previously unset to re-ingest, increment by 1 to subsequently re-ingest, the ACS store
   # acsStoreDescriptorUserVersion:

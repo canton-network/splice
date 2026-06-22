@@ -11,6 +11,7 @@ data:
   PGDATA: "/var/lib/postgresql/data/pgdata"
   POSTGRES_DB: "cantonnet"
   POSTGRES_USER: "cnadmin"
+  POSTGRES_INITDB_ARGS: "--data-checksums"
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -48,10 +49,14 @@ spec:
           {{- end }}
         env:
         - name: POSTGRES_PASSWORD
+          {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
            secretKeyRef:
               name: {{ .Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         envFrom:
         - configMapRef:
             name: "{{ .Release.Name }}-configuration"

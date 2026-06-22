@@ -20,7 +20,7 @@ ARGS+=( --log-encoder=json --log-level-stdout="${LOG_LEVEL_STDOUT:-DEBUG}" --log
 
 if [ -f /app/logback.xml ]; then
    DEFAULT_JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-}"
-   export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=/app/logback.xml ${DEFAULT_JAVA_TOOL_OPTIONS/CURRENT_DATE/$(date -Iseconds)}"
+   export JAVA_TOOL_OPTIONS="-Dlogback.configurationFile=/app/logback.xml ${DEFAULT_JAVA_TOOL_OPTIONS//CURRENT_DATE/$(date -Iseconds)}"
 fi
 
 if [ -f /app/pre-bootstrap.sh ]; then

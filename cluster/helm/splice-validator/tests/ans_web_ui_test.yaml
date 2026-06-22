@@ -1,0 +1,39 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "ANS Web UI"
+templates:
+  - ans-web-ui.yaml
+
+set:
+  nodeIdentifier: "helm-mock-1-validator"
+  validatorPartyHint: "helm-mock-1"
+  validatorWalletUser: "mock-wallet-user-id"
+  spliceInstanceNames:
+    networkName: MockNet
+    networkFaviconUrl: https://mock.net/favicon.ico
+    amuletName: Mocklet
+    amuletNameAcronym: MCK
+    nameServiceName: Mock Name Service
+    nameServiceNameAcronym: MNS
+  topup:
+    enabled: false
+  auth:
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+    audience: "mock_audience"
+
+tests:
+  - it: "allows overriding ans-web-ui secret env vars with raw strings"
+    set:
+      ansWebUi.secretOverrides.clientId: "vault:kv/data/cns-ui/client-id"
+      ansWebUi.secretOverrides.url: "vault:kv/data/cns-ui/url"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="ans-web-ui")].env[?(@.name=="SPLICE_APP_UI_AUTH_CLIENT_ID")].value
+          pattern: "vault:kv/data/cns-ui/client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="ans-web-ui")].env[?(@.name=="SPLICE_APP_UI_AUTH_URL")].value
+          pattern: "vault:kv/data/cns-ui/url"

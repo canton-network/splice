@@ -336,3 +336,18 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
           value: "secure-registry.example.com/postgres:14-custom"
+
+  - it: "allows overriding participant database secret env vars with raw strings"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/participant/postgres-password"
+      persistence.enablePgInitContainer: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/participant/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/participant/postgres-password"

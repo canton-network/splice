@@ -6,6 +6,17 @@
     "imageName": {
       "type": "string"
     },
+    "secretOverrides": {
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
     "auth": {
       "type": "object",
       "description": "The authentication configuration for the application"

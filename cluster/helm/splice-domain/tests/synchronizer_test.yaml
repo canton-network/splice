@@ -1,0 +1,38 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "Domain values"
+templates:
+  - domain.yaml
+release:
+  name: mock-domain
+
+set:
+  sequencer:
+    persistence:
+      host: "postgres"
+      secretName: "postgres-secrets"
+  mediator:
+    persistence:
+      host: "postgres"
+      secretName: "postgres-secrets"
+  initImageName: "postgres:14"
+
+tests:
+  - it: "allows overriding sequencer and mediator postgres passwords with raw strings"
+    set:
+      sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/synchronizer/sequencer-db-pass"
+      mediator.persistence.secretOverrides.postgresPassword: "vault:kv/data/synchronizer/mediator-db-pass"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=="mock-domain")].env[?(@.name=="CANTON_DOMAIN_POSTGRES_PASSWORD")].value
+          pattern: "vault:kv/data/synchronizer/sequencer-db-pass"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=="mock-domain-init-sequencer")].env[?(@.name=="PGPASSWORD")].value
+          pattern: "vault:kv/data/synchronizer/sequencer-db-pass"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=="mock-domain-init-mediator")].env[?(@.name=="PGPASSWORD")].value
+          pattern: "vault:kv/data/synchronizer/mediator-db-pass"
