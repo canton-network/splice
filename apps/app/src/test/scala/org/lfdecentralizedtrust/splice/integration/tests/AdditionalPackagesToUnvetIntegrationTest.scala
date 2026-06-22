@@ -118,11 +118,15 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
           vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
           vettedPackageIds should contain(missingDependency.packageId)
         }
-        stopAllAsync(
-          sv1Backend,
-          sv1ValidatorBackend,
-        ).futureValue
       }
+    }
+
+    stopAllAsync(
+      sv1Backend,
+      sv1ValidatorBackend,
+    ).futureValue
+
+    if (currentPv >= ProtocolVersion.v35) {
 
       clue(
         s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
