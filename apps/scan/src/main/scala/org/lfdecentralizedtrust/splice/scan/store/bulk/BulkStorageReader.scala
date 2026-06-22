@@ -84,26 +84,75 @@ class BulkStorageReader(
   def getTimestampOfStagingAcsSnapshotAfter(
       afterTimestamp: CantonTimestamp
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Option[CantonTimestamp]] = {
+    logger.trace(s"Looking for the next snapshot in staging bulk storage after $afterTimestamp")
     acsSnapshotBulkStorageStaging.persistentProgress.readLatestProcessedSnapshotTimestamp
-      .map {
+      .flatMap {
         case None =>
           logger.debug(
             s"No snapshot in staging bulk storage yet"
           )
-          None
+          Future.successful(None)
         case Some(ts) if ts.timestamp <= afterTimestamp =>
-          logger.trace(
+          logger.debug(
             s"Latest snapshot in staging bulk storage is at ${ts.timestamp}, which is not after the requested timestamp $afterTimestamp"
           )
-          None
+          Future.successful(None)
+        case Some(ts) if afterTimestamp == CantonTimestamp.MinValue =>
+          logger.debug(
+            "snapshots exist in staging bulk storage, but `afterTimestamp` is at minimum value, finding the first snapshot expected in staging bulk storage"
+          )
+          getFirstAcsSnapshotTimestampAfterGenesis.map(Some(_)).recover {
+            case ex if Status.fromThrowable(ex).getCode == Status.Code.NOT_FOUND =>
+              // FIXME: once we have committed snapshots, update this message to be "have not been copied to committed bulk storage yet"
+              logger.debug(
+                "Could not yet find the first snapshot, most probably because the first updates have not been dumped to bulk storage yet, returning None to retry later"
+              )
+              None
+          }
         case Some(ts) =>
-          Some(
-            storageConfig.computeSnapshotTimeAfter(
-              afterTimestamp,
-              storageConfig.bulkAcsSnapshotPeriodHours,
+          logger.trace(
+            s"Latest snapshot in staging bulk storage is at ${ts.timestamp}, which is after the requested timestamp $afterTimestamp, computing the next snapshot timestamp after $afterTimestamp (which is larger than min time of ${CantonTimestamp.MinValue})"
+          )
+          Future.successful(
+            Some(
+              storageConfig.computeSnapshotTimeAfter(
+                afterTimestamp,
+                storageConfig.bulkAcsSnapshotPeriodHours,
+              )
             )
           )
       }
+  }
+
+  private def getFirstAcsSnapshotTimestampAfterGenesis: Future[CantonTimestamp] = {
+    val genesisPrefix =
+      storageConfig.findSegmentFolderPrefixByStartTimestamp(CantonTimestamp.MinValue)
+
+    // FIXME: once we have committed updates, this needs to use committed instead of staging
+    stagingS3Connection.listObjects(genesisPrefix, _ => true, PageLimit.tryCreate(1)).map {
+      objects =>
+        val firstObject = objects.headOption.getOrElse(
+          throw Status.NOT_FOUND
+            .withDescription(
+              s"No updates found in staging bulk storage for the genesis segment"
+            )
+            .asRuntimeException()
+        )
+        val folderPrefix = firstObject.substring(0, firstObject.lastIndexOf('/') + 1)
+        storageConfig.getStartAndEndTimestampsForFolder(folderPrefix) match {
+          case Left(err) =>
+            throw Status.INTERNAL
+              .withDescription(
+                s"Cannot parse folder name $folderPrefix, error: $err"
+              )
+              .asRuntimeException()
+          case Right((_, segmentEnd)) =>
+            logger.debug(
+              s"Found first snapshot in staging bulk storage, ending at timestamp $segmentEnd, (based on object: $firstObject)"
+            )
+            segmentEnd
+        }
+    }
   }
 
   // TODO: improve consistency below on querying staging vs committed vs both

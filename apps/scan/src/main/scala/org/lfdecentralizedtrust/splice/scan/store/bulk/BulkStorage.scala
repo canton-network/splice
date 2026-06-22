@@ -64,6 +64,7 @@ class BulkStorage(
     loggerFactory,
   )
   val acsStaging = new AcsSnapshotBulkStorage(
+    "AcsSnapshotBulkStorageStaging",
     "ACS Snapshot Bulk Storage (Staging)",
     acsStagingWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
@@ -84,6 +85,7 @@ class BulkStorage(
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
+    "AcsSnapshotBulkStorageCommitted",
     "ACS Snapshot Bulk Storage (Committed)",
     acsCommittedWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
