@@ -152,6 +152,11 @@ class TestTokenV2SettlementIntegrationTest
 
       // Give alice some CC
       aliceWalletClient.tap(1000)
+      val aliceCCBalanceBefore = eventually() {
+        val balance = aliceWalletClient.balance().unlockedQty
+        balance should be > BigDecimal(0)
+        balance
+      }
 
       // make venue and ttadmin featured app parties
       splitwellWalletClient.selfGrantFeaturedAppRight()
@@ -188,6 +193,7 @@ class TestTokenV2SettlementIntegrationTest
         new testtokenv2.accountconfig.PartyConfig(true, true),
         new testtokenv2.accountconfig.PartyConfig(false, false),
       )
+      val bobOfferMintAmount = 100
       ttAdminValidator.participantClient.ledger_api_extensions.commands
         .submitJava(
           userId = ttAdminValidator.config.ledgerApiUser,
@@ -195,7 +201,7 @@ class TestTokenV2SettlementIntegrationTest
           commands = tokenRulesId
             .exerciseTokenRules_OfferMint(
               basicAccount(bobParty),
-              BigDecimal(100).bigDecimal,
+              BigDecimal(bobOfferMintAmount).bigDecimal,
               new holdingv2.InstrumentId(ttAdminParty.toProtoPrimitive, "USDC"),
               Instant.now(),
               bobConfigAccount,
@@ -458,21 +464,9 @@ class TestTokenV2SettlementIntegrationTest
             java.util.List.of(bobParty.toProtoPrimitive),
           )
         )
-        val bobUsdcHoldings =
-          bobValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
-            .of_party(
-              party = bobParty,
-              filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
-                TemplateId(
-                  templateId.getPackageId,
-                  templateId.getModuleName,
-                  templateId.getEntityName,
-                )
-              ),
-              includeCreatedEventBlob = true,
-            )
-            .map(_.contractId)
-            .map(id => new holdingv2.Holding.ContractId(id))
+        val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
+          .map(_.contractId)
+          .map(id => new holdingv2.Holding.ContractId(id))
         val usdcContext = registry.getContext(
           bobUsdcHoldings
         )
@@ -585,21 +579,9 @@ class TestTokenV2SettlementIntegrationTest
             emptyExtraArgs,
           )
           val amuletContext = sv1ScanBackend.getSettlementFactoryV2(settleBatch)
-          val bobUsdcHoldings =
-            bobValidatorBackend.participantClientWithAdminToken.ledger_api.state.acs
-              .of_party(
-                party = bobParty,
-                filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
-                  TemplateId(
-                    templateId.getPackageId,
-                    templateId.getModuleName,
-                    templateId.getEntityName,
-                  )
-                ),
-                includeCreatedEventBlob = true,
-              )
-              .map(_.contractId)
-              .map(id => new holdingv2.Holding.ContractId(id))
+          val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
+            .map(_.contractId)
+            .map(id => new holdingv2.Holding.ContractId(id))
           val usdcContext = registry.getContext(
             bobUsdcHoldings
           )
@@ -608,7 +590,6 @@ class TestTokenV2SettlementIntegrationTest
               actAs = Seq(venueParty),
               commands = otcTrade.id
                 .exerciseOTCTrade_Settle(
-                  // TODO: you can't just pass the allocations like that
                   Map[String, tradingappv2.SettlementBatch](
                     dsoParty.toProtoPrimitive -> new SettlementBatchV2(
                       amuletAllocations
@@ -679,8 +660,52 @@ class TestTokenV2SettlementIntegrationTest
                 usdcContext.disclosedContracts ++ amuletContext.disclosedContracts,
             )
         },
-      )("The balances are updated", _ => {})
+      )(
+        "The balances are updated",
+        _ => {
+          aliceWalletClient.balance().unlockedQty should be(aliceCCBalanceBefore - 100)
+          bobWalletClient.balance().unlockedQty should be(100)
+
+          getUsdcBalance(bobParty, bobValidatorBackend) should be(bobOfferMintAmount - 15)
+          getUsdcBalance(aliceParty, aliceValidatorBackend) should be(15 - 0.2)
+          getUsdcBalance(venueParty, venueValidator) should be(0.2)
+        },
+      )
     }
+  }
+
+  private def getHoldings(partyId: PartyId, hostedOnValidator: ValidatorAppBackendReference) = {
+    hostedOnValidator.participantClientWithAdminToken.ledger_api.state.acs
+      .of_party(
+        party = partyId,
+        filterInterfaces = Seq(holdingv2.Holding.TEMPLATE_ID).map(templateId =>
+          TemplateId(
+            templateId.getPackageId,
+            templateId.getModuleName,
+            templateId.getEntityName,
+          )
+        ),
+        includeCreatedEventBlob = true,
+      )
+  }
+
+  private def getUsdcBalance(partyId: PartyId, hostedOnValidator: ValidatorAppBackendReference) = {
+    getHoldings(partyId, hostedOnValidator)
+      .map { entry =>
+        Contract
+          .fromCreatedEvent(holdingv2.Holding.INTERFACE)(
+            CreatedEvent.fromProto(
+              createdEventToJavaProto(
+                entry.event
+              )
+            )
+          )
+          .valueOrFail("Failed to read Holding")
+      }
+      .filter(_.payload.instrumentId.id == usdcInstrumentName)
+      .map(_.payload.amount)
+      .map(BigDecimal(_))
+      .sum
   }
 
   class TestTokenV2Registry(
