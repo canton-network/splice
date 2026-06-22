@@ -82,6 +82,7 @@ jobs:
     needs:
       - get_head
       - determine_test_type
+    if: needs.determine_test_type.outputs.workflow != ''
     uses: ./.github/workflows/cluster_tests.yml
     secrets: inherit
     with:
