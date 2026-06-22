@@ -16,6 +16,11 @@
                 To use this, you must have the corresponding mutating webhook, injector, or tool hook installed in your cluster
                 to dynamically resolve raw string references at runtime.
 
+          - splice-info
+
+              - ``/runtime/status.json`` now includes reachability for scan and sequencer (0 is good, 1 is lagging
+                behind, 2 is unreachable, 3 is lagging behind and unreachable).
+
       - PostgreSQL Data Checksums
 
           - `PostgreSQL data checksums <https://www.postgresql.org/docs/14/checksums.html>`_ are now
