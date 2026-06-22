@@ -120,6 +120,7 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
         sv1ValidatorBackend,
       ).futureValue
     }
+
     clue(
       s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
           .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
@@ -140,7 +141,6 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
         sv1ValidatorLocalBackend,
       ).futureValue
     }
-
   }
 }
 
