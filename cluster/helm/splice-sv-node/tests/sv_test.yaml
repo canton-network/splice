@@ -363,3 +363,76 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
           pattern: "vault:kv/data/sv/topology"
+
+  - it: "renders zero secretKeyRefs and correctly injects raw strings when all overrides are provided"
+    set:
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/sv/auth-user"
+          audience: "vault:kv/data/sv/auth-aud"
+          token: "vault:kv/data/sv/auth-token"
+          url: "vault:kv/data/sv/auth-url"
+          clientId: "vault:kv/data/sv/auth-client-id"
+          clientSecret: "vault:kv/data/sv/auth-client-secret"
+          scope: "vault:kv/data/sv/auth-scope"
+      joinWithKeyOnboarding:
+        sponsorApiUrl: "https://sponsor.mock.com"
+      cometBFT:
+        externalGovernanceKey: true
+        secretOverrides:
+          governancePublicKey: "vault:kv/data/sv/comet-pub"
+          governancePrivateKey: "vault:kv/data/sv/comet-priv"
+      identitiesExport:
+        prefix: "mock-prefix"
+        bucket:
+          bucketName: "mock-bucket"
+          jsonCredentials: "mock-creds"
+          projectId: "mock-project"
+          secretName: "mock-secret"
+          secretOverrides:
+            jsonCredentials: "vault:kv/data/sv/ids-export"
+      periodicTopologySnapshotConfig:
+        backupInterval: "24h"
+        location:
+          prefix: "mock-prefix"
+          bucket:
+            projectId: "mock-project"
+            bucketName: "mock-bucket"
+            secretName: "mock-secret"
+            secretOverrides:
+              jsonCredentials: "vault:kv/data/sv/topology"
+      secretOverrides:
+        svPublicKey: "vault:kv/data/sv/pub"
+        svPrivateKey: "vault:kv/data/sv/priv"
+      persistence:
+        secretOverrides:
+          postgresPassword: "vault:kv/data/sv/pg"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/sv/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/sv/auth-aud"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_URL')].value
+          pattern: "vault:kv/data/sv/auth-url"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_CLIENT_ID')].value
+          pattern: "vault:kv/data/sv/auth-client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_CLIENT_SECRET')].value
+          pattern: "vault:kv/data/sv/auth-client-secret"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_SCOPE')].value
+          pattern: "vault:kv/data/sv/auth-scope"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/sv/auth-user"

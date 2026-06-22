@@ -43,8 +43,8 @@ spec:
           env:
             - name: JAVA_TOOL_OPTIONS
               value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
-            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens) | indent 12}}
-            {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator") | indent 12}}
+            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
+            {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator" "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
             - name: SPLICE_APP_SV_PARTICIPANT_ADDRESS
               value: {{ .Values.participantAddress | quote }}
             {{- if .Values.joinWithKeyOnboarding }}
