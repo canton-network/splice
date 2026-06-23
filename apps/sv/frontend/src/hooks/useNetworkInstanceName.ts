@@ -1,9 +1,16 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useDsoInfos } from '../contexts/SvContext';
+import { useSvConfig } from '../utils';
 
-export const useNetworkInstanceName: () => string | undefined = () => {
+export const useNetworkInstanceName: () => string = () => {
+  const config = useSvConfig();
   const dsoInfosQuery = useDsoInfos();
+
+  const configured = config.spliceInstanceNames.networkName;
+  if (configured && configured.length > 0) {
+    return configured;
+  }
 
   const scanUrls = dsoInfosQuery.data?.nodeStates.flatMap(nsContract => {
     return nsContract.payload.state.synchronizerNodes
@@ -13,7 +20,7 @@ export const useNetworkInstanceName: () => string | undefined = () => {
   }) as string[];
 
   if (scanUrls === undefined) {
-    return undefined;
+    return 'Unknown Network';
   }
 
   const instances = scanUrls
@@ -28,22 +35,19 @@ export const useNetworkInstanceName: () => string | undefined = () => {
     return getNetworkName(instances[0]);
   }
 
-  return undefined;
+  return 'Unknown Network';
 };
 
 const getNetworkName = (network: string) => {
-  let networkName;
-
   // NOTE: mainnet does not have the network/cluster name in the url.
   if (network === 'global') {
-    networkName = 'MainNet';
+    return 'MainNet';
   } else if (network === 'test') {
-    networkName = 'TestNet';
+    return 'TestNet';
   } else if (network === 'dev') {
-    networkName = 'DevNet';
-  } else if (network?.startsWith('scratch')) {
-    networkName = 'ScratchNet';
+    return 'DevNet';
+  } else if (network.startsWith('scratch')) {
+    return 'ScratchNet';
   }
-
-  return networkName;
+  return network.charAt(0).toUpperCase() + network.slice(1);
 };
