@@ -32,11 +32,15 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
   CalculateRewardsTrigger,
 }
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  ProcessRewardsDryRunTrigger,
+  ProcessRewardsTrigger,
+}
 import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
@@ -138,104 +142,137 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         svBackends.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
       val calculateRewardsTriggers =
         svBackends.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
-
-      // Create activity for 6, 7, and 8 and confirm creation of CalculateRewardsV2
-      setTriggersWithin(
-        triggersToPauseAtStart = calculateRewardsDryRunTriggers ++ calculateRewardsTriggers
-      ) {
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(6)
-        doTransfer(bobParty)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(7)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(8)
-        doTransfer(bobParty)
-
-        advanceRoundsToNextRoundOpening
-        assertOldestOpenRound(9)
-
-        clue("CalculateRewardsV2 are created for rounds, 6 and 8") {
-          eventually() {
-            val v2s = sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue
-            v2s.map(_.payload.round.number) should contain(6L)
-            v2s.map(_.payload.round.number) should not contain 7L
-            v2s
-              .filter(_.payload.round.number == 8L)
-              .map(_.payload.dryRun)
-              .toSet shouldBe Set(true, false)
-          }
+      // Paused so we can drive it deterministically via runOnce; it owns the
+      // calculate_rewards_v2/process_rewards_v2 active_contracts gauges.
+      val sv1RewardMetricsTrigger = sv1Backend.dsoAutomation.trigger[RewardMetricsTrigger]
+      val processRewardsTriggers =
+        svBackends.flatMap { sv =>
+          Seq(
+            sv.dsoDelegateBasedAutomation.trigger[ProcessRewardsTrigger],
+            sv.dsoDelegateBasedAutomation.trigger[ProcessRewardsDryRunTrigger],
+          )
         }
 
-        clue("SV trigger tasks are created and metrics updated") {
-          eventually() {
-            // Dry run for R6 and R8
-            val dryRunTasks = sv1Backend.dsoAutomation
-              .trigger[CalculateRewardsDryRunTrigger]
+      setTriggersWithin(
+        triggersToPauseAtStart = processRewardsTriggers :+ sv1RewardMetricsTrigger
+      ) {
+        // Create activity for 6, 7, and 8 and confirm creation of CalculateRewardsV2
+        setTriggersWithin(
+          triggersToPauseAtStart = calculateRewardsDryRunTriggers ++ calculateRewardsTriggers
+        ) {
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(6)
+          doTransfer(bobParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(7)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(8)
+          doTransfer(bobParty)
+
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(9)
+
+          clue("CalculateRewardsV2 are created for rounds, 6 and 8") {
+            eventually() {
+              val v2s = sv1Backend.appState.dsoStore.listCalculateRewardsV2().futureValue
+              v2s.map(_.payload.round.number) should contain(6L)
+              v2s.map(_.payload.round.number) should not contain 7L
+              v2s
+                .filter(_.payload.round.number == 8L)
+                .map(_.payload.dryRun)
+                .toSet shouldBe Set(true, false)
+            }
+          }
+
+          clue("SV trigger tasks are created and metrics updated") {
+            eventually() {
+              // Dry run for R6 and R8
+              val dryRunTasks = sv1Backend.dsoAutomation
+                .trigger[CalculateRewardsDryRunTrigger]
+                .retrieveTasks()
+                .futureValue
+                .map(_.calculateRewards.payload.round.number)
+              dryRunTasks should contain allElementsOf Seq(6, 8)
+
+              // Non-dry run for R8 only
+              val mintingTasks = sv1Backend.dsoAutomation
+                .trigger[CalculateRewardsTrigger]
+                .retrieveTasks()
+                .futureValue
+                .map(_.calculateRewards.payload.round.number)
+              mintingTasks should contain(8)
+              mintingTasks should not contain (6)
+
+              sv1RewardMetricsTrigger.runOnce().futureValue
+
+              val dryRunMetric =
+                metricValue(
+                  sv1Backend,
+                  "calculate_rewards_v2.active_contracts",
+                  Map("dryRun" -> "true"),
+                )
+              dryRunMetric shouldBe 2L
+
+              val mintingMetric =
+                metricValue(
+                  sv1Backend,
+                  "calculate_rewards_v2.active_contracts",
+                  Map("dryRun" -> "false"),
+                )
+              mintingMetric shouldBe 1L
+            }
+          }
+
+          clue("CalculateRewardsV2 contracts are also visible in scan rewards reference store") {
+            eventually() {
+              val v2s = sv1ScanBackend.appState.rewardsReferenceStoreO.value
+                .listActiveCalculateRewardsV2()
+                .futureValue
+              v2s.map(c =>
+                (c.payload.round.number, c.payload.dryRun)
+              ) should contain allElementsOf Seq((6L, true), (8L, true), (8L, false))
+            }
+          }
+
+          clue("Scan metrics are updated") {
+            // retrieveTasks updates the metric
+            sv1ScanBackend.automation
+              .trigger[RewardComputationTrigger]
               .retrieveTasks()
               .futureValue
-              .map(_.calculateRewards.payload.round.number)
-            dryRunTasks should contain allElementsOf Seq(6, 8)
-            val dryRunMetric =
-              metricValue(
-                sv1Backend,
-                "calculate_rewards_v2.active_contracts",
-                Map("dryRun" -> "true"),
-              )
+            val dryRunMetric = metricValue(
+              sv1ScanBackend,
+              "scan.reward_computation.calculate_rewards_v2.active_contracts",
+              Map("dryRun" -> "true"),
+            )
             dryRunMetric shouldBe 2L
-
-            // Non-dry run for R8 only
-            val mintingTasks = sv1Backend.dsoAutomation
-              .trigger[CalculateRewardsTrigger]
-              .retrieveTasks()
-              .futureValue
-              .map(_.calculateRewards.payload.round.number)
-            mintingTasks should contain(8)
-            mintingTasks should not contain (6)
-
-            val mintingMetric =
-              metricValue(
-                sv1Backend,
-                "calculate_rewards_v2.active_contracts",
-                Map("dryRun" -> "false"),
-              )
+            val mintingMetric = metricValue(
+              sv1ScanBackend,
+              "scan.reward_computation.calculate_rewards_v2.active_contracts",
+              Map("dryRun" -> "false"),
+            )
             mintingMetric shouldBe 1L
           }
-        }
+        } // Resume CalculateRewardsTrigger(s)
 
-        clue("CalculateRewardsV2 contracts are also visible in scan rewards reference store") {
+        clue("ProcessRewardsV2 are created and RewardMetricsTrigger reports active counts") {
           eventually() {
-            val v2s = sv1ScanBackend.appState.rewardsReferenceStoreO.value
-              .listActiveCalculateRewardsV2()
-              .futureValue
-            v2s.map(c =>
-              (c.payload.round.number, c.payload.dryRun)
-            ) should contain allElementsOf Seq((6L, true), (8L, true), (8L, false))
+            sv1RewardMetricsTrigger.runOnce().futureValue
+            metricValue(
+              sv1Backend,
+              "process_rewards_v2.active_contracts",
+              Map("dryRun" -> "true"),
+            ) shouldBe 2L
+            metricValue(
+              sv1Backend,
+              "process_rewards_v2.active_contracts",
+              Map("dryRun" -> "false"),
+            ) shouldBe 1L
           }
         }
-
-        clue("Scan metrics are updated") {
-          // retrieveTasks updates the metric
-          sv1ScanBackend.automation
-            .trigger[RewardComputationTrigger]
-            .retrieveTasks()
-            .futureValue
-          val dryRunMetric = metricValue(
-            sv1ScanBackend,
-            "scan.reward_computation.calculate_rewards_v2.active_contracts",
-            Map("dryRun" -> "true"),
-          )
-          dryRunMetric shouldBe 2L
-          val mintingMetric = metricValue(
-            sv1ScanBackend,
-            "scan.reward_computation.calculate_rewards_v2.active_contracts",
-            Map("dryRun" -> "false"),
-          )
-          mintingMetric shouldBe 1L
-        }
-      }
+      } // Resume ProcessRewardsTrigger(s)
 
       clue("Alice and Bob have minting allowances for R6") {
         eventually() {
