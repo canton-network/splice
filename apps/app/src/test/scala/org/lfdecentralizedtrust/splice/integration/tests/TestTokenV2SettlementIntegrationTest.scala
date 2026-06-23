@@ -20,42 +20,23 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradinga
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.{
-  TSA_AllocationFactory_AllocateV2,
-  TSA_AllocationRequest_AcceptV2,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.{
-  TSAR_AllocationInstructionResultV2,
-  TSAR_AllocationRequest_AcceptV2Result,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
-  BatchingUtility,
-  ChoiceCall,
-  HoldingMap,
-  ScopedAccount,
-  BatchingUtility as BatchingUtilityV2,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.{TSA_AllocationFactory_AllocateV2, TSA_AllocationRequest_AcceptV2}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.{TSAR_AllocationInstructionResultV2, TSAR_AllocationRequest_AcceptV2Result}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{BatchingUtility, ChoiceCall, HoldingMap, ScopedAccount, BatchingUtility as BatchingUtilityV2}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  ConfigurableApp,
-  bumpUrl,
-  updateAutomationConfig,
-}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{ConfigurableApp, bumpUrl, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.http.v0.definitions.EventHistoryItem
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTest,
-  SpliceTestConsoleEnvironment,
-}
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{AdvanceOpenMiningRoundTrigger}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTest, SpliceTestConsoleEnvironment}
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.time.Instant
 import scala.jdk.CollectionConverters.*
 
@@ -183,8 +164,7 @@ class TestTokenV2SettlementIntegrationTest
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
       val venueValidator = splitwellValidatorBackend
-      val venueParty = venueValidator.getValidatorPartyId()
-      logger.info(venueParty.toProtoPrimitive)
+      val venueParty = PartyId.tryFromProtoPrimitive(splitwellWalletClient.userStatus().party)
       val ttAdminParty = ttAdminValidator.getValidatorPartyId()
       val registry = new TestTokenV2Registry(ttAdminParty, ttAdminValidator)
 
@@ -771,20 +751,24 @@ class TestTokenV2SettlementIntegrationTest
         name -> clue(s"Checking traffic & activity records for '$name'") {
           eventually() {
             inside(sv1ScanBackend.getEventById(updateId, None)) {
-              case Some(EventHistoryItem(_, _, Some(trafficSummary), appActivityRecords)) =>
-                (trafficSummary, appActivityRecords)
+              case Some(
+                    item @ EventHistoryItem(
+                      _,
+                      Some(_),
+                      Some(_),
+                      Some(_),
+                    )
+                  ) =>
+                EventHistoryItem.encodeEventHistoryItem(item)
             }
           }
         }
       }
+      val json = io.circe.JsonObject(events*)
+      val savePath = java.io.File.createTempFile("test_token_v2_settlement_results", ".json").toPath
+      Files.writeString(savePath, json.toJson.spaces2)
 
-      val resultString = events
-        .map { case (name, (trafficSummary, appActivityRecords)) =>
-          s"$name: Total Traffic Cost: ${trafficSummary.totalTrafficCost}; ActivityRecords: $appActivityRecords"
-        }
-        .mkString("\n")
-
-      logger.info(s"Traffic & Activity Records results:\n$resultString")
+      logger.info(s"Traffic & Activity Records results written to $savePath")
     }
   }
 
