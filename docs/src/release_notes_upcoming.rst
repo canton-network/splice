@@ -7,3 +7,8 @@
 
 .. release-notes:: Upcoming
 
+    - SV app
+
+        - The "You are on <network>" banner now displays on all deployments, including
+          clusters where it was previously hidden. Banner text is sourced from the
+          configured ``spliceInstanceNames.networkName`` value
