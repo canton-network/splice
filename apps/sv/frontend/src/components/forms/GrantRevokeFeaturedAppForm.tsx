@@ -283,7 +283,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       id={`${testIdPrefix}-rightCid`}
                       options={revokeRightOptions}
                       disabled={revokeRightOptions.length === 0}
-                      helperText={
+                      placeholder={
                         providerHasNoRights
                           ? 'No featured application rights found for this provider'
                           : undefined

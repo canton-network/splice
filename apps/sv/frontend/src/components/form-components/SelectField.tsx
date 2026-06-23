@@ -20,11 +20,11 @@ export interface SelectFieldProps {
   id: string;
   onChange?: () => void;
   disabled?: boolean;
-  helperText?: string;
+  placeholder?: string;
 }
 
 export const SelectField: React.FC<SelectFieldProps> = props => {
-  const { title, options, id, disabled = false, helperText } = props;
+  const { title, options, id, disabled = false, placeholder } = props;
   const externalOnChange = props.onChange ?? (() => {});
   const field = useFieldContext<string>();
   const handleSelectValueChange = (value: string) => {
@@ -32,20 +32,36 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
     externalOnChange();
   };
 
+  const showPlaceholder = !!placeholder && !field.state.value;
+  const isError = !field.state.meta.isValid && !showPlaceholder;
+
   return (
     <Box data-testid={`${id}-select-component`}>
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
 
-      <FormControl variant="outlined" error={!field.state.meta.isValid} fullWidth>
+      <FormControl variant="outlined" error={isError} fullWidth>
         <Select
           value={field.state.value}
+          displayEmpty
+          renderValue={selected => {
+            if (!selected) {
+              return showPlaceholder ? (
+                <Typography component="span" color="text.secondary">
+                  {placeholder}
+                </Typography>
+              ) : (
+                ''
+              );
+            }
+            return options.find(option => option.value === selected)?.key ?? selected;
+          }}
           onChange={(e: SelectChangeEvent) => {
             handleSelectValueChange(e.target.value as string);
           }}
           onBlur={field.handleBlur}
-          error={!field.state.meta.isValid}
+          error={isError}
           disabled={disabled}
           id={`${id}-dropdown`}
           data-testid={id}
@@ -67,7 +83,7 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
           ))}
         </Select>
         <FormHelperText data-testid={`${id}-error`}>
-          {helperText ?? field.state.meta.errors?.[0]}
+          {isError ? field.state.meta.errors?.[0] : undefined}
         </FormHelperText>
       </FormControl>
     </Box>

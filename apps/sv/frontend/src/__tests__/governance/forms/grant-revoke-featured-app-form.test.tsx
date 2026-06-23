@@ -295,10 +295,14 @@ describe('Revoke Featured App Form', () => {
     fireEvent.blur(partyIdInput);
 
     await waitFor(() => {
-      expect(screen.getByTestId('revoke-featured-app-rightCid-error').textContent).toBe(
+      expect(screen.getByTestId('revoke-featured-app-rightCid')).toHaveTextContent(
         'No featured application rights found for this provider'
       );
     });
+
+    expect(screen.getByTestId('revoke-featured-app-rightCid-error')).not.toHaveTextContent(
+      'No featured application rights found for this provider'
+    );
 
     expect(screen.getByTestId('revoke-featured-app-rightCid-dropdown')).toBeDisabled();
   });
