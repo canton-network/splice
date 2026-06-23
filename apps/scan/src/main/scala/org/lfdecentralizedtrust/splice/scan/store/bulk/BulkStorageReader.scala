@@ -41,7 +41,7 @@ class BulkStorageReader(
           _.matches(".*ACS_\\d+\\.zstd"),
           HardLimit.tryCreate(Limit.DefaultMaxPageSize),
         )
-      objectsWithChecksums <- committedS3Connection.getChecksums(objects)
+      objectsWithChecksums <- s3Connection.getChecksums(objects)
     } yield {
       if (objects.isEmpty) {
         throw Status.NOT_FOUND
