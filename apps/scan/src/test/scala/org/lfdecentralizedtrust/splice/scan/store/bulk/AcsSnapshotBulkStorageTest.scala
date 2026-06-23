@@ -183,6 +183,7 @@ class AcsSnapshotBulkStorageTest
         loggerFactory,
       )
       val bulkStorage = new AcsSnapshotBulkStorage(
+        "AcsSnapshotBulkStorageUnitTest",
         "Test AcsSnapshotBulkStorage",
         bulkStorageProcessor,
         progress,
