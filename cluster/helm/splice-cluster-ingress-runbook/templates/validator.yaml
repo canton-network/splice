@@ -18,6 +18,9 @@ spec:
         - port: 443
           uri:
             prefix: "/api/validator/"
+        - port: 80
+          uri:
+            prefix: "/api/validator/"
       route:
         - destination:
             port:
@@ -25,6 +28,7 @@ spec:
             host: validator-app.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:
@@ -48,6 +52,9 @@ spec:
         - port: 443
           uri:
             prefix: "/api/validator/"
+        - port: 80
+          uri:
+            prefix: "/api/validator/"
       route:
         - destination:
             port:
@@ -55,6 +62,7 @@ spec:
             host: validator-app.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:
