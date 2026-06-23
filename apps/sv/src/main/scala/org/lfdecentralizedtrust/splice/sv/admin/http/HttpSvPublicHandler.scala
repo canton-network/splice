@@ -458,15 +458,15 @@ class HttpSvPublicHandler(
     *
     * Protection: Endpoint is protected by IP allowlisting
     */
-  override def onboardSvPartyMigrationAuthorize(
-      respond: r0.OnboardSvPartyMigrationAuthorizeResponse.type
+  override def onboardSvPartyMigrationInitiate(
+      respond: r0.OnboardSvPartyMigrationInitiateResponse.type
   )(
-      body: definitions.OnboardSvPartyMigrationAuthorizeRequest
+      body: definitions.OnboardSvPartyMigrationInitiateRequest
   )(
       extracted: TraceContext
-  ): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  ): Future[r0.OnboardSvPartyMigrationInitiateResponse] = {
     implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.onboardSvPartyMigrationAuthorize") { _ => _ =>
+    withSpan(s"$workflowId.onboardSvPartyMigrationInitiate") { _ => _ =>
       (for {
         candidateParty <- Codec.decode(Codec.Party)(body.candidatePartyId)
       } yield {
@@ -491,26 +491,28 @@ class HttpSvPublicHandler(
                 )
               )
             else
-              authorizeParticipantForHostingDsoParty(
-                ParticipantId.tryFromProtoPrimitive(candidateParticipantId.payload.svParticipantId)
+              initiatePartyMigration(
+                candidateParty,
+                ParticipantId.tryFromProtoPrimitive(candidateParticipantId.payload.svParticipantId),
               )
         } yield res
       }).fold(errMsg => Future.failed(HttpErrorHandler.badRequest(errMsg)), identity)
     }
   }
 
-  private def authorizeParticipantForHostingDsoParty(
-      participantId: ParticipantId
-  )(implicit tc: TraceContext): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  private def initiatePartyMigration(
+      candidateParty: PartyId,
+      participantId: ParticipantId,
+  )(implicit tc: TraceContext): Future[r0.OnboardSvPartyMigrationInitiateResponse] = {
     dsoPartyMigration
-      .authorizeParticipantForHostingDsoParty(participantId)
+      .initiateSnapshot(candidateParty, participantId)
       .fold(
         {
           case DsoPartyHosting
                 .RequiredProposalNotFound(
                   partyToParticipantSerial
                 ) =>
-            r0.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
+            r0.OnboardSvPartyMigrationInitiateResponseBadRequest(
               definitions.ProposalNotFoundErrorResponse(
                 proposalNotFound = definitions.ProposalNotFoundErrorResponse.ProposalNotFound(
                   BigInt(partyToParticipantSerial.value)
@@ -518,15 +520,9 @@ class HttpSvPublicHandler(
               )
             )
         },
-        { acsBytes =>
-          // TODO(M3-57) consider if a more space-efficient encoding is necessary
-          val encoded = Base64.getEncoder.encodeToString(acsBytes.toByteArray)
-          r0.OnboardSvPartyMigrationAuthorizeResponseOK(
-            definitions.OnboardSvPartyMigrationAuthorizeResponse(
-              encoded
-            )
-          )
-        },
+        // The snapshot is exported asynchronously; the candidate downloads it from the resumable
+        // GET /v0/onboard/sv/party-migration/snapshot/{candidate_party_id} endpoint.
+        _ => r0.OnboardSvPartyMigrationInitiateResponseAccepted,
       )
   }
 

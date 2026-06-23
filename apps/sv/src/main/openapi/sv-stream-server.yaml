@@ -1,0 +1,48 @@
+openapi: 3.0.0
+info:
+  title: SV Streaming API
+  version: 0.0.1
+tags:
+  - name: sv
+    description: |
+      SV operator endpoints that stream binary payloads.
+servers:
+  - url: https://example.com/api/sv
+paths:
+
+  # Note for developers working on this openAPI spec: we generate only server-side code from this
+  # file, not client-side, because guardrail cannot decode a binary stream response as JSON.
+  # The client lives in SvConnection.downloadDsoPartyAcsSnapshot and must be updated manually to
+  # reflect any changes here.
+
+  /v0/onboard/sv/party-migration/snapshot/{candidate_party_id}:
+    get:
+      tags: [sv]
+      x-jvm-package: svStream
+      operationId: "onboardSvPartyMigrationSnapshot"
+      description: |
+        Step 2 of the resumable SV party migration: download the DSO party ACS snapshot prepared by
+        the POST /v0/onboard/sv/party-migration/initiate endpoint. The response is served from a
+        file with HTTP range support (withRangeSupport in SvApp), so a Range request yields a 206
+        Partial Content response and a failed download can resume from a byte offset.
+      parameters:
+        - name: "candidate_party_id"
+          in: "path"
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: the ACS snapshot
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                x-scala-type: org.apache.pekko.http.scaladsl.model.ResponseEntity
+        "404":
+          description: no snapshot for this candidate; call the initiate endpoint first
+        "409":
+          description: the snapshot is still being generated; retry later
+        "500":
+          description: the snapshot generation failed; re-initiate

@@ -58,6 +58,14 @@ pvc:
   volumeName: sv-app-global-domain-migration-pvc
   volumeStorageClass: standard-rwo
 
+# pvc for the DSO party ACS snapshots a sponsoring SV writes while onboarding a new SV.
+# Mounted at /acs-snapshots and used as the app's acs-snapshot-dir.
+acsSnapshot:
+  enabled: true
+  size: 10Gi
+  volumeName: sv-app-acs-snapshot-pvc
+  volumeStorageClass: standard-rwo
+
 failOnAppVersionMismatch: true
 permissionedSynchronizer: false
 

@@ -396,6 +396,23 @@
             }
           }
         },
+        "acsSnapshot": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "size": {
+              "type": "string"
+            },
+            "volumeName": {
+              "type": "string"
+            },
+            "volumeStorageClass": {
+              "type": "string"
+            }
+          }
+        },
         "failOnAppVersionMismatch": {
           "type": "boolean"
         },

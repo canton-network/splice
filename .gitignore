@@ -79,3 +79,6 @@ docs/src/deployment/observability/metrics_reference.rst
 /.vagrant/
 /vagrant-nix-cache/
 lnav*work
+
+# SV ACS onboarding snapshots written at runtime (default acsSnapshotDir)
+/acs-snapshots/

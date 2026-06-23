@@ -66,6 +66,8 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   TopologySnapshot,
 }
 
+import java.io.BufferedOutputStream
+import java.nio.file.{Files, Path}
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
@@ -204,6 +206,51 @@ class ParticipantAdminConnection(
     } yield ByteString.copyFrom(chunks.map(_.chunk).asJava)
   }
 
+  /** Like [[exportPartyAcs]] but streams the snapshot chunks straight to `outputFile` instead of
+    * accumulating them in memory, so the full ACS is never held on the heap. The caller is
+    * responsible for the lifecycle of `outputFile` (e.g. writing to a temporary file and
+    * atomically renaming it once this future completes successfully).
+    */
+  def exportPartyAcsToFile(
+      party: PartyId,
+      synchronizerId: SynchronizerId,
+      targetParticipantId: ParticipantId,
+      activationTime: Instant,
+      outputFile: Path,
+  )(implicit
+      traceContext: TraceContext
+  ): Future[Unit] = {
+    val out = new BufferedOutputStream(Files.newOutputStream(outputFile))
+    val observer = new ChunkWritingObserver[ExportPartyAcsResponse](out, _.chunk)
+
+    val result = for {
+      // See exportPartyAcs for why we resolve the offset and subtract one.
+      activationOffset <- resolveOffset(Left(activationTime), synchronizerId, force = true)
+      beforeActivationOffset = activationOffset - 1L
+      _ = logger.info(
+        s"Exporting ACS snapshot for party $party from domain $synchronizerId at offset $beforeActivationOffset to file $outputFile"
+      )
+      _ <- runCmd(
+        ParticipantAdminCommands.PartyManagement.ExportPartyAcs(
+          party,
+          synchronizerId,
+          targetParticipantId,
+          beforeActivationOffset,
+          waitForActivationTimeout = None, // i.e., default
+          observer,
+        )
+      )
+      // The export streams asynchronously; this future completes once the last chunk has been
+      // written to `out`.
+      _ <- observer.resultFuture
+    } yield ()
+    // Close the stream (flushing the buffer) in both the success and failure cases.
+    result.transform { res =>
+      out.close()
+      res
+    }
+  }
+
   def downloadAcsSnapshotNonChunked(
       parties: Set[PartyId],
       filterSynchronizerId: SynchronizerId,
@@ -259,6 +306,32 @@ class ParticipantAdminConnection(
             representativePackageIdOverride = RepresentativePackageIdOverride.NoOverride,
             // according to docs: enables crash-resilient scheduling of the onboarding flag clearance
             // ...except that only works from protocol version 35+
+            party = Some(partyId),
+          ),
+        timeoutOverride = Some(GrpcAdminCommand.DefaultUnboundedTimeout),
+      ).map(_ => ()),
+      logger,
+    )
+  }
+
+  /** Like [[importPartyAcs]] but reads the snapshot from a file on disk, streaming it into the
+    * participant so the full ACS is never held on the heap. A fresh [[java.io.InputStream]] is
+    * opened on every (retried) attempt.
+    */
+  def importPartyAcsFromFile(acsFile: Path, synchronizerId: SynchronizerId, partyId: PartyId)(
+      implicit tc: TraceContext
+  ): Future[Unit] = {
+    retryProvider.retryForClientCalls(
+      "import_party_acs",
+      "Imports the acs in the participant",
+      runCmd(
+        ParticipantAdminCommands.PartyManagement
+          .ImportPartyAcs(
+            Files.newInputStream(acsFile),
+            synchronizerId,
+            IMPORT_ACS_WORKFLOW_ID_PREFIX,
+            contractImportMode = ContractImportMode.Validation,
+            representativePackageIdOverride = RepresentativePackageIdOverride.NoOverride,
             party = Some(partyId),
           ),
         timeoutOverride = Some(GrpcAdminCommand.DefaultUnboundedTimeout),
