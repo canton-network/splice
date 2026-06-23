@@ -11,22 +11,37 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.AllocationFactory_Allocate
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.allocationinstructionresult_output.AllocationInstructionResult_Completed
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationrequestv2.AllocationRequest_Accept
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_ContractId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2.OTCTradeAllocationRequest
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2.settlementbatch.SettlementBatchV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.TSA_AllocationFactory_AllocateV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.TSAR_AllocationInstructionResultV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{BatchingUtility, ChoiceCall, HoldingMap, ScopedAccount, BatchingUtility as BatchingUtilityV2}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.{
+  TSA_AllocationFactory_AllocateV2,
+  TSA_AllocationRequest_AcceptV2,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.{
+  TSAR_AllocationInstructionResultV2,
+  TSAR_AllocationRequest_AcceptV2Result,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
+  BatchingUtility,
+  ChoiceCall,
+  HoldingMap,
+  ScopedAccount,
+  BatchingUtility as BatchingUtilityV2,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTest, SpliceTestConsoleEnvironment}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTest,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
@@ -421,6 +436,17 @@ class TestTokenV2SettlementIntegrationTest
                       ),
                     )
                   ),
+                  new TSA_AllocationRequest_AcceptV2(
+                    new ChoiceCall[AllocationRequest_Accept](
+                      new metadatav1.AnyContract.ContractId(
+                        aliceAllocationRequest.contract.contractId.contractId
+                      ),
+                      new AllocationRequest_Accept(
+                        java.util.List.of(aliceParty.toProtoPrimitive),
+                        amuletAllocationFactory.args.extraArgs,
+                      ),
+                    )
+                  ),
                 ),
                 true,
               ),
@@ -431,14 +457,17 @@ class TestTokenV2SettlementIntegrationTest
           .actionResults
           .asScala
           .map {
+            case _: TSAR_AllocationRequest_AcceptV2Result => None
             case v: TSAR_AllocationInstructionResultV2 =>
               v.allocationInstructionResultValue.output match {
-                case completed: AllocationInstructionResult_Completed => completed.allocationCid
+                case completed: AllocationInstructionResult_Completed =>
+                  Some(completed.allocationCid)
                 case other => fail(s"Expected AllocationInstructionResult_Completed but got $other")
               }
             case other =>
               fail(s"Expected TSAR_AllocationResultV2 but got $other")
           }
+          .collect { case Some(cid) => cid }
       }
 
       val bobAllocationCids = clue(
@@ -510,6 +539,17 @@ class TestTokenV2SettlementIntegrationTest
                       ),
                     )
                   ),
+                  new TSA_AllocationRequest_AcceptV2(
+                    new ChoiceCall[AllocationRequest_Accept](
+                      new metadatav1.AnyContract.ContractId(
+                        bobAllocationRequest.contract.contractId.contractId
+                      ),
+                      new AllocationRequest_Accept(
+                        java.util.List.of(bobParty.toProtoPrimitive),
+                        new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                      ),
+                    )
+                  ),
                 ),
                 true,
               ),
@@ -520,14 +560,17 @@ class TestTokenV2SettlementIntegrationTest
           .actionResults
           .asScala
           .map {
+            case _: TSAR_AllocationRequest_AcceptV2Result => None
             case v: TSAR_AllocationInstructionResultV2 =>
               v.allocationInstructionResultValue.output match {
-                case completed: AllocationInstructionResult_Completed => completed.allocationCid
+                case completed: AllocationInstructionResult_Completed =>
+                  Some(completed.allocationCid)
                 case other => fail(s"Expected AllocationInstructionResult_Completed but got $other")
               }
             case other =>
               fail(s"Expected TSAR_AllocationResultV2 but got $other")
           }
+          .collect { case Some(cid) => cid }
       }
 
       actAndCheck(
@@ -645,10 +688,7 @@ class TestTokenV2SettlementIntegrationTest
                       new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
                     ),
                   ).asJava,
-                  List(
-                    bobAllocationRequest.contract.contractId.contractId,
-                    aliceAllocationRequest.contract.contractId.contractId,
-                  ).map(cid => new OTCTradeAllocationRequest.ContractId(cid)).asJava,
+                  java.util.List.of(),
                 )
                 .commands()
                 .asScala
