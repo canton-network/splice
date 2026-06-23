@@ -1,6 +1,6 @@
 # This file is generated automatically. Do not edit directly.
 chaosMesh:
-  dabftLatency: '50ms'
+  dabftLatency: '1ms'
 cloudArmor:
   allRulesPreviewOnly: true
   enabled: false
@@ -424,6 +424,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -514,6 +516,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -604,6 +608,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -694,6 +700,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -784,6 +792,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -874,6 +884,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -964,6 +976,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1054,6 +1068,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1225,6 +1241,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1315,6 +1333,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1405,6 +1425,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1495,6 +1517,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1585,6 +1609,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1675,6 +1701,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1765,6 +1793,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1855,6 +1885,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       resources:
         limits:
           cpu: '3'
@@ -1949,6 +1981,8 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_PROTOCOL_VERSION'
           value: "canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = \"35\"\n"
+        - name: 'ADDITIONAL_CONFIG_BFT_SEQUENCING_PARAMETERS'
+          value: "canton.sv-apps.sv.bft-sequencing-parameters = { pbft-view-change-timeout = 5s, segment-length = 10, blacklist-leader-selection-policy-config = { how-long-to-blacklist = { type = \"linear\", maximum-epoch-blacklisted = 250 }, how-many-can-we-blacklist = \"num-faults-tolerated\", } }\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
       resources:
