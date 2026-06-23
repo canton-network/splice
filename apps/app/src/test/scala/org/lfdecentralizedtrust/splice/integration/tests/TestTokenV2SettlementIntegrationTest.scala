@@ -693,7 +693,6 @@ class TestTokenV2SettlementIntegrationTest
                       usdAllocations
                         .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
                         .asJava,
-                      // (Account {owner = Some 'splitwell-validator24e329e9-1::1220b953443037009f7ef58a3421728329a96a37ad53c63a027bb7dff32b13c992f7', provider = None, id = ""},TransferLegSide {transferLegId = "alicetovenue0.2USDC", side = ReceiverSide, otherside = Account {owner = Some 'alice__wallet__user-24e329e9__tc0::122062c1..."
                       java.util.List.of(
                         new tradingappv2.MissingAllocation(
                           java.util.Optional.empty(),
