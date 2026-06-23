@@ -215,63 +215,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         ) : (
           <>
             <form.AppField name="action">
-              {field => (
-                <field.TextField
-                  title="Action"
-                  id={`${testIdPrefix}-action`}
-                  muiTextFieldProps={{ disabled: true }}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="expiryDate"
-              validators={{
-                onChange: ({ value }) => validateExpiration(value),
-                onBlur: ({ value }) => validateExpiration(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title="Threshold Deadline"
-                  description={THRESHOLD_DEADLINE_SUBTITLE}
-                  id={`${testIdPrefix}-expiry-date`}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="effectiveDate"
-              validators={{
-                onChange: ({ value }) => validateEffectiveDate(value),
-                onBlur: ({ value }) => validateEffectiveDate(value),
-              }}
-              children={_ => (
-                <EffectiveDateField
-                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
-                  id={`${testIdPrefix}-effective-date`}
-                />
-              )}
-            />
-
-            <form.AppField
-              name="summary"
-              validators={{
-                onBlur: ({ value }) => validateSummary(value),
-                onChange: ({ value }) => validateSummary(value),
-              }}
-            >
-              {field => <field.ProposalSummaryField id={`${testIdPrefix}-summary`} />}
-            </form.AppField>
-
-            <form.AppField
-              name="url"
-              validators={{
-                onBlur: ({ value }) => validateUrl(value),
-                onChange: ({ value }) => validateUrl(value),
-              }}
-            >
-              {field => <field.TextField title="URL" id={`${testIdPrefix}-url`} />}
+              {field => <field.ProposalTypeField id={`${testIdPrefix}-action`} />}
             </form.AppField>
 
             {formAction === 'SRARC_GrantFeaturedAppRight' && (
@@ -333,6 +277,56 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 </form.AppField>
               </>
             )}
+
+            <form.AppField
+              name="expiryDate"
+              validators={{
+                onChange: ({ value }) => validateExpiration(value),
+                onBlur: ({ value }) => validateExpiration(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title="Threshold Deadline"
+                  description={THRESHOLD_DEADLINE_SUBTITLE}
+                  id={`${testIdPrefix}-expiry-date`}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="effectiveDate"
+              validators={{
+                onChange: ({ value }) => validateEffectiveDate(value),
+                onBlur: ({ value }) => validateEffectiveDate(value),
+              }}
+              children={_ => (
+                <EffectiveDateField
+                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
+                  id={`${testIdPrefix}-effective-date`}
+                />
+              )}
+            />
+
+            <form.AppField
+              name="summary"
+              validators={{
+                onBlur: ({ value }) => validateSummary(value),
+                onChange: ({ value }) => validateSummary(value),
+              }}
+            >
+              {field => <field.ProposalSummaryField id={`${testIdPrefix}-summary`} />}
+            </form.AppField>
+
+            <form.AppField
+              name="url"
+              validators={{
+                onBlur: ({ value }) => validateUrl(value),
+                onChange: ({ value }) => validateUrl(value),
+              }}
+            >
+              {field => <field.TextField title="URL" id={`${testIdPrefix}-url`} />}
+            </form.AppField>
           </>
         )}
 

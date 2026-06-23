@@ -233,14 +233,29 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           )}
 
           <form.AppField name="common.action">
-            {field => (
-              <field.TextField
-                title="Action"
-                id="set-dso-config-rules-action"
-                muiTextFieldProps={{ disabled: true }}
-              />
-            )}
+            {field => <field.ProposalTypeField id="set-dso-config-rules-action" />}
           </form.AppField>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+
+            {dsoConfigChanges.map((change, index) => (
+              <form.AppField name={`config.${change.fieldName}`} key={index}>
+                {field => (
+                  <field.ConfigField
+                    configChange={change}
+                    key={index}
+                    pendingFieldInfo={pendingConfigFields.find(
+                      f => f.fieldName === change.fieldName
+                    )}
+                    effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+                  />
+                )}
+              </form.AppField>
+            ))}
+          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -291,27 +306,6 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           >
             {field => <field.TextField title="URL" id="set-dso-config-rules-url" />}
           </form.AppField>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
-
-            {dsoConfigChanges.map((change, index) => (
-              <form.AppField name={`config.${change.fieldName}`} key={index}>
-                {field => (
-                  <field.ConfigField
-                    configChange={change}
-                    key={index}
-                    pendingFieldInfo={pendingConfigFields.find(
-                      f => f.fieldName === change.fieldName
-                    )}
-                    effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
-                  />
-                )}
-              </form.AppField>
-            ))}
-          </Box>
         </>
       )}
 
