@@ -26,7 +26,7 @@ svs:
   sv-da-1: !include(sv.yaml) {}
 persistentHeapDumps: true
 chaosMesh:
-  dabftLatency: 50ms
+  dabftLatency: 200ms
 synchronizerMigration:
   frozenMigrationId: 0
   active:
