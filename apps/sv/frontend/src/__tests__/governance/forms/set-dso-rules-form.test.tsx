@@ -387,7 +387,7 @@ describe('Set DSO Config Rules Form', () => {
 
     expect(jsonDiffs).toBeInTheDocument();
     await user.click(jsonDiffs);
-    expect(screen.queryByTestId('config-diffs-display')).toBeInTheDocument();
+    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 
   test('should have decentralized synchronizer fields disabled', async () => {
