@@ -53,6 +53,8 @@ trait ScanStore
     with VotesStore
     with ExternalPartyConfigStateStore {
 
+  override def dsoPartyId = key.dsoParty
+
   def key: ScanStore.Key
 
   protected[store] def domainMigrationId: Long
@@ -173,6 +175,10 @@ trait ScanStore
   def listFeaturedAppRightsByProvider(providerPartyId: PartyId)(implicit
       tc: TraceContext
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
+
+  def lookupLatestSvRewardWeightChange(svParty: PartyId, effectiveBefore: Option[String])(implicit
+      tc: TraceContext
+  ): Future[Option[Long]]
 
   def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit = defaultLimit)(implicit
       tc: TraceContext

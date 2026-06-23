@@ -489,6 +489,8 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
       )
     )
     registerTrigger(
@@ -526,6 +528,13 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+      )
+    )
+
+    registerTrigger(
+      new ConfirmationMismatchReportTrigger(
+        triggerContext,
+        dsoStore,
       )
     )
 
@@ -721,6 +730,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[ArchiveClosedMiningRoundsTrigger],
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
+      aTrigger[ConfirmationMismatchReportTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],

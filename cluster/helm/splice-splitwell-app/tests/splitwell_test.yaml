@@ -55,3 +55,21 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].image
           value: "secure-registry.example.com/postgres:14-custom"
+
+  - it: "allows overriding splitwell database secret env vars with raw strings"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/splitwell/postgres-password"
+      scanAddress: "dummy"
+      participantHost: "dummy"
+      persistence.host: "dummy"
+      persistence.schema: "dummy"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/splitwell/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='splitwell-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/splitwell/postgres-password"

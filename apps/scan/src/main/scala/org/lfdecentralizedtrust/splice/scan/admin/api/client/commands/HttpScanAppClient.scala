@@ -3134,6 +3134,27 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetPreviousSvRewardWeight(
+      svParty: String,
+      effectiveBefore: Option[String],
+  ) extends InternalBaseCommand[http.GetPreviousSvRewardWeightResponse, Option[Long]] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetPreviousSvRewardWeightResponse] =
+      client.getPreviousSvRewardWeight(
+        body = definitions.PreviousSvRewardWeightRequest(svParty, effectiveBefore),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetPreviousSvRewardWeightResponse.OK(response) =>
+      Right(response.rewardWeight.map(_.toLong))
+    }
+  }
+
   case class ListVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId]
   ) extends InternalBaseCommand[http.ListVoteRequestsByTrackingCidResponse, Seq[

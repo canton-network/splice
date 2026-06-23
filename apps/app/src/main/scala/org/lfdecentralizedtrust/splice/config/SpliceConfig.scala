@@ -435,6 +435,8 @@ object SpliceConfig {
       deriveReader[SpliceRateLimitConfig]
     implicit val enabledFeaturesConfigReader: ConfigReader[EnabledFeaturesConfig] =
       deriveReader[EnabledFeaturesConfig]
+    implicit val splicePostgresConfigReader: ConfigReader[SplicePostgresConfig] =
+      deriveReader[SplicePostgresConfig]
 
     implicit val upgradesConfig: ConfigReader[UpgradesConfig] = deriveReader[UpgradesConfig]
 
@@ -925,6 +927,8 @@ object SpliceConfig {
 
     implicit val enabledFeaturesConfigWriter: ConfigWriter[EnabledFeaturesConfig] =
       deriveWriter[EnabledFeaturesConfig]
+    implicit val splicePostgresConfigWriter: ConfigWriter[SplicePostgresConfig] =
+      deriveWriter[SplicePostgresConfig]
 
     implicit val authTokenSourceConfigHint: FieldCoproductHint[AuthTokenSourceConfig] =
       new FieldCoproductHint[AuthTokenSourceConfig]("type")

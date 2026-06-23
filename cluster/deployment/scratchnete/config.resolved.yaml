@@ -62,6 +62,9 @@ monitoring:
         thresholdPerNamespace: 0.05
       deployment:
         pendingPeriodMinutes: 5
+      dsoMissedConfirmations:
+        threshold: 0.01
+        windowMinutes: 10
       gcpQuotas:
         excludedApproachingMetrics: []
         excludedMetrics:
@@ -84,6 +87,13 @@ monitoring:
         mediatorRetentionDays: 30
         participantRetentionDays: 30
         sequencerRetentionDays: 30
+      scanConnectionDisagreement:
+        disagreementRateThreshold: 0.1
+        excludedConnections: []
+        excludedRequests:
+          - 'getTransferInstructionAcceptContext'
+          - 'getOpenAndIssuingMiningRounds'
+        successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
       sequencerRateLimits:
@@ -199,6 +209,9 @@ sv:
           type: 'limited'
         /api/scan/v0/active-synchronizer-serial:
           name: 'activeSynchronizerSerial'
+          type: 'unlimited'
+        /api/scan/v0/admin/sv/previous-sv-reward-weight:
+          name: 'sv-previous-sv-reward-weight'
           type: 'unlimited'
         /api/scan/v0/admin/sv/voterequests:
           name: 'sv-voterequests'

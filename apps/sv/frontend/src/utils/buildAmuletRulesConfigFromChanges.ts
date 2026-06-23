@@ -25,13 +25,15 @@ export function buildAmuletRulesConfigFromChanges(
 ): AmuletConfig<'USD'> {
   const changeMap = new Map<string, string>();
   amuletConfigChanges.forEach(change => {
-    changeMap.set(change.fieldName, change.newValue.toString());
+    changeMap.set(change.fieldName, change.newValue);
   });
 
-  const getValue = (fieldName: string, fallbackValue: string = '') => {
+  function getValue(fieldName: string, nullable: true): string | null;
+  function getValue(fieldName: string, nullable: false): string;
+  function getValue(fieldName: string, nullable: boolean): string | null {
     const value = changeMap.get(fieldName);
-    return value ? value : fallbackValue;
-  };
+    return value === undefined || value === '' ? (nullable ? null : '') : value;
+  }
 
   const getArrayCount = (prefix: string, isPairs = false) => {
     const keysCount = Array.from(changeMap.keys()).filter(key => key.startsWith(prefix)).length;
@@ -42,8 +44,8 @@ export function buildAmuletRulesConfigFromChanges(
   const transferFeeStepsCount = getArrayCount('transferFeeSteps', true);
   const transferFeeSteps: Tuple2<string, string>[] = [];
   for (let i = 1; i <= transferFeeStepsCount; i++) {
-    const _1 = getValue(`transferFeeSteps${i}_1`);
-    const _2 = getValue(`transferFeeSteps${i}_2`);
+    const _1 = getValue(`transferFeeSteps${i}_1`, false);
+    const _2 = getValue(`transferFeeSteps${i}_2`, false);
     if (_1 && _2) {
       transferFeeSteps.push({ _1, _2 });
     }
@@ -52,7 +54,9 @@ export function buildAmuletRulesConfigFromChanges(
   const numRequiredSynchronizers = getArrayCount('decentralizedSynchronizerRequiredSynchronizers');
   const requiredSynchronizers: string[] = [];
   for (let i = 1; i <= numRequiredSynchronizers; i++) {
-    requiredSynchronizers.push(getValue(`decentralizedSynchronizerRequiredSynchronizers${i}`));
+    requiredSynchronizers.push(
+      getValue(`decentralizedSynchronizerRequiredSynchronizers${i}`, false)
+    );
   }
   const requiredSynchronizersSet = lsToSet(requiredSynchronizers);
 
@@ -61,113 +65,128 @@ export function buildAmuletRulesConfigFromChanges(
   ).length;
   const futureValues: Tuple2<RelTime, IssuanceConfig>[] = [];
   for (let i = 0; i < futureValuesCount; i++) {
-    const time = { microseconds: getValue(`issuanceCurveFutureValues${i}`) };
-    const futureOptDevelopmentFundPercentage = getValue(
-      `issuanceCurveFutureValues${i}OptDevelopmentFundPercentage`
-    );
+    const time = { microseconds: getValue(`issuanceCurveFutureValues${i}`, false) };
     const config: IssuanceConfig = {
-      amuletToIssuePerYear: getValue(`issuanceCurveFutureValues${i}AmuletToIssuePerYear`),
-      validatorRewardPercentage: getValue(`issuanceCurveFutureValues${i}ValidatorRewardPercentage`),
-      appRewardPercentage: getValue(`issuanceCurveFutureValues${i}AppRewardPercentage`),
-      validatorRewardCap: getValue(`issuanceCurveFutureValues${i}ValidatorRewardCap`),
-      featuredAppRewardCap: getValue(`issuanceCurveFutureValues${i}FeaturedAppRewardCap`),
-      unfeaturedAppRewardCap: getValue(`issuanceCurveFutureValues${i}UnfeaturedAppRewardCap`),
-      optValidatorFaucetCap: getValue(`issuanceCurveFutureValues${i}OptValidatorFaucetCap`),
-      optDevelopmentFundPercentage:
-        futureOptDevelopmentFundPercentage === '' ? null : futureOptDevelopmentFundPercentage,
+      amuletToIssuePerYear: getValue(`issuanceCurveFutureValues${i}AmuletToIssuePerYear`, false),
+      validatorRewardPercentage: getValue(
+        `issuanceCurveFutureValues${i}ValidatorRewardPercentage`,
+        false
+      ),
+      appRewardPercentage: getValue(`issuanceCurveFutureValues${i}AppRewardPercentage`, false),
+      validatorRewardCap: getValue(`issuanceCurveFutureValues${i}ValidatorRewardCap`, false),
+      featuredAppRewardCap: getValue(`issuanceCurveFutureValues${i}FeaturedAppRewardCap`, false),
+      unfeaturedAppRewardCap: getValue(
+        `issuanceCurveFutureValues${i}UnfeaturedAppRewardCap`,
+        false
+      ),
+      optValidatorFaucetCap: getValue(`issuanceCurveFutureValues${i}OptValidatorFaucetCap`, true),
+      optDevelopmentFundPercentage: getValue(
+        `issuanceCurveFutureValues${i}OptDevelopmentFundPercentage`,
+        true
+      ),
     };
     futureValues.push({ _1: time, _2: config });
   }
 
-  const transferPreapprovalFee = getValue('transferPreapprovalFee');
-  const optDevelopmentFundManager = getValue('optDevelopmentFundManager');
-  const initialOptDevelopmentFundPercentage = getValue(
-    'issuanceCurveInitialValueOptDevelopmentFundPercentage'
+  const externalPartyConfigStateTickDuration = getValue(
+    'externalPartyConfigStateTickDuration',
+    true
   );
-  const externalPartyConfigStateTickDuration = getValue('externalPartyConfigStateTickDuration');
-  const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL');
-  const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion');
+  const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL', true);
+  const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
   const amuletConfig: AmuletConfig<'USD'> = {
-    tickDuration: { microseconds: getValue('tickDuration') },
-    transferPreapprovalFee: transferPreapprovalFee === '' ? null : transferPreapprovalFee,
-    featuredAppActivityMarkerAmount: getValue('featuredAppActivityMarkerAmount'),
-    optDevelopmentFundManager: optDevelopmentFundManager === '' ? null : optDevelopmentFundManager,
+    tickDuration: { microseconds: getValue('tickDuration', false) },
+    transferPreapprovalFee: getValue('transferPreapprovalFee', true),
+    featuredAppActivityMarkerAmount: getValue('featuredAppActivityMarkerAmount', true),
+    optDevelopmentFundManager: getValue('optDevelopmentFundManager', true),
     externalPartyConfigStateTickDuration:
-      externalPartyConfigStateTickDuration === ''
+      externalPartyConfigStateTickDuration === null
         ? null
         : { microseconds: externalPartyConfigStateTickDuration },
+    transferPreapprovalBaseDuration: null,
     transferConfig: {
-      createFee: { fee: getValue('transferConfigCreateFee') },
-      holdingFee: { rate: getValue('transferConfigHoldingFeeRate') },
+      createFee: { fee: getValue('transferConfigCreateFee', false) },
+      holdingFee: { rate: getValue('transferConfigHoldingFeeRate', false) },
       transferFee: {
-        initialRate: getValue('transferConfigTransferFeeInitialRate'),
+        initialRate: getValue('transferConfigTransferFeeInitialRate', false),
         steps: transferFeeSteps,
       },
-      lockHolderFee: { fee: getValue('transferConfigLockHolderFee') },
-      extraFeaturedAppRewardAmount: getValue('transferConfigExtraFeaturedAppRewardAmount'),
-      maxNumInputs: getValue('transferConfigMaxNumInputs'),
-      maxNumOutputs: getValue('transferConfigMaxNumOutputs'),
-      maxNumLockHolders: getValue('transferConfigMaxNumLockHolders'),
+      lockHolderFee: { fee: getValue('transferConfigLockHolderFee', false) },
+      extraFeaturedAppRewardAmount: getValue('transferConfigExtraFeaturedAppRewardAmount', false),
+      maxNumInputs: getValue('transferConfigMaxNumInputs', false),
+      maxNumOutputs: getValue('transferConfigMaxNumOutputs', false),
+      maxNumLockHolders: getValue('transferConfigMaxNumLockHolders', false),
       tokenStandardMaxTTL:
-        transferConfigTokenStandardMaxTTL === ''
-          ? null
-          : { microseconds: transferConfigTokenStandardMaxTTL },
+        transferConfigTokenStandardMaxTTL && transferConfigTokenStandardMaxTTL !== ''
+          ? { microseconds: transferConfigTokenStandardMaxTTL }
+          : null,
     },
 
     issuanceCurve: {
       initialValue: {
-        amuletToIssuePerYear: getValue('issuanceCurveInitialValueAmuletToIssuePerYear'),
-        validatorRewardPercentage: getValue('issuanceCurveInitialValueValidatorRewardPercentage'),
-        appRewardPercentage: getValue('issuanceCurveInitialValueAppRewardPercentage'),
-        validatorRewardCap: getValue('issuanceCurveInitialValueValidatorRewardCap'),
-        featuredAppRewardCap: getValue('issuanceCurveInitialValueFeaturedAppRewardCap'),
-        unfeaturedAppRewardCap: getValue('issuanceCurveInitialValueUnfeaturedAppRewardCap'),
-        optValidatorFaucetCap: getValue('issuanceCurveInitialValueOptValidatorFaucetCap'),
-        optDevelopmentFundPercentage:
-          initialOptDevelopmentFundPercentage === '' ? null : initialOptDevelopmentFundPercentage,
+        amuletToIssuePerYear: getValue('issuanceCurveInitialValueAmuletToIssuePerYear', false),
+        validatorRewardPercentage: getValue(
+          'issuanceCurveInitialValueValidatorRewardPercentage',
+          false
+        ),
+        appRewardPercentage: getValue('issuanceCurveInitialValueAppRewardPercentage', false),
+        validatorRewardCap: getValue('issuanceCurveInitialValueValidatorRewardCap', false),
+        featuredAppRewardCap: getValue('issuanceCurveInitialValueFeaturedAppRewardCap', false),
+        unfeaturedAppRewardCap: getValue('issuanceCurveInitialValueUnfeaturedAppRewardCap', false),
+        optValidatorFaucetCap: getValue('issuanceCurveInitialValueOptValidatorFaucetCap', true),
+        optDevelopmentFundPercentage: getValue(
+          'issuanceCurveInitialValueOptDevelopmentFundPercentage',
+          true
+        ),
       },
       futureValues: futureValues,
     },
 
     decentralizedSynchronizer: {
-      activeSynchronizer: getValue('decentralizedSynchronizerActiveSynchronizer'),
+      activeSynchronizer: getValue('decentralizedSynchronizerActiveSynchronizer', false),
       requiredSynchronizers: requiredSynchronizersSet,
       fees: {
         baseRateTrafficLimits: {
-          burstAmount: getValue('decentralizedSynchronizerFeesBaseRateTrafficLimitsBurstAmount'),
+          burstAmount: getValue(
+            'decentralizedSynchronizerFeesBaseRateTrafficLimitsBurstAmount',
+            false
+          ),
           burstWindow: {
-            microseconds: getValue('decentralizedSynchronizerFeesBaseRateTrafficLimitsBurstWindow'),
+            microseconds: getValue(
+              'decentralizedSynchronizerFeesBaseRateTrafficLimitsBurstWindow',
+              false
+            ),
           },
         },
-        extraTrafficPrice: getValue('decentralizedSynchronizerFeesExtraTrafficPrice'),
-        readVsWriteScalingFactor: getValue('decentralizedSynchronizerFeesReadVsWriteScalingFactor'),
-        minTopupAmount: getValue('decentralizedSynchronizerFeesMinTopupAmount'),
+        extraTrafficPrice: getValue('decentralizedSynchronizerFeesExtraTrafficPrice', false),
+        readVsWriteScalingFactor: getValue(
+          'decentralizedSynchronizerFeesReadVsWriteScalingFactor',
+          false
+        ),
+        minTopupAmount: getValue('decentralizedSynchronizerFeesMinTopupAmount', false),
       },
     },
 
     packageConfig: {
-      amulet: getValue('packageConfigAmulet'),
-      amuletNameService: getValue('packageConfigAmuletNameService'),
-      dsoGovernance: getValue('packageConfigDsoGovernance'),
-      validatorLifecycle: getValue('packageConfigValidatorLifecycle'),
-      wallet: getValue('packageConfigWallet'),
-      walletPayments: getValue('packageConfigWalletPayments'),
+      amulet: getValue('packageConfigAmulet', false),
+      amuletNameService: getValue('packageConfigAmuletNameService', false),
+      dsoGovernance: getValue('packageConfigDsoGovernance', false),
+      validatorLifecycle: getValue('packageConfigValidatorLifecycle', false),
+      wallet: getValue('packageConfigWallet', false),
+      walletPayments: getValue('packageConfigWalletPayments', false),
     },
 
     rewardConfig:
-      rewardConfigMintingVersion === ''
+      rewardConfigMintingVersion === null
         ? null
         : {
-            mintingVersion: getValue('rewardConfigMintingVersion') as RewardVersion,
-            dryRunVersion:
-              getValue('rewardConfigDryRunVersion') === ''
-                ? null
-                : (getValue('rewardConfigDryRunVersion') as RewardVersion),
-            batchSize: getValue('rewardConfigBatchSize'),
+            mintingVersion: rewardConfigMintingVersion as RewardVersion,
+            dryRunVersion: getValue('rewardConfigDryRunVersion', true) as RewardVersion | null,
+            batchSize: getValue('rewardConfigBatchSize', false),
             rewardCouponTimeToLive: {
-              microseconds: getValue('rewardConfigRewardCouponTimeToLive'),
+              microseconds: getValue('rewardConfigRewardCouponTimeToLive', false),
             },
-            appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold'),
+            appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
           },
   };
 

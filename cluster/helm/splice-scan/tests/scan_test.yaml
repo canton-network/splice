@@ -400,3 +400,44 @@ tests:
         matchRegex:
           path: spec.template.spec.containers[?(@.name=='scan-web-ui')].image
           pattern: "^secure-registry\\.example\\.com/custom-scan-ui:"
+
+  - it: "allows overriding scan database and bulk storage secret env vars with raw strings"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+        secretOverrides:
+          postgresPassword: "vault:kv/data/scan/postgres-password"
+      bulkStorage:
+        s3:
+          endpoint: "mock-endpoint"
+          region: "mock-region"
+          bucketName: "mock-bucket"
+          secretName: "mock-secret"
+          secretOverrides:
+            accessKey: "vault:kv/data/scan/s3-access-key"
+            secretAccessKey: "vault:kv/data/scan/s3-secret-key"
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/scan/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='scan-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/scan/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID')].value
+          pattern: "vault:kv/data/scan/s3-access-key"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY')].value
+          pattern: "vault:kv/data/scan/s3-secret-key"

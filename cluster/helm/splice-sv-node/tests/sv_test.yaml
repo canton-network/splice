@@ -313,3 +313,53 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].image
           value: "secure-registry.example.com/postgres:14-custom"
+
+  - it: "allows overriding all 8 SV secret env vars with raw strings"
+    set:
+      joinWithKeyOnboarding.sponsorApiUrl: "https://sponsor.mock.com"
+      cometBFT.externalGovernanceKey: true
+      identitiesExport.prefix: "mock-prefix"
+      identitiesExport.bucket.bucketName: "mock-bucket"
+      identitiesExport.bucket.jsonCredentials: "mock-creds"
+      identitiesExport.bucket.projectId: "mock-project"
+      identitiesExport.bucket.secretName: "mock-secret"
+      periodicTopologySnapshotConfig.backupInterval: "24h"
+      periodicTopologySnapshotConfig.location.prefix: "mock-prefix"
+      periodicTopologySnapshotConfig.location.bucket.projectId: "mock-project"
+      periodicTopologySnapshotConfig.location.bucket.bucketName: "mock-bucket"
+      periodicTopologySnapshotConfig.location.bucket.secretName: "mock-secret"
+      secretOverrides.svPublicKey: "vault:kv/data/sv/pub"
+      secretOverrides.svPrivateKey: "vault:kv/data/sv/priv"
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/sv/pg"
+      cometBFT.secretOverrides.governancePublicKey: "vault:kv/data/sv/comet-pub"
+      cometBFT.secretOverrides.governancePrivateKey: "vault:kv/data/sv/comet-priv"
+      identitiesExport.bucket.secretOverrides.jsonCredentials: "vault:kv/data/sv/ids-export"
+      periodicTopologySnapshotConfig.location.bucket.secretOverrides.jsonCredentials: "vault:kv/data/sv/topology"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_PUBLIC_KEY')].value
+          pattern: "vault:kv/data/sv/pub"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_PRIVATE_KEY')].value
+          pattern: "vault:kv/data/sv/priv"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/sv/pg"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/sv/pg"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY')].value
+          pattern: "vault:kv/data/sv/comet-pub"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY')].value
+          pattern: "vault:kv/data/sv/comet-priv"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_IDS_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
+          pattern: "vault:kv/data/sv/ids-export"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
+          pattern: "vault:kv/data/sv/topology"

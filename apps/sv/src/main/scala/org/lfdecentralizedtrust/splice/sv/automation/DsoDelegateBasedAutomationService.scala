@@ -176,6 +176,16 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+      )
+    )
+
+    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+
+    registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(
         triggerContext,
         svTaskContext,
@@ -237,6 +247,8 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
+    aTrigger[ExpireRewardCouponV2Trigger],
+    aTrigger[UnhideRewardCouponV2Trigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],

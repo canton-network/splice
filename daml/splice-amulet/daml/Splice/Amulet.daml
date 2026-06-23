@@ -260,6 +260,7 @@ template ValidatorRight with
   where
     signatory user, validator
 
+
     choice ValidatorRight_ArchiveAsValidator : ValidatorRight_ArchiveAsValidatorResult
       controller validator
       do return ValidatorRight_ArchiveAsValidatorResult
@@ -456,7 +457,6 @@ template ValidatorRewardCoupon
          -- Expiry requires proof of the coupon's round being closed, as all rounds go through their phases at their own pace
         void $ fetchReferenceData (ForRound with dso; round) closedRoundCid
         return ValidatorRewardCoupon_DsoExpireResult with ..
-
 
     choice ValidatorRewardCoupon_ArchiveAsValidator : ValidatorRewardCoupon_ArchiveAsValidatorResult
       -- ^ This choice is used by validators to archive the burn receipt upon claiming its corresponding issuance.

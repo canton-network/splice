@@ -91,10 +91,8 @@ function makeIncludeTagDefinition(context: ConfigLoaderContext): Yaml.Type {
     multi: true,
     construct(data, tag) {
       const { paths } = parseIncludeTag(tag as string, context); // tag cannot be undefined here
-      const configs = paths.map(path => ({ value: readAndParseYaml(path, context) }));
-      // All of the merged configs are wrapped in { value: } because the mergeStrategy does not
-      // apply to the actual arguments of mergeWith, only nested properties.
-      return mergeWith({}, ...configs, { value: data }, mergeStrategy).value;
+      const configs = paths.map(path => readAndParseYaml(path, context));
+      return mergeConfigFragments(...configs, data);
     },
   });
 }
@@ -109,6 +107,12 @@ function parseIncludeTag(tag: string, context: ConfigLoaderContext): ParsedInclu
 type ParsedIncludeTag = {
   paths: Array<string>;
 };
+
+export function mergeConfigFragments(...fragments: Array<unknown>): unknown {
+  // All of the merged configs are wrapped in { value: } because the mergeStrategy does not
+  // apply to the actual arguments of mergeWith, only nested properties.
+  return mergeWith({}, ...fragments.map(fragment => ({ value: fragment })), mergeStrategy).value;
+}
 
 function mergeStrategy(included: unknown, overrides: unknown): unknown {
   // includes without overrides get included unchanged

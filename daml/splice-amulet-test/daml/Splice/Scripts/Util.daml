@@ -726,18 +726,21 @@ allocateDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reaso
 checkTransferMetadata
   : AmuletApp -> TxKind -> Party -> Script (TransferResult, TransactionTree)
   -> Script (TransferResult, [TransferEventsV2.EventLog_HoldingsChange])
-checkTransferMetadata = genericCheckTxMetadata (.meta) (Some . (.summary))
+checkTransferMetadata app = genericCheckTxMetadata (.meta) (Some . (.summary)) app . Some
 
 checkTxMetadata : HasField "meta" a (Optional Metadata) => AmuletApp -> TxKind -> Party -> Script (a, TransactionTree) -> Script (a, [TransferEventsV2.EventLog_HoldingsChange])
-checkTxMetadata = genericCheckTxMetadata (.meta) (const None)
+checkTxMetadata app = genericCheckTxMetadata (.meta) (const None) app . Some
 
 checkTxMetadata' : HasField "meta" a Metadata => AmuletApp -> TxKind -> Party -> Script (a, TransactionTree) -> Script (a, [TransferEventsV2.EventLog_HoldingsChange])
-checkTxMetadata' = genericCheckTxMetadata (\a -> Some a.meta) (const None)
+checkTxMetadata' app = genericCheckTxMetadata (\a -> Some a.meta) (const None) app . Some
+
+checkTxMetadataOpt : HasField "meta" a (Optional Metadata) => AmuletApp -> Optional TxKind -> Party -> Script (a, TransactionTree) -> Script (a, [TransferEventsV2.EventLog_HoldingsChange])
+checkTxMetadataOpt = genericCheckTxMetadata (\a -> a.meta) (const None)
 
 genericCheckTxMetadata
-  : (a -> Optional Metadata) -> (a -> Optional TransferSummary) -> AmuletApp -> TxKind -> Party -> Script (a, TransactionTree)
+  : (a -> Optional Metadata) -> (a -> Optional TransferSummary) -> AmuletApp -> Optional TxKind -> Party -> Script (a, TransactionTree)
   -> Script (a, [TransferEventsV2.EventLog_HoldingsChange])
-genericCheckTxMetadata extractMeta extractSummary app expectedKind sender body = do
+genericCheckTxMetadata extractMeta extractSummary app optExpectedKind sender body = do
   holdingsBefore <- getHoldingAmounts
   (result, changes) <- WalletClientV2.extractAndCheckTxHistory [app.dso] body
   (Some (Metadata meta)) <- pure (extractMeta result)
@@ -753,44 +756,47 @@ genericCheckTxMetadata extractMeta extractSummary app expectedKind sender body =
         | otherwise = expect k (show v)
   let expectNotSet k = when (TextMap.member k meta) (abort ("Expected " <> show k <> " to not be set"))
   -- check kind
-  expect txKindMetaKey (txKindToText expectedKind)
-  -- check which holding amounts changed
-  if expectedKind == TxKind_Transfer
-    then do
-      expect senderMetaKey (partyToText (sender))
-    else do
-      expectNotSet senderMetaKey
-      -- check that only the holding amounts of the sender changed
-      forA_ (Map.toList holdingsBefore) $ \(p, v) -> do
-        let v' = Map.lookup p holdingsAfter
-        when (p /= sender && v' /= Some v) $
-          fail $ "Expected " <> show p <> " to have the same amount after transfer, but got " <> show v' <> " instead of " <> show v
-      forA_ (Map.toList holdingsAfter) $ \(p, v) -> do
-        let v' = Map.lookup p holdingsBefore
-        when (p /= sender && v' /= Some v) $
-          fail $ "Expected " <> show p <> " to have the same amount before transfer, but got " <> show v' <> " instead of " <> show v
-  -- check total burn being computed correctly
-  mint <- case extractSummary result of
-    None -> pure 0.0
-    Some summary -> do
-      let
-        inputUnclaimedActivityRecordAmount = fromOptional 0.0 summary.inputUnclaimedActivityRecordAmount
-        inputDevelopmentFundAmountAmount = fromOptional 0.0 summary.inputDevelopmentFundAmount
-      expectUnlessZero svRewardAmountMetaKey summary.inputSvRewardAmount
-      expectUnlessZero appRewardAmountMetaKey summary.inputAppRewardAmount
-      expectUnlessZero validatorRewardAmountMetaKey summary.inputValidatorRewardAmount
-      expectUnlessZero unclaimedActivityRecordAmountMetaKey inputUnclaimedActivityRecordAmount
-      expectUnlessZero developmentFundAmountMetaKey inputDevelopmentFundAmountAmount
-      pure $ summary.inputAppRewardAmount + summary.inputValidatorRewardAmount + summary.inputSvRewardAmount +
-        inputUnclaimedActivityRecordAmount + inputDevelopmentFundAmountAmount
-  let expectedBurn = totalHoldingsBefore + mint - totalHoldingsAfter
-  -- mints are inferred, and show here as a negative burn
-  if (expectedBurn < 0.0)
-    then
-      unless (expectedKind == TxKind_Mint) $
-        fail $ "unnaccounted minting of " <> show (negate expectedBurn)
-    else
-      expectUnlessZero burnedMetaKey expectedBurn
+  case optExpectedKind of
+    None -> pure ()
+    Some expectedKind -> do
+      expect txKindMetaKey (txKindToText expectedKind)
+      -- check which holding amounts changed
+      if expectedKind == TxKind_Transfer
+        then do
+          expect senderMetaKey (partyToText (sender))
+        else do
+          expectNotSet senderMetaKey
+          -- check that only the holding amounts of the sender changed
+          forA_ (Map.toList holdingsBefore) $ \(p, v) -> do
+            let v' = Map.lookup p holdingsAfter
+            when (p /= sender && v' /= Some v) $
+              fail $ "Expected " <> show p <> " to have the same amount after transfer, but got " <> show v' <> " instead of " <> show v
+          forA_ (Map.toList holdingsAfter) $ \(p, v) -> do
+            let v' = Map.lookup p holdingsBefore
+            when (p /= sender && v' /= Some v) $
+              fail $ "Expected " <> show p <> " to have the same amount before transfer, but got " <> show v' <> " instead of " <> show v
+      -- check total burn being computed correctly
+      mint <- case extractSummary result of
+        None -> pure 0.0
+        Some summary -> do
+          let
+            inputUnclaimedActivityRecordAmount = fromOptional 0.0 summary.inputUnclaimedActivityRecordAmount
+            inputDevelopmentFundAmountAmount = fromOptional 0.0 summary.inputDevelopmentFundAmount
+          expectUnlessZero svRewardAmountMetaKey summary.inputSvRewardAmount
+          expectUnlessZero appRewardAmountMetaKey summary.inputAppRewardAmount
+          expectUnlessZero validatorRewardAmountMetaKey summary.inputValidatorRewardAmount
+          expectUnlessZero unclaimedActivityRecordAmountMetaKey inputUnclaimedActivityRecordAmount
+          expectUnlessZero developmentFundAmountMetaKey inputDevelopmentFundAmountAmount
+          pure $ summary.inputAppRewardAmount + summary.inputValidatorRewardAmount + summary.inputSvRewardAmount +
+            inputUnclaimedActivityRecordAmount + inputDevelopmentFundAmountAmount
+      let expectedBurn = totalHoldingsBefore + mint - totalHoldingsAfter
+      -- mints are inferred, and show here as a negative burn
+      if (expectedBurn < 0.0)
+        then
+          unless (expectedKind == TxKind_Mint) $
+            fail $ "unnaccounted minting of " <> show (negate expectedBurn)
+        else
+          expectUnlessZero burnedMetaKey expectedBurn
   pure (result, changes)
   where
     getHoldingAmounts : Script (Map.Map Party Decimal)

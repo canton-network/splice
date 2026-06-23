@@ -14,7 +14,7 @@ import DA.TextMap as TextMap
 
 import Splice.Amulet
 import Splice.AmuletRules
-import Splice.AmuletConfig (defaultTransferPreapprovalFee)
+import Splice.AmuletConfig (defaultTransferPreapprovalFee, defaultTransferPreapprovalBaseDuration)
 import Splice.Types
 import Splice.Schedule
 import Splice.DecentralizedSynchronizer
@@ -557,9 +557,6 @@ testTransferPreapproval = script do
   -- -----------------------------------------
 
   now <- getTime
-  [(_, amuletRules)] <- query @AmuletRules app.dso
-  let createFee = (Splice.Schedule.getValueAsOf now amuletRules.configSchedule).transferConfig.createFee.fee
-
   install <- submit (actAs aliceValidator.primaryParty) $ createCmd $ WalletAppInstall with
     endUserParty = aliceValidator.primaryParty
     endUserName = "alice_validator_user"
@@ -572,32 +569,39 @@ testTransferPreapproval = script do
   appRewardsBefore <- query @AppRewardCoupon aliceValidator.primaryParty
   validatorRewardsBefore <- query @ValidatorRewardCoupon aliceValidator.primaryParty
 
-  let duration = days 1
+  let duration = days 100
   WalletAppInstall_ExecuteBatchResult { outcomes } <- submit (actAs aliceValidator.primaryParty <> readAs aliceValidator.primaryParty <> readAs app.dso) $
     exerciseCmd install WalletAppInstall_ExecuteBatch with
       inputs = [InputAmulet amulet]
-      operations = [CO_CreateExternalPartySetupProposal alice.primaryParty (now `addRelTime` duration)]
+      operations =
+        -- create a short duration preapproval first to check batching logic handling unconsumed amulet inputs
+        [ CO_CreateExternalPartySetupProposal alice.primaryParty (now `addRelTime` days 90)
+        , CO_CreateExternalPartySetupProposal alice.primaryParty (now `addRelTime` duration)
+        ]
       context
 
-  let [COO_CreateExternalPartySetupProposal proposalCid] = outcomes
+  debug ("outcomes", outcomes)
+  let [ COO_CreateExternalPartySetupProposal _shortLivedProposalCid,
+        COO_CreateExternalPartySetupProposal proposalCid ] = outcomes
   Some proposal <- queryContractId aliceValidator.primaryParty proposalCid
+  let preapprovalExpiresAt = (now `addRelTime` duration)
   proposal === ExternalPartySetupProposal with
     user = alice.primaryParty
     validator = aliceValidator.primaryParty
     dso = app.dso
     createdAt = now
-    preapprovalExpiresAt = (now `addRelTime` duration)
+    preapprovalExpiresAt
 
   -- Check results of TransferPreapproval purchase
   (preapprovalFee, _) <- calculateTransferPreapprovalFee app duration
-  -- Setup creates 1 amulet of value 1. The input amulet is split to pay the fee, so createFees are also charged
-  checkAmuletPositions aliceValidator [1.0, initialAmount - preapprovalFee - 2.0*createFee]
+  -- Setup creates 1 amulet of value 1. First preapproval is for 90 days wich is free. Second preapproval is > 90 days so we pay for it.
+  checkAmuletPositions aliceValidator [1.0, initialAmount - preapprovalFee]
   appRewardsAfter <- query @AppRewardCoupon aliceValidator.primaryParty
   validatorRewardsAfter <- query @ValidatorRewardCoupon aliceValidator.primaryParty
   appRewardsAfter === appRewardsBefore
   let Some [(_, newCoupon)] = stripPrefix validatorRewardsBefore validatorRewardsAfter
   newCoupon.user === aliceValidator.primaryParty
-  newCoupon.amount === preapprovalFee + createFee
+  newCoupon.amount === preapprovalFee
 
   result <- submit alice.primaryParty $ exerciseCmd proposalCid ExternalPartySetupProposal_Accept {}
   let preapprovalCid = result.transferPreapprovalCid
@@ -618,10 +622,10 @@ testTransferPreapproval = script do
   preapprovalCid2 =/= preapprovalCid
   Some preapproval2 <- queryContractId aliceValidator.primaryParty preapprovalCid2
   preapproval2 === preapproval with
-    lastRenewedAt = now
+    lastRenewedAt = preapprovalExpiresAt
     expiresAt = newExpiresAt
 
-  checkAmuletPositions aliceValidator [1.0, initialAmount - 2.0*preapprovalFee - 4.0*createFee]
+  checkAmuletPositions aliceValidator [1.0, initialAmount - 2.0*preapprovalFee]
 
   -- test CO_TransferPreapprovalSend
   -- --------------------------------
@@ -686,7 +690,7 @@ testTransferPreapproval = script do
     lastRenewedAt = now
     expiresAt = now `addRelTime` duration
 
-  checkAmuletPositions bobValidator [1.0, 10.0 - preapprovalFee - 2.0*createFee]
+  checkAmuletPositions bobValidator [1.0, 10.0 - preapprovalFee]
 
   pure ()
 
@@ -1020,10 +1024,12 @@ calculateSynchronizerFees app trafficAmount = do
   pure (trafficCostCc, trafficCostUsd)
 
 calculateTransferPreapprovalFee : AmuletApp -> RelTime -> Script (Decimal, Decimal)
-calculateTransferPreapprovalFee app duration = do
+calculateTransferPreapprovalFee app duration0 = do
   [(_, amuletRules)] <- query @AmuletRules app.dso
   now <- getTime
   let configUsd = getValueAsOf now amuletRules.configSchedule
+  let duration = max (days 0) (duration0 - defaultTransferPreapprovalBaseDuration)
+  debug ("Duration", duration)
   let preapprovalFeeUsd = (relTimeToDays duration) * (fromOptional defaultTransferPreapprovalFee configUsd.transferPreapprovalFee)
   (_, openRound) <- getLatestOpenRound app
   let amuletPrice = openRound.amuletPrice

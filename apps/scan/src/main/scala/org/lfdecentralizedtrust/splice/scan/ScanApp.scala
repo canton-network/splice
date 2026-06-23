@@ -256,18 +256,20 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = BulkStorage(
-        scanStorageConfigV1,
-        config.bulkStorage,
-        acsSnapshotStore,
-        updateHistory,
-        currentMigrationId = domainMigrationId,
-        kvProvider,
-        retryProvider.metricsFactory,
-        config.automation,
-        backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
-        retryProvider,
-        loggerFactory,
+      bulkStorage = config.bulkStorage.s3.map(_ =>
+        BulkStorage(
+          scanStorageConfigV1,
+          config.bulkStorage,
+          acsSnapshotStore,
+          updateHistory,
+          currentMigrationId = domainMigrationId,
+          kvProvider,
+          retryProvider.metricsFactory,
+          config.automation,
+          backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
+          retryProvider,
+          loggerFactory,
+        )
       )
       // Conditionally create traffic summary ingestion dependencies
       appActivityRecordStoreO =
@@ -280,6 +282,7 @@ class ScanApp(
                 AppActivityComputation.ActivityIngestionCodeVersion,
                 config.activityIngestionUserVersion.fold(0)(_.toInt),
               ),
+              config.isFirstSv,
               loggerFactory,
             )
           )
@@ -399,7 +402,7 @@ class ScanApp(
         appActivityRecordStoreO,
         acsSnapshotStore,
         scanEventStore,
-        bulkStorage,
+        bulkStorage.map(_.reader),
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
         config.enableForcedAcsSnapshots,
@@ -542,6 +545,7 @@ class ScanApp(
         bulkStorage,
         verdictAutomation,
         scanEventStore,
+        rewardsReferenceStoreO,
         loggerFactory.getTracedLogger(ScanApp.State.getClass),
         timeouts,
         bftSequencersWithAdminConnections.map(_._1),
@@ -612,9 +616,10 @@ object ScanApp {
       storage: Storage,
       store: ScanStore,
       automation: ScanAutomationService,
-      bulkStorage: BulkStorage,
+      bulkStorage: Option[BulkStorage],
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
+      rewardsReferenceStoreO: Option[ScanRewardsReferenceStore],
       logger: TracedLogger,
       timeouts: ProcessingTimeout,
       bftSequencersAdminConnections: Seq[SequencerAdminConnection],
@@ -627,8 +632,8 @@ object ScanApp {
     override def close(): Unit = {
       LifeCycle.close(bftSequencersAdminConnections*)(logger)
       LifeCycle.close(cleanups*)(logger)
+      bulkStorage.foreach(LifeCycle.close(_)(logger))
       LifeCycle.close(
-        bulkStorage,
         automation,
         verdictAutomation,
         store,

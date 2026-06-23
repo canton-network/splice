@@ -8,7 +8,6 @@ import { useInView } from 'react-intersection-observer';
 
 import {
   Box,
-  Chip,
   CircularProgress,
   Stack,
   Table,
@@ -74,7 +73,6 @@ const ValidatorLicenses: React.FC<ValidatorLicensesProps> = ({
             <TableRow>
               <TableCell>Created at</TableCell>
               <TableCell>Validator</TableCell>
-              <TableCell>Sponsor</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -83,9 +81,7 @@ const ValidatorLicenses: React.FC<ValidatorLicensesProps> = ({
                 <LicenseRow
                   key={license.contractId}
                   validator={license.payload.validator}
-                  sponsor={license.payload.sponsor}
                   createdAt={new Date(license.createdAt)}
-                  sv={dsoInfosQuery.data!.svPartyId}
                 />
               );
             })}
@@ -107,13 +103,10 @@ const ValidatorLicenses: React.FC<ValidatorLicensesProps> = ({
 
 interface LicenseRowProps {
   validator: Party;
-  sponsor: Party;
   createdAt: Date;
-  sv: Party;
 }
 
-const LicenseRow: React.FC<LicenseRowProps> = ({ validator, sponsor, createdAt, sv }) => {
-  const sponsoredByThisSv = sponsor === sv;
+const LicenseRow: React.FC<LicenseRowProps> = ({ validator, createdAt }) => {
   return (
     <TableRow className="validator-licenses-table-row">
       <TableCell>
@@ -121,12 +114,6 @@ const LicenseRow: React.FC<LicenseRowProps> = ({ validator, sponsor, createdAt, 
       </TableCell>
       <TableCell>
         <PartyId partyId={validator} className="validator-licenses-validator" />
-      </TableCell>
-      <TableCell>
-        <Stack direction="row" spacing={1}>
-          <PartyId partyId={sponsor} className="validator-licenses-sponsor" />
-          {sponsoredByThisSv && <Chip label="THIS SV" color="primary" size="small" />}
-        </Stack>
       </TableCell>
     </TableRow>
   );

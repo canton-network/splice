@@ -168,3 +168,17 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
           value: "secure-registry.com/postgres:14-hardened"
+
+  - it: "allows overriding mediator database secret env vars with raw strings"
+    set:
+      mediator.persistence.secretOverrides.postgresPassword: "vault:kv/data/mediator/postgres-password"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='mediator')].env[?(@.name=='CANTON_DOMAIN_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/mediator/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/mediator/postgres-password"

@@ -31,17 +31,25 @@ spec:
         {{- end }}
         env:
         - name: SPLICE_APP_UI_AUTH_CLIENT_ID
+          {{- if (.Values.secretOverrides).clientId }}
+          value: {{ .Values.secretOverrides.clientId | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: client-id
               name: splice-app-splitwell-ui-auth
               optional: false
+          {{- end }}
         - name: SPLICE_APP_UI_AUTH_URL
+          {{- if (.Values.secretOverrides).url }}
+          value: {{ .Values.secretOverrides.url | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: url
               name: splice-app-splitwell-ui-auth
               optional: false
+          {{- end }}
         - name: SPLICE_APP_UI_AUTH_AUDIENCE
           value: {{ .Values.auth.audience | quote }}
         - name: SPLICE_APP_UI_CLUSTER

@@ -67,6 +67,8 @@ trait UserWalletStore extends TxLogAppStore[TxLogEntry] with TransferInputStore 
   /** The key identifying the parties considered by this store. */
   def key: UserWalletStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   def domainMigrationId: Long
 
   final def lookupInstall()(implicit tc: TraceContext): Future[

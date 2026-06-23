@@ -38,6 +38,7 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetDsoInfoResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
@@ -45,6 +46,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  RewardAccountingActivityTotalsOk,
+  RewardAccountingActivityTotalsUndetermined,
   RewardAccountingRootHashOk,
   RewardAccountingRootHashUndetermined,
 }
@@ -500,6 +503,14 @@ class BftScanConnection(
     "listVoteRequestResults",
   )
 
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = bftCall(
+    _.getPreviousSvRewardWeight(svParty, effectiveBefore),
+    "getPreviousSvRewardWeight",
+  )
+
   override def getImportUpdates(
       migrationId: Long,
       afterUpdateId: String,
@@ -927,6 +938,7 @@ class BftScanConnection(
             logger,
             shortenResponsesForLog,
             consensusLogConfig,
+            connectionMetrics,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -976,6 +988,54 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
+
+  /** This is special because in addition to 'Ok' we can receive
+    * 'Undetermined' - This might indicate that scan is yet to process activity totals for this round
+    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+    *
+    * So simple equality comparison on responses is not possible, and we treat
+    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
+    * that this does not cause grouping in executeCall.
+    *
+    * And if no response could be obtained via bft we respond with 'Undetermined'
+    */
+  override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse] = {
+    val undetermined =
+      GetRewardAccountingActivityTotalsResponse(
+        RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+      )
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
+    else
+      bftCall[RewardAccountingActivityTotalsOk](
+        call = scan =>
+          scan.getRewardAccountingActivityTotals(roundNumber).flatMap {
+            case GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(ok) =>
+              Future.successful(ok)
+            case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined |
+                _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide =>
+              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingActivityTotals",
+        callConfig = callConfig,
+        consensusLogConfig = BftScanConnection.ConsensusLogConfig(
+          disagreementLogLevel = Level.WARN,
+          onlyLogDisagreementsInSuccessResponse = true,
+          agreementLogLevel = Some(Level.INFO),
+        ),
+      )
+        .transform(tryTotals =>
+          Success(
+            tryTotals.toOption.fold(undetermined)(ok =>
+              GetRewardAccountingActivityTotalsResponse(ok)
+            )
+          )
+        )
+  }
 
   /** This is special because in addition to 'Ok' we can receive
     * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
@@ -1065,7 +1125,12 @@ object BftScanConnection {
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
       consensusLogConfig: ConsensusLogConfig = ConsensusLogConfig(),
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      mc: MetricsContext = MetricsContext.Empty,
+  ): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
     val responses =
@@ -1103,7 +1168,13 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses, consensusLogConfig)
+                logDisagreements(
+                  logger,
+                  consensusResponse,
+                  responses,
+                  consensusLogConfig,
+                  connectionMetrics,
+                )
             }
           }
         }
@@ -1148,10 +1219,35 @@ object BftScanConnection {
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
       consensusLogConfig: ConsensusLogConfig,
-  )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
+      connectionMetrics: Option[ScanConnectionMetrics],
+  )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
     implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
+    def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
+      connectionMetrics.foreach { metrics =>
+        val context = mc.merge(
+          MetricsContext(
+            Map(
+              "scan_connection" -> url.authority.host.address(),
+              "consensus" -> consensus,
+            ) ++ extraLabels
+          )
+        )
+        metrics.bftPerConnectionConsensus.mark()(context)
+      }
+    def disagreementLabels(response: BftScanConnection.ScanResponse[T]): Map[String, String] =
+      response match {
+        case _: SuccessfulResponse[?] => Map("success" -> "true")
+        case HttpFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case NonJsonHttpFailureResponse(status) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case TextFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case _: ExceptionFailureResponse[?] => Map("success" -> "false")
+      }
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
       val agreeingScanUrls = responses.remove(consensusResponseKey)
+      agreeingScanUrls.foreach(recordConsensus(_, "agree", Map.empty))
       consensusLogConfig.agreementLogLevel.foreach { level =>
         LoggerUtil.logAtLevel(
           level,
@@ -1159,6 +1255,8 @@ object BftScanConnection {
         )
       }
       responses.forEach { (disagreeingResponse, scanUrls) =>
+        val extraLabels = disagreementLabels(disagreeingResponse)
+        scanUrls.foreach(recordConsensus(_, "disagree", extraLabels))
         val shouldLog = disagreeingResponse match {
           case _: SuccessfulResponse[?] => true
           case _ => !consensusLogConfig.onlyLogDisagreementsInSuccessResponse
@@ -1812,7 +1910,7 @@ object BftScanConnection {
             clock,
             retryProvider,
             loggerFactory,
-            None,
+            connectionMetrics,
           )
 
           _ <- retryProvider.waitUntil(

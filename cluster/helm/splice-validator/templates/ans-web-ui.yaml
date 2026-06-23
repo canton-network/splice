@@ -60,17 +60,25 @@ spec:
           value: "https://validator.example.com"
         {{- else }}
         - name: SPLICE_APP_UI_AUTH_CLIENT_ID
+          {{- if ((.Values.ansWebUi).secretOverrides).clientId }}
+          value: {{ .Values.ansWebUi.secretOverrides.clientId | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: client-id
               name: splice-app-cns-ui-auth
               optional: false
+          {{- end }}
         - name: SPLICE_APP_UI_AUTH_URL
+          {{- if ((.Values.ansWebUi).secretOverrides).url }}
+          value: {{ .Values.ansWebUi.secretOverrides.url | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: url
               name: splice-app-cns-ui-auth
               optional: false
+          {{- end }}
         - name: SPLICE_APP_UI_AUTH_AUDIENCE
           value: {{ .Values.auth.audience | quote }}
         {{- if .Values.auth.scope }}

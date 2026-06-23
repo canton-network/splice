@@ -397,6 +397,8 @@ object SpliceUtil {
         .map(t => new RelTime(TimeUnit.NANOSECONDS.toMicros(t.duration.toNanos)))
         .toJava,
       initialRewardConfig.toJava,
+      // transferPreapprovalBaseDuration
+      Optional.empty(),
     )
 
   def defaultAnsConfig(
@@ -594,6 +596,8 @@ object SpliceUtil {
       preapprovalFeeRate: Option[BigDecimal],
       amuletPrice: BigDecimal,
   ): (BigDecimal, BigDecimal) = {
+    // No easy access to the config here and we don't customize the base duration so just hardcode 90 days
+    val paidDurationSeconds = duration.duration.toSeconds - 90 * 24 * 3600
 
     def tryCompute() = for {
       preapprovalFeeN <- Numeric.fromBigDecimal(
@@ -601,7 +605,7 @@ object SpliceUtil {
         preapprovalFeeRate.getOrElse(BigDecimal(defaultTransferPreapprovalFee)),
       )
       amuletPriceN <- Numeric.fromBigDecimal(decimalScale, amuletPrice)
-      durationDays = BigDecimal(duration.duration.toSeconds) / (3600 * 24)
+      durationDays = BigDecimal(paidDurationSeconds) / (3600 * 24)
       durationDaysN <- Numeric.fromBigDecimal(decimalScale, durationDays)
       feeUsd <- Numeric.multiply(decimalScale, preapprovalFeeN, durationDaysN)
       feeAmulet <- Numeric.divide(decimalScale, feeUsd, amuletPriceN)

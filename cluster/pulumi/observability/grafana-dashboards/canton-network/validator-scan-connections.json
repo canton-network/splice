@@ -99,8 +99,8 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "12.4.0",
@@ -111,8 +111,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile($percentile, sum by (request, namespace, scan_connection) (rate(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"${namespace}\", request=~\"${per_connection_request}\", scan_connection=~\"${scan_connection}\"}[$__rate_interval])))",
-          "legendFormat": "{{namespace}} - {{scan_connection}} - {{request}}",
+          "expr": "histogram_quantile($percentile, sum by (request, namespace, node_name, scan_connection) (rate(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"${namespace}\", job=~\"$job\", node_name=~\"$node_name\", request=~\"${per_connection_request}\", scan_connection=~\"${scan_connection}\"}[$__rate_interval])))",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{scan_connection}} - {{request}}",
           "range": true,
           "refId": "A"
         }
@@ -197,16 +197,16 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (namespace, scan_connection, request)(rate(splice_validator_scan_per_connection_calls_total{namespace=~\"$namespace\", scan_connection=~\"$scan_connection\", request=~\"$per_connection_request\", outcome!=\"ok\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}} - {{scan_connection}} - {{request}}",
+          "expr": "sum by (namespace, node_name, scan_connection, request)(rate(splice_validator_scan_per_connection_calls_total{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", request=~\"$per_connection_request\", outcome!=\"ok\"}[$__rate_interval]))",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{scan_connection}} - {{request}}",
           "range": true,
           "refId": "A"
         }
@@ -292,16 +292,16 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile($percentile, sum by (request, namespace)(rate(splice_validator_scan_bft_read_latency_duration_seconds{namespace=~\"${namespace}\", request=~\"${bft_request}\"}[$__rate_interval])))",
-          "legendFormat": "{{namespace}} - {{request}}",
+          "expr": "histogram_quantile($percentile, sum by (request, namespace, node_name)(rate(splice_validator_scan_bft_read_latency_duration_seconds{namespace=~\"${namespace}\", job=~\"$job\", node_name=~\"$node_name\", request=~\"${bft_request}\"}[$__rate_interval])))",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{request}}",
           "range": true,
           "refId": "A"
         }
@@ -386,25 +386,448 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (outcome, namespace, request) (\n  rate(splice_validator_scan_bft_calls_total{namespace=~\"$namespace\", request=~\"${bft_request}\", outcome!=\"ok\"}[$__rate_interval])\n)",
-          "legendFormat": "{{namespace}} - {{outcome}} - {{request}}",
+          "expr": "sum by (outcome, namespace, node_name, request) (\n  rate(splice_validator_scan_bft_calls_total{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", request=~\"${bft_request}\", outcome!=\"ok\"}[$__rate_interval])\n)",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{outcome}} - {{request}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "BFT errors",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 100,
+      "panels": [],
+      "title": "BFT Consensus",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (namespace, node_name, scan_connection, consensus, request, http_status) (rate(splice_validator_scan_bft_per_connection_consensus_total{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", consensus=\"disagree\", request=~\"${bft_request}\"}[$__rate_interval])) > 0",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{scan_connection}} - {{request}} - {{http_status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "BFT consensus disagreements per connection",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Total number of times each scan connection disagreed with the BFT consensus result over the selected time range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disagreements"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Disagreements"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (namespace,job, node_name, scan_connection, http_status) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus=\"disagree\", namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", request=~\"${bft_request}\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Disagreements per connection (time range)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Disagreements"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Fraction of BFT consensus comparisons per request on each scan connection that disagreed with the consensus result over the last 30m. Mirrors the warning alert, which fires above 10%.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum by (namespace, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus=\"disagree\", namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", request=~\"${bft_request}\"}[30m]))\n/\nsum by (namespace, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", request=~\"${bft_request}\"}[30m]))) > 0",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{scan_connection}} - {{request}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Disagreement rate per connection & request ",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Number of successful (2xx) responses per request on each scan connection that disagreed with the BFT consensus result over the last 30m. Mirrors the critical alert, which fires above 5.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, node_name, scan_connection, request) (increase(splice_validator_scan_bft_per_connection_consensus_total{consensus=\"disagree\", success=\"true\", namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\", request=~\"${bft_request}\"}[30m])) > 0",
+          "legendFormat": "{{namespace}} - {{node_name}} - {{scan_connection}} - {{request}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Successful responses disagreeing with BFT consensus ",
+      "type": "timeseries"
     }
   ],
   "preload": false,
+  "refresh": "15m",
   "schemaVersion": 42,
   "tags": [],
   "templating": {
@@ -413,10 +836,10 @@
         "allowCustomValue": false,
         "current": {
           "text": [
-            "All"
+            "validator1"
           ],
           "value": [
-            "$__all"
+            "validator1"
           ]
         },
         "datasource": {
@@ -452,17 +875,71 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds,scan_connection)",
+        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\"},job)",
+        "includeAll": true,
+        "multi": true,
+        "name": "job",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\"},job)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{job=~\"$job\", namespace=~\"$namespace\"},node_name)",
+        "includeAll": true,
+        "multi": true,
+        "name": "node_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{job=~\"$job\", namespace=~\"$namespace\"},node_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\"},scan_connection)",
         "includeAll": true,
         "multi": true,
         "name": "scan_connection",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds,scan_connection)",
+          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\"},scan_connection)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "regexApplyTo": "value",
         "type": "query"
@@ -481,9 +958,7 @@
       {
         "allowCustomValue": false,
         "current": {
-          "text": [
-            "All"
-          ],
+          "text": "All",
           "value": [
             "$__all"
           ]
@@ -492,17 +967,17 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds,request)",
+        "definition": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\"},request)",
         "includeAll": true,
         "multi": true,
         "name": "per_connection_request",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds,request)",
+          "query": "label_values(splice_validator_scan_per_connection_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\", scan_connection=~\"$scan_connection\"},request)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "regexApplyTo": "value",
         "type": "query"
@@ -510,9 +985,7 @@
       {
         "allowCustomValue": false,
         "current": {
-          "text": [
-            "All"
-          ],
+          "text": "All",
           "value": [
             "$__all"
           ]
@@ -521,17 +994,17 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(splice_validator_scan_bft_read_latency_duration_seconds,request)",
+        "definition": "label_values(splice_validator_scan_bft_read_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\"},request)",
         "includeAll": true,
         "multi": true,
         "name": "bft_request",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(splice_validator_scan_bft_read_latency_duration_seconds,request)",
+          "query": "label_values(splice_validator_scan_bft_read_latency_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", node_name=~\"$node_name\"},request)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "regexApplyTo": "value",
         "type": "query"
@@ -546,6 +1019,6 @@
   "timezone": "",
   "title": "Validator Scan Connections",
   "uid": "cnndx7p",
-  "version": 18,
+  "version": 2,
   "weekStart": ""
 }

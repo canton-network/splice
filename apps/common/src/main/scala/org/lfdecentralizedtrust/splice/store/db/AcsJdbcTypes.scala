@@ -186,6 +186,9 @@ trait AcsJdbcTypes {
   protected implicit lazy val longSeqSetParameter: SetParameter[Seq[Long]] =
     (longs: Seq[Long], pp: PositionedParameters) => longArraySetParameter(longs.toArray, pp)
 
+  protected implicit lazy val longSeqGetResult: GetResult[Seq[Long]] =
+    longArrayGetResult.andThen(_.toSeq)
+
   protected implicit lazy val cantonTimestampArraySetParameter
       : SetParameter[Array[CantonTimestamp]] =
     (timestamps: Array[CantonTimestamp], pp: PositionedParameters) =>

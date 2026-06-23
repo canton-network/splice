@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
+import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter}
+import com.daml.metrics.api.MetricQualification.Errors
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -11,21 +13,30 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.RewardVersion
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_MiningRound_StartIssuing
 import org.lfdecentralizedtrust.splice.codegen.java.splice.issuance.OpenMiningRoundSummary
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.SummarizingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_MiningRound_StartIssuing
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerConnection, SpliceMetrics}
+import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingActivityTotalsResponse.members.{
+  RewardAccountingActivityTotalsCannotProvide,
+  RewardAccountingActivityTotalsOk,
+  RewardAccountingActivityTotalsUndetermined,
+}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
+import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore}
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 
 import java.util.Optional
@@ -39,6 +50,8 @@ class SummarizingMiningRoundTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
+    scanConnectionF: () => Future[ScanConnection],
+    bftScanConnectionF: () => Future[BftScanConnection],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -49,6 +62,8 @@ class SummarizingMiningRoundTrigger(
 
   private val svParty = store.key.svParty
   private val dsoParty = store.key.dsoParty
+
+  private val miningRoundMetrics = new SummarizingMiningRoundMetrics(context.metricsFactory)
 
   private def amuletRulesStartIssuingAction(
       miningRoundCid: SummarizingMiningRound.ContractId,
@@ -65,42 +80,24 @@ class SummarizingMiningRoundTrigger(
 
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     summarizingRounds <- store.listOldestSummarizingMiningRounds()
-    tasks <- MonadUtil
-      .sequentialTraverse(summarizingRounds) { round =>
-        for {
-          rewards <- queryRewards(
-            round.payload.round.number,
-            round.domain,
-            round.payload.issuanceConfig,
-          )
-          action = amuletRulesStartIssuingAction(
-            round.contractId,
-            rewards.summary,
-          )
-          queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
-        } yield queryResult.value match {
-          case None =>
-            Some(
-              Task(
-                round,
-                rewards,
-              )
-            )
-          case Some(_) => None
-        }
-      }
-      .map(_.flatten)
-  } yield tasks
+    confirmedCids <- listConfirmedMiningRoundStartIssuingCids()
+  } yield summarizingRounds
+    .filterNot(round => confirmedCids.contains(round.contractId))
+    .map(Task(_))
 
   override def completeTask(
       task: Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val round = task.summarizingRound.contract.payload.round.number
     for {
+      rewards <- queryRewards(
+        task.summarizingRound.payload,
+        task.summarizingRound.domain,
+      )
       dsoRules <- store.getDsoRules()
       action = amuletRulesStartIssuingAction(
         task.summarizingRound.contractId,
-        task.rewards.summary,
+        rewards.summary,
       )
       queryResult <- store.lookupConfirmationByActionWithOffset(svParty, action)
       cmd = dsoRules.exercise(
@@ -153,20 +150,31 @@ class SummarizingMiningRoundTrigger(
     * for a SummarizingMiningRound.
     */
   private def queryRewards(
-      round: Long,
+      payload: splice.round.SummarizingMiningRound,
       domain: SynchronizerId,
-      issuanceConfig: splice.issuance.IssuanceConfig,
   )(implicit
       ec: ExecutionContext,
       traceContext: TraceContext,
   ): Future[RoundRewards] = {
+    val round = payload.round.number
+    val issuanceConfig = payload.issuanceConfig
     val faucetCapIsZero = issuanceConfig.optValidatorFaucetCap.toScala
       .exists(_.compareTo(java.math.BigDecimal.ZERO) <= 0)
     for {
-      appRewardCoupons <- store.sumAppRewardCouponsOnDomain(
-        round,
-        domain,
-      )
+      appRewardCoupons <-
+        if (useTrafficBasedAppRewards(payload)) {
+          fetchRewardAccountingTotals(round).map { totals =>
+            // The total featured app rewards (in CC) is the sum of the minting
+            // allowance and the thresholded amount reported by Scan.
+            val appRewardsInCc =
+              (BigDecimal(totals.totalAppRewardMintingAllowance) +
+                BigDecimal(totals.totalAppRewardThresholded))
+                .setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
+            AppRewardCouponsSum(featured = appRewardsInCc, unfeatured = BigDecimal(0))
+          }
+        } else {
+          store.sumAppRewardCouponsOnDomain(round, domain)
+        }
       validatorRewardCoupons <- store.sumValidatorRewardCouponsOnDomain(
         round,
         domain,
@@ -192,6 +200,64 @@ class SummarizingMiningRoundTrigger(
         svRewardCouponsWeightSum = svRewardCouponsWeightSum,
       )
     }
+  }
+
+  private def listConfirmedMiningRoundStartIssuingCids()(implicit
+      tc: TraceContext
+  ): Future[Set[SummarizingMiningRound.ContractId]] =
+    store.listConfirmationsByConfirmer(svParty).map { confirmations =>
+      confirmations.iterator.flatMap { c =>
+        c.payload.action match {
+          case arc: ARC_AmuletRules =>
+            arc.amuletRulesAction match {
+              case crarc: CRARC_MiningRound_StartIssuing =>
+                Some(crarc.amuletRules_MiningRound_StartIssuingValue.miningRoundCid)
+              case _ => None
+            }
+          case _ => None
+        }
+      }.toSet
+    }
+
+  private def useTrafficBasedAppRewards(
+      payload: splice.round.SummarizingMiningRound
+  ): Boolean =
+    payload.rewardConfig.toScala.exists(
+      _.mintingVersion == RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
+    )
+
+  private def fetchRewardAccountingTotals(
+      round: Long
+  )(implicit tc: TraceContext): Future[definitions.RewardAccountingActivityTotalsOk] = {
+    def totalsUnavailable(reason: String): Nothing =
+      throw Status.FAILED_PRECONDITION
+        .withDescription(s"For round $round: $reason")
+        .asRuntimeException()
+
+    def bftReadTotals: Future[definitions.RewardAccountingActivityTotalsOk] = {
+      miningRoundMetrics.summarizingRoundTotalsBftReads.mark()
+      for {
+        bftScan <- bftScanConnectionF()
+        response <- bftScan.getRewardAccountingActivityTotals(round)
+      } yield response match {
+        case RewardAccountingActivityTotalsOk(ok) =>
+          logger.info(s"Obtained the reward accounting totals for round $round via BFT read.")
+          ok
+        case _ => totalsUnavailable("could not obtain reward accounting totals via BFT read.")
+      }
+    }
+
+    for {
+      ownScan <- scanConnectionF()
+      response <- ownScan.getRewardAccountingActivityTotals(round)
+      totals <- response match {
+        case RewardAccountingActivityTotalsOk(ok) =>
+          Future.successful(ok)
+        case RewardAccountingActivityTotalsUndetermined(_) =>
+          totalsUnavailable("our own Scan has not yet computed the reward accounting totals.")
+        case RewardAccountingActivityTotalsCannotProvide(_) => bftReadTotals
+      }
+    } yield totals
   }
 }
 
@@ -227,13 +293,28 @@ object SummarizingMiningRoundTrigger {
       summarizingRound: AssignedContract[
         splice.round.SummarizingMiningRound.ContractId,
         splice.round.SummarizingMiningRound,
-      ],
-      rewards: RoundRewards,
+      ]
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
-        param("summarizingRound", _.summarizingRound),
-        param("rewards", _.rewards),
+        param("summarizingRound", _.summarizingRound)
       )
+  }
+
+  class SummarizingMiningRoundMetrics(metricsFactory: LabeledMetricsFactory) {
+
+    private val metricsContext = MetricsContext.Empty
+
+    private val prefix: MetricName = SpliceMetrics.MetricsPrefix
+    val summarizingRoundTotalsBftReads: Meter =
+      metricsFactory.meter(
+        MetricInfo(
+          name = prefix :+ "summarizing_mining_round" :+ "totals_bft_reads",
+          summary = "Count of BFT reads of the reward-accounting totals",
+          description =
+            "This metric counts the BFT reads of the reward-accounting totals performed by the SummarizingMiningRound trigger, i.e., the cases where this SV's own Scan could not provide the totals and it had to be obtained via a BFT read against peer Scans.",
+          qualification = Errors,
+        )
+      )(metricsContext)
   }
 }

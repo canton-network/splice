@@ -174,17 +174,17 @@ class AppUpgradeIntegrationTest
 
           clue("Tapping some amulet in the network before any upgrades") {
             bobWalletClient.tap(10)
-            bobValidatorWalletClient.tap(1_000_001)
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
-            sv2Wallet.tap(1_000_002)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.tap(1001)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
+            sv2Wallet.tap(1002)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           val bobTxsBeforeUpgrade =
             clue("Check that bob validator can see the tap in the wallet tx history") {
               val txs = withoutDevNetTopups(bobValidatorWalletClient.listTransactions(None, 10))
               inside(txs(0)) { case logEntry: BalanceChangeTxLogEntry =>
-                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1_000_001))
+                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1001))
               }
               txs
             }
@@ -203,7 +203,7 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Validating that the balance is visible in the upgraded validator") {
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           clue("Upgrading sv-2 & sv-3") {
@@ -214,16 +214,16 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Testing some more transactions after 2 SVs upgraded") {
-            sv2Wallet.tap(1_000_003)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(2_000_000)
+            sv2Wallet.tap(1003)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(2000)
             // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's)
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
               sv1Client.getDsoInfo().svParty,
-              500_001,
+              501,
             )
-            sv1WalletClient.balance().unlockedQty should be > BigDecimal(490_000)
+            sv1WalletClient.balance().unlockedQty should be > BigDecimal(400)
           }
 
           clue("Upgrading also sv1") {
@@ -266,6 +266,7 @@ class AppUpgradeIntegrationTest
             amuletConfig.optDevelopmentFundManager,
             amuletConfig.externalPartyConfigStateTickDuration,
             amuletConfig.rewardConfig,
+            amuletConfig.transferPreapprovalBaseDuration,
           )
           val upgradeAction = new ARC_AmuletRules(
             new CRARC_SetConfig(
