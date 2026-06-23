@@ -21,18 +21,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testto
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.TSA_AllocationFactory_AllocateV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.TSAR_AllocationInstructionResultV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
-  BatchingUtility,
-  ChoiceCall,
-  HoldingMap,
-  ScopedAccount,
-  BatchingUtility as BatchingUtilityV2,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{BatchingUtility, ChoiceCall, HoldingMap, ScopedAccount, BatchingUtility as BatchingUtilityV2}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTest, SpliceTestConsoleEnvironment}
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
@@ -82,7 +76,12 @@ class TestTokenV2SettlementIntegrationTest
       .simpleTopology1SvWithLocalValidator(this.getClass.getSimpleName)
       .withoutAliceValidatorConnectingToSplitwell
       .withSequencerConnectionsFromScanDisabled()
-      .addConfigTransform((_, config) =>
+      .addConfigTransform((_, config) => {
+        // We copy the already-existing definition of aliceValidatorLocal for testTokenValidatorLocal
+        val aliceValidatorLocal = config.validatorApps.getOrElse(
+          InstanceName.tryCreate("aliceValidatorLocal"),
+          throw new RuntimeException("aliceValidatorLocal not found"),
+        )
         config.copy(
           svApps = config.svApps.map { case (instanceName, svApp) =>
             instanceName -> svApp.copy(expectedValidatorOnboardings =
@@ -92,16 +91,13 @@ class TestTokenV2SettlementIntegrationTest
             )
           },
           validatorApps =
-            config.validatorApps.updatedWith(InstanceName.tryCreate("aliceValidatorLocal")) {
-              _.map { aliceValidatorConfig =>
-                aliceValidatorConfig.copy(
-                  adminApi = aliceValidatorConfig.adminApi
-                    .copy(internalPort = Some(aliceValidatorConfig.adminApi.port + 22_000)),
-                  onboarding =
-                    aliceValidatorConfig.onboarding.map(_.copy(secret = "aliceExtraValidator")),
-                )
-              }
-            },
+            config.validatorApps + (InstanceName.tryCreate("testTokenValidatorLocal") ->
+              aliceValidatorLocal.copy(
+                adminApi = aliceValidatorLocal.adminApi
+                  .copy(internalPort = Some(aliceValidatorLocal.adminApi.port + 22_000)),
+                onboarding =
+                  aliceValidatorLocal.onboarding.map(_.copy(secret = "aliceExtraValidator")),
+              )),
           walletAppClients = config.walletAppClients + (
             InstanceName.tryCreate("aliceValidatorLocalWallet") -> {
               val aliceValidatorWalletConfig =
@@ -115,8 +111,10 @@ class TestTokenV2SettlementIntegrationTest
             }
           ),
         )
-      )
+      })
   }
+
+  def ttAdminValidator(implicit env: SpliceTestConsoleEnvironment) = v("testTokenValidatorLocal")
 
   "TestTokenV2 should be settleable" in { implicit env =>
     initDso()
@@ -126,7 +124,7 @@ class TestTokenV2SettlementIntegrationTest
       ),
       Seq(),
       "test_token_v2_settlement",
-      "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
+      "EXTRA_PARTICIPANT_ADMIN_USER" -> ttAdminValidator.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> dbName,
     ) {
       Seq(
@@ -134,7 +132,7 @@ class TestTokenV2SettlementIntegrationTest
         aliceValidatorBackend, // hosts Alice
         bobValidatorBackend, // hosts Bob
         splitwellValidatorBackend, // hosts the venue party
-        aliceValidatorLocalBackend, // hosts the ttadmin
+        ttAdminValidator, // hosts the ttadmin
       ).foreach { validatorBackend =>
         validatorBackend.startSync()
         validatorBackend.participantClient.upload_dar_unless_exists(tokenStandardV2TestDarPath)
@@ -146,7 +144,6 @@ class TestTokenV2SettlementIntegrationTest
       val venueValidator = splitwellValidatorBackend
       val venueParty = venueValidator.getValidatorPartyId()
       logger.info(venueParty.toProtoPrimitive)
-      val ttAdminValidator = aliceValidatorLocalBackend
       val ttAdminParty = ttAdminValidator.getValidatorPartyId()
       val registry = new TestTokenV2Registry(ttAdminParty, ttAdminValidator)
 
