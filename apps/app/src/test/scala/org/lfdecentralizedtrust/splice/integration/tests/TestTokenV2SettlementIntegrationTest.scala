@@ -142,8 +142,8 @@ class TestTokenV2SettlementIntegrationTest
       "EXTRA_PARTICIPANT_ADMIN_USER" -> ttAdminValidator.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> dbName,
     ) {
+      sv1ValidatorBackend.startSync() // hosts DSO
       Seq(
-        sv1ValidatorBackend, // hosts DSO
         aliceValidatorBackend, // hosts Alice
         bobValidatorBackend, // hosts Bob
         splitwellValidatorBackend, // hosts the venue party
