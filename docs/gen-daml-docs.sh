@@ -24,6 +24,7 @@ gen_project_docs () (
 NON_COMPILED_DAML_PROJECTS=(
     "$SPLICE_ROOT/daml/splice-api-featured-app-v1"
     "$SPLICE_ROOT/daml/splice-api-featured-app-v2"
+    "$SPLICE_ROOT/daml/splice-api-reward-assignment-v1"
     "$SPLICE_ROOT/token-standard/splice-api-token-allocation-v1"
     "$SPLICE_ROOT/token-standard/splice-api-token-transfer-instruction-v1"
     "$SPLICE_ROOT/token-standard/splice-api-token-allocation-instruction-v1"
