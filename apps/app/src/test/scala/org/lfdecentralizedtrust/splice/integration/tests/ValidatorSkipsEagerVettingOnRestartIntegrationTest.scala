@@ -60,7 +60,7 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
       // the eager startup vetting could vet the new version.
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllValidatorConfigs((name, conf) =>
-          if (name == "aliceValidatorBackend") {
+          if (name == "aliceValidator") {
             conf.focus(_.automation).modify(_.withPausedTrigger[ValidatorPackageVettingTrigger])
           } else {
             conf
