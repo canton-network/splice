@@ -14,3 +14,9 @@
           This aligns with standard idempotency-key semantics: a second request with a previously
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
+
+    - SV app
+
+        - The "You are on <network>" banner now displays on all deployments, including
+          clusters where it was previously hidden. Banner text is sourced from the
+          configured ``spliceInstanceNames.networkName`` value
