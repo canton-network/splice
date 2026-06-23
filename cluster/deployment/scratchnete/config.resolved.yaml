@@ -1,6 +1,6 @@
 # This file is generated automatically. Do not edit directly.
 chaosMesh:
-  dabftLatency: '1ms'
+  dabftLatency: '100ms'
 cloudArmor:
   allRulesPreviewOnly: true
   enabled: false
