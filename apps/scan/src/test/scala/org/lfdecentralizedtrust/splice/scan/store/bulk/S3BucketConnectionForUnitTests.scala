@@ -6,7 +6,11 @@ import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.config.S3Config
 import org.lfdecentralizedtrust.splice.store.S3BucketConnectionForTests
 import software.amazon.awssdk.core.async.{AsyncRequestBody, AsyncResponseTransformer}
-import software.amazon.awssdk.services.s3.model.{GetObjectRequest, GetObjectResponse, PutObjectRequest}
+import software.amazon.awssdk.services.s3.model.{
+  GetObjectRequest,
+  GetObjectResponse,
+  PutObjectRequest,
+}
 
 import java.io.DataInputStream
 import java.nio.ByteBuffer
@@ -51,7 +55,9 @@ class S3BucketConnectionForUnitTests(
     }
   }
 
-  def createObject(key: String, content: Array[Byte] = Array.emptyByteArray)(implicit ec: ExecutionContext): Future[Unit] = {
+  def createObject(key: String, content: Array[Byte] = Array.emptyByteArray)(implicit
+      ec: ExecutionContext
+  ): Future[Unit] = {
     val md = MessageDigest.getInstance("SHA-256")
     md.update(content)
     val request = PutObjectRequest.builder

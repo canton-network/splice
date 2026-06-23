@@ -30,7 +30,7 @@ trait UpdateHistoryBulkStorageWriter {
     * The Flow must emit back the same segment as its output once processing is complete.
     */
   def processSegmentsFlow(implicit
-      tc: TraceContext,
+      tc: TraceContext
   ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
 }
 

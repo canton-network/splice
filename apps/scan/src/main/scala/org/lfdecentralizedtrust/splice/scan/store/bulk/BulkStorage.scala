@@ -157,8 +157,9 @@ class BulkStorage(
     loggerFactory,
   )
 
-  private val services = Seq[RetryableService[?]](acsStaging, acsCommitted, updatesStaging)
-    .map(_.asRetryableService(automationConfig, backoffClock, retryProvider))
+  private val services =
+    Seq[RetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
+      .map(_.asRetryableService(automationConfig, backoffClock, retryProvider))
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     services.flatMap(_.closeAsync())

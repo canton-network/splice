@@ -396,7 +396,8 @@ class UpdateHistoryBulkStorageTest
         updateHistoryBulkStorageCommitted = null, // not needed for this test
         storageConfig = bulkStorageTestConfig,
         stagingS3Connection = bucketConnection,
-        committedS3Connection = bucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
+        committedS3Connection =
+          bucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
         loggerFactory,
       )
 

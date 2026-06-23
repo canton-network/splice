@@ -444,8 +444,10 @@ class ScanTimeBasedIntegrationTest
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
     val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
-    val stagingBucketConnection = new S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory)
-    val committedBucketConnection = new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
+    val stagingBucketConnection =
+      new S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory)
+    val committedBucketConnection =
+      new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
     eventually() {
 
       // wait for latest ACS snapshots to be created

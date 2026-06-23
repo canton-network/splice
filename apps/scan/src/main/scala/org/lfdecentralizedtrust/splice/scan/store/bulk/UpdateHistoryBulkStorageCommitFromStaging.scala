@@ -20,7 +20,9 @@ class UpdateHistoryBulkStorageCommitFromStaging(
 )(implicit ec: ExecutionContext, actorSystem: ActorSystem)
     extends UpdateHistoryBulkStorageWriter
     with NamedLogging {
-  override def processSegmentsFlow(implicit tc: TraceContext): Flow[UpdatesSegment, UpdatesSegment, NotUsed] =
+  override def processSegmentsFlow(implicit
+      tc: TraceContext
+  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed] =
     BulkStorageCommitFromStaging(
       stagingS3Connection,
       committedS3Connection,

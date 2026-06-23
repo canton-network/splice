@@ -26,7 +26,7 @@ class UpdateHistoryBulkStorageWriterFromDb(
     with Spanning {
 
   override def processSegmentsFlow(implicit
-      tc: TraceContext,
+      tc: TraceContext
   ): Flow[UpdatesSegment, UpdatesSegment, NotUsed] = {
     UpdateHistorySegmentBulkStorage
       .asFlow(
