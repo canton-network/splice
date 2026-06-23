@@ -23,7 +23,8 @@ import org.lfdecentralizedtrust.splice.RetryableService
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   acsStagingKvStoreKey,
   acsCommittedKvStoreKey,
-  updatesKvStoreKey,
+  updatesStagingKvStoreKey,
+  updatesCommittedKvStoreKey,
 }
 
 class BulkStorage(
@@ -99,7 +100,7 @@ class BulkStorage(
     updateHistory,
     loggerFactory,
   )
-  val updatesStaging = new UpdateHistoryBulkStorageWriterFromDb(
+  val updatesStagingWriter = new UpdateHistoryBulkStorageWriterFromDb(
     storageConfig,
     appConfig,
     updateHistory,
@@ -107,13 +108,36 @@ class BulkStorage(
     historyMetrics,
     loggerFactory,
   )
-  val updates = new UpdateHistoryBulkStorage(
+  val updatesStaging = new UpdateHistoryBulkStorage(
+    "UpdateHistoryBulkStorageStaging",
     "Update History Bulk Storage (Staging)",
-    updatesStaging,
+    updatesStagingWriter,
     new UpdateHistoryBulkStoragePersistentProgress(
-      updatesKvStoreKey,
+      updatesStagingKvStoreKey,
       kvProvider,
       historyMetrics.BulkStorage.latestUpdatesSegmentStaging,
+      loggerFactory,
+    ),
+    storageConfig,
+    appConfig,
+    updateHistory,
+    currentMigrationId,
+    loggerFactory,
+  )
+  val updatesCommittedWriter = new UpdateHistoryBulkStorageCommitFromStaging(
+    stagingConnection,
+    committedConnection,
+    getReader,
+    loggerFactory,
+  )
+  val updatesCommitted = new UpdateHistoryBulkStorage(
+    "UpdateHistoryBulkStorageCommitted",
+    "Update History Bulk Storage (Committed)",
+    updatesCommittedWriter,
+    new UpdateHistoryBulkStoragePersistentProgress(
+      updatesCommittedKvStoreKey,
+      kvProvider,
+      historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
       loggerFactory,
     ),
     storageConfig,
@@ -125,14 +149,15 @@ class BulkStorage(
   val reader = new BulkStorageReader(
     acsStaging,
     acsCommitted,
-    updates,
+    updatesStaging,
+    updatesCommitted,
     storageConfig,
     stagingConnection,
     committedConnection,
     loggerFactory,
   )
 
-  private val services = Seq[RetryableService[?]](acsStaging, acsCommitted, updates)
+  private val services = Seq[RetryableService[?]](acsStaging, acsCommitted, updatesStaging)
     .map(_.asRetryableService(automationConfig, backoffClock, retryProvider))
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
@@ -143,7 +168,8 @@ object BulkStorage {
 
   val acsStagingKvStoreKey = "latest_acs_snapshot_in_bulk_storage_staging"
   val acsCommittedKvStoreKey = "latest_acs_snapshot_in_bulk_storage_committed"
-  val updatesKvStoreKey = "latest_updates_segment_in_bulk_storage"
+  val updatesStagingKvStoreKey = "latest_updates_segment_in_bulk_storage_staging"
+  val updatesCommittedKvStoreKey = "latest_updates_segment_in_bulk_storage_committed"
 
   def apply(
       storageConfig: ScanStorageConfig,

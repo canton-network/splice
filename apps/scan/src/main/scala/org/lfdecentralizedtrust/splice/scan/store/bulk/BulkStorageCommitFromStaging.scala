@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
-import com.digitalasset.canton.logging.NamedLogging
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
@@ -14,10 +14,19 @@ import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
-trait BulkStorageCommitFromStaging[T] extends NamedLogging {
+class BulkStorageCommitFromStaging[T](
+    stagingS3Connection: S3BucketConnection,
+    committedS3Connection: S3BucketConnection,
+    getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+    override val loggerFactory: NamedLoggerFactory,
+)(implicit
+    tc: TraceContext,
+    ec: ExecutionContext,
+    actorSystem: ActorSystem,
+) extends NamedLogging {
   private def checkBftForObjects(
       objects: Seq[ObjectKeyAndChecksum]
-  )(implicit tc: TraceContext): Future[Boolean] = {
+  ): Future[Boolean] = {
     logger.debug(
       s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")}"
     )
@@ -25,11 +34,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
   }
   // TODO(#XXXX): implement the BFT check
 
-  private def waitForBftAgreement(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-      actorSystem: ActorSystem,
-  ): Flow[
+  private def waitForBftAgreement: Flow[
     (T, Seq[ObjectKeyAndChecksum]),
     (T, Seq[ObjectKeyAndChecksum]),
     NotUsed,
@@ -63,7 +68,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
       committedS3Connection: S3BucketConnection,
   )(
       obj: S3BucketConnection.ObjectKeyAndChecksum
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
+  ): Future[Unit] = {
     committedS3Connection.doesObjectExist(obj.key).flatMap {
       case true =>
         logger.debug(
@@ -76,13 +81,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
     }
   }
 
-  private def copyToCommitted(
-      stagingS3Connection: S3BucketConnection,
-      committedS3Connection: S3BucketConnection,
-  )(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Flow[
+  private def copyToCommitted: Flow[
     (T, Seq[ObjectKeyAndChecksum]),
     (T, Seq[ObjectKeyAndChecksum]),
     NotUsed,
@@ -94,9 +93,7 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
           .map(_ => (ts, objs))
       }
 
-  private def deleteFromStaging(
-      stagingS3Connection: S3BucketConnection
-  )(implicit ec: ExecutionContext): Flow[
+  private def deleteFromStaging: Flow[
     (T, Seq[ObjectKeyAndChecksum]),
     T,
     NotUsed,
@@ -110,19 +107,30 @@ trait BulkStorageCommitFromStaging[T] extends NamedLogging {
           .map(_ => ts)
       }
 
-  def processFlow(
+  def getFlow: Flow[T, T, NotUsed] =
+    Flow[T]
+      .mapAsync(parallelism = 1)(ts => getObjects(ts).map((ts, _)))
+      .via(waitForBftAgreement)
+      .via(copyToCommitted)
+      .via(deleteFromStaging)
+}
+
+object BulkStorageCommitFromStaging {
+  def apply[T](
       stagingS3Connection: S3BucketConnection,
       committedS3Connection: S3BucketConnection,
-      getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+      getStagingObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+      loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
       actorSystem: ActorSystem,
-  ): Flow[T, T, NotUsed] =
-    Flow[T]
-      .mapAsync(parallelism = 1)(ts => getObjects(ts).map((ts, _)))
-      .via(waitForBftAgreement)
-      .via(copyToCommitted(stagingS3Connection, committedS3Connection))
-      .via(deleteFromStaging(stagingS3Connection))
-
+  ): Flow[T, T, NotUsed] = {
+    new BulkStorageCommitFromStaging[T](
+      stagingS3Connection,
+      committedS3Connection,
+      getStagingObjects,
+      loggerFactory,
+    ).getFlow
+  }
 }

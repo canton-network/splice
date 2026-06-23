@@ -29,7 +29,9 @@ trait UpdateHistoryBulkStorageWriter {
   /** The main Flow that processes a given segment of updates.
     * The Flow must emit back the same segment as its output once processing is complete.
     */
-  def processSegmentsFlow(implicit tc: TraceContext): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
+  def processSegmentsFlow(implicit
+      tc: TraceContext,
+  ): Flow[UpdatesSegment, UpdatesSegment, NotUsed]
 }
 
 class UpdateHistoryBulkStoragePersistentProgress(
@@ -67,6 +69,7 @@ class UpdateHistoryBulkStoragePersistentProgress(
 /** An abstract class for pipelines that process update history for bulk storage.
   */
 class UpdateHistoryBulkStorage(
+    spanName: String,
     description: String,
     writer: UpdateHistoryBulkStorageWriter,
     val persistentProgress: UpdateHistoryBulkStoragePersistentProgress,
@@ -204,7 +207,7 @@ class UpdateHistoryBulkStorage(
       backoffClock: Clock,
       retryProvider: RetryProvider,
   )(implicit tracer: Tracer): PekkoRetryingService[UpdatesSegment] = {
-    withNewTrace(this.getClass.getSimpleName) { implicit traceContext => _ =>
+    withNewTrace(spanName) { implicit traceContext => _ =>
       val src = mksrc()
       new PekkoRetryingService(
         src,

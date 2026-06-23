@@ -19,8 +19,8 @@ class AcsSnapshotBulkStorageCommitFromStaging(
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends AcsSnapshotBulkStorageWriter
-    with BulkStorageCommitFromStaging[TimestampWithMigrationId]
     with NamedLogging {
+
   override def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
   )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]] = {
@@ -39,13 +39,14 @@ class AcsSnapshotBulkStorageCommitFromStaging(
       tc: TraceContext,
       actorSystem: ActorSystem,
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed] = {
-    processFlow(
+    BulkStorageCommitFromStaging(
       stagingS3Connection,
       committedS3Connection,
       ts =>
         getBulkReader
           .getStagingObjectsForAcsSnapshotAt(ts.timestamp)
           .map(objects => objects.objects),
+      loggerFactory,
     )
   }
 }

@@ -444,7 +444,8 @@ class ScanTimeBasedIntegrationTest
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
     val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
-    val bucketConnection = new S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory)
+    val stagingBucketConnection = new S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory)
+    val committedBucketConnection = new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
     eventually() {
 
       // wait for latest ACS snapshots to be created
@@ -459,17 +460,19 @@ class ScanTimeBasedIntegrationTest
         getSnapshotResponse.recordTime should be(lastMidnight.atOffset(java.time.ZoneOffset.UTC))
         getSnapshotResponse
       }
-      val allS3Objs = bucketConnection.listObjects.futureValue.contents().asScala
+      val stagingS3Objs = stagingBucketConnection.listObjects.futureValue.contents().asScala
+      val committedS3Objs = committedBucketConnection.listObjects.futureValue.contents().asScala
 
       // Wait for bulk storage objects to be created
-      allS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
+      committedS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
 
       // Depending on how the days are split exactly (based on the exact simtime when the test was started),
       // the updates may be in one or two segments, so we only assert that there exists a segment that ends
       // at last midnight
-      allS3Objs
+      stagingS3Objs
         .map(_.key())
         .filter(_.endsWith(s"~$lastMidnight/updates_0.zstd")) should not be empty
+      // FIXME: should be committed once updates are copied to committed storage
 
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well

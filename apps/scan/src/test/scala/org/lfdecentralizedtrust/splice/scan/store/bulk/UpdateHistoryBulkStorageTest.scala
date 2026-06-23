@@ -240,6 +240,7 @@ class UpdateHistoryBulkStorageTest
           loggerFactory,
         )
         val bulkStorage = new UpdateHistoryBulkStorage(
+          "UpdateHistoryBulkStorageUnitTest",
           "Test Update History Bulk Storage",
           writer,
           progress,
@@ -371,6 +372,7 @@ class UpdateHistoryBulkStorageTest
         loggerFactory,
       )
       val svc = new UpdateHistoryBulkStorage(
+        "UpdateHistoryBulkStorageUnitTest",
         "Test Update History Bulk Storage",
         writer,
         new UpdateHistoryBulkStoragePersistentProgress(
@@ -390,10 +392,11 @@ class UpdateHistoryBulkStorageTest
       val reader = new BulkStorageReader(
         acsSnapshotBulkStorageStaging = null, // not needed for this test
         acsSnapshotBulkStorageCommitted = null, // not needed for this test
-        updateHistoryBulkStorage = svc,
+        updateHistoryBulkStorageStaging = svc,
+        updateHistoryBulkStorageCommitted = null, // not needed for this test
         storageConfig = bulkStorageTestConfig,
         stagingS3Connection = bucketConnection,
-        committedS3Connection = null,
+        committedS3Connection = bucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
         loggerFactory,
       )
 
@@ -427,7 +430,7 @@ class UpdateHistoryBulkStorageTest
 
       // A wider range than the data
       val res1 = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-10T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-30T00:00:00Z")),
           PageLimit.tryCreate(10),
@@ -446,7 +449,7 @@ class UpdateHistoryBulkStorageTest
       )
       res1.nextPageTokenO shouldBe Some("2015-10-23T00:00:00Z~2015-10-24T00:00:00Z/")
       val res1b = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-10T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-30T00:00:00Z")),
           PageLimit.tryCreate(10),
@@ -458,7 +461,7 @@ class UpdateHistoryBulkStorageTest
 
       // A smaller range within the data
       val res2 = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
           PageLimit.tryCreate(10),
@@ -470,7 +473,7 @@ class UpdateHistoryBulkStorageTest
 
       // pagination
       val res3 = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-01T12:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
           PageLimit.tryCreate(
@@ -482,7 +485,7 @@ class UpdateHistoryBulkStorageTest
       res3.objects.map(_.key) should contain theSameElementsInOrderAs Seq(d20u0, d20u1)
       res3.nextPageTokenO shouldBe Some("2015-10-20T00:00:00Z~2015-10-21T00:00:00Z/")
       val res3b = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-01T12:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
           PageLimit.tryCreate(3),
@@ -494,7 +497,7 @@ class UpdateHistoryBulkStorageTest
 
       // exact match with start and end of segments
       val res4 = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-23T00:00:00Z")),
           PageLimit.tryCreate(4),
@@ -507,7 +510,7 @@ class UpdateHistoryBulkStorageTest
 
       // limit too low for first folder
       val ex = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-23T00:00:00Z")),
           PageLimit.tryCreate(1),
@@ -562,7 +565,7 @@ class UpdateHistoryBulkStorageTest
       )
       // Query up to the middle of the empty segment
       val res5 = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-20T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-25T12:00:00Z")),
           PageLimit.tryCreate(20),
@@ -573,7 +576,7 @@ class UpdateHistoryBulkStorageTest
       res5.objects.map(_.key) should contain theSameElementsInOrderAs allObjs
       res5.nextPageTokenO shouldBe Some("2015-10-24T00:00:00Z~2015-10-25T00:00:00Z/")
       val res5b = reader
-        .getUpdatesBetweenDates(
+        .getCommittedUpdatesBetweenDates(
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
           CantonTimestamp.tryFromInstant(Instant.parse("2015-10-25T12:00:00Z")),
           PageLimit.tryCreate(20),

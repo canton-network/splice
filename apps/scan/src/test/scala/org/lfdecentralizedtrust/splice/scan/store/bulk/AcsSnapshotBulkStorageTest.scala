@@ -196,7 +196,8 @@ class AcsSnapshotBulkStorageTest
         acsSnapshotBulkStorageStaging = bulkStorage,
         acsSnapshotBulkStorageCommitted =
           null, // FIXME: use once we start using the committed bucket
-        updateHistoryBulkStorage = null, // not needed for this test
+        updateHistoryBulkStorageStaging = null, // not needed for this test
+        updateHistoryBulkStorageCommitted = null, // not needed for this test
         bulkStorageTestConfig,
         s3BucketConnection,
         committedS3Connection = null, // FIXME: use once we start using the committed bucket

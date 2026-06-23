@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters.*
 
 class BulkStorageCommitFromStagingTest
     extends StoreTestBase
-    with BulkStorageCommitFromStaging[String]
     with HasExecutionContext
     with HasActorSystem
     with HasS3Mock
@@ -67,10 +66,11 @@ class BulkStorageCommitFromStagingTest
       committedS3Connection: S3BucketConnectionForUnitTests,
       objsWithDigests: Seq[ObjectKeyAndChecksum],
   ) = {
-    val flow = processFlow(
+    val flow = BulkStorageCommitFromStaging[String](
       stagingS3Connection,
       committedS3Connection,
       _ => Future.successful(objsWithDigests),
+      loggerFactory,
     )
 
     val (pub, sub) = TestSource

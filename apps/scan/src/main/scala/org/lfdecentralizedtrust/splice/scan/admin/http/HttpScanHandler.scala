@@ -2600,7 +2600,7 @@ class HttpScanHandler(
         val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
         val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
         bulkStorage
-          .getUpdatesBetweenDates(
+          .getCommittedUpdatesBetweenDates(
             afterTs,
             upToTs,
             PageLimit.tryCreate(body.pageSize),
