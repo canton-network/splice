@@ -20,17 +20,36 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradinga
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.TokenRules as TokenV2Rules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.tokens.testtokenv2.holding.Token as TestTokenV2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.{TSA_AllocationFactory_AllocateV2, TSA_AllocationRequest_AcceptV2}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.{TSAR_AllocationInstructionResultV2, TSAR_AllocationRequest_AcceptV2Result}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{BatchingUtility, ChoiceCall, HoldingMap, ScopedAccount, BatchingUtility as BatchingUtilityV2}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardaction.{
+  TSA_AllocationFactory_AllocateV2,
+  TSA_AllocationRequest_AcceptV2,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.tokenstandardactionresult.{
+  TSAR_AllocationInstructionResultV2,
+  TSAR_AllocationRequest_AcceptV2Result,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.{
+  BatchingUtility,
+  ChoiceCall,
+  HoldingMap,
+  ScopedAccount,
+  BatchingUtility as BatchingUtilityV2,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{ConfigurableApp, bumpUrl, updateAutomationConfig}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  bumpUrl,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.http.v0.definitions.EventHistoryItem
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTest, SpliceTestConsoleEnvironment}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTest,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
