@@ -4,15 +4,12 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   PackageConfig,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  ConfigurableApp,
-  updateAutomationConfig,
-}
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
@@ -62,8 +59,12 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
       // config it survives the stop()/startSync() below, so after the restart nothing other than
       // the eager startup vetting could vet the new version.
       .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ValidatorPackageVettingTrigger]
+        ConfigTransforms.updateAllValidatorConfigs((name, conf) =>
+          if (name == "aliceValidatorBackend") {
+            conf.focus(_.automation).modify(_.withPausedTrigger[ValidatorPackageVettingTrigger])
+          } else {
+            conf
+          }
         )(config)
       )
 
