@@ -108,3 +108,7 @@
         wallet             0.1.22
         walletPayments     0.1.21
         ================== =======
+
+    - The "You are on <network>" banner now displays on all deployments, including
+      clusters where it was previously hidden. Banner text is sourced from the
+      configured ``spliceInstanceNames.networkName`` value.
