@@ -341,7 +341,11 @@ tests:
     set:
       persistence.secretOverrides.postgresPassword: "vault:kv/data/participant/postgres-password"
       persistence.enablePgInitContainer: true
-      disableAuth: true
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/participant/admin-user"
     documentSelector:
       path: kind
       value: Deployment
@@ -354,3 +358,6 @@ tests:
           pattern: "vault:kv/data/participant/postgres-password"
       - notExists:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_ADMIN_USER_NAME')].value
+          pattern: "vault:kv/data/participant/admin-user"
