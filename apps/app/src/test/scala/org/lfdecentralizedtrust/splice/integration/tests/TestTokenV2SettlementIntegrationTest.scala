@@ -121,8 +121,7 @@ class TestTokenV2SettlementIntegrationTest
                   .copy(internalPort = Some(aliceValidatorLocal.adminApi.port + 22_000)),
                 onboarding =
                   aliceValidatorLocal.onboarding.map(_.copy(secret = "aliceExtraValidator")),
-                validatorPartyHint =
-                  Some(s"testtoken-validator-${scala.util.Random.nextInt().abs}"),
+                validatorPartyHint = Some(s"testtoken-validator-${scala.util.Random.nextInt().abs}"),
               )),
           walletAppClients = config.walletAppClients + (
             InstanceName.tryCreate("aliceValidatorLocalWallet") -> {
