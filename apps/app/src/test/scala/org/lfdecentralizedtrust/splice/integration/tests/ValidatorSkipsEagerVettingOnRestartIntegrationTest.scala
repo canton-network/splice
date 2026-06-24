@@ -36,18 +36,13 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
-      .withoutAliceValidatorConnectingToSplitwell
-      // if other tests run before, packages that break this test might already be vetted
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
-      // Boot the network on the minimum package version so there is a strictly newer version to
-      // vote in later.
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(initialPackageConfig = initialPackageConfig)
         )(config)
       )
-      // Reduce the scan cache TTL so the (later resumed) vetting trigger sees the new AmuletRules
-      // quickly rather than waiting out the default TTL.
+      // Reduce the scan TTL so the validator quickly sees the updated amulet rules.
       .addConfigTransform((_, conf) =>
         ConfigTransforms.updateAllValidatorAppConfigs_(c =>
           c.copy(scanClient =
@@ -55,9 +50,7 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
           )
         )(conf)
       )
-      // Start the validator vetting trigger paused. Because this lives in the HOCON automation
-      // config it survives the stop()/startSync() below, so after the restart nothing other than
-      // the eager startup vetting could vet the new version.
+      // Disable the vetting trigger so we can check the vetting step during init specifically.
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllValidatorConfigs((name, conf) =>
           if (name == "aliceValidator") {
@@ -76,11 +69,8 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
       val oldAmuletPackageId =
         DarResources.amulet.getPackageIdWithVersion(initialPackageConfig.amuletVersion).value
       val newAmuletPackageId = DarResources.amulet.latest.packageId
-      // Guard the test's premise: there must actually be a newer version to vet.
       newAmuletPackageId should not be oldAmuletPackageId
 
-      // The trigger is paused, so the eager startup vetting is the only thing that could have vetted
-      // anything on the first init. Seeing the initial version vetted proves the eager path ran.
       clue("on first init the validator eagerly vetted the initial package version") {
         eventually() {
           getVettedPackageIds(
@@ -137,8 +127,6 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
 
       aliceValidatorBackend.startSync()
 
-      // startSync() returns only after init (and thus the eager vetting, had it run) completed, and
-      // the trigger is paused, so the vetting state is stable: the new version must be absent.
       clue("after restart the newly-required version was NOT eagerly vetted") {
         always(durationOfSuccess = 5.seconds) {
           getVettedPackageIds(
@@ -146,7 +134,6 @@ class ValidatorSkipsEagerVettingOnRestartIntegrationTest
             synchronizerId,
           ) should contain noElementsOf Seq(newAmuletPackageId)
         }
-        // The initial version is still vetted from the first init.
         getVettedPackageIds(
           aliceValidatorBackend.appState.participantAdminConnection,
           synchronizerId,
