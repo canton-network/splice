@@ -2745,11 +2745,11 @@ class HttpScanHandler(
                   undetermined
               }
             case None =>
-              appActivityStore.earliestRoundWithCompleteAppActivity().map {
-                case Some(earliest) =>
-                  if (roundNumber < earliest) cannotProvide else undetermined
-                case None =>
+              appActivityStore.earliestIngestedRound().map {
+                case Some(earliestIngested) if roundNumber <= earliestIngested =>
                   cannotProvide
+                case _ =>
+                  undetermined
               }
           }
         case _ =>
@@ -2791,11 +2791,11 @@ class HttpScanHandler(
                 )
               )
             case None =>
-              appActivityStore.earliestRoundWithCompleteAppActivity().map {
-                case Some(earliest) =>
-                  if (roundNumber < earliest) cannotProvide else undetermined
-                case None =>
+              appActivityStore.earliestIngestedRound().map {
+                case Some(earliestIngested) if roundNumber <= earliestIngested =>
                   cannotProvide
+                case _ =>
+                  undetermined
               }
           }
         case _ =>

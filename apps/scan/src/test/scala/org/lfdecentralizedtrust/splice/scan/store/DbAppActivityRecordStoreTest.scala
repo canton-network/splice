@@ -511,6 +511,55 @@ class DbAppActivityRecordStoreTest
     }
   }
 
+  "earliestIngestedRound" should {
+
+    "return None when no meta record exists" in {
+      for {
+        (store, _) <- newStore()
+        result <- store.earliestIngestedRound()
+      } yield {
+        result shouldBe None
+      }
+    }
+
+    "return the earliest ingested round even when last_archived_round is not set" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        // Unlike earliestRoundWithCompleteAppActivity, this does not require any
+        // archival to have happened yet.
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L, None)
+        result <- store.earliestIngestedRound()
+      } yield {
+        result.value shouldBe 42L
+      }
+    }
+
+    "use the current version's meta row when multiple meta rows exist" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMeta(0, 0, baseTs.toMicros, 10L, Some(15L))
+        _ <- store.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(10L).toMicros, 20L, None)
+        result <- store.earliestIngestedRound()
+      } yield {
+        result.value shouldBe 20L
+      }
+    }
+
+    "only consider the meta row from own history_id" in {
+      for {
+        (store1, _) <- newStore()
+        (store2, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store2.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L, Some(11L))
+        result <- store1.earliestIngestedRound()
+      } yield {
+        result shouldBe None
+      }
+    }
+  }
+
   "lookupActivityRecordMeta" should {
 
     "return None when no meta row exists" in {

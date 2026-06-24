@@ -174,6 +174,26 @@ class DbAppActivityRecordStore(
     )
   }
 
+  /** The earliest round for which we have ingested app activity records.
+    * This round may not have all app activity records ingested.
+    * Returns None if no app activity records have been ingested, ie meta row does not exist.
+    */
+  def earliestIngestedRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    runQuerySingle(
+      sql"""select m.earliest_ingested_round
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
+      """.as[Long].headOption,
+      "appActivity.earliestIngestedRound",
+    )
+  }
+
   /** Find the latest round with complete app activity.
     * A round is complete once the verdict ingestion has moved passed its archival.
     * Returns None if no meta row exists or archival of a round has not happened yet.
