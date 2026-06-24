@@ -43,3 +43,4 @@ persistence:
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+# serviceAccountName: ""

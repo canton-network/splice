@@ -368,3 +368,16 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='test-postgres')].env[?(@.name=='POSTGRES_PASSWORD')].value
           pattern: "vault:kv/data/postgres/postgres-password"
+
+
+  - it: "injects custom serviceAccountName into StatefulSet when specified"
+    set:
+      serviceAccountName: "custom-postgres-sa"
+    documentIndex: 1
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-postgres-sa"
