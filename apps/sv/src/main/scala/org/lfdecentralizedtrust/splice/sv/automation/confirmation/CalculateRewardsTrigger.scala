@@ -59,6 +59,8 @@ abstract class CalculateRewardsTriggerBase(
   private val dsoParty = store.key.dsoParty
   private val rewardMetrics = new CalculateRewardsMetrics(context.metricsFactory, isDryRun)
 
+  override def extraMetricLabels: Seq[(String, String)] = Seq("dryRun" -> isDryRun.toString)
+
   override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = for {
     // These are ordered by round, so we process the oldest first
     calculateRewards <- store.listCalculateRewardsV2()
