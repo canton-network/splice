@@ -84,7 +84,7 @@ spec:
       labels:
         app: {{ $name }}
     spec:
-      {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- include "splice-util-lib.service-account" . | nindent 6 }}
       volumes:
         - name: postgres-password
           secret:
