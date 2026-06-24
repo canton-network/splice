@@ -40,12 +40,14 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   ): SqlStreamingAction[Vector[
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
-    // Must match the expression of scan_txlog_store_sid_effat_en_vot for the index to be used.
+    // Sort key: the vote's effective date, falling back to the result's completedAt for non-accepted votes that have none.
     val effectiveAtSortKey =
       "coalesce(vote_effective_at, entry_data->'result'->>'completedAt')"
     val afterCondition = after match {
       case Some(a) =>
         Some(
+          // Keyset pagination past the previous page's last entry_number `a`. Lexicographical row comparison,
+          // expands to: effectiveAt < cursorEffectiveAt OR (effectiveAt = cursorEffectiveAt AND entry_number < a).
           sql"""(#$effectiveAtSortKey, entry_number) < ((select #$effectiveAtSortKey from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
         )
       case None => None
