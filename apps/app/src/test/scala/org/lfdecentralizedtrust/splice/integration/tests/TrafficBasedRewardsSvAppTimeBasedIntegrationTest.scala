@@ -326,12 +326,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       ) {
         val round = oldestOpenRound
         doTransfer(bobParty)
-        // Need to advance by two rounds, see note below about last_archived_round
         // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
         // on summarizing and issuing round to complete, and here the
         // summarizing round will block until the sv2 provides the round totals
         // via bft read.
-        advanceTimeAndWaitForRoundOpening
         advanceTimeAndWaitForRoundOpening
 
         val (calculateRewardsCid, rootHash) =
@@ -379,16 +377,11 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               case other => fail(s"Expected DbStorage")
             }
             implicit val closeContext: CloseContext = CloseContext(sv2Db)
-            // Here the last_archived_round must reach earliest_ingested_round + 1 for the scan
-            // to confirm that it CannotProvide for a round.
-            // In practice it would mean that SV2 would wait for its scan to
-            // ingest verdicts for one full round after the version bump,
-            // and only then get to know that its own scan does not have the data.
             sv2Db
               .update_(
                 sqlu"""update app_activity_record_meta
                        set earliest_ingested_round = $round,
-                           last_archived_round = ${round + 1}""",
+                           last_archived_round = null""",
                 "test.increaseAppActivityMeta_EarliestIngestedRound",
               )
               .futureValueUS
