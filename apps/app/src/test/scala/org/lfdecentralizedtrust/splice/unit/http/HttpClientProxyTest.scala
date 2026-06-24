@@ -223,7 +223,7 @@ class HttpClientProxyTest
             .set("http.proxyPassword", "fail")
           withProperties(props) {
             executeRequest(serverBinding).failed.futureValue.getMessage should include(
-              "401 Unauthorized"
+              "407 Proxy Authentication Required"
             )
           }
         }
