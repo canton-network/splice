@@ -58,3 +58,5 @@
           for the following actions, as these are submitted by automations and no disagreement is expected:
           ``CRARC_MiningRound_Archive``, ``CRARC_MiningRound_StartIssuing`` and
           ``CRARC_StartProcessingRewardsV2``
+
+        - The governance Vote History is now ordered by effective date rather than ingestion order
