@@ -255,23 +255,25 @@ object HttpSvPublicAppClient {
       sequencerSnapshot: CantonSequencerSnapshot,
   )
 
-  case class OnboardSvPartyMigrationAuthorizeProposalNotFound(
+  case class OnboardSvPartyMigrationProposalNotFound(
       partyToParticipantMappingSerial: PositiveInt
   ) extends QuietNonRetryableException(
         s"Party migration failed as required proposals were not found. Found base mappings: PartyToParticipant($partyToParticipantMappingSerial)"
       )
-  case class OnboardSvPartyMigrationAuthorizeResponse(
-      acsSnapshot: ByteString
-  )
 
-  case class OnboardSvPartyMigrationAuthorize(
+  /** Step 1 of the resumable party migration: ask the sponsor to authorize hosting the DSO party
+    * on the candidate participant and to start exporting the ACS snapshot to a file. The snapshot
+    * itself is fetched separately via the resumable download endpoint (see
+    * [[org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection.downloadDsoPartyAcsSnapshot]]).
+    */
+  case class OnboardSvPartyMigrationInitiate(
       participantId: ParticipantId,
       candidate: PartyId,
   ) extends BaseCommandPublic[
-        http.OnboardSvPartyMigrationAuthorizeResponse,
+        http.OnboardSvPartyMigrationInitiateResponse,
         Either[
-          OnboardSvPartyMigrationAuthorizeProposalNotFound,
-          OnboardSvPartyMigrationAuthorizeResponse,
+          OnboardSvPartyMigrationProposalNotFound,
+          Unit,
         ],
       ] {
     override val nonErrorStatusCodes = Set(StatusCodes.BadRequest)
@@ -282,9 +284,9 @@ object HttpSvPublicAppClient {
     ): EitherT[Future, Either[
       Throwable,
       HttpResponse,
-    ], http.OnboardSvPartyMigrationAuthorizeResponse] =
-      client.onboardSvPartyMigrationAuthorize(
-        body = definitions.OnboardSvPartyMigrationAuthorizeRequest(
+    ], http.OnboardSvPartyMigrationInitiateResponse] =
+      client.onboardSvPartyMigrationInitiate(
+        body = definitions.OnboardSvPartyMigrationInitiateRequest(
           candidate.toProtoPrimitive
         ),
         headers = headers,
@@ -293,14 +295,14 @@ object HttpSvPublicAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = {
-      case http.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case http.OnboardSvPartyMigrationInitiateResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .AcceptedStateNotFoundErrorResponse(
                 response
               )
           ) =>
         Left(response.acceptedStateNotFound.error)
-      case http.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case http.OnboardSvPartyMigrationInitiateResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .ProposalNotFoundErrorResponse(
                 response
@@ -308,23 +310,13 @@ object HttpSvPublicAppClient {
           ) =>
         Right(
           Left(
-            OnboardSvPartyMigrationAuthorizeProposalNotFound(
+            OnboardSvPartyMigrationProposalNotFound(
               PositiveInt.tryCreate(response.proposalNotFound.partyToParticipantBaseSerial.intValue)
             )
           )
         )
-      case http.OnboardSvPartyMigrationAuthorizeResponse.OK(
-            definitions.OnboardSvPartyMigrationAuthorizeResponse(
-              encodedAcsSnapshot
-            )
-          ) =>
-        Right(
-          Right(
-            OnboardSvPartyMigrationAuthorizeResponse(
-              ByteString.copyFrom(Base64.getDecoder.decode(encodedAcsSnapshot))
-            )
-          )
-        )
+      case http.OnboardSvPartyMigrationInitiateResponse.Accepted =>
+        Right(Right(()))
     }
   }
 

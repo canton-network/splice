@@ -187,6 +187,11 @@ spec:
             - name: ADDITIONAL_CONFIG_GLOBAL_DOMAIN_UPGRADE_DUMP_PATH
               value: |
                 canton.sv-apps.sv.domain-migration-dump-path = "/domain-upgrade-dump/domain_migration_dump.json"
+            {{- if .Values.acsSnapshot.enabled }}
+            - name: ADDITIONAL_CONFIG_ACS_SNAPSHOT_PATH
+              value: |
+                canton.sv-apps.sv.acs-snapshot-dir = "/acs-snapshots"
+            {{- end }}
             {{- if .Values.domain }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN
               #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
@@ -580,6 +585,10 @@ spec:
               mountPath: /domain-upgrade-dump
           {{- end }}
           {{- end }}
+          {{- if .Values.acsSnapshot.enabled }}
+            - name: acs-snapshot-volume
+              mountPath: /acs-snapshots
+          {{- end }}
           {{- with .Values.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -622,6 +631,11 @@ spec:
         - name: domain-upgrade-dump-volume
           persistentVolumeClaim:
             claimName: {{ .Values.pvc.volumeName }}
+      {{- end }}
+      {{- if .Values.acsSnapshot.enabled }}
+        - name: acs-snapshot-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.acsSnapshot.volumeName }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -669,6 +683,23 @@ spec:
     requests:
       storage: 20G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
+{{- if .Values.acsSnapshot.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.acsSnapshot.volumeName }}
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.acsSnapshot.size }}
+  storageClassName: {{ .Values.acsSnapshot.volumeStorageClass }}
 {{- end }}
 ---
 apiVersion: v1

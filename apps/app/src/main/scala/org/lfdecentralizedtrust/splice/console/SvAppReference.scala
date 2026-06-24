@@ -115,14 +115,14 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.CometBftJsonRpcRequest(id, method, params))
     }
 
-  def onboardSvPartyMigrationAuthorize(
+  def onboardSvPartyMigrationInitiate(
       participantId: ParticipantId,
       candidateParty: PartyId,
-  ): HttpSvPublicAppClient.OnboardSvPartyMigrationAuthorizeResponse =
+  ): Unit =
     consoleEnvironment
       .run {
         httpCommand(
-          HttpSvPublicAppClient.OnboardSvPartyMigrationAuthorize(
+          HttpSvPublicAppClient.OnboardSvPartyMigrationInitiate(
             participantId,
             candidateParty,
           )

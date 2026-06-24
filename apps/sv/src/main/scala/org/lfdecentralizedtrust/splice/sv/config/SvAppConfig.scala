@@ -366,6 +366,10 @@ case class SvAppBackendConfig(
     participantBootstrappingDump: Option[ParticipantBootstrapDumpConfig] = None,
     identitiesDump: Option[BackupDumpConfig] = None,
     domainMigrationDumpPath: Option[Path] = None,
+    // Directory in which a sponsoring SV writes DSO party ACS snapshots while onboarding a new SV,
+    // so they can be served via the resumable party-migration download endpoint without being held
+    // in memory.
+    acsSnapshotDir: Path = java.nio.file.Paths.get("acs-snapshots"),
     onLedgerStatusReportInterval: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMinutes(2),
     lsuSequencingTestInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),

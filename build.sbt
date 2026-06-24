@@ -1113,7 +1113,18 @@ lazy val `apps-sv` =
             pkg = "org.lfdecentralizedtrust.splice.http.v0",
             modules = List("pekko-http-v1.0.0", "circe"),
             customExtraction = true,
-          )
+          ),
+          // Server-only: the binary snapshot download endpoint. The client is hand-written in
+          // SvConnection because guardrail cannot decode a binary stream response.
+          ScalaServer(
+            new File("apps/sv/src/main/openapi/sv-stream-server.yaml"),
+            pkg = "org.lfdecentralizedtrust.splice.http.v0",
+            modules = List("pekko-http-v1.0.0", "circe"),
+            imports = List(
+              "org.lfdecentralizedtrust.splice.sv.admin.http.ResponseEntityGuardrailSupport._"
+            ),
+            customExtraction = true,
+          ),
         ),
     )
 

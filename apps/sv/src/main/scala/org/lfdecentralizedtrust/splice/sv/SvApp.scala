@@ -51,6 +51,7 @@ import org.lfdecentralizedtrust.splice.http.{HttpClient, HttpRateLimiter}
 import org.lfdecentralizedtrust.splice.http.v0.sv_admin.SvAdminResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
+import org.lfdecentralizedtrust.splice.http.v0.svStream.SvStreamResource
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -59,6 +60,7 @@ import org.lfdecentralizedtrust.splice.sv.admin.http.{
   HttpSvAdminHandler,
   HttpSvOperatorHandler,
   HttpSvPublicHandler,
+  HttpSvStreamHandler,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.{
   DsoDelegateBasedAutomationService,
@@ -463,6 +465,17 @@ class SvApp(
             throw new IllegalStateException("No initial round specified in user's metadata")
         }
 
+      dsoPartyMigration = new DsoPartyMigration(
+        svAutomation,
+        dsoAutomation,
+        participantAdminConnection,
+        ledgerClient,
+        retryProvider,
+        dsoPartyHosting,
+        config.acsSnapshotDir,
+        loggerFactory,
+      )
+
       publicHandler = new HttpSvPublicHandler(
         config.ledgerApiUser,
         svAutomation,
@@ -473,18 +486,12 @@ class SvApp(
         participantAdminConnection,
         synchronizerNodeService,
         retryProvider,
-        new DsoPartyMigration(
-          svAutomation,
-          dsoAutomation,
-          participantAdminConnection,
-          ledgerClient,
-          retryProvider,
-          dsoPartyHosting,
-          loggerFactory,
-        ),
+        dsoPartyMigration,
         loggerFactory,
         initialRound,
       )
+
+      streamHandler = new HttpSvStreamHandler(dsoPartyMigration)
 
       operatorHandler = new HttpSvOperatorHandler(
         svAutomation,
@@ -547,6 +554,17 @@ class SvApp(
 
           errorHandler.directive(traceContext) {
             concat(
+              // The binary ACS-snapshot download endpoint. withRangeSupport turns the known-length
+              // file entity returned by the handler into resumable 206 Partial Content responses
+              // when a Range header is present.
+              SvStreamResource.routes(
+                streamHandler,
+                operation =>
+                  withRangeSupport.tflatMap(_ =>
+                    buildOperation("svStream", operation)
+                      .tflatMap(_ => provide(traceContext))
+                  ),
+              ),
               SvPublicResource.routes(
                 publicHandler,
                 operation =>

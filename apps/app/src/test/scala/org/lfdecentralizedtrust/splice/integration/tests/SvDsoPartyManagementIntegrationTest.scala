@@ -65,7 +65,7 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
       ) {
         val randomParty = allocateRandomSvParty("random")
         assertThrowsAndLogsCommandFailures(
-          sv1Backend.onboardSvPartyMigrationAuthorize(
+          sv1Backend.onboardSvPartyMigrationInitiate(
             sv3Backend.participantClient.id,
             randomParty,
           ),

@@ -429,24 +429,29 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-  /v0/onboard/sv/party-migration/authorize:
+  # Step 1 of the resumable SV party migration. Authorizes hosting the DSO party on the
+  # candidate participant (synchronous, surfaces proposal/accepted-state errors) and then
+  # asynchronously exports the DSO party ACS snapshot to a file on the sponsor. Returns 202
+  # immediately; the candidate then downloads the snapshot via the resumable, range-enabled
+  # GET /v0/onboard/sv/party-migration/snapshot/{candidate_party_id} endpoint, which is defined
+  # in sv-stream-server.yaml (server-only generation, since guardrail cannot generate a client
+  # for a binary stream response).
+  /v0/onboard/sv/party-migration/initiate:
     post:
       tags: [sv]
       x-jvm-package: sv_public
-      operationId: "onboardSvPartyMigrationAuthorize"
+      operationId: "onboardSvPartyMigrationInitiate"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              "$ref": "#/components/schemas/OnboardSvPartyMigrationAuthorizeRequest"
+              "$ref": "#/components/schemas/OnboardSvPartyMigrationInitiateRequest"
       responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/OnboardSvPartyMigrationAuthorizeResponse"
+        "202":
+          description: |
+            Snapshot generation has been accepted and is running (or already complete).
+            Poll the snapshot download endpoint until it returns the snapshot.
         "400":
           description: system state not yet valid
           content:
@@ -987,20 +992,12 @@ components:
           completed: "#/components/schemas/SvOnboardingStateCompleted"
           unknown: "#/components/schemas/SvOnboardingStateUnknown"
 
-    OnboardSvPartyMigrationAuthorizeRequest:
+    OnboardSvPartyMigrationInitiateRequest:
       type: object
       required:
         - candidate_party_id
       properties:
         candidate_party_id:
-          type: string
-
-    OnboardSvPartyMigrationAuthorizeResponse:
-      type: object
-      required:
-        - acs_snapshot
-      properties:
-        acs_snapshot:
           type: string
 
     OnboardSvPartyMigrationAuthorizeErrorResponse:
