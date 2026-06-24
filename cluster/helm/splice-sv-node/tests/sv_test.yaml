@@ -436,3 +436,14 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME')].value
           pattern: "vault:kv/data/sv/auth-user"
+
+  - it: "injects custom serviceAccountName into Deployment when specified"
+    set:
+      serviceAccountName: "custom-sv-sa"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-sv-sa"
