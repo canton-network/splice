@@ -20,6 +20,11 @@
                 Note that Splice Helm charts do not create Service Account resources;
                 operators must separately deploy and annotate their own service accounts.
 
+          - splice-info
+
+              - ``/runtime/status.json`` now includes reachability for scan and sequencer (0 is good, 1 is lagging
+                behind, 2 is unreachable, 3 is lagging behind and unreachable).
+
       - PostgreSQL Data Checksums
 
           - `PostgreSQL data checksums <https://www.postgresql.org/docs/14/checksums.html>`_ are now
