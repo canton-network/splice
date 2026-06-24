@@ -350,7 +350,51 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].env[?(@.name=='PGPASSWORD')].value
           pattern: "vault:kv/data/validator/postgres-password"
-      # FIXED: Real environment variable name
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
           pattern: "vault:kv/data/validator/bucket-creds"
+
+  - it: "renders zero secretKeyRefs and correctly injects raw strings when all overrides are provided"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/validator/postgres-password"
+      persistence.enablePgInitContainer: true
+      participantIdentitiesDumpPeriodicBackup.location.bucket.secretOverrides.jsonCredentials: "vault:kv/data/validator/bucket-creds"
+      auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
+      auth.audience: "mock_audience"
+      auth.secretOverrides.ledgerApiUser: "vault:kv/data/validator/auth-user"
+      auth.secretOverrides.audience: "vault:kv/data/validator/auth-aud"
+      auth.secretOverrides.token: "vault:kv/data/validator/auth-token"
+      auth.secretOverrides.url: "vault:kv/data/validator/auth-url"
+      auth.secretOverrides.clientId: "vault:kv/data/validator/auth-client-id"
+      auth.secretOverrides.clientSecret: "vault:kv/data/validator/auth-client-secret"
+      auth.secretOverrides.scope: "vault:kv/data/validator/auth-scope"
+      svValidator: true
+      scanClient.scanType: "trust-single"
+      scanClient.scanAddress: "http://scan"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_SV_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/validator/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/validator/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/validator/auth-aud"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_URL')].value
+          pattern: "vault:kv/data/validator/auth-url"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_ID')].value
+          pattern: "vault:kv/data/validator/auth-client-id"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_SECRET')].value
+          pattern: "vault:kv/data/validator/auth-client-secret"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_SCOPE')].value
+          pattern: "vault:kv/data/validator/auth-scope"

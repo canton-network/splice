@@ -25,3 +25,12 @@ metrics:
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 
+#auth:
+#  secretOverrides:
+#    ledgerApiUser: ""
+#    audience: ""
+#    token: ""
+#    url: ""
+#    clientId: ""
+#    clientSecret: ""
+#    scope: ""

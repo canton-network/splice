@@ -86,7 +86,7 @@ spec:
             }]
         {{- else }}
         - name: CANTON_PARTICIPANT_ADMIN_USER_NAME
-          valueFrom: {{ .Values.participantAdminUserNameFrom | toYaml | nindent 12 }}
+{{ include "splice-util-lib.secret" (dict "overrides" (.Values.auth).secretOverrides "overrideKey" "ledgerApiUser" "secretName" .Values.participantAdminUserNameFrom.secretKeyRef.name "secretKey" .Values.participantAdminUserNameFrom.secretKeyRef.key "optional" (.Values.participantAdminUserNameFrom.secretKeyRef.optional | default false)) | indent 10 }}
         - name: AUTH_JWKS_URL
           value: {{ .Values.auth.jwksUrl }}
         - name: AUTH_TARGET_AUDIENCE

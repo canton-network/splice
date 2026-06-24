@@ -98,7 +98,7 @@ spec:
         {{ if .Values.svValidator }}
         - name: SPLICE_APP_VALIDATOR_SV_VALIDATOR
           value: "true"
-        {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "sv" "keyName" "sv") | indent 8}}
+        {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "sv" "keyName" "sv" "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         - name: ADDITIONAL_CONFIG_TRUST_SINGLE_SCAN
           value: |
             canton.validator-apps.validator_backend.scan-client.type = "trust-single"
@@ -343,7 +343,7 @@ spec:
         - name: SPLICE_APP_VALIDATOR_AUTH_JWKS_READ_TIMEOUT
           value: {{ .Values.auth.jwks.readTimeout | quote }}
         {{ end }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         {{- end }}
         ports:
         - containerPort: 5003

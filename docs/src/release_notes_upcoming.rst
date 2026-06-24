@@ -11,9 +11,9 @@
 
           - Helm
 
-              - Added support for `secretOverrides` for Helm charts,
-                allowing node operators to inject raw configuration strings for external secret managers like HashiCorp Vault.
-                To use this, you must have the corresponding mutating webhook, injector, or tool hook installed in your cluster
+              - Added support for `secretOverrides` for Helm charts.
+                This allows node operators to inject raw configuration strings for an external secret manager.
+                To use this, you must have the corresponding mutating webhook installed in your cluster
                 to dynamically resolve raw string references at runtime.
 
       - PostgreSQL Data Checksums
@@ -58,3 +58,5 @@
           for the following actions, as these are submitted by automations and no disagreement is expected:
           ``CRARC_MiningRound_Archive``, ``CRARC_MiningRound_StartIssuing`` and
           ``CRARC_StartProcessingRewardsV2``
+
+        - The governance Vote History is now ordered by effective date rather than ingestion order

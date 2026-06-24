@@ -37,6 +37,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.automation.AcceptedTransferOfferTrigger
 
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -318,7 +319,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         },
       )
 
-      actAndCheck(
+      actAndCheck(timeUntilSuccess = 40.seconds)(
         "Re-vet Alice",
         revetV2AmuletOnAlice(aliceParticipantId),
       )(

@@ -45,11 +45,11 @@ describe('Set Amulet Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-amulet-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-amulet-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Set Amulet Rules Configuration');
+    expect(actionInput.textContent).toBe('Set Amulet Rules Configuration');
 
     const summaryInput = screen.getByTestId('set-amulet-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();

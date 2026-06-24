@@ -73,3 +73,42 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='splitwell-init')].env[?(@.name=='PGPASSWORD')].value
           pattern: "vault:kv/data/splitwell/postgres-password"
+
+  - it: "allows overriding splitwell database and auth0 secret env vars with raw strings and renders zero secretKeyRefs"
+    set:
+      scanAddress: "dummy"
+      participantHost: "dummy"
+      persistence:
+        host: "dummy"
+        schema: "dummy"
+        secretOverrides:
+          postgresPassword: "vault:kv/data/splitwell/postgres-password"
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/splitwell/auth-user"
+          audience: "vault:kv/data/splitwell/auth-aud"
+          token: "vault:kv/data/splitwell/auth-token"
+          url: "vault:kv/data/splitwell/auth-url"
+          clientId: "vault:kv/data/splitwell/auth-client-id"
+          clientSecret: "vault:kv/data/splitwell/auth-client-secret"
+          scope: "vault:kv/data/splitwell/auth-scope"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/splitwell/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='splitwell-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/splitwell/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.name=='SPLICE_APP_SPLITWELL_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/splitwell/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.name=='SPLICE_APP_SPLITWELL_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/splitwell/auth-aud"

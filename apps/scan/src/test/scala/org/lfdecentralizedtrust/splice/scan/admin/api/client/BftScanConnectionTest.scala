@@ -1244,20 +1244,23 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       // With n=4, we query only two connections randomly, and even with
-      // retries it can sometimes fail. This eventually is here to avoid flakyness.
+      // retries a single call can fail to reach consensus.
+      def attempt(remaining: Int): Future[GetRewardAccountingRootHashResponse] =
+        bft.getRewardAccountingRootHash(round).flatMap {
+          case ok: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk =>
+            Future.successful(ok)
+          case _ if remaining > 1 => attempt(remaining - 1)
+          case other => Future.successful(other)
+        }
+
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-          {
-            // TODO(tech-debt): make the retry params configurable so that we
-            // don't spend time waiting in long backoffs
-            eventually(timeUntilSuccess = 40.seconds) {
-              inside(bft.getRewardAccountingRootHash(round).futureValue) {
-                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                  ok.rootHash should be("aabb")
-                  ok.roundNumber should be(round)
-              }
+          attempt(100).map { resp =>
+            inside(resp) {
+              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                ok.rootHash should be("aabb")
+                ok.roundNumber should be(round)
             }
-            Future.unit
           },
           logs =>
             logs.exists(l =>
@@ -1362,21 +1365,26 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       // With n=4, we query only two connections randomly, and even with
-      // retries it can sometimes fail. This eventually is here to avoid flakyness.
+      // retries a single call can fail to reach consensus.
+      def attempt(remaining: Int): Future[GetRewardAccountingActivityTotalsResponse] =
+        bft.getRewardAccountingActivityTotals(round).flatMap {
+          case ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk =>
+            Future.successful(ok)
+          case _ if remaining > 1 => attempt(remaining - 1)
+          case other => Future.successful(other)
+        }
+
       loggerFactory
         .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-          {
-            eventually(timeUntilSuccess = 40.seconds) {
-              inside(bft.getRewardAccountingActivityTotals(round).futureValue) {
-                case GetRewardAccountingActivityTotalsResponse.members
-                      .RewardAccountingActivityTotalsOk(ok) =>
-                  ok.roundNumber should be(round)
-                  ok.totalAppActivityWeight should be(100L)
-                  ok.activePartiesCount should be(10L)
-                  ok.activityRecordsCount should be(5L)
-              }
+          attempt(100).map { resp =>
+            inside(resp) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(ok) =>
+                ok.roundNumber should be(round)
+                ok.totalAppActivityWeight should be(100L)
+                ok.activePartiesCount should be(10L)
+                ok.activityRecordsCount should be(5L)
             }
-            Future.unit
           },
           logs =>
             logs.exists(l =>
