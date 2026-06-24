@@ -57,4 +57,3 @@ enableReloader: true
 #    clientSecret: ""
 #    scope: ""
 
-# serviceAccountName: ""

@@ -49,4 +49,3 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# serviceAccountName: ""
