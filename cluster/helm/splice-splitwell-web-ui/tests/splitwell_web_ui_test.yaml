@@ -103,3 +103,24 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='splitwell-web-ui')].env[?(@.name=='SPLICE_APP_UI_AUTH_URL')].value
           pattern: "vault:kv/data/splitwell-ui/url"
+
+  - it: "injects custom serviceAccountName into Deployment when specified"
+    set:
+      serviceAccountName: "custom-splitwell-ui-sa"
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+      spliceInstanceNames:
+        networkName: "MockNet"
+        networkFaviconUrl: "https://mock.net/favicon.ico"
+        amuletName: "Mocklet"
+        amuletNameAcronym: "MCK"
+        nameServiceName: "Mock Name Service"
+        nameServiceNameAcronym: "MNS"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-splitwell-ui-sa"
