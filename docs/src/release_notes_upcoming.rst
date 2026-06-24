@@ -16,6 +16,10 @@
                 To use this, you must have the corresponding mutating webhook installed in your cluster
                 to dynamically resolve raw string references at runtime.
 
+              - Added support for injecting custom `serviceAccountName` into deployments.
+                Note that Splice Helm charts do not create Service Account resources;
+                operators must separately deploy and annotate their own service accounts.
+
       - PostgreSQL Data Checksums
 
           - `PostgreSQL data checksums <https://www.postgresql.org/docs/14/checksums.html>`_ are now
