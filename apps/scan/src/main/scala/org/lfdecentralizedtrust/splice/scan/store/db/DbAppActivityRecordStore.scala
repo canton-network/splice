@@ -96,6 +96,7 @@ class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -301,33 +302,50 @@ class DbAppActivityRecordStore(
   }
 
   /** Insert activity records and ensure the meta row exists.
-    * Creates the meta row on first call even when `items` is empty,
-    * so that rounds with no featured-app activity are still considered
-    * complete.
+    * Creates the meta row when enough information is available to
+    * determine which rounds have complete activity, even when no
+    * activity records exist (e.g., no featured app providers).
+    * On a fresh firstSV with no archived rounds, bootstraps round 0
+    * as complete.
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
-    val earliestRound = if (items.nonEmpty) {
-      items
-        .map(_.roundNumber)
-        .foldLeft(Long.MaxValue)(math.min)
-    } else {
-      // No activity records (e.g., no featured app providers).
-      // Use lastArchivedRound as earliest so rounds after it are
-      // considered to have complete (empty) activity.
-      lastArchivedRoundO.getOrElse(-1L)
-    }
+    val insertRecords =
+      if (items.isEmpty) DBIO.successful(())
+      else
+        batchInsertAppActivityRecords(items).map { _ =>
+          logger.info(s"Inserted ${items.size} app activity records.")
+        }
+
+    // earliestRound: the lowest round covered by this ingestion batch.
+    //   - From activity records when present
+    //   - From lastArchivedRound when no featured apps produced records
+    //   - From bootstrap (-1) on a fresh firstSV with no archived rounds
+    val earliestRound = items
+      .map(_.roundNumber)
+      .minOption
+      .orElse(lastArchivedRoundO)
+      .orElse(if (isFirstSv) Some(-1L) else None)
+
+    // lastArchived: the highest round archived as of this verdict batch.
+    //   - From the caller when available
+    //   - Bootstrapped to 0 on a fresh firstSV to make round 0 complete
+    val lastArchived = lastArchivedRoundO
+      .orElse(if (isFirstSv) Some(0L) else None)
+
     for {
-      _ <-
-        if (items.isEmpty) DBIO.successful(())
-        else
-          batchInsertAppActivityRecords(items).map { _ =>
-            logger.info(s"Inserted ${items.size} app activity records.")
-          }
-      ensureResult <- ensureMetaDBIO((firstRecordTimeMicros, earliestRound), lastArchivedRoundO)
+      _ <- insertRecords
+      ensureResult <- earliestRound match {
+        case Some(earliest) =>
+          ensureMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
+        case None =>
+          // No archived rounds and not firstSV — skip meta creation.
+          // A later verdict batch will create it.
+          DBIO.successful(Resume: MetaCheckResult)
+      }
       _ <- (ensureResult, lastArchivedRoundO) match {
         // We already have meta row, so do the update in place.
         case (Resume, Some(round)) => updateLastArchivedRoundDBIO(round)

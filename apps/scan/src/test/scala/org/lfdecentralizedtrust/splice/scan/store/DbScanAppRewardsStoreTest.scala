@@ -1208,7 +1208,8 @@ class DbScanAppRewardsStoreTest
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   private def newStore(
-      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001)
+      rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.001),
+      isFirstSv: Boolean = false,
   ): Future[(DbScanAppRewardsStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
@@ -1229,6 +1230,7 @@ class DbScanAppRewardsStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(

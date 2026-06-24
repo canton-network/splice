@@ -258,11 +258,10 @@ class DbAppActivityRecordStoreTest
       } yield {
         v shouldBe defined
         countAfter shouldBe 0L
-        // Meta row is created with earliestRound = -1 (no lastArchivedRound)
-        // because verdict ingestion is active even without activity records
-        meta shouldBe defined
-        meta.value.earliestIngestedRound shouldBe -1L
-        meta.value.lastArchivedRound shouldBe None
+        // Non-firstSV with no lastArchivedRound: meta row is not created
+        // because it would have last_archived_round = NULL, making no
+        // rounds complete.
+        meta shouldBe None
       }
     }
 
@@ -973,7 +972,8 @@ class DbAppActivityRecordStoreTest
     */
   private def newStore(
       versions: DbAppActivityRecordStore.IngestionVersions =
-        DbAppActivityRecordStore.IngestionVersions(1, 0)
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
+      isFirstSv: Boolean = false,
   ): Future[(DbAppActivityRecordStore, Long)] = {
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
@@ -994,6 +994,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         versions,
+        isFirstSv,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -1022,6 +1023,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv = false,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(

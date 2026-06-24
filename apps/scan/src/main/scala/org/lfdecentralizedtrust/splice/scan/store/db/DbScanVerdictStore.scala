@@ -508,10 +508,8 @@ class DbScanVerdictStore(
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
     ).map { _ =>
-      val maxRt = items.foldLeft(items.head._1.recordTime) { case (acc, (v, _)) =>
-        if (v.recordTime > acc) v.recordTime else acc
-      }
-      advanceLastIngestedRecordTime(maxRt)
+      // items is NonEmptyList so maxOption always returns Some
+      items.toList.map(_._1.recordTime).maxOption.foreach(advanceLastIngestedRecordTime)
     }
   }
 
