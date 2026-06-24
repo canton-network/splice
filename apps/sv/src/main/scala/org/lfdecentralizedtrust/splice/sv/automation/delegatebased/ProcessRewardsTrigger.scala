@@ -70,6 +70,8 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
   private val store = svTaskContext.dsoStore
   private val rewardMetrics = new ProcessRewardsMetrics(context.metricsFactory, isDryRun)
 
+  override def extraMetricLabels: Seq[(String, String)] = Seq("dryRun" -> isDryRun.toString)
+
   override protected def source(implicit
       traceContext: TraceContext
   ): Source[ProcessRewardsV2Contract, NotUsed] =

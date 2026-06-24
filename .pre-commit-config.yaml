@@ -86,6 +86,12 @@ repos:
         language: script
         entry: "./scripts/check-grafana-dashboards.sh"
         files: 'cluster/pulumi/observability/grafana-dashboards/.*\.json'
+      - id: build-actions
+        name: Make sure actions are built
+        language: system
+        entry: ./gha-scripts/scripts/check-build.sh
+        pass_filenames: false
+        files: '(^gha-scripts/package\.json$|^gha-scripts/package-lock\.json$|^gha-scripts/src/.*\.ts$)'
   -  repo: https://github.com/rstcheck/rstcheck
      rev: v6.2.5
      hooks:

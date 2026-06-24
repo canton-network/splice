@@ -3,6 +3,9 @@
   "type": "object",
   "required": ["db", "persistence", "imageName"],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
       "type": "string"
     },

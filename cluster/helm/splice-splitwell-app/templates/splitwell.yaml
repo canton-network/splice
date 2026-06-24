@@ -39,7 +39,7 @@ spec:
           value: {{ .Values.scanAddress }}
         - name: SPLICE_APP_SPLITWELL_PARTICIPANT_HOST
           value: {{ .Values.participantHost }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "splitwell" "keyName" "splitwell" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "splitwell" "keyName" "splitwell" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         {{- with .Values.persistence }}
         - name: ADDITIONAL_CONFIG_PERSISTENCE
           value: |

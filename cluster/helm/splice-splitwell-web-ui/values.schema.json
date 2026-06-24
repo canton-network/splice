@@ -3,6 +3,9 @@
   "type": "object",
   "required": ["imageName"],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageName": {
       "type": "string"
     },

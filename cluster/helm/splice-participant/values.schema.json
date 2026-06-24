@@ -9,6 +9,9 @@
     "imageName"
   ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
       "type": "string"
     },
@@ -117,6 +120,14 @@
         },
         "targetAudience": {
           "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "ledgerApiUser": {
+              "type": "string"
+            }
+          }
         }
       }
     },
