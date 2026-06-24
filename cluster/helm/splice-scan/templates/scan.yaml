@@ -349,6 +349,7 @@ spec:
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 8 }}
     spec:
+      {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - env:
         - name: JAVA_TOOL_OPTIONS

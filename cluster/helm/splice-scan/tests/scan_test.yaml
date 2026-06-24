@@ -460,3 +460,27 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_SCAN_LEDGER_API_AUTH_AUDIENCE')].value
           pattern: "vault:kv/data/scan/auth-aud"
+
+  - it: "injects custom serviceAccountName into Deployments when specified"
+    set:
+      serviceAccountName: "custom-scan-sa"
+      participantAddress: "dummy"
+      sequencerAddress: "dummy"
+      mediatorAddress: "dummy"
+      persistence.host: "dummy"
+      persistence.schema: "dummy"
+      spliceInstanceNames.networkName: "dummy"
+      spliceInstanceNames.networkFaviconUrl: "http://dummy"
+      spliceInstanceNames.amuletName: "dummy"
+      spliceInstanceNames.amuletNameAcronym: "dummy"
+      spliceInstanceNames.nameServiceName: "dummy"
+      spliceInstanceNames.nameServiceNameAcronym: "dummy"
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-scan-sa"
+      - documentIndex: 2
+        equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-scan-sa"
