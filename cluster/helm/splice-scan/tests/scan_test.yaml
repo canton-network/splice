@@ -484,3 +484,109 @@ tests:
         equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-scan-sa"
+
+  - it: "pvc creates volume and mount for heap dumps at /persistent-data"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: scan-app
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scan-volume
+            mountPath: /persistent-data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scan-volume
+            persistentVolumeClaim:
+              claimName: scan-scan-pvc
+
+  - it: "pvc creates a PersistentVolumeClaim resource"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: metadata.name
+      value: scan-scan-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "5Gi"
+      - equal:
+          path: spec.storageClassName
+          value: "standard"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "pvc is not created by default"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scan-volume
+            mountPath: /persistent-data

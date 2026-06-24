@@ -113,7 +113,6 @@ tests:
           path: spec.template.spec.containers[?(@.name=='splitwell-app')].env[?(@.name=='SPLICE_APP_SPLITWELL_LEDGER_API_AUTH_AUDIENCE')].value
           pattern: "vault:kv/data/splitwell/auth-aud"
 
-
   - it: "injects custom serviceAccountName into Deployment when specified"
     set:
       serviceAccountName: "custom-splitwell-sa"
@@ -128,3 +127,80 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-splitwell-sa"
+
+  - it: "pvc creates volume and mount for heap dumps at /persistent-data"
+    set:
+      persistence:
+        host: mock-pg-host
+        schema: splitwell
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: splitwell-volume
+            mountPath: /persistent-data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: splitwell-volume
+            persistentVolumeClaim:
+              claimName: splitwell-splitwell-pvc
+
+  - it: "pvc creates a PersistentVolumeClaim resource"
+    set:
+      persistence:
+        host: mock-pg-host
+        schema: splitwell
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: metadata.name
+      value: splitwell-splitwell-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "5Gi"
+      - equal:
+          path: spec.storageClassName
+          value: "standard"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "pvc is not created by default"
+    set:
+      persistence:
+        host: mock-pg-host
+        schema: splitwell
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: splitwell-volume
+            mountPath: /persistent-data

@@ -409,3 +409,59 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-validator-sa"
+
+  - it: "persistentDataPvc creates volume and mount for heap dumps at /persistent-data"
+    set:
+      persistentDataPvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: validator-app-volume
+            mountPath: /persistent-data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: validator-app-volume
+            persistentVolumeClaim:
+              claimName: mock-validator-validator-app-pvc
+
+  - it: "persistentDataPvc creates a PersistentVolumeClaim resource"
+    set:
+      persistentDataPvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: metadata.name
+      value: mock-validator-validator-app-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "5Gi"
+      - equal:
+          path: spec.storageClassName
+          value: "standard"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "persistentDataPvc is not created by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: validator-app-volume
+            persistentVolumeClaim:
+              claimName: mock-validator-validator-app-pvc

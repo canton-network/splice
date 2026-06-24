@@ -14,11 +14,11 @@ import {
   loadJsonFromFile,
   loadYamlFromFile,
   LogLevel,
+  persistentHeapDumpsPvc,
   sanitizedForPostgres,
   sequencerTokenExpirationTime,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
-  standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 import {
   CometBftNodeConfigs,
@@ -28,7 +28,6 @@ import {
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
 } from '@canton-network/splice-pulumi-common-sv';
-import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
@@ -175,12 +174,7 @@ abstract class InStackDecentralizedSynchronizerNode
           additionalJvmOptions: getAdditionalJvmOptions(
             physicalSynchronizerConfig.sequencer.additionalJvmOptions
           ),
-          pvc: spliceConfig.configuration.persistentHeapDumps
-            ? {
-                size: '35Gi',
-                volumeStorageClass: standardStorageClassName,
-              }
-            : undefined,
+          pvc: persistentHeapDumpsPvc(),
           serviceAccountName: imagePullServiceAccountName,
         },
       },

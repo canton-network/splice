@@ -382,6 +382,10 @@ spec:
             mountPath: /domain-upgrade-dump
         {{- end }}
         {{- end }}
+        {{- if .Values.persistentDataPvc }}
+          - name: validator-app-volume
+            mountPath: /persistent-data
+        {{- end }}
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -400,6 +404,11 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.pvc.volumeName }}
       {{- end }}
+      {{- end }}
+      {{- if .Values.persistentDataPvc }}
+        - name: validator-app-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-validator-app-pvc
       {{- end }}
       {{- if or (.Values.persistence.enablePgInitContainer) (.Values.extraInitContainers) (.Values.participantIdentitiesDumpImport) ($requiresMigrationPvc) }}
       initContainers:
@@ -481,6 +490,25 @@ spec:
     requests:
       storage: 10G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
+{{- if .Values.persistentDataPvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-validator-app-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $validatorAppLabel) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistentDataPvc.size }}
+  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass }}
 {{- end }}
 ---
 apiVersion: v1

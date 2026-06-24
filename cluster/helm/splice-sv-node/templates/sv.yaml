@@ -580,6 +580,10 @@ spec:
               mountPath: /domain-upgrade-dump
           {{- end }}
           {{- end }}
+          {{- if .Values.persistentDataPvc }}
+            - name: sv-app-volume
+              mountPath: /persistent-data
+          {{- end }}
           {{- with .Values.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -622,6 +626,11 @@ spec:
         - name: domain-upgrade-dump-volume
           persistentVolumeClaim:
             claimName: {{ .Values.pvc.volumeName }}
+      {{- end }}
+      {{- if .Values.persistentDataPvc }}
+        - name: sv-app-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-sv-app-pvc
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -669,6 +678,25 @@ spec:
     requests:
       storage: 20G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
+{{- if .Values.persistentDataPvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-sv-app-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $appIdentifier) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistentDataPvc.size }}
+  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass }}
 {{- end }}
 ---
 apiVersion: v1

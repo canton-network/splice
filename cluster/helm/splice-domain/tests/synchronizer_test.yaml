@@ -47,3 +47,55 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-domain-sa"
+
+  - it: "pvc creates volume and mount for heap dumps at /persistent-data"
+    set:
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: domain-volume
+            mountPath: /persistent-data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: domain-volume
+            persistentVolumeClaim:
+              claimName: mock-domain-domain-pvc
+
+  - it: "pvc creates a PersistentVolumeClaim resource"
+    set:
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: metadata.name
+      value: mock-domain-domain-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "5Gi"
+      - equal:
+          path: spec.storageClassName
+          value: "standard"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "pvc is not created by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes

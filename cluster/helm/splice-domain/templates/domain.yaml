@@ -90,6 +90,11 @@ spec:
           tcpSocket:
             port: cd-pub-api
           timeoutSeconds: 1
+        {{- if .Values.pvc }}
+        volumeMounts:
+          - name: domain-volume
+            mountPath: /persistent-data
+        {{- end }}
       restartPolicy: Always
       initContainers:
         - name: {{ .Release.Name }}-init-sequencer
@@ -154,6 +159,31 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.pvc }}
+      volumes:
+        - name: domain-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-domain-pvc
+      {{- end }}
+{{- if .Values.pvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-domain-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $.Release.Name) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+  storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

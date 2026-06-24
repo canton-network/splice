@@ -262,6 +262,10 @@ spec:
             # would not receive configmap updates.
             # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
             mountPath: /app/logback
+        {{- if .Values.pvc }}
+          - name: scan-volume
+            mountPath: /persistent-data
+        {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
           image: {{ .Values.persistence.initImageName}}
@@ -304,6 +308,30 @@ spec:
         - name: logback-config
           configMap:
             name: {{ .Release.Name }}-scan-app-logback-config
+        {{- if .Values.pvc }}
+        - name: scan-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-scan-pvc
+        {{- end }}
+{{- if .Values.pvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-scan-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $.Release.Name) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+  storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

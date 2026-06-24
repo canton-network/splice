@@ -14,10 +14,10 @@ import {
   InstalledHelmChart,
   installSpliceHelmChart,
   loadYamlFromFile,
+  persistentHeapDumpsPvc,
   SPLICE_ROOT,
   spliceConfig,
   SpliceCustomResourceOptions,
-  standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 import { SingleSvConfiguration } from '@canton-network/splice-pulumi-common-sv';
 import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
@@ -121,12 +121,7 @@ function installParticipantChart(
     enablePostgresMetrics: true,
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
-    pvc: spliceConfig.configuration.persistentHeapDumps
-      ? {
-          size: '35Gi',
-          volumeStorageClass: standardStorageClassName,
-        }
-      : undefined,
+    pvc: persistentHeapDumpsPvc(),
   };
 
   return installSpliceHelmChart(xns, 'participant', 'splice-participant', values, version, {

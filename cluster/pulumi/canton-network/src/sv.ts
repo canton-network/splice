@@ -29,6 +29,7 @@ import {
   networkWideConfig,
   participantBootstrapDumpSecretName,
   PersistenceConfig,
+  persistentHeapDumpsPvc,
   sanitizedForPostgres,
   spliceInstanceNames,
   svCometBftGovernanceKeySecret,
@@ -503,6 +504,7 @@ function installSvApp(
     logAsyncFlush: config.logging?.appsAsync,
     resources: config.svApp?.resources,
     periodicTopologySnapshotConfig: config.periodicTopologySnapshotConfig,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   } as ChartValues;
 
   if (config.onboarding.type == 'join-with-key') {
@@ -611,6 +613,7 @@ function installScan(
         }
       : {}),
     publicUrl: publicScanUrl(config),
+    pvc: persistentHeapDumpsPvc(),
   };
 
   if (svsConfig?.scan?.externalRateLimits) {
