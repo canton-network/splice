@@ -48,3 +48,5 @@ resources:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# serviceAccountName: ""
