@@ -29,7 +29,6 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       dbType: String3,
       actionNameColumnName: String,
       acceptedColumnName: String,
-      effectiveAtColumnName: String,
       requesterNameColumnName: String,
       actionName: Option[String],
       accepted: Option[Boolean],
@@ -41,8 +40,9 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   ): SqlStreamingAction[Vector[
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
+    // Must match the expression of scan_txlog_store_sid_effat_en_vot for the index to be used.
     val effectiveAtSortKey =
-      s"coalesce($effectiveAtColumnName, entry_data->'result'->>'completedAt')"
+      "coalesce(vote_effective_at, entry_data->'result'->>'completedAt')"
     val afterCondition = after match {
       case Some(a) =>
         Some(
@@ -63,15 +63,15 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     }
     val effectivenessCondition = (effectiveFrom, effectiveTo) match {
       case (Some(effectiveFrom), Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName between ${lengthLimited(
+        Some(sql"""vote_effective_at between ${lengthLimited(
             effectiveFrom
           )} and ${lengthLimited(
             effectiveTo
           )}""")
       case (Some(effectiveFrom), None) =>
-        Some(sql"""#$effectiveAtColumnName > ${lengthLimited(effectiveFrom)}""")
+        Some(sql"""vote_effective_at > ${lengthLimited(effectiveFrom)}""")
       case (None, Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName < ${lengthLimited(effectiveTo)}""")
+        Some(sql"""vote_effective_at < ${lengthLimited(effectiveTo)}""")
       case (None, None) => None
     }
     val requesterCondition = requester match {
