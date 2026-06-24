@@ -21,7 +21,7 @@ on:
 
 jobs:
   backport:
-    uses: canton-network/splice-shared-gha/.github/workflows/backport.yml@d7eb0ca758166c84d3c885e207d690766cf4993a
+    uses: ./.github/workflows/backport_workflow.yml
     with:
       commit_sha: ${{ inputs.commit_sha }}
       pr_number: ${{ fromJSON(inputs.pr_number) }}
