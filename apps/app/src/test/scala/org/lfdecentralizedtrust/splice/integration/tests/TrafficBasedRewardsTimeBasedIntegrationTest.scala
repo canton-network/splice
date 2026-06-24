@@ -124,8 +124,14 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     assertOldestOpenRound(0)
 
-    clue("Reward accounting endpoints report Undetermined before any data is available") {
-      sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe None
+    clue(
+      "Reward accounting: earliest available round is 0 after bootstrap but totals are not yet computed"
+    ) {
+      eventually() {
+        sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe Some(0L)
+      }
+      // Activity totals are still Undetermined at this point because no
+      // CalculateRewardsV2 contract exists yet (no round has closed).
       sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe an[
         GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
       ]
