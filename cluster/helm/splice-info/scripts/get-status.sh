@@ -55,16 +55,25 @@ grpcurl() {
   GRPCURL_EXPECTED_SHA="a926b62a85787ccf73ef8736b3ae554f1242e39d92bb8767a79d6dd23b11d1d5"
 
   if [[ ! -f "$GRPCURL_BIN" ]]; then
-    GRPCURL_DIST=$(mktemp)
-    GRPCURL_TMPDIR=$(mktemp -d)
+    local flock_file="/tmp/downloading_grpcurl_$GRPCURL_VERSION.lock"
+    local flock_fd
 
-    echo "Downloading grpcurl..." >&2
-    curl -Ls "$GRPCURL_URL" -o "$GRPCURL_DIST"
-    echo "$GRPCURL_EXPECTED_SHA  $GRPCURL_DIST" | sha256sum --check >&2 || return 1
-    tar -xzf "$GRPCURL_DIST" -C "$GRPCURL_TMPDIR" grpcurl
-    mv "$GRPCURL_TMPDIR/grpcurl" "$GRPCURL_BIN"
+    {
+      flock "$flock_fd"
 
-    rm -rf "$GRPCURL_TMPDIR" "$GRPCURL_DIST"
+      if [[ ! -f "$GRPCURL_BIN" ]]; then
+        GRPCURL_DIST=$(mktemp)
+        GRPCURL_TMPDIR=$(mktemp -d)
+
+        echo "Downloading grpcurl..." >&2
+        curl -Ls "$GRPCURL_URL" -o "$GRPCURL_DIST"
+        echo "$GRPCURL_EXPECTED_SHA  $GRPCURL_DIST" | sha256sum --check >&2 || return 1
+        tar -xzf "$GRPCURL_DIST" -C "$GRPCURL_TMPDIR" grpcurl
+        mv "$GRPCURL_TMPDIR/grpcurl" "$GRPCURL_BIN"
+
+        rm -rf "$GRPCURL_TMPDIR" "$GRPCURL_DIST"
+      fi
+    } {flock_fd}<>"$flock_file"
   fi
 
   "$GRPCURL_BIN" "$@"
