@@ -193,6 +193,10 @@ rateLimits:
     name: rollForwardLsu
     type: unlimited
 
+  /api/scan/v0/lsu:
+    name: lsu
+    type: unlimited
+
   /api/scan/v0/internal/reward-accounting-process:
     name: reward-accounting-process
     type: unlimited
