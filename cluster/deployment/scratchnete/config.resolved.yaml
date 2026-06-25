@@ -2030,8 +2030,9 @@ synchronizerMigration:
       repoUrl: 'https://github.com/DACH-NY/canton-network-internal'
       spliceRoot: 'splice'
     sequencer:
+      dedicatedBftSequencerDb: false
       enableBftSequencer: true
-    version: '0.6.9-snapshot.20260617.3124.0.v52759ac4'
+    version: '0.6.10-snapshot.20260625.3226.0.v47641f47'
   frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'

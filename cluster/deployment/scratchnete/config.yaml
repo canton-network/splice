@@ -31,9 +31,11 @@ synchronizerMigration:
   frozenMigrationId: 0
   active:
     id: 0
-    version: 0.6.9-snapshot.20260625.3135.0.v2f3a0330
+    version: 0.6.10-snapshot.20260625.3226.0.v47641f47
     sequencer:
       enableBftSequencer: true
+      dedicatedBftSequencerDb: false
+      # migrateBftSequencerDbFromSharedServer: true
     releaseReference:
       gitReference: "refs/heads/tom-da/basicScratch"
       repoUrl: https://github.com/DACH-NY/canton-network-internal
