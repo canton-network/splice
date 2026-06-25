@@ -184,7 +184,6 @@ class AcsSnapshotBulkStorageTest
       )
       val bulkStorage = new AcsSnapshotBulkStorage(
         "AcsSnapshotBulkStorageUnitTest",
-        "Test AcsSnapshotBulkStorage",
         bulkStorageProcessor,
         progress,
         appConfig,

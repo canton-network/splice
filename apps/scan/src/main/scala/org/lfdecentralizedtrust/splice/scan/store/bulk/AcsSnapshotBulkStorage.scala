@@ -87,7 +87,6 @@ class AcsSnapshotBulkStoragePersistentProgress(
 }
 
 class AcsSnapshotBulkStorage(
-    spanName: String,
     description: String,
     writer: AcsSnapshotBulkStorageWriter,
     val persistentProgress: AcsSnapshotBulkStoragePersistentProgress,
@@ -176,7 +175,7 @@ class AcsSnapshotBulkStorage(
       backoffClock: Clock,
       retryProvider: RetryProvider,
   )(implicit tracer: Tracer): PekkoRetryingService[TimestampWithMigrationId] = {
-    withNewTrace(spanName) { implicit traceContext => _ =>
+    withNewTrace(description) { implicit traceContext => _ =>
       val src = mksrc()
       new PekkoRetryingService(
         src,

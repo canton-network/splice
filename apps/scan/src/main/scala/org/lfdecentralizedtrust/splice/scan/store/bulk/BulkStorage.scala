@@ -66,7 +66,6 @@ class BulkStorage(
   )
   val acsStaging = new AcsSnapshotBulkStorage(
     "AcsSnapshotBulkStorageStaging",
-    "ACS Snapshot Bulk Storage (Staging)",
     acsStagingWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
       acsStagingKvStoreKey,
@@ -87,7 +86,6 @@ class BulkStorage(
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
     "AcsSnapshotBulkStorageCommitted",
-    "ACS Snapshot Bulk Storage (Committed)",
     acsCommittedWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
       acsCommittedKvStoreKey,
@@ -106,11 +104,11 @@ class BulkStorage(
     updateHistory,
     stagingConnection,
     historyMetrics,
+    currentMigrationId,
     loggerFactory,
   )
   val updatesStaging = new UpdateHistoryBulkStorage(
     "UpdateHistoryBulkStorageStaging",
-    "Update History Bulk Storage (Staging)",
     updatesStagingWriter,
     new UpdateHistoryBulkStoragePersistentProgress(
       updatesStagingKvStoreKey,
@@ -118,7 +116,6 @@ class BulkStorage(
       historyMetrics.BulkStorage.latestUpdatesSegmentStaging,
       loggerFactory,
     ),
-    storageConfig,
     appConfig,
     updateHistory,
     currentMigrationId,
@@ -132,7 +129,6 @@ class BulkStorage(
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
     "UpdateHistoryBulkStorageCommitted",
-    "Update History Bulk Storage (Committed)",
     updatesCommittedWriter,
     new UpdateHistoryBulkStoragePersistentProgress(
       updatesCommittedKvStoreKey,
@@ -140,7 +136,6 @@ class BulkStorage(
       historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
       loggerFactory,
     ),
-    storageConfig,
     appConfig,
     updateHistory,
     currentMigrationId,

@@ -231,6 +231,7 @@ class UpdateHistoryBulkStorageTest
           mockStore.store,
           bucketConnection,
           metrics,
+          migrationId,
           loggerFactory,
         )
         val progress = new UpdateHistoryBulkStoragePersistentProgress(
@@ -241,10 +242,8 @@ class UpdateHistoryBulkStorageTest
         )
         val bulkStorage = new UpdateHistoryBulkStorage(
           "UpdateHistoryBulkStorageUnitTest",
-          "Test Update History Bulk Storage",
           writer,
           progress,
-          bulkStorageTestConfig,
           appConfig,
           mockStore.store,
           migrationId,
@@ -369,11 +368,11 @@ class UpdateHistoryBulkStorageTest
         mock[UpdateHistory],
         bucketConnection,
         new HistoryMetrics(new InMemoryMetricsFactory)(MetricsContext.Empty),
+        1L,
         loggerFactory,
       )
       val svc = new UpdateHistoryBulkStorage(
         "UpdateHistoryBulkStorageUnitTest",
-        "Test Update History Bulk Storage",
         writer,
         new UpdateHistoryBulkStoragePersistentProgress(
           "latest_updates_segment_in_bulk_storage",
@@ -383,7 +382,6 @@ class UpdateHistoryBulkStorageTest
           ).BulkStorage.latestUpdatesSegmentStaging,
           loggerFactory,
         ),
-        bulkStorageTestConfig,
         appConfig,
         mock[UpdateHistory],
         1L,

@@ -10,7 +10,7 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class UpdateHistoryBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
@@ -32,4 +32,6 @@ class UpdateHistoryBulkStorageCommitFromStaging(
           .map(objects => objects.objects),
       loggerFactory,
     )
+
+  override def getNextSegmentAfter(afterO: Option[UpdatesSegment])(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = ???
 }
