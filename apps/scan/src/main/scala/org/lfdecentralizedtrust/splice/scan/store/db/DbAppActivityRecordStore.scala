@@ -154,6 +154,7 @@ class DbAppActivityRecordStore(
   /** Find the earliest round with complete app activity.
     * The first ingested round may be partial, so the earliest complete round
     * is `earliest_ingested_round + 1`.
+    * Returns the round only after it has been archived.
     * Returns None if no meta row exists or if archival of the earliest round has not happened yet.
     */
   def earliestRoundWithCompleteAppActivity()(implicit

@@ -20,9 +20,10 @@ object AppActivityComputation {
   val MaxTrafficCostBytes: Long = 100L * 1024 * 1024 // 100 MB
 
   /** Bump this when the functional behavior of the app activity computation changes.
-    * WARNING: this MUST be bumped with care, and one must avoid an
-    * unjustifiable loss of integrity due to the BFT read fallbacks due to the
-    * loss of app activity records.
+    * WARNING: this MUST be bumped with utmost care to avoid the loss of
+    * actual activity records due to all SV nodes upgrading and resetting
+    * their stores at the same time, which in turn also breaks the BFT-read
+    * fallback as there is no node to fallback to.
     */
   val ActivityIngestionCodeVersion: Int = 1
 }
