@@ -63,7 +63,7 @@
           ``CRARC_MiningRound_Archive``, ``CRARC_MiningRound_StartIssuing`` and
           ``CRARC_StartProcessingRewardsV2``
 
-        - The governance Vote History is now ordered by effective date rather than ingestion order
+        - The governance Vote History is now ordered by effective date rather than ingestion order.
 
         - The Set DSO Rules governance form now accepts an empty (null) ACS commitment reconciliation interval instead of requiring a value.
 
