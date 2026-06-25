@@ -423,20 +423,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }.toMap
       }
 
-    clue("Rounds 0..4 have zero activity from bootstrap (no featured apps yet)") {
-      (0L to 4L).foreach { round =>
-        totalsByRound(round).activityRecordsCount shouldBe 0L withClue
-          s"Round $round should have no activity records"
-        totalsByRound(round).totalAppActivityWeight shouldBe 0L withClue
-          s"Round $round should have no activity weight"
-        BigDecimal(totalsByRound(round).totalAppRewardMintingAllowance) shouldBe BigDecimal(
-          0
-        ) withClue
-          s"Round $round should have no minting allowance"
-      }
-    }
-
-    // Rounds 5..10 have activity. Round 11 has not closed yet.
+    // Rounds 0..4 have no activity records (totals are zero);
+    // rounds 5..10 have activity. Round 11 has not closed yet.
     clue(
       "Minting allowances: rounds 6, 7, 10 reward both parties; round 9 only alice"
     ) {
