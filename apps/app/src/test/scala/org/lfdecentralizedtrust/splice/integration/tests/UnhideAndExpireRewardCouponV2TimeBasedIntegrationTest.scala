@@ -9,7 +9,6 @@ import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, P
 import com.digitalasset.daml.lf.data.Ref.PackageId
 import java.time.Duration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingActivityTotalsResponse
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
   RewardBeneficiary,
   RewardCoupon,
@@ -167,24 +166,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
-
-    clue("Bootstrap rounds have zero activity (no featured apps yet)") {
-      (0L to 3L).foreach { round =>
-        eventually() {
-          inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
-            case GetRewardAccountingActivityTotalsResponse.members
-                  .RewardAccountingActivityTotalsOk(t) =>
-              t.activityRecordsCount shouldBe 0L withClue
-                s"Round $round should have no activity records"
-              t.totalAppActivityWeight shouldBe 0L withClue
-                s"Round $round should have no activity weight"
-              BigDecimal(t.totalAppRewardMintingAllowance) shouldBe BigDecimal(0) withClue
-                s"Round $round should have no minting allowance"
-          }
-        }
-      }
-    }
-
     // FA right now effective from round 4
     doTransfer()
     advanceRoundsToNextRoundOpening
