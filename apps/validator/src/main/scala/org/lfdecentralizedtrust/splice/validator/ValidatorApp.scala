@@ -219,13 +219,7 @@ class ValidatorApp(
             _ <- appInitStep("Ensuring extra domains registered") {
               domainConnector.ensureExtraDomainsRegistered()
             }
-            // Prevet early to make sure we have the required packages even
-            // before the automation kicks in. We only need this on the very
-            // first initialization: the primary party is allocated right after
-            // this step (see ensureUserPrimaryPartyIsAllocated below), so once
-            // it exists we know this node was already initialized and the
-            // ValidatorPackageVettingTrigger keeps the vetting state current.
-            // On restarts we therefore skip the Scan-dependent eager vetting.
+            // Vet eagerly on first-initialization where no party exists, all other runs rely on the vetting trigger to vet async.
             alreadyInitialized <- connection
               .getOptionalPrimaryParty(config.ledgerApiUser)
               .map(_.isDefined)
@@ -233,9 +227,7 @@ class ValidatorApp(
               if (alreadyInitialized)
                 Future.successful(
                   logger.info(
-                    s"Validator user ${config.ledgerApiUser} already has a primary party; " +
-                      "skipping eager package vetting on startup " +
-                      "(kept current by ValidatorPackageVettingTrigger)."
+                    s"Validator user ${config.ledgerApiUser} already has a primary party, skipping eager package vetting"
                   )
                 )
               else
