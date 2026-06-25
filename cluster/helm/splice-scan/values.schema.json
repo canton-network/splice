@@ -26,6 +26,9 @@
         "imageName"
       ],
       "properties": {
+        "serviceAccountName": {
+          "type": "string"
+        },
         "imageRepo": {
           "type": "string"
         },

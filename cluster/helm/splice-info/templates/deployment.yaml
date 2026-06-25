@@ -26,6 +26,7 @@ spec:
         checksum/updater: {{ .Files.Get "scripts/updater.sh" | sha256sum }}
         {{- end }}
     spec:
+      {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: nginx
         image: {{ .Values.nginxImage }}

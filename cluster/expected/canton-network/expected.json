@@ -302,6 +302,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": false
           },
           "version": {
@@ -323,6 +324,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -343,6 +345,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -361,6 +364,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -383,6 +387,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": false
           },
           "version": {
@@ -403,6 +408,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": true
           },
           "version": {

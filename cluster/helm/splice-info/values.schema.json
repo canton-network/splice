@@ -41,6 +41,9 @@
   "type": "object",
   "required": [ "resources", "nginxImage", "contentType" ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "nginxImage": {
       "type": "string",
       "description": "The Docker image to use for Nginx. Defaults to 'nginx:latest' if not present."
