@@ -246,7 +246,7 @@ class DbAppActivityRecordStore(
   }
 
   @VisibleForTesting
-  def getRecordByVerdictRowId(verdictRowId: Long)(implicit
+  def getRecordByVerdictRowIdForTesting(verdictRowId: Long)(implicit
       tc: TraceContext
   ): Future[Option[AppActivityRecordT]] = {
     runQuerySingle(
@@ -256,7 +256,7 @@ class DbAppActivityRecordStore(
         where history_id = $historyId and verdict_row_id = $verdictRowId
         limit 1
       """.as[AppActivityRecordT].headOption,
-      "appActivity.getRecordByVerdictRowId",
+      "appActivity.getRecordByVerdictRowIdForTesting",
     )
   }
 
@@ -362,10 +362,10 @@ class DbAppActivityRecordStore(
   }
 
   /** Insert activity records only, without meta row management.
-    * Tests manage meta rows separately via `insertActivityRecordMeta`.
+    * Tests manage meta rows separately via `insertActivityRecordMetaForTesting`.
     */
   @VisibleForTesting
-  def insertAppActivityRecords(
+  def insertAppActivityRecordsForTesting(
       items: Seq[AppActivityRecordT]
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
@@ -437,7 +437,7 @@ class DbAppActivityRecordStore(
     """.asUpdate
 
   @VisibleForTesting
-  def insertActivityRecordMeta(
+  def insertActivityRecordMetaForTesting(
       codeVersion: Int,
       userVersion: Int,
       startedIngestingAt: Long,
