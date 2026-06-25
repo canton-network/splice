@@ -44,7 +44,6 @@ class ExpiredAmuletAllocationTrigger(
       allocation =>
         Seq(
           allocation.allocation.transferLeg.sender,
-          allocation.allocation.transferLeg.receiver,
           allocation.allocation.settlement.executor,
           svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
         ).map(PartyId.tryFromProtoPrimitive),
