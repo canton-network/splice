@@ -88,6 +88,9 @@ class BulkStorageCommitFromStaging[T](
   ] =
     Flow[(T, Seq[ObjectKeyAndChecksum])]
       .mapAsync(parallelism = 1) { case (ts, objs) =>
+        logger.debug(
+          s"Copying ${objs.size} objects from staging to committed storage for timestamp $ts"
+        )
         Future
           .sequence(objs.map(copyObjectToCommitted(stagingS3Connection, committedS3Connection)))
           .map(_ => (ts, objs))
@@ -100,12 +103,19 @@ class BulkStorageCommitFromStaging[T](
   ] =
     Flow[(T, Seq[ObjectKeyAndChecksum])]
       .mapAsync(parallelism = 1) { case (ts, objs) =>
+        logger.debug(
+          s"Deleting ${objs.size} objects from staging storage for timestamp $ts"
+        )
         Future
           .sequence(
-            objs.map(obj => stagingS3Connection.deleteObject(obj.key))
+            objs.map(obj => {
+              logger.debug(s"Deleting object ${obj.key} from staging storage")
+              stagingS3Connection.deleteObject(obj.key).map(_ => logger.debug(s"Deleted object ${obj.key} from staging storage"))
+            })
           )
           .map(_ => ts)
       }
+      .wireTap(ts => logger.debug(s"Successfully deleted objects from staging for timestamp $ts"))
 
   def getFlow: Flow[T, T, NotUsed] =
     Flow[T]
@@ -113,6 +123,7 @@ class BulkStorageCommitFromStaging[T](
       .via(waitForBftAgreement)
       .via(copyToCommitted)
       .via(deleteFromStaging)
+      .wireTap(ts => logger.debug(s"Successfully committed objects for timestamp $ts"))
 }
 
 object BulkStorageCommitFromStaging {

@@ -393,7 +393,7 @@ class UpdateHistoryBulkStorageTest
         acsSnapshotBulkStorageStaging = null, // not needed for this test
         acsSnapshotBulkStorageCommitted = null, // not needed for this test
         updateHistoryBulkStorageStaging = svc,
-        updateHistoryBulkStorageCommitted = null, // not needed for this test
+        updateHistoryBulkStorageCommitted = svc,
         storageConfig = bulkStorageTestConfig,
         stagingS3Connection = bucketConnection,
         committedS3Connection =
