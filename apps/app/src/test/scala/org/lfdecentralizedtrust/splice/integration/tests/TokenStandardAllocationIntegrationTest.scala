@@ -51,7 +51,7 @@ class TokenStandardAllocationIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
-      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
