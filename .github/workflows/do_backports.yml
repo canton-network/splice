@@ -13,7 +13,7 @@ jobs:
     outputs:
       branches: ${{ steps.parse_backport_comments.outputs.backport_branches }}
     steps:
-      - uses: ./github-scripts/actions/parse_backport_comments
+      - uses: ./gha-scripts/actions/parse_backport_comments
         id: parse_backport_comments
         with:
           pr_number: ${{ github.event.pull_request.number }}
