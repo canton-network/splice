@@ -212,6 +212,7 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   if its actors include all parties required to authorize the transfer
 - Remove `V2.AllocationRequest.settleAt` field, as it is redundant with the
   `settlementDeadline` of the requested allocations
+- Bumped the Daml SDK for building the V2 API packages to 3.5.1, which changed their package hashes.
 
 
 ### Utility and test library changes
