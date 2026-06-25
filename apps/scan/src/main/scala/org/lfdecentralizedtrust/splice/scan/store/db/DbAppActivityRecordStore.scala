@@ -332,7 +332,9 @@ class DbAppActivityRecordStore(
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available
-    //   - Bootstrapped to 0 on a fresh firstSV to make round 0 complete
+    //   - Bootstrapped to 0 on a fresh firstSV because
+    //     lookupLatestArchivedOpenMiningRound may not yet reflect
+    //     round 0's archival due to ingestion delay.
     val lastArchived = lastArchivedRoundO
       .orElse(if (isFirstSv) Some(0L) else None)
 
