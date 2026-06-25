@@ -856,6 +856,16 @@ abstract class ScanAppReference(
         HttpScanAppClient.GetActivePhysicalSynchronizerSerial()
       )
     }
+
+  @Help.Summary(
+    "Retrieve information on the next logical synchronizer upgrade (LSU)"
+  )
+  def getLsu(): Option[HttpScanAppClient.Lsu] =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetLsu()
+      )
+    }
 }
 
 final class ScanAppBackendReference(

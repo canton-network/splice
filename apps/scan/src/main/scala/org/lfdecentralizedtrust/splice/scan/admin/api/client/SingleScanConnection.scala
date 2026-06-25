@@ -432,6 +432,15 @@ class SingleScanConnection private[client] (
     )
   }
 
+  override def getLsu()(implicit
+      tc: TraceContext
+  ): Future[Option[HttpScanAppClient.Lsu]] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetLsu(),
+    )
+  }
+
   override def getPartyToParticipant(
       synchronizerId: SynchronizerId,
       partyId: PartyId,

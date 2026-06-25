@@ -419,6 +419,13 @@ class LsuIntegrationTest
         waitForLsuAnnouncement()
       }
 
+      clue(s"Scan API returns proper LSU info after LSU announcement") {
+        val lsu = sv1ScanBackend.getLsu().value
+        lsu.topologyFreezeTime shouldBe topologyFreezeTime
+        lsu.upgradeTime shouldBe upgradeTime
+        lsu.successorPhysicalSynchronizerSerial shouldBe newSynchronizerSerial.value.toLong
+      }
+
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
           val upgradeSequencerClient = backend.sequencerClientFor(_.successor.value)
@@ -439,6 +446,10 @@ class LsuIntegrationTest
 
       clue(s"wait for upgrade time $upgradeTime") {
         Threading.sleep(Duration.between(Instant.now(), upgradeTime.toInstant).toMillis.abs)
+      }
+
+      clue(s"Scan API returns empty LSU info after upgrade") {
+        sv1ScanBackend.getLsu() shouldBe None
       }
 
       clue("Restart sv2 and resume traffic transfer trigger") {

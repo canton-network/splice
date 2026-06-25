@@ -178,7 +178,7 @@ paths:
       x-jvm-package: scan
       operationId: "getLsu"
       description: |
-        Retrieve information on the next LSU
+        Retrieve information on the next logical synchronizer upgrade (LSU)
       responses:
         "200":
           description: ok
@@ -2130,10 +2130,11 @@ components:
     Lsu:
       type: object
       required:
-        - freezeTime
+        - topologyFreezeTime
         - upgradeTime
+        - successorPhysicalSynchronizerSerial
       properties:
-        freezeTime:
+        topologyFreezeTime:
           description: The time when topology freeze starts
           type: string
           format: date-time
@@ -2141,6 +2142,10 @@ components:
           description: The time at which to upgrade
           type: string
           format: date-time
+        successorPhysicalSynchronizerSerial:
+          description: The successor physical synchronizer serial
+          type: integer
+          format: int64
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
       required: ["serial"]

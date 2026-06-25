@@ -13,7 +13,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.ActiveContract
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.store.TimeQuery.HeadState
+import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{
@@ -2683,15 +2683,17 @@ class HttpScanHandler(
         .getPhysicalSynchronizerId()
       maybeAnnouncement <- participantAdminConnection.lookupSynchronizerLsuAnnouncement(
         synchronizerId = currentSynchronizerId.logical,
-        timeQuery = HeadState,
+        timeQuery = TimeQuery.HeadState,
         topologyTransactionType = TopologyTransactionType.AuthorizedState,
       )
     } yield ScanResource.GetLsuResponse.OK(
       definitions.GetLsuResponse(
         maybeAnnouncement.map { announcement =>
           definitions.Lsu(
-            freezeTime = announcement.base.validFrom.atOffset(ZoneOffset.UTC),
+            topologyFreezeTime = announcement.base.validFrom.atOffset(ZoneOffset.UTC),
             upgradeTime = announcement.mapping.upgradeTime.toInstant.atOffset(ZoneOffset.UTC),
+            successorPhysicalSynchronizerSerial =
+              announcement.mapping.successorSynchronizerId.serial.unwrap.toLong,
           )
         }
       )
