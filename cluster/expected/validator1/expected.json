@@ -753,7 +753,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "databaseVersion": "POSTGRES_14",
+      "databaseVersion": "POSTGRES_17",
       "deletionProtection": false,
       "region": "europe-west6",
       "settings": {
@@ -948,7 +948,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "databaseVersion": "POSTGRES_14",
+      "databaseVersion": "POSTGRES_17",
       "deletionProtection": false,
       "region": "europe-west6",
       "settings": {

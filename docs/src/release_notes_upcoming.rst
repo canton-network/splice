@@ -15,6 +15,15 @@
                 This allows node operators to inject raw configuration strings for an external secret manager.
                 To use this, you must have the corresponding mutating webhook installed in your cluster
                 to dynamically resolve raw string references at runtime.
+              - The ``splice-postgres`` Helm chart is now **deprecated** and will not receive
+                further PostgreSQL version upgrades. It will be unsupported after **2026-11-12**
+                (PostgreSQL 14 upstream end-of-life).
+
+                Operators running validator or SV nodes with ``splice-postgres`` should plan a
+                migration to an upstream PostgreSQL chart before that date. We recommend
+                ``bitnami/postgresql``, which Splice uses for its own non-production deployments,
+                but it is maintained by Bitnami and not supported by the Splice project.
+                See :ref:`migrate-postgres-chart` for the migration guide.
 
               - Added support for injecting custom `serviceAccountName` into deployments.
                 Note that Splice Helm charts do not create Service Account resources;

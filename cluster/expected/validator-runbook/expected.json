@@ -596,66 +596,44 @@
     "inputs": {},
     "name": "validator-postgres",
     "provider": "",
-    "type": "canton:network:postgres"
+    "type": "canton:network:bitnami-postgres"
   },
   {
     "custom": true,
     "id": "",
     "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
       "compat": "true",
       "maxHistory": 10,
       "name": "postgres",
       "namespace": "validator",
       "timeout": 600,
       "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-secrets",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres",
+        "primary": {
+          "extendedConfiguration": "max_connections = 300\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
             }
+          },
+          "persistence": {
+            "size": "200Gi",
+            "storageClass": "hyperdisk-standard-rwo"
           }
-        },
-        "cluster": {
-          "dnsName": "mock.global.canton.network.digitalasset.com",
-          "fixedTokens": false,
-          "hostname": "mock.global.canton.network.digitalasset.com",
-          "name": "cn-mocknet"
-        },
-        "db": {
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "200Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-secrets"
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
+        }
       },
-      "version": "0.3.20"
+      "version": "16.7.27"
     },
     "name": "validator-postgres",
     "provider": "",

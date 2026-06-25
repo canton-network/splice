@@ -412,9 +412,11 @@ Please modify the file ``splice-node/examples/sv-helm/participant-values.yaml`` 
 - Update the `auth.jwksUrl` entry to point to your auth provider's JWK set document by replacing ``OIDC_AUTHORITY_URL`` with your auth provider's OIDC URL, as explained above.
 - If you are running on a version of Kubernetes earlier than 1.24, set `enableHealthProbes` to `false` to disable the gRPC liveness and readiness probes.
 
-If you are using the provided postgres helm chart, modify ``splice-node/examples/sv-helm/postgres-values-validator-participant.yaml`` as follows:
-
-- Add ``db.volumeSize`` and ``db.volumeStorageClass`` to the values file adjust persistant storage size and storage class if necessary. (These values default to 20GiB and ``standard-rwo``)
+If you are running Postgres in-cluster, the example values file
+``splice-node/examples/sv-helm/postgres-values-validator-participant.yaml`` targets the upstream
+``bitnami/postgresql`` chart. Adjust ``primary.persistence.size`` and
+``primary.persistence.storageClass`` if necessary (these default to 50Gi and ``standard-rwo``).
+You are free to use any well-known PostgreSQL chart instead; Splice no longer ships its own.
 
 
 Additionally, please modify the file ``splice-node/examples/sv-helm/standalone-participant-values.yaml`` as follows:
@@ -469,7 +471,7 @@ reaches a stable state prior to moving on to the next step.
 
 .. parsed-literal::
 
-    helm install postgres |helm_repo_prefix|/splice-postgres -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-validator-participant.yaml --wait
+    helm install postgres oci://registry-1.docker.io/bitnamicharts/postgresql --version 16.7.27 -n validator -f splice-node/examples/sv-helm/postgres-values-validator-participant.yaml --wait
     helm install participant |helm_repo_prefix|/splice-participant -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/participant-values.yaml -f splice-node/examples/sv-helm/standalone-participant-values.yaml --wait
     helm install validator |helm_repo_prefix|/splice-validator -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/validator-values.yaml -f splice-node/examples/sv-helm/standalone-validator-values.yaml --wait
 

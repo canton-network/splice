@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as _ from 'lodash';
 import {
   CloudSqlConfig,
   clusterSmallDisk,
@@ -10,7 +9,7 @@ import {
   supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { BitnamiPostgres, CloudPostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installPostgres(
   xns: ExactNamespace,
@@ -19,7 +18,7 @@ export async function installPostgres(
   selfHostedValuesFile: string,
   isActive: boolean = true,
   cloudSqlConfigOverride?: CloudSqlConfig
-): Promise<SplicePostgres | CloudPostgres> {
+): Promise<BitnamiPostgres | CloudPostgres> {
   const cloudSqlConfig = cloudSqlConfigOverride ?? spliceConfig.pulumiProjectConfig.cloudSql;
   if (cloudSqlConfig.enabled) {
     return CloudPostgres.install(`${xns.logicalName}-${name}`, {
@@ -35,24 +34,18 @@ export async function installPostgres(
     const valuesFromFile = loadYamlFromFile(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/${selfHostedValuesFile}`
     );
-    const volumeSizeOverride = determineVolumeSizeOverride(valuesFromFile.db?.volumeSize);
-    const values = _.merge(valuesFromFile || {}, { db: { volumeSize: volumeSizeOverride } });
-    return new SplicePostgres(
-      xns,
-      name,
-      name,
+    const volumeSize = determineVolumeSize(valuesFromFile.primary?.persistence?.size);
+    return new BitnamiPostgres(xns, name, {
       secretName,
-      values,
-      undefined,
-      supportsSvRunbookReset
-    );
+      volumeSize,
+      disableProtection: supportsSvRunbookReset,
+    });
   }
 }
 
-// A bit complicated because some of the values in our examples are actually lower than the default for CLUSTER_SMALL_DISK
-function determineVolumeSizeOverride(volumeSizeFromFile: string | undefined): string | undefined {
+function determineVolumeSize(volumeSizeFromFile: string | undefined): string | undefined {
   const gigs = (s: string) => parseInt(s.replace('Gi', ''));
   return clusterSmallDisk && volumeSizeFromFile && gigs(volumeSizeFromFile) > 240
     ? '240Gi'
-    : undefined;
+    : volumeSizeFromFile;
 }

@@ -1,4 +1,33 @@
-db:
-  # This is only the suggested initial value.
-  # The volume usage should be monitored and the size adjusted as usage grows.
-  volumeSize: 50Gi
+# Values for deploying the validator participant database with the upstream bitnami/postgresql chart.
+#
+# fullnameOverride sets the Kubernetes Service name; it must equal the release name you
+# `helm install` with AND the `host:` configured in the consuming Canton app values.
+fullnameOverride: postgres
+
+auth:
+  enablePostgresUser: false  # Canton connects as cnadmin only; no postgres superuser password needed
+  username: cnadmin
+  database: cantonnet
+  existingSecret: postgres-secrets
+  secretKeys:
+    userPasswordKey: postgresPassword
+
+primary:
+  initdb:
+    args: "--data-checksums"
+    scripts:
+      grant-createdb.sql: "ALTER USER cnadmin CREATEDB;"
+  extendedConfiguration: |
+    max_connections = 300
+    max_wal_size = 2GB
+  persistence:
+    # This is only the suggested initial value.
+    # The volume usage should be monitored and the size adjusted as usage grows.
+    size: 50Gi
+    storageClass: standard-rwo
+  resources:
+    limits:
+      memory: 12Gi
+    requests:
+      cpu: "0.5"
+      memory: 1Gi

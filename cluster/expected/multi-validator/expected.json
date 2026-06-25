@@ -4789,6 +4789,93 @@
     "type": "random:index/randomPassword:RandomPassword"
   },
   {
+    "custom": false,
+    "id": "",
+    "inputs": {},
+    "name": "multi-validator-postgres-0",
+    "provider": "",
+    "type": "canton:network:bitnami-postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "postgres-0",
+      "namespace": "multi-validator",
+      "timeout": 600,
+      "values": {
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-0-secret",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres-0",
+        "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "extendedConfiguration": "max_connections = 1000\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
+            }
+          },
+          "persistence": {
+            "size": "100Gi",
+            "storageClass": "hyperdisk-standard-rwo"
+          },
+          "resources": {
+            "limits": {
+              "memory": "12Gi"
+            },
+            "requests": {
+              "memory": "5Gi"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "version": "16.7.27"
+    },
+    "name": "multi-validator-postgres-0",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
+  },
+  {
     "custom": true,
     "id": "",
     "inputs": {
@@ -4799,6 +4886,93 @@
     "name": "multi-validator-postgres-1-passwd",
     "provider": "",
     "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {},
+    "name": "multi-validator-postgres-1",
+    "provider": "",
+    "type": "canton:network:bitnami-postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "postgres-1",
+      "namespace": "multi-validator",
+      "timeout": 600,
+      "values": {
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-1-secret",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres-1",
+        "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "extendedConfiguration": "max_connections = 1000\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
+            }
+          },
+          "persistence": {
+            "size": "100Gi",
+            "storageClass": "hyperdisk-standard-rwo"
+          },
+          "resources": {
+            "limits": {
+              "memory": "12Gi"
+            },
+            "requests": {
+              "memory": "5Gi"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "version": "16.7.27"
+    },
+    "name": "multi-validator-postgres-1",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
   },
   {
     "custom": true,
@@ -4813,6 +4987,93 @@
     "type": "random:index/randomPassword:RandomPassword"
   },
   {
+    "custom": false,
+    "id": "",
+    "inputs": {},
+    "name": "multi-validator-postgres-2",
+    "provider": "",
+    "type": "canton:network:bitnami-postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "postgres-2",
+      "namespace": "multi-validator",
+      "timeout": 600,
+      "values": {
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-2-secret",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres-2",
+        "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "extendedConfiguration": "max_connections = 1000\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
+            }
+          },
+          "persistence": {
+            "size": "100Gi",
+            "storageClass": "hyperdisk-standard-rwo"
+          },
+          "resources": {
+            "limits": {
+              "memory": "12Gi"
+            },
+            "requests": {
+              "memory": "5Gi"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "version": "16.7.27"
+    },
+    "name": "multi-validator-postgres-2",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
+  },
+  {
     "custom": true,
     "id": "",
     "inputs": {
@@ -4825,6 +5086,93 @@
     "type": "random:index/randomPassword:RandomPassword"
   },
   {
+    "custom": false,
+    "id": "",
+    "inputs": {},
+    "name": "multi-validator-postgres-3",
+    "provider": "",
+    "type": "canton:network:bitnami-postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "postgres-3",
+      "namespace": "multi-validator",
+      "timeout": 600,
+      "values": {
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-3-secret",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres-3",
+        "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "extendedConfiguration": "max_connections = 1000\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
+            }
+          },
+          "persistence": {
+            "size": "100Gi",
+            "storageClass": "hyperdisk-standard-rwo"
+          },
+          "resources": {
+            "limits": {
+              "memory": "12Gi"
+            },
+            "requests": {
+              "memory": "5Gi"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "version": "16.7.27"
+    },
+    "name": "multi-validator-postgres-3",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
+  },
+  {
     "custom": true,
     "id": "",
     "inputs": {
@@ -4835,6 +5183,93 @@
     "name": "multi-validator-postgres-4-passwd",
     "provider": "",
     "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {},
+    "name": "multi-validator-postgres-4",
+    "provider": "",
+    "type": "canton:network:bitnami-postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://registry-1.docker.io/bitnamicharts/postgresql",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "postgres-4",
+      "namespace": "multi-validator",
+      "timeout": 600,
+      "values": {
+        "auth": {
+          "database": "cantonnet",
+          "enablePostgresUser": false,
+          "existingSecret": "postgres-4-secret",
+          "secretKeys": {
+            "userPasswordKey": "postgresPassword"
+          },
+          "username": "cnadmin"
+        },
+        "fullnameOverride": "postgres-4",
+        "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "extendedConfiguration": "max_connections = 1000\nmax_wal_size = 2GB\n",
+          "initdb": {
+            "args": "--data-checksums",
+            "scripts": {
+              "grant-createdb.sql": "ALTER USER cnadmin CREATEDB;"
+            }
+          },
+          "persistence": {
+            "size": "100Gi",
+            "storageClass": "hyperdisk-standard-rwo"
+          },
+          "resources": {
+            "limits": {
+              "memory": "12Gi"
+            },
+            "requests": {
+              "memory": "5Gi"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "version": "16.7.27"
+    },
+    "name": "multi-validator-postgres-4",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
   },
   {
     "custom": true,
@@ -4862,495 +5297,5 @@
     "name": "organization/infra/infra.mock",
     "provider": "",
     "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres-0",
-      "namespace": "multi-validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "appsAffinityAndTolerations": {
-          "affinity": {
-            "nodeAffinity": {
-              "requiredDuringSchedulingIgnoredDuringExecution": {
-                "nodeSelectorTerms": [
-                  {
-                    "matchExpressions": [
-                      {
-                        "key": "cn_apps",
-                        "operator": "Exists"
-                      },
-                      {
-                        "key": "cn_apps",
-                        "operator": "In",
-                        "values": [
-                          "hyperdisk"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "tolerations": [
-            {
-              "effect": "NoSchedule",
-              "key": "cn_apps",
-              "operator": "Exists"
-            }
-          ]
-        },
-        "db": {
-          "maxConnections": 1000,
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "100Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-0-secret"
-        },
-        "resources": {
-          "limits": {
-            "memory": "12Gi"
-          },
-          "requests": {
-            "memory": "5Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "postgres-0",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres-1",
-      "namespace": "multi-validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "appsAffinityAndTolerations": {
-          "affinity": {
-            "nodeAffinity": {
-              "requiredDuringSchedulingIgnoredDuringExecution": {
-                "nodeSelectorTerms": [
-                  {
-                    "matchExpressions": [
-                      {
-                        "key": "cn_apps",
-                        "operator": "Exists"
-                      },
-                      {
-                        "key": "cn_apps",
-                        "operator": "In",
-                        "values": [
-                          "hyperdisk"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "tolerations": [
-            {
-              "effect": "NoSchedule",
-              "key": "cn_apps",
-              "operator": "Exists"
-            }
-          ]
-        },
-        "db": {
-          "maxConnections": 1000,
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "100Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-1-secret"
-        },
-        "resources": {
-          "limits": {
-            "memory": "12Gi"
-          },
-          "requests": {
-            "memory": "5Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "postgres-1",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres-2",
-      "namespace": "multi-validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "appsAffinityAndTolerations": {
-          "affinity": {
-            "nodeAffinity": {
-              "requiredDuringSchedulingIgnoredDuringExecution": {
-                "nodeSelectorTerms": [
-                  {
-                    "matchExpressions": [
-                      {
-                        "key": "cn_apps",
-                        "operator": "Exists"
-                      },
-                      {
-                        "key": "cn_apps",
-                        "operator": "In",
-                        "values": [
-                          "hyperdisk"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "tolerations": [
-            {
-              "effect": "NoSchedule",
-              "key": "cn_apps",
-              "operator": "Exists"
-            }
-          ]
-        },
-        "db": {
-          "maxConnections": 1000,
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "100Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-2-secret"
-        },
-        "resources": {
-          "limits": {
-            "memory": "12Gi"
-          },
-          "requests": {
-            "memory": "5Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "postgres-2",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres-3",
-      "namespace": "multi-validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "appsAffinityAndTolerations": {
-          "affinity": {
-            "nodeAffinity": {
-              "requiredDuringSchedulingIgnoredDuringExecution": {
-                "nodeSelectorTerms": [
-                  {
-                    "matchExpressions": [
-                      {
-                        "key": "cn_apps",
-                        "operator": "Exists"
-                      },
-                      {
-                        "key": "cn_apps",
-                        "operator": "In",
-                        "values": [
-                          "hyperdisk"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "tolerations": [
-            {
-              "effect": "NoSchedule",
-              "key": "cn_apps",
-              "operator": "Exists"
-            }
-          ]
-        },
-        "db": {
-          "maxConnections": 1000,
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "100Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-3-secret"
-        },
-        "resources": {
-          "limits": {
-            "memory": "12Gi"
-          },
-          "requests": {
-            "memory": "5Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "postgres-3",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres-4",
-      "namespace": "multi-validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "appsAffinityAndTolerations": {
-          "affinity": {
-            "nodeAffinity": {
-              "requiredDuringSchedulingIgnoredDuringExecution": {
-                "nodeSelectorTerms": [
-                  {
-                    "matchExpressions": [
-                      {
-                        "key": "cn_apps",
-                        "operator": "Exists"
-                      },
-                      {
-                        "key": "cn_apps",
-                        "operator": "In",
-                        "values": [
-                          "hyperdisk"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "tolerations": [
-            {
-              "effect": "NoSchedule",
-              "key": "cn_apps",
-              "operator": "Exists"
-            }
-          ]
-        },
-        "db": {
-          "maxConnections": 1000,
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "100Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-4-secret"
-        },
-        "resources": {
-          "limits": {
-            "memory": "12Gi"
-          },
-          "requests": {
-            "memory": "5Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "postgres-4",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
   }
 ]

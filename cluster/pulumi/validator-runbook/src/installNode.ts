@@ -45,7 +45,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { BitnamiPostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { installPartyAllocator } from './partyAllocator';
 import { validatorConfig, validatorName } from './validatorConfig';
@@ -162,23 +162,13 @@ async function installValidator(
   const postgresValuesFromFile: ChartValues = loadYamlFromFile(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/postgres-values-validator-participant.yaml`
   );
-  const postgresValues: ChartValues = validatorConfig.postgresPvcSize
-    ? {
-        ...postgresValuesFromFile,
-        db: { ...postgresValuesFromFile.db, volumeSize: validatorConfig.postgresPvcSize },
-      }
-    : postgresValuesFromFile;
-  const postgres = new SplicePostgres(
-    xns,
-    'postgres',
-    // can be removed once base version > 0.2.1
-    `postgres`,
-    'postgres-secrets',
-    postgresValues,
-    true,
-    supportsValidatorRunbookReset,
-    validatorVersion
-  );
+  const volumeSize =
+    validatorConfig.postgresPvcSize ?? postgresValuesFromFile.primary?.persistence?.size;
+  const postgres = new BitnamiPostgres(xns, 'postgres', {
+    secretName: 'postgres-secrets',
+    volumeSize,
+    disableProtection: supportsValidatorRunbookReset,
+  });
   const participantAddress = (
     await installParticipant(
       validatorConfig,

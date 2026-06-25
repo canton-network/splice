@@ -1,6 +1,12 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+#
+# DEPRECATED: This chart will not receive PostgreSQL version upgrades.
+# The postgres:14 image will reach end-of-life on 2026-11-12.
+# Do not bump imageName here — migrate to bitnami/postgresql instead.
+# See https://github.com/canton-network/splice/issues/1129
+
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "postgres:14"
 

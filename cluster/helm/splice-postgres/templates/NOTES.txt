@@ -1,1 +1,15 @@
-Splice Self-Hosted PGSQL
+******************************************************************************
+WARNING: splice-postgres IS DEPRECATED
+******************************************************************************
+
+This chart will not receive any further PostgreSQL version upgrades.
+Support ends on 2026-11-12 (PostgreSQL 14 upstream end-of-life).
+
+Please migrate to an upstream PostgreSQL chart before that date.
+We recommend bitnami/postgresql (used by Splice for non-production deployments),
+but it is maintained by Bitnami — not by Splice. Chart issues should be reported
+upstream, not to the Splice project.
+
+Migration guide: docs/src/validator_operator/migrate-postgres-chart.rst
+Tracking issue: https://github.com/canton-network/splice/issues/1129
+******************************************************************************

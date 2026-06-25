@@ -7,7 +7,12 @@ type: application
 version: VERSION_NUMBER
 appVersion: VERSION_NUMBER
 
-description: Splice Self-Hosted PGSQL
+description: >
+  DEPRECATED: This chart will not receive PostgreSQL version upgrades and will be
+  unsupported after 2026-11-12 (PostgreSQL 14 upstream EOL).
+  Migrate to bitnami/postgresql. See https://github.com/canton-network/splice/issues/1129
+
+deprecated: true
 
 dependencies:
 - name: splice-util-lib

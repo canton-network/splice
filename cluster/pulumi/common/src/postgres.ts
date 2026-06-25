@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
+import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import * as _ from 'lodash';
@@ -19,7 +20,14 @@ import {
 import { installPostgresPasswordSecret } from './secrets';
 import { standardStorageClassName } from './storage/storageClass';
 import { createVolumeSnapshot } from './storage/volumeSnapshot';
-import { ChartValues, CLUSTER_BASENAME, ExactNamespace, GCP_ZONE } from './utils';
+import {
+  ChartValues,
+  CLUSTER_BASENAME,
+  ExactNamespace,
+  GCP_ZONE,
+  HELM_CHART_TIMEOUT_SEC,
+  HELM_MAX_HISTORY_SIZE,
+} from './utils';
 
 const project = gcp.organizations.getProjectOutput({});
 
@@ -118,7 +126,7 @@ export class CloudPostgres
     const databaseInstance = new gcp.sql.DatabaseInstance(
       name,
       {
-        databaseVersion: 'POSTGRES_14',
+        databaseVersion: 'POSTGRES_17',
         // keep always false as this is the terraform provider and cannot be manually removed
         // https://github.com/pulumi/pulumi-gcp/issues/1209
         deletionProtection: false,
@@ -369,6 +377,9 @@ type CloudPostgresOutput = {
   secretName: pulumi.Output<string>;
 };
 
+// @deprecated Use bitnami/postgresql instead. This class installs the splice-postgres chart which
+// is frozen at PostgreSQL 14 and will be unsupported after 2026-11-12.
+// See https://github.com/canton-network/splice/issues/1129
 export class SplicePostgres extends pulumi.ComponentResource implements Postgres {
   instanceName: string;
   namespace: ExactNamespace;
@@ -470,6 +481,124 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
 
     this.registerOutputs({
       address: pg.id.apply(() => `${instanceName}.${xns.logicalName}.svc.cluster.local`),
+      secretName: this.secretName,
+    });
+  }
+
+  addUser(_userName: string): PostgresUser {
+    return {
+      userName: 'cnadmin',
+      secretName: this.secretName,
+    };
+  }
+}
+
+// Pulled directly from the upstream bitnami OCI registry, consistent with how every other external
+// chart in this repo is consumed (prometheus, istio, pulumi-operator, gha runners all pull from
+// their respective upstreams). Note: this is the only external chart sourced from Docker Hub, which
+// is rate-limited and whose free bitnami catalog is being pruned — if that becomes a problem, route
+// it through the Docker Hub read-through mirror (cluster/pulumi/gha/src/dockerMirror.ts) rather than
+// CACHE_GHCR, which only proxies ghcr.io.
+const BITNAMI_POSTGRESQL_CHART = 'oci://registry-1.docker.io/bitnamicharts/postgresql';
+const BITNAMI_POSTGRESQL_CHART_VERSION = '16.7.27'; // PostgreSQL 17.6.0
+
+export type BitnamiPostgresArgs = {
+  secretName: string;
+  volumeSize?: string;
+  storageClass?: string;
+  maxConnections?: number;
+  maxWalSize?: string;
+  resources?: ChartValues;
+  disableProtection?: boolean;
+  affinityAndTolerations?: { affinity?: object; tolerations?: object[] };
+  dependsOn?: pulumi.Input<pulumi.Resource>[];
+};
+
+export class BitnamiPostgres extends pulumi.ComponentResource implements Postgres {
+  instanceName: string;
+  namespace: ExactNamespace;
+  address: pulumi.Output<string>;
+  pg: k8s.helm.v3.Release;
+  secretName: pulumi.Output<string>;
+  userName: string;
+
+  constructor(xns: ExactNamespace, instanceName: string, args: BitnamiPostgresArgs) {
+    const logicalName = `${xns.logicalName}-${instanceName}`;
+    super('canton:network:bitnami-postgres', logicalName, [], {
+      protect: args.disableProtection ? false : spliceConfig.pulumiProjectConfig.cloudSql.protected,
+    });
+
+    this.instanceName = instanceName;
+    this.namespace = xns;
+    this.userName = 'cnadmin';
+    this.address = pulumi.output(`${instanceName}.${xns.logicalName}.svc.cluster.local`);
+
+    // Single-key secret (postgresPassword) for the cnadmin user. We set enablePostgresUser=false
+    // below, so no postgres-superuser password is needed and the secret shape matches what the old
+    // splice-postgres chart used — letting operators reuse their existing secret on migration.
+    const userPassword = generatePassword(`${logicalName}-passwd`, { parent: this }).result;
+    const passwordSecret = installPostgresPasswordSecret(xns, userPassword, args.secretName);
+    this.secretName = passwordSecret.metadata.name;
+
+    const maxConnections = args.maxConnections ?? 300;
+    const maxWalSize = args.maxWalSize ?? '2GB';
+    const storageClass = args.storageClass ?? standardStorageClassName;
+    const { affinity, tolerations } = args.affinityAndTolerations ?? {};
+
+    const helmValues: ChartValues = {
+      fullnameOverride: instanceName,
+      // Chart + images are pulled directly from upstream bitnami (docker.io), consistent with how
+      // every other external chart in this repo is consumed. The repo's Docker Hub rate-limit
+      // mitigation is an anonymous shared read-through cache wired as a containerd registry-mirror
+      // (see cluster/pulumi/gha/src/dockerMirror.ts) — there are no Docker Hub credentials. For
+      // app-cluster image pulls to benefit, the node containerd needs that same registry-mirror;
+      // that is cluster/node config, not something this chart controls.
+      auth: {
+        enablePostgresUser: false, // Canton connects as cnadmin only; no postgres superuser password
+        username: 'cnadmin',
+        database: 'cantonnet',
+        existingSecret: args.secretName,
+        secretKeys: {
+          userPasswordKey: 'postgresPassword',
+        },
+      },
+      primary: {
+        initdb: {
+          args: '--data-checksums',
+          scripts: {
+            'grant-createdb.sql': 'ALTER USER cnadmin CREATEDB;',
+          },
+        },
+        extendedConfiguration: `max_connections = ${maxConnections}\nmax_wal_size = ${maxWalSize}\n`,
+        persistence: {
+          size: args.volumeSize ?? '2800Gi',
+          storageClass,
+        },
+        ...(args.resources ? { resources: args.resources } : {}),
+        ...(affinity ? { affinity } : {}),
+        ...(tolerations ? { tolerations } : {}),
+      },
+    };
+
+    this.pg = new k8s.helm.v3.Release(
+      logicalName,
+      {
+        name: instanceName,
+        namespace: xns.ns.metadata.name,
+        chart: BITNAMI_POSTGRESQL_CHART,
+        version: BITNAMI_POSTGRESQL_CHART_VERSION,
+        values: helmValues,
+        timeout: HELM_CHART_TIMEOUT_SEC,
+        maxHistory: HELM_MAX_HISTORY_SIZE,
+      },
+      {
+        parent: this,
+        dependsOn: [passwordSecret, xns.ns, ...(args.dependsOn ?? [])],
+      }
+    );
+
+    this.registerOutputs({
+      address: this.pg.id.apply(() => `${instanceName}.${xns.logicalName}.svc.cluster.local`),
       secretName: this.secretName,
     });
   }

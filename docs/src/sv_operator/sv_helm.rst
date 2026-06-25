@@ -521,21 +521,35 @@ The password can be setup with the following command, assuming you set the envir
 Postgres in the Cluster
 +++++++++++++++++++++++
 
-If you wish to run the Postgres instances as pods in your cluster, you can use the `splice-postgres` Helm chart to install them:
+If you wish to run the Postgres instances as pods in your cluster, you can use any well-known
+PostgreSQL Helm chart. The example values files below target the upstream
+`bitnami/postgresql <https://github.com/bitnami/charts/tree/main/bitnami/postgresql>`_ chart,
+which Splice uses for its own non-production deployments. You are free to use a different chart;
+adapt the values accordingly.
+
+.. note::
+
+   Splice previously shipped its own ``splice-postgres`` chart. That chart is **deprecated** and
+   will be removed (PostgreSQL 14 reaches end-of-life on 2026-11-12). Splice does not maintain a
+   PostgreSQL chart; please use an upstream chart such as ``bitnami/postgresql``, which is
+   maintained by Bitnami, not by the Splice project.
 
 .. parsed-literal::
 
-    helm install sequencer-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-sequencer.yaml --wait
-    helm install mediator-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-mediator.yaml --wait
-    helm install participant-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-participant.yaml --wait
-    helm install apps-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-apps.yaml --wait
+    helm install sequencer-pg oci://registry-1.docker.io/bitnamicharts/postgresql --version 16.7.27 -n sv -f splice-node/examples/sv-helm/postgres-values-sequencer.yaml --wait
+    helm install mediator-pg oci://registry-1.docker.io/bitnamicharts/postgresql --version 16.7.27 -n sv -f splice-node/examples/sv-helm/postgres-values-mediator.yaml --wait
+    helm install participant-pg oci://registry-1.docker.io/bitnamicharts/postgresql --version 16.7.27 -n sv -f splice-node/examples/sv-helm/postgres-values-participant.yaml --wait
+    helm install apps-pg oci://registry-1.docker.io/bitnamicharts/postgresql --version 16.7.27 -n sv -f splice-node/examples/sv-helm/postgres-values-apps.yaml --wait
+
+The release name (``sequencer-pg``, etc.) must match the ``fullnameOverride`` in each values file,
+which is also the ``persistence.host`` the Canton apps connect to.
 
 Cloud-Hosted Postgres
 +++++++++++++++++++++
 
 If you wish to use cloud-hosted Postgres instances, please configure and initialize each of them as follows:
 
-- Use Postgres version 14
+- Use Postgres version 17
 - Create a database called ``cantonnet`` (this is a dummy database that will not be filled with actual data; additional databases will be created as part of deployment and initialization)
 - Create a user called ``cnadmin`` with the password as configured in the kubernetes secrets above
 

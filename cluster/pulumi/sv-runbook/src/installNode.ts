@@ -67,7 +67,7 @@ import {
   valuesForSvValidatorApp,
 } from '@canton-network/splice-pulumi-common-sv';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
@@ -204,7 +204,7 @@ type SvConfig = {
   cometBftGovernanceKey?: CnInput<SvCometBftGovernanceKey>;
 };
 
-function persistenceForPostgres(pg: SplicePostgres | CloudPostgres, values: ChartValues) {
+function persistenceForPostgres(pg: Postgres, values: ChartValues) {
   return {
     persistence: {
       ...values?.persistence,

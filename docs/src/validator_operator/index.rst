@@ -45,5 +45,6 @@ You can find hardware requirements for both options in a :ref:`dedicated section
    validator_delegations.rst
    validator_development_fund.rst
    validator_networking.rst
+   migrate-postgres-chart.rst
 
 .. todo:: Add top-level sections on node onboarding, validator functionality
