@@ -2032,7 +2032,7 @@ synchronizerMigration:
     sequencer:
       dedicatedBftSequencerDb: false
       enableBftSequencer: true
-    version: '0.6.10-snapshot.20260625.3226.0.v47641f47'
+    version: '0.6.10-snapshot.20260625.3229.0.ve0766216'
   frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'
