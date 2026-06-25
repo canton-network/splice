@@ -4872,7 +4872,7 @@
       "maxHistory": 10,
       "name": "postgres-0",
       "namespace": "multi-validator",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -4970,7 +4970,7 @@
       "maxHistory": 10,
       "name": "postgres-1",
       "namespace": "multi-validator",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -5068,7 +5068,7 @@
       "maxHistory": 10,
       "name": "postgres-2",
       "namespace": "multi-validator",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -5166,7 +5166,7 @@
       "maxHistory": 10,
       "name": "postgres-3",
       "namespace": "multi-validator",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -5264,7 +5264,7 @@
       "maxHistory": 10,
       "name": "postgres-4",
       "namespace": "multi-validator",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {

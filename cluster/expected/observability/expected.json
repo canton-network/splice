@@ -917,7 +917,7 @@
       "maxHistory": 10,
       "name": "grafana-postgres",
       "namespace": "observability",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {

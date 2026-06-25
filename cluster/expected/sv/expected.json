@@ -386,7 +386,7 @@
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {
@@ -685,7 +685,7 @@
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {
@@ -1021,7 +1021,7 @@
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {

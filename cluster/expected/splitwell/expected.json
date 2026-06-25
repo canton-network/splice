@@ -362,7 +362,7 @@
       "maxHistory": 10,
       "name": "cluster-ingress-splitwell-uis",
       "namespace": "splitwell",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -535,7 +535,7 @@
       "maxHistory": 10,
       "name": "participant-2",
       "namespace": "splitwell",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {
@@ -756,7 +756,7 @@
       "maxHistory": 10,
       "name": "splitwell-app",
       "namespace": "splitwell",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -1084,7 +1084,7 @@
       "maxHistory": 10,
       "name": "validator-splitwell",
       "namespace": "splitwell",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
