@@ -61,6 +61,8 @@
 
     - Token Standard V2 (CIP-112)
 
+      - Notable callout: bump Daml SDK to 3.5.1, which required bumping the package versions for all non-API packages.
+
       - Notable callouts for Amulet changes:
           - add support for single-step transfers via the V2 transfer factory interface for
             cases where both sender and receiver authorization is available
