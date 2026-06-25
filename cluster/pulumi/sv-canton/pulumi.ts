@@ -90,7 +90,6 @@ export function runSvCantonForSvs<T>(
           sequencer: {
             enableBftSequencer: false,
             dedicatedBftSequencerDb: true,
-            migrateBftSequencerDbFromSharedServer: false,
           },
         };
       })

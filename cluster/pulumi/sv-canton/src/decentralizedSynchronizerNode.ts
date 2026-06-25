@@ -98,12 +98,6 @@ abstract class InStackDecentralizedSynchronizerNode
             databaseName?: string;
             port?: number;
             user?: string;
-            migrateFrom?: {
-              host: Output<string>;
-              secretName: Output<string>;
-              port?: number;
-              user?: string;
-            };
           };
         },
     version: CnChartVersion,
@@ -300,7 +294,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
       bftSequencerPostgres?: Postgres;
-      migrateBftSequencerDbFromSharedServer?: boolean;
     },
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
@@ -313,14 +306,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
           host: dbs.bftSequencerPostgres.address,
           secretName: dbs.bftSequencerPostgres.secretName,
           databaseName,
-          ...(dbs.migrateBftSequencerDbFromSharedServer
-            ? {
-                migrateFrom: {
-                  host: dbs.sequencerPostgres.address,
-                  secretName: dbs.sequencerPostgres.secretName,
-                },
-              }
-            : {}),
         }
       : {
           databaseName,
