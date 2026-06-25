@@ -1,7 +1,1 @@
-!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml)
-infra:
-  gkeGateway:
-    proxyForIstioHttp: true
-cloudArmor:
-  enabled: true
-  allRulesPreviewOnly: true
+!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml) {}
