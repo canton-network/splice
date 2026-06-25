@@ -182,6 +182,14 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             assertOldestOpenRound(round.toLong)
           }
 
+          clue("All non-firstSV scans have activity data after round 0 is archived") {
+            eventually() {
+              Seq(sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
+                scan.getRewardAccountingEarliestAvailableRound() should not be None
+              }
+            }
+          }
+
           val id0 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(splitwellWalletClient)
 
