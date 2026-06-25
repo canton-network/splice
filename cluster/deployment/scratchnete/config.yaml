@@ -27,6 +27,37 @@ svs:
 persistentHeapDumps: true
 chaosMesh:
   dabftLatency: 100ms
+validators:
+  party-allocator:
+    postgresPvcSize: '200Gi'
+    partyAllocator:
+      enable: true
+      maxParties: 500000
+      parallelism: 4
+      pvcSize: 100Gi
+    namespace: party-allocator
+    partyHint: 'digitalassset-partyallocator-1'
+    onboardingSecret: 'eyJzcG9uc29yaW5nU3YiOiJEaWdpdGFsLUFzc2V0LTI6OjEyMjBmZWE2ZThlOGM5MmVmMWY3NmIwNTAxY2MzNWY2M2IyMzU2ZWEyY2VmYjkxOTA1MWJlMzcwZDRlYWJhZjljN2FiIiwic2VjcmV0IjoicjJDQ2l4dFdrb29taVk3MjVXR0xiWVBiMEorOE5GT1NVZDBHMTVaQ3lZST0iLCJwYXJ0eUhpbnQiOiJkaWdpdGFsYXNzc2V0LXBhcnR5YWxsb2NhdG9yLTEifQ=='
+    participantPruningSchedule:
+      cron: "0 /10 * * * ?" # Run every 10min
+      maxDuration: "5m"
+      retention: "14d"
+    participant:
+      resources:
+        requests:
+          memory: 16Gi
+        limits:
+          memory: 20Gi
+      additionalEnvVars:
+        - !include($SPLICE_ROOT/cluster/configs/shared/participant_pruning.yaml)
+        - name: ADDITIONAL_CONFIG_TOPOLOGY_BATCH_SIZE
+          value: |
+            canton.participants.participant.topology.broadcast-batch-size = 50
+    validatorApp:
+      additionalEnvVars:
+        - name: ADDITIONAL_CONFIG_DISABLE_TRANSFER_PREAPPROVAL_DEDUP
+          value: |
+            canton.validator-apps.validator_backend.transfer-preapproval.proposal-acceptance-deduplication = false
 synchronizerMigration:
   frozenMigrationId: 0
   active:
