@@ -95,6 +95,7 @@ class SvReonboardingIntegrationTest
       .simpleTopology4Svs(this.getClass.getSimpleName)
       // Disable user allocation
       .withPreSetup(_ => ())
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransformsToFront((_, conf) => ConfigTransforms.bumpCantonPortsBy(22_000)(conf))
       .addConfigTransforms(
         (_, config) =>

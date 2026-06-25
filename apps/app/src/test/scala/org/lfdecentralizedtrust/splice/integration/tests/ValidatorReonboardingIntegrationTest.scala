@@ -88,6 +88,7 @@ trait ValidatorReonboardingIntegrationTestBase
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withPreSetup(_ => ())
       .withAllocatedUsers(extraIgnoredValidatorPrefixes = Seq("aliceValidator"))
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) => {
         val defaultAliceValidatorConfig =
           config.validatorApps(InstanceName.tryCreate("aliceValidator"))
