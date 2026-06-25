@@ -47,6 +47,10 @@
       party after freeze time failing with
       ``TOPOLOGY_NO_APPROPRIATE_SIGNING_KEY_IN_STORE``.
 
+  - Scan
+
+    - Add a metric for the size of the most recent ACS snapshot
+
   - Daml
 
     - Release the Token Standard V2 APIs (`CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md>`__).

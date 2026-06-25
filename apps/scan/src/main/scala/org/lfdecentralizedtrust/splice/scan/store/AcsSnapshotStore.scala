@@ -467,20 +467,21 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       action: DBIOAction[R, NoStream, E],
       expectedState: Option[IncrementalAcsSnapshot],
+      onSkip: R,
   )(implicit
       tc: TraceContext
-  ): DBIOAction[Unit, NoStream, Effect.Transactional & Effect.Read & E] = {
+  ): DBIOAction[R, NoStream, Effect.Transactional & Effect.Read & E] = {
     (for {
       actualState <- getIncrementalSnapshotAction(table)
       result <-
         if (actualState == expectedState) {
-          action.map(_ => ())
+          action
         } else {
           logger.info(
             s"Skipping action because actual state $actualState != expected state $expectedState. " +
               "In production, this is expected only during retries after transient network failures."
           )
-          DBIOAction.unit
+          DBIOAction.successful(onSkip)
         }
     } yield result).transactionally
   }
@@ -542,7 +543,7 @@ class AcsSnapshotStore(
     }
 
     storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+      withIncrementalSnapshotIdempotencyCheck(table, statement, None, onSkip = ()),
       "initializeIncrementalSnapshot",
     )
   }
@@ -603,7 +604,7 @@ class AcsSnapshotStore(
     }
 
     storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+      withIncrementalSnapshotIdempotencyCheck(table, statement, None, onSkip = ()),
       "initializeIncrementalSnapshotFromImportUpdates",
     )
   }
@@ -620,7 +621,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[Int] = {
     logger.debug(
       s"Saving incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime}"
     )
@@ -693,7 +694,7 @@ class AcsSnapshotStore(
         s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copied_rows rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
-      ()
+      copied_rows
     }
     storage.queryAndUpdate(
       withExclusiveSnapshotDataLock(
@@ -701,6 +702,7 @@ class AcsSnapshotStore(
           table,
           statement,
           Some(snapshot),
+          onSkip = 0,
         )
       ),
       "saveIncrementalSnapshot",
@@ -781,7 +783,7 @@ class AcsSnapshotStore(
       _ <- sqlu"""delete from acs_incremental_snapshot where snapshot_id = ${snapshot.snapshotId}"""
     } yield ()
     storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
+      withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot), onSkip = ()),
       "deleteIncrementalSnapshot",
     )
   }
