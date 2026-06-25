@@ -21,7 +21,7 @@ class SplitwellIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
-      .addConfigTransform((_, config) => ConfigTransforms.withoutRewardConfig(config))
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withAdditionalSetup(implicit env => {
         aliceValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
         bobValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
