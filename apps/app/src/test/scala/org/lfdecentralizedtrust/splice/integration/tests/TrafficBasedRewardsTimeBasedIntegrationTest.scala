@@ -15,7 +15,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
+import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
@@ -158,28 +158,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         assertOldestOpenRound(round.toLong)
       }
 
-      clue("All non-firstSV scans have activity data after round 0 is archived") {
-        eventually() {
-          Seq(sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
-            scan.getRewardAccountingEarliestAvailableRound() should not be None
-          }
-        }
+      clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
+        assertZeroTotals(sv1ScanBackend, 0L to 2L)
       }
 
-      clue("Bootstrap rounds have zero activity (no featured apps yet)") {
-        (0L to 2L).foreach { round =>
-          eventually() {
-            inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
-              case GetRewardAccountingActivityTotalsResponse.members
-                    .RewardAccountingActivityTotalsOk(t) =>
-                t.activityRecordsCount shouldBe 0L withClue
-                  s"Round $round should have no activity records"
-                t.totalAppActivityWeight shouldBe 0L withClue
-                  s"Round $round should have no activity weight"
-                BigDecimal(t.totalAppRewardMintingAllowance) shouldBe BigDecimal(0) withClue
-                  s"Round $round should have no minting allowance"
-            }
-          }
+      clue("All SVs report zero totals for rounds after bootstrap") {
+        Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
+          assertZeroTotals(scan, 1L to 2L)
         }
       }
     }
@@ -669,6 +654,25 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       }
     }
   }
+
+  private def assertZeroTotals(
+      scan: ScanAppBackendReference,
+      rounds: Seq[Long],
+  ): Unit =
+    rounds.foreach { round =>
+      eventually() {
+        inside(scan.getRewardAccountingActivityTotals(round)) {
+          case GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(t) =>
+            t.activityRecordsCount shouldBe 0L withClue
+              s"Round $round should have no activity records on ${scan.name}"
+            t.totalAppActivityWeight shouldBe 0L withClue
+              s"Round $round should have no activity weight on ${scan.name}"
+            BigDecimal(t.totalAppRewardMintingAllowance) shouldBe BigDecimal(0) withClue
+              s"Round $round should have no minting allowance on ${scan.name}"
+        }
+      }
+    }
 
   private def assertOldestOpenRound(
       expectedOldestRound: Long
