@@ -620,6 +620,29 @@
         },
         "fullnameOverride": "postgres",
         "primary": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
           "extendedConfiguration": "max_connections = 300\nmax_wal_size = 2GB\n",
           "initdb": {
             "args": "--data-checksums",
@@ -630,7 +653,14 @@
           "persistence": {
             "size": "200Gi",
             "storageClass": "hyperdisk-standard-rwo"
-          }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
         }
       },
       "version": "16.7.27"

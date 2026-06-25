@@ -543,7 +543,9 @@ export class BitnamiPostgres extends pulumi.ComponentResource implements Postgre
     const maxConnections = args.maxConnections ?? 300;
     const maxWalSize = args.maxWalSize ?? '2GB';
     const storageClass = args.storageClass ?? standardStorageClassName;
-    const { affinity, tolerations } = args.affinityAndTolerations ?? {};
+    // Default to the apps node affinity/tolerations so the pod schedules onto cn_apps nodes,
+    // matching the behavior of the splice-postgres chart this replaces.
+    const { affinity, tolerations } = args.affinityAndTolerations ?? appsAffinityAndTolerations;
 
     const helmValues: ChartValues = {
       fullnameOverride: instanceName,
