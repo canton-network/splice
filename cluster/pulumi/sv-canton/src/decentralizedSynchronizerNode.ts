@@ -14,11 +14,11 @@ import {
   loadJsonFromFile,
   loadYamlFromFile,
   LogLevel,
+  persistentHeapDumpsPvc,
   sanitizedForPostgres,
   sequencerTokenExpirationTime,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
-  standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 import {
   CometBftNodeConfigs,
@@ -28,7 +28,6 @@ import {
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
 } from '@canton-network/splice-pulumi-common-sv';
-import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
@@ -85,6 +84,7 @@ abstract class InStackDecentralizedSynchronizerNode
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
     },
     driver:
       | { type: 'cometbft'; host: Output<string>; port: number }
@@ -98,6 +98,12 @@ abstract class InStackDecentralizedSynchronizerNode
             databaseName?: string;
             port?: number;
             user?: string;
+            migrateFrom?: {
+              host: Output<string>;
+              secretName: Output<string>;
+              port?: number;
+              user?: string;
+            };
           };
         },
     version: CnChartVersion,
@@ -175,19 +181,18 @@ abstract class InStackDecentralizedSynchronizerNode
           additionalJvmOptions: getAdditionalJvmOptions(
             physicalSynchronizerConfig.sequencer.additionalJvmOptions
           ),
-          pvc: spliceConfig.configuration.persistentHeapDumps
-            ? {
-                size: '35Gi',
-                volumeStorageClass: standardStorageClassName,
-              }
-            : undefined,
+          pvc: persistentHeapDumpsPvc(),
           serviceAccountName: imagePullServiceAccountName,
         },
       },
       this.version,
       {
         ...opts,
-        dependsOn: (opts?.dependsOn || []).concat([dbs.sequencerPostgres, dbs.mediatorPostgres]),
+        dependsOn: (opts?.dependsOn || []).concat(
+          [dbs.sequencerPostgres, dbs.mediatorPostgres].concat(
+            dbs.bftSequencerPostgres ? [dbs.bftSequencerPostgres] : []
+          )
+        ),
         parent: this,
       }
     );
@@ -294,12 +299,32 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
+      migrateBftSequencerDbFromSharedServer?: boolean;
     },
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
   ) {
     super(migrationId, xns, version);
+    const databaseName = `sequencer_${migrationId}_dabft`;
+    const persistence = dbs.bftSequencerPostgres
+      ? {
+          host: dbs.bftSequencerPostgres.address,
+          secretName: dbs.bftSequencerPostgres.secretName,
+          databaseName,
+          ...(dbs.migrateBftSequencerDbFromSharedServer
+            ? {
+                migrateFrom: {
+                  host: dbs.sequencerPostgres.address,
+                  secretName: dbs.sequencerPostgres.secretName,
+                },
+              }
+            : {}),
+        }
+      : {
+          databaseName,
+        };
     this.installDecentralizedSynchronizer(
       svConfig,
       migrationId,
@@ -308,9 +333,7 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
         type: 'cantonbft',
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
-        persistence: {
-          databaseName: `sequencer_${migrationId}_dabft`,
-        },
+        persistence,
       },
       version,
       svConfig.logging?.cantonLogLevel,

@@ -29,7 +29,6 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       dbType: String3,
       actionNameColumnName: String,
       acceptedColumnName: String,
-      effectiveAtColumnName: String,
       requesterNameColumnName: String,
       actionName: Option[String],
       accepted: Option[Boolean],
@@ -41,8 +40,16 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   ): SqlStreamingAction[Vector[
     TxLogQueries.SelectFromTxLogTableResult
   ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
+    // Sort key: the vote's effective date, falling back to the result's completedAt for non-accepted votes that have none.
+    val effectiveAtSortKey =
+      "coalesce(vote_effective_at, entry_data->'result'->>'completedAt')"
     val afterCondition = after match {
-      case Some(a) => Some(sql"""entry_number < $a""")
+      case Some(a) =>
+        Some(
+          // Keyset pagination past the previous page's last entry_number `a`. Lexicographical row comparison,
+          // expands to: effectiveAt < cursorEffectiveAt OR (effectiveAt = cursorEffectiveAt AND entry_number < a).
+          sql"""(#$effectiveAtSortKey, entry_number) < ((select #$effectiveAtSortKey from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
+        )
       case None => None
     }
     val actionNameCondition = actionName match {
@@ -58,15 +65,15 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     }
     val effectivenessCondition = (effectiveFrom, effectiveTo) match {
       case (Some(effectiveFrom), Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName between ${lengthLimited(
+        Some(sql"""vote_effective_at between ${lengthLimited(
             effectiveFrom
           )} and ${lengthLimited(
             effectiveTo
           )}""")
       case (Some(effectiveFrom), None) =>
-        Some(sql"""#$effectiveAtColumnName > ${lengthLimited(effectiveFrom)}""")
+        Some(sql"""vote_effective_at > ${lengthLimited(effectiveFrom)}""")
       case (None, Some(effectiveTo)) =>
-        Some(sql"""#$effectiveAtColumnName < ${lengthLimited(effectiveTo)}""")
+        Some(sql"""vote_effective_at < ${lengthLimited(effectiveTo)}""")
       case (None, None) => None
     }
     val requesterCondition = requester match {
@@ -92,7 +99,8 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       txLogTableName,
       txLogStoreId,
       where = whereClause.toActionBuilder,
-      orderLimit = sql"""order by entry_number desc limit ${sqlLimit(limit)}""",
+      orderLimit =
+        sql"""order by #$effectiveAtSortKey desc, entry_number desc limit ${sqlLimit(limit)}""",
     )
   }
 }

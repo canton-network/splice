@@ -363,6 +363,9 @@ template AmuletRules
       controller receiver
       do
         require "isDevNet flag is true" isDevNet
+        -- Limit the maximal amount that can be tapped in a single transaction to avoid hitting
+        -- limits in downstream processing, e.g., when computing the total supply.
+        require "Tapped amount <= 100,000,000" (amount <= 100000000.0)
         result <- exercise self AmuletRules_Mint with ..
         return AmuletRules_DevNet_TapResult with
           amuletSum = result.amuletSum

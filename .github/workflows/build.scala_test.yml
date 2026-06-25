@@ -128,7 +128,7 @@ jobs:
         image: ${{ inputs.postgres_image }}
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_INITDB_ARGS: ${{ inputs.postgres_init_args }}
+          POSTGRES_INITDB_ARGS: ${{ inputs.postgres_init_args }} --data-checksums
 
     steps:
 

@@ -609,6 +609,100 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       }
     }
 
+    "listExpiredRewardCouponsV2" should {
+
+      "return expired observer coupons respecting ignored parties, and always include hidden coupons" in {
+        val now = Instant.parse("2025-01-01T12:00:00.000000Z")
+        val past = now.minusSeconds(3600)
+        val future = now.plusSeconds(3600)
+
+        val expiredHavingBeneficiary = rewardCouponV2(
+          round = 1,
+          provider = userParty(1),
+          beneficiary = Some(userParty(2)),
+          expiresAt = past,
+        )
+
+        val active = rewardCouponV2(
+          round = 1,
+          provider = userParty(1),
+          beneficiary = Some(userParty(2)),
+          expiresAt = future,
+        )
+
+        val expiredNoBeneficiary = rewardCouponV2(
+          round = 1,
+          provider = userParty(3),
+          beneficiary = None,
+          expiresAt = past,
+        )
+
+        val expiredHidden = rewardCouponV2(
+          round = 1,
+          provider = userParty(4),
+          beneficiary = None,
+          expiresAt = past,
+          providerIsObserver = false,
+        )
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(expiredHavingBeneficiary, active, expiredNoBeneficiary, expiredHidden)
+          )(dummyDomain.create(_)(store.multiDomainAcsStore))
+
+          resultAll <- store.listExpiredRewardCouponsV2()(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreProvider <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(1))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreBeneficiary <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(2))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+
+          ignoreProviderOfHiddenAndNoBeneficiary <- store.listExpiredRewardCouponsV2(
+            Some(new IgnoredPartiesStore(Set(userParty(3), userParty(4))))
+          )(
+            CantonTimestamp.assertFromInstant(now),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+        } yield {
+          val all = resultAll.map(_.contract)
+          all should contain(expiredHavingBeneficiary)
+          all should contain(expiredNoBeneficiary)
+          all should contain(expiredHidden)
+          all should not contain active
+
+          val byProvider = ignoreProvider.map(_.contract)
+          byProvider should not contain expiredHavingBeneficiary
+          byProvider should contain(expiredNoBeneficiary)
+          byProvider should contain(expiredHidden)
+
+          val byBeneficiary = ignoreBeneficiary.map(_.contract)
+          byBeneficiary should not contain expiredHavingBeneficiary
+          byBeneficiary should contain(expiredNoBeneficiary)
+          byBeneficiary should contain(expiredHidden)
+
+          // expiredHidden coupon is always returned
+          val byProviderOfHiddenAndNoBeneficiary =
+            ignoreProviderOfHiddenAndNoBeneficiary.map(_.contract)
+          byProviderOfHiddenAndNoBeneficiary should contain(expiredHavingBeneficiary)
+          byProviderOfHiddenAndNoBeneficiary should not contain expiredNoBeneficiary
+          byProviderOfHiddenAndNoBeneficiary should contain(expiredHidden)
+        }
+      }
+    }
+
     "listConfirmations" should {
 
       "list all confirmations with a matching action" in {

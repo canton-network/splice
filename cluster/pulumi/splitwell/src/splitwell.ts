@@ -18,6 +18,7 @@ import {
   imagePullSecret,
   installLedgerApiSecret,
   installSpliceHelmChart,
+  persistentHeapDumpsPvc,
   ValidatorTopupConfig,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
@@ -112,6 +113,7 @@ export async function installSplitwell(
       logLevel: splitwellConfig.logging?.level,
       apiRequestLogLevel: splitwellConfig.logging?.apiRequestLogLevel,
       logAsyncFlush: splitwellConfig.logging?.async,
+      pvc: persistentHeapDumpsPvc(),
     },
     activeVersion,
     { dependsOn: imagePullDeps }

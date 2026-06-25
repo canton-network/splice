@@ -302,7 +302,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": false
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": false,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
@@ -323,7 +325,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -343,7 +347,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -361,7 +367,9 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
-              "enableBftSequencer": false
+              "dedicatedBftSequencerDb": true,
+              "enableBftSequencer": false,
+              "migrateBftSequencerDbFromSharedServer": false
             },
             "version": {
               "type": "remote",
@@ -383,7 +391,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": false
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": false,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
@@ -403,7 +413,9 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
-            "enableBftSequencer": true
+            "dedicatedBftSequencerDb": true,
+            "enableBftSequencer": true,
+            "migrateBftSequencerDbFromSharedServer": false
           },
           "version": {
             "type": "remote",
@@ -1607,6 +1619,10 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
+          "type": "unlimited"
+        },
         "/api/scan/v0/admin/sv/voterequests": {
           "name": "sv-voterequests",
           "type": "unlimited"
@@ -1832,6 +1848,10 @@
         },
         "/api/scan/v0/active-synchronizer-serial": {
           "name": "activeSynchronizerSerial",
+          "type": "unlimited"
+        },
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {

@@ -10,12 +10,14 @@ import {
   ProposalVote,
   ProposalVotingInformation,
   SupportedActionTag,
+  UpdateSvRewardWeightProposal,
 } from '../utils/types';
 import { Box, Typography } from '@mui/material';
 import { useSvConfig } from '../utils';
 import {
   actionTagToTitle,
   buildProposal,
+  formatBasisPoints,
   getActionValue,
   getVoteResultStatus,
 } from '../utils/governance';
@@ -23,6 +25,7 @@ import { useDsoInfos } from '../contexts/SvContext';
 import dayjs from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useVoteRequestResultByCid } from '../hooks/useVoteRequestResultByCid';
+import { usePreviousSvRewardWeight } from '../hooks/usePreviousSvRewardWeight';
 import { Loading } from '@canton-network/splice-common-frontend';
 import { ProposalDetailsContent } from '../components/governance/ProposalDetailsContent';
 
@@ -38,15 +41,28 @@ export const VoteRequestDetails: React.FC = () => {
   const { hasVoteRequest, hasVoteResult, voteRequest, voteResult, isPending } =
     useVoteRequestResultByCid(contractId as ContractId<VoteRequest>);
 
-  if (dsoInfosQuery.isPending && isPending) {
-    return <Loading />;
-  }
-
   const request = hasVoteRequest
     ? voteRequest?.payload
     : hasVoteResult
       ? voteResult?.request
       : undefined;
+
+  const rewardWeightAction =
+    request?.action.tag === 'ARC_DsoRules' &&
+    request.action.value.dsoAction.tag === 'SRARC_UpdateSvRewardWeight'
+      ? request.action.value.dsoAction.value
+      : undefined;
+  const currentEffectiveAt =
+    voteResult?.outcome.tag === 'VRO_Accepted' ? voteResult.outcome.value.effectiveAt : undefined;
+  const { weight: previousRewardWeight, isPending: isPreviousRewardWeightPending } =
+    usePreviousSvRewardWeight(
+      currentEffectiveAt ? rewardWeightAction?.svParty : undefined,
+      currentEffectiveAt
+    );
+
+  if (dsoInfosQuery.isPending && isPending) {
+    return <Loading />;
+  }
 
   if (!request) {
     return (
@@ -85,6 +101,15 @@ export const VoteRequestDetails: React.FC = () => {
     isVoteRequest: hasVoteRequest,
     proposal: buildProposal(request.action, dsoInfosQuery.data),
   } as ProposalDetails;
+
+  if (
+    action === 'SRARC_UpdateSvRewardWeight' &&
+    currentEffectiveAt &&
+    !isPreviousRewardWeightPending
+  ) {
+    (proposalDetails.proposal as UpdateSvRewardWeightProposal).currentWeight =
+      previousRewardWeight !== undefined ? formatBasisPoints(previousRewardWeight) : '';
+  }
 
   const votingInformation: ProposalVotingInformation = {
     requester: request.requester,

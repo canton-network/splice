@@ -100,6 +100,7 @@ class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -153,6 +154,7 @@ class DbAppActivityRecordStore(
   /** Find the earliest round with complete app activity.
     * The first ingested round may be partial, so the earliest complete round
     * is `earliest_ingested_round + 1`.
+    * Returns the round only after it has been archived.
     * Returns None if no meta row exists or if archival of the earliest round has not happened yet.
     */
   def earliestRoundWithCompleteAppActivity()(implicit
@@ -170,6 +172,26 @@ class DbAppActivityRecordStore(
               and m.last_archived_round >= m.earliest_ingested_round + 1
       """.as[Option[Long]].headOption.map(_.flatten),
       "appActivity.earliestRoundWithCompleteAppActivity",
+    )
+  }
+
+  /** The earliest round for which we have ingested app activity records.
+    * This round may not have all app activity records ingested.
+    * Returns None if no app activity records have been ingested, ie meta row does not exist.
+    */
+  def earliestIngestedRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    runQuerySingle(
+      sql"""select m.earliest_ingested_round
+            from #${Tables.activityRecordMeta} m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = $codeVersion
+              and m.activity_ingestion_user_version = $userVersion
+      """.as[Long].headOption,
+      "appActivity.earliestIngestedRound",
     )
   }
 
@@ -455,11 +477,16 @@ class DbAppActivityRecordStore(
               case None =>
                 DBIO.successful(NotReady: EnsureResult)
               case Some((firstRecordTimeMicros, earliestRound)) =>
+                // First SV on fresh network: set earliest_ingested_round to -1
+                // so that round 0 passes assertCompleteActivity (0 > -1)
+                // and earliestRoundWithCompleteAppActivity returns -1 + 1 = 0.
+                val adjustedEarliestRound =
+                  if (isFirstSv && maxVersions.isEmpty) -1L else earliestRound
                 insertActivityRecordMetaDBIO(
                   codeVersion,
                   userVersion,
                   firstRecordTimeMicros,
-                  earliestRound,
+                  adjustedEarliestRound,
                   lastArchivedRoundO,
                 ).map { _ =>
                   metaChecked.set(true)

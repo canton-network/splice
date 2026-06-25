@@ -13,15 +13,22 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import org.lfdecentralizedtrust.splice.admin.api.client.DamlGrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.TriggerMetrics
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
-import org.lfdecentralizedtrust.splice.scan.metrics.ScanMediatorVerdictIngestionMetrics
+import org.lfdecentralizedtrust.splice.scan.metrics.{
+  RewardComputationMetrics,
+  ScanMediatorVerdictIngestionMetrics,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SequencerPruningMetrics
 import org.lfdecentralizedtrust.splice.sv.automation.{
   AmuletPriceMetricsTrigger,
   ReportSvStatusMetricsExportTrigger,
-  RewardProcessingMetrics,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreMetrics}
+import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
+  CalculateRewardsTriggerBase,
+  SummarizingMiningRoundTrigger,
+}
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTriggerBase
 import org.lfdecentralizedtrust.splice.validator.metrics.TopologyMetrics
 import org.lfdecentralizedtrust.splice.wallet.metrics.AmuletMetrics
 
@@ -103,7 +110,9 @@ object MetricsDocs {
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
-    new RewardProcessingMetrics(generator)(MetricsContext.Empty)
+    new ProcessRewardsTriggerBase.ProcessRewardsMetrics(generator, true)
+    new CalculateRewardsTriggerBase.CalculateRewardsMetrics(generator, true)
+    new SummarizingMiningRoundTrigger.SummarizingMiningRoundMetrics(generator)
     val svMetrics = generator.getAll()
     generator.reset()
     // scan
@@ -113,6 +122,7 @@ object MetricsDocs {
       ProcessingTimeout(),
     )
     new ScanMediatorVerdictIngestionMetrics(generator)
+    new RewardComputationMetrics(generator)(MetricsContext.Empty)
     val scanMetrics = generator.getAll()
     generator.reset()
     GeneratedMetrics(

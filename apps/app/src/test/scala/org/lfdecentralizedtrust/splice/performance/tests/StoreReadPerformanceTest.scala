@@ -56,8 +56,7 @@ abstract class StoreReadPerformanceTest(
   )(implicit tc: TraceContext): Future[Unit]
 
   @SuppressWarnings(Array("org.lfdecentralizedtrust.splice.wart.Println"))
-  def run(): Future[Unit] = {
-    val storage = initializeStorage()
+  def run(): Future[Unit] = withStorage { storage =>
     val store = mkStore(storage)
     TraceContext
       .withNewTraceContext(this.getClass.getName) { implicit tc =>

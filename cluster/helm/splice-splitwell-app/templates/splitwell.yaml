@@ -39,7 +39,7 @@ spec:
           value: {{ .Values.scanAddress }}
         - name: SPLICE_APP_SPLITWELL_PARTICIPANT_HOST
           value: {{ .Values.participantHost }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "splitwell" "keyName" "splitwell" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "splitwell" "keyName" "splitwell" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         {{- with .Values.persistence }}
         - name: ADDITIONAL_CONFIG_PERSISTENCE
           value: |
@@ -56,10 +56,14 @@ spec:
               }
             }
         - name: SPLICE_APP_POSTGRES_PASSWORD
+          {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- end }}
         - name: FAIL_ON_APP_VERSION_MISMATCH
           value: {{ .Values.failOnAppVersionMismatch | quote }}
@@ -82,15 +86,23 @@ spec:
             # would not receive configmap updates.
             # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
             mountPath: /app/logback
+        {{- if .Values.pvc }}
+          - name: splitwell-volume
+            mountPath: /persistent-data
+        {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -120,6 +132,30 @@ spec:
         - name: logback-config
           configMap:
             name: {{ .Release.Name }}-splitwell-app-logback-config
+        {{- if .Values.pvc }}
+        - name: splitwell-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-splitwell-pvc
+        {{- end }}
+{{- if .Values.pvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-splitwell-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $.Release.Name) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+  storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

@@ -308,11 +308,71 @@ tests:
             name: pg-init-bft-driver
             image: postgres:14
             env:
-              - name: PGPASSWORD
+              - name: PGPASSWORD_TARGET
                 valueFrom:
                   secretKeyRef:
                     key: postgresPassword
                     name: custom-pg-secret
+      # Without migrateFrom there is no source password and no migration logic.
+      - notContains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: PGPASSWORD_SOURCE
+          any: true
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "Migrating database"
+  - it: "cantonbft driver migrates the dabft database from the shared server when migrateFrom is set"
+    set:
+      sequencer:
+        persistence:
+          host: shared-sequencer-pg
+          secretName: sequencer-pg-secret
+        driver:
+          type: cantonbft
+          externalAddress: "sequencer.example.com"
+          externalPort: 5010
+          persistence:
+            host: dedicated-bft-pg
+            secretName: dedicated-bft-pg-secret
+            databaseName: sequencer_6_dabft
+            migrateFrom:
+              host: shared-sequencer-pg
+              secretName: sequencer-pg-secret
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - isSubset:
+          path: spec.template.spec.initContainers[1]
+          content:
+            name: pg-init-bft-driver
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: PGPASSWORD_TARGET
+            valueFrom:
+              secretKeyRef:
+                key: postgresPassword
+                name: dedicated-bft-pg-secret
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: PGPASSWORD_SOURCE
+            valueFrom:
+              secretKeyRef:
+                key: postgresPassword
+                name: sequencer-pg-secret
+      # The migration copies the dabft database from the shared sequencer server to the dedicated one.
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: 'TARGET_HOST="dedicated-bft-pg"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: 'SOURCE_HOST="shared-sequencer-pg"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: 'pg_dump .* "\$SOURCE_HOST"'
 
   - it: "allows setting cometbft sequencer image and primary initImage"
     set:
@@ -352,3 +412,62 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].image
           value: "secure-registry.example.com/postgres:14-driver"
+
+  - it: "allows overriding sequencer base database password with raw strings"
+    set:
+      sequencer.driver.type: "postgres"
+      sequencer.driver.address: "mock-driver-address"
+      sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/sequencer/postgres-password"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='CANTON_DOMAIN_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_DATABASE_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/sequencer/postgres-password"
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.valueFrom.secretKeyRef)]
+
+
+  - it: "allows overriding bft driver database password with raw strings"
+    set:
+      sequencer.driver.type: "cantonbft"
+      sequencer.driver.externalAddress: "sequencer.example.com"
+      sequencer.driver.externalPort: 5010
+      sequencer.driver.persistence:
+        host: "custom-driver-host"
+        secretOverrides:
+          postgresPassword: "vault:kv/data/sequencer/driver-password"
+          migrateFromPostgresPassword: "vault:kv/data/sequencer/migrate-from-driver-password"
+        migrateFrom:
+          host: custom-driver-host-source
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_BFT_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/sequencer/driver-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].env[?(@.name=='PGPASSWORD_TARGET')].value
+          pattern: "vault:kv/data/sequencer/driver-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].env[?(@.name=='PGPASSWORD_SOURCE')].value
+          pattern: "vault:kv/data/sequencer/migrate-from-driver-password"
+
+  - it: "injects custom serviceAccountName into Deployment when specified"
+    set:
+      serviceAccountName: "custom-domain-sa"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-domain-sa"
