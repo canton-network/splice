@@ -554,7 +554,7 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
         // Unlike earliestRoundWithCompleteAppActivity, this does not require any
         // archival to have happened yet.
-        _ <- store.insertActivityRecordMeta(1, 0, baseTs.toMicros, 42L, None)
+        _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 42L, None)
         result <- store.earliestIngestedRound()
       } yield {
         result.value shouldBe 42L
@@ -565,8 +565,14 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         baseTs = CantonTimestamp.now()
-        _ <- store.insertActivityRecordMeta(0, 0, baseTs.toMicros, 10L, Some(15L))
-        _ <- store.insertActivityRecordMeta(1, 0, baseTs.plusSeconds(10L).toMicros, 20L, None)
+        _ <- store.insertActivityRecordMetaForTesting(0, 0, baseTs.toMicros, 10L, Some(15L))
+        _ <- store.insertActivityRecordMetaForTesting(
+          1,
+          0,
+          baseTs.plusSeconds(10L).toMicros,
+          20L,
+          None,
+        )
         result <- store.earliestIngestedRound()
       } yield {
         result.value shouldBe 20L
@@ -578,7 +584,7 @@ class DbAppActivityRecordStoreTest
         (store1, _) <- newStore()
         (store2, _) <- newStore()
         baseTs = CantonTimestamp.now()
-        _ <- store2.insertActivityRecordMeta(1, 0, baseTs.toMicros, 10L, Some(11L))
+        _ <- store2.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
         result <- store1.earliestIngestedRound()
       } yield {
         result shouldBe None
