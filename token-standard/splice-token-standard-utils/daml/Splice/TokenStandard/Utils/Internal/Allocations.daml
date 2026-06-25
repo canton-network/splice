@@ -684,6 +684,7 @@ allocationInstructionV1_withdrawDefaultImplUsingV2
   -> ContractId AllocationInstructionV1.AllocationInstruction -> AllocationInstructionV1.AllocationInstruction_Withdraw -> Update AllocationInstructionV1.AllocationInstructionResult
 allocationInstructionV1_withdrawDefaultImplUsingV2 this v2Impl self arg = do
   let thisView = view this
+  ensureWithdrawIsAllowed thisView.allocation
   result <- v2Impl (coerceInterfaceContractId self) AllocationInstructionV2.AllocationInstruction_Withdraw with
     actors = [regularAccountOwner thisView.allocation.authorizer]
     extraArgs = arg.extraArgs

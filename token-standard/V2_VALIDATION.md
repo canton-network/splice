@@ -263,4 +263,4 @@ It aims to do so by writing Daml script tests that mirror real-world use cases a
   `settlementFactoryV2_settleBatchDefaultImpl`; and use it in `TestTokenV2` to filter the
   account maps to only the one of the allocation authorizer to avoid leaking
   information about unrelated counter-parties.
-
+- Check the `committed` flag of allocations in `allocationV2_withdrawDefaultImplUsingV1` as a prudent engineering measure
