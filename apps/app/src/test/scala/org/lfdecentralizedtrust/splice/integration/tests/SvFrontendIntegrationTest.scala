@@ -1457,10 +1457,6 @@ class SvFrontendIntegrationTest
           sv3Backend.castVote(grantTrackingCid, true, "", "")
         }
 
-        eventuallySucceeds() {
-          sv4Backend.castVote(grantTrackingCid, true, "", "")
-        }
-
         eventually() {
           sv1ScanBackend.lookupFeaturedAppRight(providerParty) shouldBe a[Some[?]]
         }
