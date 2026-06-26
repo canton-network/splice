@@ -217,7 +217,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           ) shouldBe Some(ts3)
         }
         reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1)
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts3)
           .futureValue
           .objects
           .map(_.key) should contain theSameElementsAs
