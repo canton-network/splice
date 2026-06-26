@@ -131,7 +131,7 @@ Cannot use file /tmp/hsperfdata_ci
 WARN: InvalidDefaultArgInFrom
 
 # the script does not try to be secure
-.*api_jwt\.py:153: InsecureKeyLengthWarning:.*
+.*api_jwt\.py:.*: InsecureKeyLengthWarning:.*
 
 # com.daml.testing-utils seems to bring its own logback-test.xml, but it doesn't seem to break anything so we just ignore it
 Resource.*logback-test.xml.*occurs

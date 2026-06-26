@@ -12,7 +12,7 @@ import { ClusterBasename, GcpProject, GcpRegion, GcpZone } from './config/gcpCon
 import { jmxOptions } from './jmx';
 
 /// Environment variables
-export const HELM_CHART_TIMEOUT_SEC = Number(config.optionalEnv('HELM_CHART_TIMEOUT_SEC')) || 600;
+export const HELM_CHART_TIMEOUT_SEC = Number(config.optionalEnv('HELM_CHART_TIMEOUT_SEC')) || 1200;
 export const HELM_MAX_HISTORY_SIZE = Number(config.optionalEnv('HELM_MAX_HISTORY_SIZE')) || 0; // 0 => no limit
 
 const MOCK_SPLICE_ROOT = config.optionalEnv('MOCK_SPLICE_ROOT');

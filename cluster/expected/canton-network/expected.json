@@ -217,7 +217,7 @@
       "maxHistory": 10,
       "name": "docs",
       "namespace": "docs",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -2292,7 +2292,7 @@
       "maxHistory": 10,
       "name": "info",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -2391,7 +2391,7 @@
       "maxHistory": 10,
       "name": "ingress-sv",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -2760,7 +2760,7 @@
       "maxHistory": 10,
       "name": "scan",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {
@@ -2883,7 +2883,7 @@
       "maxHistory": 10,
       "name": "sv-app",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
@@ -3177,7 +3177,7 @@
       "maxHistory": 10,
       "name": "validator-sv-1",
       "namespace": "sv-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
@@ -3545,7 +3545,7 @@
       "maxHistory": 10,
       "name": "info",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -3644,7 +3644,7 @@
       "maxHistory": 10,
       "name": "ingress-sv",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "affinity": {
           "nodeAffinity": {
@@ -3873,7 +3873,7 @@
       "maxHistory": 10,
       "name": "scan",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "additionalEnvVars": [
           {
@@ -3997,7 +3997,7 @@
       "maxHistory": 10,
       "name": "sv-app",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
@@ -4244,7 +4244,7 @@
       "maxHistory": 10,
       "name": "validator-sv-da-1",
       "namespace": "sv-da-1",
-      "timeout": 600,
+      "timeout": 1200,
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
