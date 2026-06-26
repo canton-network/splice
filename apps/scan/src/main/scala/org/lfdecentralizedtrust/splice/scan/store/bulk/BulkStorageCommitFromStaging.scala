@@ -110,7 +110,9 @@ class BulkStorageCommitFromStaging[T](
           .sequence(
             objs.map(obj => {
               logger.debug(s"Deleting object ${obj.key} from staging storage")
-              stagingS3Connection.deleteObject(obj.key).map(_ => logger.debug(s"Deleted object ${obj.key} from staging storage"))
+              stagingS3Connection
+                .deleteObject(obj.key)
+                .map(_ => logger.debug(s"Deleted object ${obj.key} from staging storage"))
             })
           )
           .map(_ => ts)

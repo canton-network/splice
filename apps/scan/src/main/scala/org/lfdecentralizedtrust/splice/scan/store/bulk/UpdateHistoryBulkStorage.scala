@@ -99,7 +99,7 @@ class UpdateHistoryBulkStorage(
               Some(
                 (
                   Some(segment),
-                  Some(segment)
+                  Some(segment),
                 )
               )
             )
@@ -116,7 +116,7 @@ class UpdateHistoryBulkStorage(
                 Some(
                   (
                     last,
-                    None
+                    None,
                   )
                 )
               )

@@ -178,6 +178,7 @@ class AcsSnapshotBulkStorageTest
       )
       val progress = new AcsSnapshotBulkStoragePersistentProgress(
         "latest_acs_snapshot_in_bulk_storage",
+        "first_acs_snapshot_in_bulk_storage",
         kvProvider,
         historyMetrics.BulkStorage.latestAcsSnapshotStaging,
         loggerFactory,

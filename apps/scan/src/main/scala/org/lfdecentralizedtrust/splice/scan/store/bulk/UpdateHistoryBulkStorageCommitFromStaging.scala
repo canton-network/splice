@@ -36,14 +36,18 @@ class UpdateHistoryBulkStorageCommitFromStaging(
   override def getNextSegmentAfter(
       after: Option[UpdatesSegment]
   )(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = {
-    getBulkReader.getStagingSegmentStartingAt(
-      after.map(_.toTimestamp.timestamp)
-    ).map(_.map(segment =>
-      // We don't care about migration IDs in commit-from-staging pipelines
-      UpdatesSegment(
-        TimestampWithMigrationId(segment._1, -1L),
-        TimestampWithMigrationId(segment._2, -1L)
+    getBulkReader
+      .getStagingSegmentStartingAt(
+        after.map(_.toTimestamp.timestamp)
       )
-    ))
+      .map(
+        _.map(segment =>
+          // We don't care about migration IDs in commit-from-staging pipelines
+          UpdatesSegment(
+            TimestampWithMigrationId(segment._1, -1L),
+            TimestampWithMigrationId(segment._2, -1L),
+          )
+        )
+      )
   }
 }
