@@ -11,7 +11,7 @@ jobs:
   add-backport-reminder:
     runs-on: ubuntu-24.04
     steps:
-        - uses: canton-network/splice-shared-gha/actions/backport_reminder@d7eb0ca758166c84d3c885e207d690766cf4993a
+        - uses: ./github-scripts/actions/backport_reminder
           with:
             pr_number: ${{ github.event.pull_request.number }}
             lookup_prod_cluster_configs: false

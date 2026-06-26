@@ -172,6 +172,21 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetRollForwardLsuResponse"
 
+  /v0/lsu:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getLsu"
+      description: |
+        Retrieve information on the next logical synchronizer upgrade (LSU)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetLsuResponse"
+
   /v0/active-synchronizer-serial:
     get:
       tags: [internal, scan]
@@ -2106,6 +2121,30 @@ components:
           type: string
         successorPhysicalSynchronizerId:
           type: string
+    GetLsuResponse:
+      type: object
+      properties:
+        lsu:
+          description: Info on the next LSU
+          "$ref": "#/components/schemas/Lsu"
+    Lsu:
+      type: object
+      required:
+        - topologyFreezeTime
+        - upgradeTime
+        - successorPhysicalSynchronizerId
+      properties:
+        topologyFreezeTime:
+          description: The time when topology freeze starts
+          type: string
+          format: date-time
+        upgradeTime:
+          description: The time at which to upgrade
+          type: string
+          format: date-time
+        successorPhysicalSynchronizerId:
+          description: The successor physical synchronizer ID
+          type: string
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
       required: ["serial"]
@@ -3867,11 +3906,9 @@ components:
         If an event pertains to a transaction that is partially private, it may also bear verdict information for the private portions.
         When both fields are present, the transaction and verdict have the same `update_id` and `record_time`.
 
-        **Experimental**: for networks where the SVs enable activity record
-        computation, a traffic summary and app activity record are present when
+        For networks where the SVs enable activity record computation,
+        a traffic summary and app activity record are present when
         a verdict is present.
-
-        This support is experimental while the preview phase of CIP-104 is running.
       properties:
         update:
           $ref: "#/components/schemas/UpdateHistoryItemV2"
@@ -3880,15 +3917,9 @@ components:
           $ref: "#/components/schemas/EventHistoryVerdict"
           nullable: true
         traffic_summary:
-          description: |
-            **EXPERIMENTAL**: This property is experimental and subject to change. Data may be incomplete or missing.
-
-            This is our current best guess for how the summaries are served, but there remains a chance that the API needs to be adjusted.
           $ref: "#/components/schemas/EventHistoryTrafficSummary"
           nullable: true
         app_activity_records:
-          description: |
-            **EXPERIMENTAL**: This property is experimental and subject to change. Data may be incomplete or missing.
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
     EventHistoryVerdict:
@@ -4235,7 +4266,7 @@ components:
           description: Total amount of minting allowances that fell below the configured app reward threshold and was thus burned.
         total_app_reward_unclaimed:
           type: string
-          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap). 
+          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap).
         rewarded_app_provider_parties_count:
           type: integer
           format: int64

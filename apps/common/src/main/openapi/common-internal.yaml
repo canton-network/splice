@@ -343,6 +343,7 @@ components:
           type: integer
           description: |
             Cursor for pagination. When requesting the next page of results, pass the `next_page_token` from the previous response.
+            Results are ordered by effective date (the accepted vote's effectiveAt, or the result's completedAt otherwise), descending.
 
     ListDsoRulesVoteResultsResponse:
       type: object

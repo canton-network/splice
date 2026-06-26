@@ -239,7 +239,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("payment-accept"))
 
         // And then back to splitwell, where he is already logged in
-        eventually(scaled(8 seconds)) {
+        eventually() {
           inside(findAll(className("balances-table-row")).toSeq) { case Seq(row) =>
             matchRow(
               Seq("ans-entry", "balances-table-amount"),

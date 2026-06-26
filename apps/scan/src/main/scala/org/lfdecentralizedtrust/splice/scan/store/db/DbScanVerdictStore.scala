@@ -483,23 +483,21 @@ class DbScanVerdictStore(
     *                           max record time of the batch
     */
   def insertVerdictsWithAppActivityRecords(
-      items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
+      items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
     val combinedAction = for {
-      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
+      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items.toList)
       // Resolve placeholder verdictRowId to actual row_ids from the inserted verdicts
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
       _ <- insertAppActivityRecordsDBIO(
         resolvedAppActivityRecords,
-        if (appActivityRecords.nonEmpty)
-          Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
-        else None,
+        items.head._1.recordTime.toMicros,
         lastArchivedRoundO,
       )
     } yield ()
@@ -510,8 +508,8 @@ class DbScanVerdictStore(
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
     ).map { _ =>
-      val maxRt = items.map(_._1.recordTime).maxOption
-      maxRt.foreach(advanceLastIngestedRecordTime)
+      // items is NonEmptyList so maxOption always returns Some
+      items.toList.map(_._1.recordTime).maxOption.foreach(advanceLastIngestedRecordTime)
     }
   }
 
@@ -546,7 +544,7 @@ class DbScanVerdictStore(
 
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      firstRecordTimeMicros: Option[Long],
+      firstRecordTimeMicros: Long,
       lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {

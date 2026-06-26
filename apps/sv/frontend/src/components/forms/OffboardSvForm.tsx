@@ -113,12 +113,18 @@ export const OffboardSvForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
+              {field => <field.ProposalTypeField id="offboard-sv-action" />}
+            </form.AppField>
+
+            <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => validateSvSelection(value),
+              }}
+            >
               {field => (
-                <field.TextField
-                  title="Action"
-                  id="offboard-sv-action"
-                  muiTextFieldProps={{ disabled: true }}
-                />
+                <field.SelectField title="Member" options={svOptions} id="offboard-sv-member" />
               )}
             </form.AppField>
 
@@ -172,18 +178,6 @@ export const OffboardSvForm: React.FC = _ => {
               }}
             >
               {field => <field.TextField title="URL" id="offboard-sv-url" />}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => validateSvSelection(value),
-              }}
-            >
-              {field => (
-                <field.SelectField title="Member" options={svOptions} id="offboard-sv-member" />
-              )}
             </form.AppField>
           </>
         )}

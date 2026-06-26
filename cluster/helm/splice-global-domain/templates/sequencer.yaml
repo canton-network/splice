@@ -214,8 +214,14 @@ spec:
                 sleep 2;
               done
       {{- if and (eq .Values.sequencer.driver.type "cantonbft") ((.Values.sequencer.driver).persistence) }}
+        {{- $p := .Values.sequencer.driver.persistence }}
+        {{- $dbHost := $p.host | default .Values.sequencer.persistence.host }}
+        {{- $dbPort := $p.port | default .Values.sequencer.persistence.port }}
+        {{- $dbUser := $p.user | default "cnadmin" }}
+        {{- $dbName := $p.databaseName | default .Values.sequencer.persistence.databaseName }}
+        {{- $dbSecret := $p.secretName | default .Values.sequencer.persistence.secretName }}
         - name: pg-init-bft-driver
-          image: {{ .Values.sequencer.driver.persistence.initImageName | default "postgres:14" }}
+          image: {{ $p.initImageName | default "postgres:14" }}
           env:
             - name: PGPASSWORD
               {{- if or (and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword) ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
@@ -224,21 +230,29 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
-                  name: {{ .Values.sequencer.driver.persistence.secretName | default .Values.sequencer.persistence.secretName }}
+                  name: {{ $dbSecret }}
               {{- end }}
           command:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.sequencer.driver.persistence.host | default .Values.sequencer.persistence.host }} -p {{ .Values.sequencer.driver.persistence.port | default .Values.sequencer.persistence.port }} --username={{ .Values.sequencer.driver.persistence.user | default "cnadmin" }} --dbname=cantonnet -c 'create database {{ .Values.sequencer.driver.persistence.databaseName | default .Values.sequencer.persistence.databaseName }}' 2>&1); do
-                if [[ $errmsg == *"already exists"* ]]; then
-                  echo "Database {{ .Values.sequencer.driver.persistence.databaseName | default .Values.sequencer.persistence.databaseName }} already exists. Done."
-                  break
-                fi
+              set -euo pipefail
+              DB_HOST="{{ $dbHost }}"
+              DB_PORT="{{ $dbPort }}"
+              DB_USER="{{ $dbUser }}"
+              DB_NAME="{{ $dbName }}"
 
-                echo "trying to create postgres database {{ .Values.sequencer.driver.persistence.databaseName | default .Values.sequencer.persistence.databaseName }}, last error: $errmsg";
+              echo "Waiting for postgres ${DB_HOST}:${DB_PORT} to become reachable...";
+              until psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -tAc 'SELECT 1' >/dev/null 2>&1; do
                 sleep 2;
               done
+
+              if [ "$(psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" = "1" ]; then
+                echo "Database ${DB_NAME} already exists on ${DB_HOST}. Done.";
+                exit 0;
+              fi
+              psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -c "CREATE DATABASE \"${DB_NAME}\"";
+              echo "Created empty database ${DB_NAME} on ${DB_HOST}.";
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -289,11 +303,11 @@ spec:
       protocol: TCP
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "name" (print "postgres-" (.Values.sequencer.persistence.databaseName | replace "_" "-" ) "-e") "namespace" .Release.Namespace "persistence" .Values.sequencer.persistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "name" (print "postgres-" (.Values.sequencer.persistence.databaseName | replace "_" "-" ) "-e") "namespace" .Release.Namespace "persistence" .Values.sequencer.persistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- if and (eq .Values.sequencer.driver.type "cantonbft") ((.Values.sequencer.driver).persistence) (((.Values.sequencer.driver).persistence).databaseName) (ne .Values.sequencer.driver.persistence.databaseName .Values.sequencer.persistence.databaseName) }}
 {{- $driverPersistence := dict "postgresName" (print .Values.sequencer.persistence.postgresName "-driver") "databaseName" .Values.sequencer.driver.persistence.databaseName "host" (.Values.sequencer.driver.persistence.host | default .Values.sequencer.persistence.host) "port" (.Values.sequencer.driver.persistence.port | default .Values.sequencer.persistence.port) "secretName" (.Values.sequencer.driver.persistence.secretName | default .Values.sequencer.persistence.secretName) }}
 ---
-{{- include "splice-util-lib.postgres-metrics" (dict "namespace" .Release.Namespace "persistence" $driverPersistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "namespace" .Release.Namespace "persistence" $driverPersistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end }}
 {{- end}}
 {{-  if .Values.pvc }}

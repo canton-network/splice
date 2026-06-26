@@ -1,0 +1,20 @@
+{
+  "name": "@canton-network/gha-scripts",
+  "private": true,
+  "scripts": {
+    "build": "tsc && npm run build:backport_reminder && npm run build:parse_backport_comments",
+    "build:backport_reminder": "npx esbuild src/actions/backport_reminder.ts --outfile=actions/backport_reminder/index.js --bundle --platform=node --format=cjs",
+    "build:parse_backport_comments": "npx esbuild src/actions/parse_backport_comments.ts --outfile=actions/parse_backport_comments/index.js --bundle --platform=node --format=cjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
+    "@types/js-yaml": "^4.0.5",
+    "@types/node": "^25.9.4",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3"
+  }
+}

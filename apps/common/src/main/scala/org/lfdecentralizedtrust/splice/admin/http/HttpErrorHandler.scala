@@ -115,6 +115,7 @@ final class HttpErrorHandler(
           Interpreter.InterpretationUserError,
           Interpreter.TemplatePreconditionViolated,
           SyncServiceInjectionError.NotConnectedToAnySynchronizer,
+          SyncServiceInjectionError.NotConnectedToSynchronizer,
           TransactionRoutingError.TopologyErrors.UnknownContractSynchronizers,
         )
         if (conflictErrorCodes.exists(ErrorCodeUtils.isError(grpcDesc, _)))
