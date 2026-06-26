@@ -179,7 +179,10 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
                   {
                     request_headers: {
                       descriptor_key: 'client_ip',
-                      header_name: 'x-forwarded-for',
+                      // x-forwarded-for can include multiple proxy hops and vary as
+                      // requests traverse different paths. Envoy's external address
+                      // header is the normalized client address we want for per-IP limits.
+                      header_name: 'x-envoy-external-address',
                     },
                   },
                 ]
