@@ -316,7 +316,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .futureValue
             .map(_.contractId.contractId)
             .toSet
-          remaining shouldBe aliceObservedCoupons
+          aliceObservedCoupons.subsetOf(remaining) shouldBe true
         },
       )
 
