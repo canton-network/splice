@@ -793,6 +793,42 @@ class DbSvDsoStore(
       assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
     )
 
+  override def listProcessRewardsV2Sample(limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+              "sample."
+            )}
+             from (
+               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               from #${DsoTables.acsTableName} acs
+               where acs.store_id = $acsStoreId
+                 and acs.migration_id = $domainMigrationId
+                 and acs.package_name = ${splice.amulet.rewardaccountingv2.ProcessRewardsV2.PACKAGE_NAME}
+                 and acs.template_id_qualified_name = ${QualifiedName(
+              splice.amulet.rewardaccountingv2.ProcessRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+               limit 1000
+             ) sample
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+          "listProcessRewardsV2Sample",
+        )
+      limited = applyLimit("listProcessRewardsV2Sample", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+    )
+
   override def listRewardCouponsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[
