@@ -172,6 +172,21 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetRollForwardLsuResponse"
 
+  /v0/lsu:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getLsu"
+      description: |
+        Retrieve information on the next logical synchronizer upgrade (LSU)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetLsuResponse"
+
   /v0/active-synchronizer-serial:
     get:
       tags: [internal, scan]
@@ -2105,6 +2120,30 @@ components:
         currentPhysicalSynchronizerId:
           type: string
         successorPhysicalSynchronizerId:
+          type: string
+    GetLsuResponse:
+      type: object
+      properties:
+        lsu:
+          description: Info on the next LSU
+          "$ref": "#/components/schemas/Lsu"
+    Lsu:
+      type: object
+      required:
+        - topologyFreezeTime
+        - upgradeTime
+        - successorPhysicalSynchronizerId
+      properties:
+        topologyFreezeTime:
+          description: The time when topology freeze starts
+          type: string
+          format: date-time
+        upgradeTime:
+          description: The time at which to upgrade
+          type: string
+          format: date-time
+        successorPhysicalSynchronizerId:
+          description: The successor physical synchronizer ID
           type: string
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
@@ -4227,7 +4266,7 @@ components:
           description: Total amount of minting allowances that fell below the configured app reward threshold and was thus burned.
         total_app_reward_unclaimed:
           type: string
-          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap). 
+          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap).
         rewarded_app_provider_parties_count:
           type: integer
           format: int64

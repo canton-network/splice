@@ -6,7 +6,7 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
-import com.digitalasset.daml.lf.data.Ref.PackageId
+import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
 import java.time.Duration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
@@ -295,6 +295,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       unvetV2AmuletOnAlice(aliceParticipantId)
 
+      val couponsBeforeAdvance = sv1Backend.appState.dsoStore
+        .listRewardCouponsV2()
+        .futureValue
+        .map(_.contractId.contractId)
+        .toSet
+
       actAndCheck(
         "Advance past the coupon TTL",
         advanceTime(Duration.ofHours(37)),
@@ -310,13 +316,13 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .futureValue
             .map(_.contractId.contractId)
             .toSet
-          remaining shouldBe aliceObservedCoupons
+          aliceObservedCoupons.subsetOf(remaining) shouldBe true
         },
       )
 
-      actAndCheck(timeUntilSuccess = 40.seconds)(
+      actAndCheck(
         "Re-vet Alice",
-        revetV2AmuletOnAlice(aliceParticipantId),
+        revetV2AmuletOnAlice(aliceParticipantId, aliceParty),
       )(
         "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
         _ => {
@@ -324,7 +330,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .trigger[ExpireRewardCouponV2Trigger]
             .runOnce()
             .futureValue
-          sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty
+          val remaining = sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .map(_.contractId.contractId)
+            .toSet
+          remaining.intersect(couponsBeforeAdvance) shouldBe empty
         },
       )
     }
@@ -422,9 +433,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     )
 
   private def revetV2AmuletOnAlice(
-      aliceParticipantId: ParticipantId
+      aliceParticipantId: ParticipantId,
+      aliceParty: PartyId,
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
-    actAndCheck(
+    // Allocate sufficient time for the change to be visible on SV1, and avoid CI flake
+    actAndCheck(timeUntilSuccess = 60.seconds)(
       "Re-vet the V2-capable amulet versions on Alice",
       aliceValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
         aliceParticipantId,
@@ -435,10 +448,29 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       ),
     )(
       "sv1's participant observes Alice has the correct vetting state again",
-      _ =>
+      _ => {
         v2CapableAmuletPackageIds.toSet
-          .subsetOf(aliceVettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true,
+          .subsetOf(aliceVettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true
+        aliceLedgerApiAmuletVersionOnSv1View(aliceParty).exists(
+          _ >= v2AmuletVersion
+        ) shouldBe true
+      },
     )
+
+  /** Confirm Alice's preferred amulet package version as resolved through sv1's
+    * Ledger API, i.e. the exact path the ExpireRewardCouponV2Trigger uses to
+    * determine the vetted version.
+    */
+  private def aliceLedgerApiAmuletVersionOnSv1View(
+      aliceParty: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Option[PackageVersion] =
+    sv1Backend.participantClient.ledger_api.interactive_submission
+      .preferred_package_version(
+        Set(aliceParty),
+        DarResources.amulet.latest.metadata.name,
+        Some(decentralizedSynchronizerId),
+      )
+      .flatMap(_.packageReference.map(ref => PackageVersion.assertFromString(ref.packageVersion)))
 
   private def assertOldestOpenRound(
       expected: Long

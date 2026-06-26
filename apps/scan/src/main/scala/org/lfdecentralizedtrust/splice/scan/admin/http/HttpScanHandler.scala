@@ -13,6 +13,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.ActiveContract
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{
@@ -52,7 +53,10 @@ import org.lfdecentralizedtrust.splice.environment.{
   SequencerAdminConnection,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
+  TopologySnapshot,
+  TopologyTransactionType,
+}
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.http.{
   HttpFeatureSupportHandler,
@@ -2668,6 +2672,32 @@ class HttpScanHandler(
           )
         )
     }
+  }
+
+  override def getLsu(respond: ScanResource.GetLsuResponse.type)()(
+      extracted: TraceContext
+  ): Future[ScanResource.GetLsuResponse] = {
+    implicit val tc = extracted
+    for {
+      currentSynchronizerId <- synchronizerNodeService.nodes.current.sequencerAdminConnection
+        .getPhysicalSynchronizerId()
+      maybeAnnouncement <- participantAdminConnection.lookupSynchronizerLsuAnnouncement(
+        synchronizerId = currentSynchronizerId.logical,
+        timeQuery = TimeQuery.HeadState,
+        topologyTransactionType = TopologyTransactionType.AuthorizedState,
+      )
+    } yield ScanResource.GetLsuResponse.OK(
+      definitions.GetLsuResponse(
+        maybeAnnouncement.map { announcement =>
+          definitions.Lsu(
+            topologyFreezeTime = announcement.base.validFrom.atOffset(ZoneOffset.UTC),
+            upgradeTime = announcement.mapping.upgradeTime.toInstant.atOffset(ZoneOffset.UTC),
+            successorPhysicalSynchronizerId =
+              announcement.mapping.successorSynchronizerId.toProtoPrimitive,
+          )
+        }
+      )
+    )
   }
 
   def getRewardAccountingEarliestAvailableRound(

@@ -44,7 +44,6 @@ class ExpiredAmuletAllocationTrigger(
       allocation =>
         Seq(
           allocation.allocation.transferLeg.sender,
-          allocation.allocation.transferLeg.receiver,
           allocation.allocation.settlement.executor,
           svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
         ).map(PartyId.tryFromProtoPrimitive),
@@ -59,9 +58,8 @@ class ExpiredAmuletAllocationTrigger(
   ): Future[TaskOutcome] = {
     val informees = task.work.expiredContracts.flatMap { contract =>
       val sender = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.sender)
-      val receiver = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.receiver)
       val executor = PartyId.tryFromProtoPrimitive(contract.payload.allocation.settlement.executor)
-      Seq(sender, receiver, executor)
+      Seq(sender, executor)
     }.toSet
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
