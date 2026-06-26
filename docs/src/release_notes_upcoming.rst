@@ -42,6 +42,9 @@
       wallets can make use of the new batching functionality (see below) on all validator
       nodes.
 
+  - Scan
+    - The ``/v0/validators/validator-faucets`` endpoint now returns HTTP 400 when called with no ``validator_ids`` query parameters, instead of returning an empty result. This makes typos in the query parameter key (e.g. ``validator`` instead of ``validator_ids``) fail loudly rather than silently.
+
   - Daml
 
     - Release the Token Standard V2 APIs (`CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md>`__).
