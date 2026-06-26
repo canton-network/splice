@@ -194,8 +194,7 @@ class AcsSnapshotBulkStorageTest
       )
       val reader = new BulkStorageReader(
         acsSnapshotBulkStorageStaging = bulkStorage,
-        acsSnapshotBulkStorageCommitted =
-          null, // FIXME: use once we start using the committed bucket
+        acsSnapshotBulkStorageCommitted = bulkStorage,
         updateHistoryBulkStorageStaging = null, // not needed for this test
         updateHistoryBulkStorageCommitted = null, // not needed for this test
         bulkStorageTestConfig,
@@ -247,7 +246,7 @@ class AcsSnapshotBulkStorageTest
         ex.asInstanceOf[StatusRuntimeException]
           .getStatus
           .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
-        ex.getMessage should include("no snapshot in bulk storage yet")
+        ex.getMessage should include("no snapshot in committed bulk storage yet")
 
         clue("Initially, a single snapshot is dumped") {
           eventually(4.minutes) {
