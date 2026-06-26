@@ -15,7 +15,6 @@ trait FrontendLoginUtil extends WithAuth0Support { self: FrontendTestCommon =>
       webDriver: WebDriver
   ) = {
     go to s"http://$hostname:$port"
-    waitForQuery(id("user-id-field"))
     loginOnCurrentPage(port, ledgerApiUser, hostname)
   }
 

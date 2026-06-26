@@ -303,8 +303,7 @@
           },
           "sequencer": {
             "dedicatedBftSequencerDb": true,
-            "enableBftSequencer": false,
-            "migrateBftSequencerDbFromSharedServer": false
+            "enableBftSequencer": false
           },
           "version": {
             "type": "remote",
@@ -326,8 +325,7 @@
             },
             "sequencer": {
               "dedicatedBftSequencerDb": true,
-              "enableBftSequencer": false,
-              "migrateBftSequencerDbFromSharedServer": false
+              "enableBftSequencer": false
             },
             "version": {
               "type": "remote",
@@ -348,8 +346,7 @@
             },
             "sequencer": {
               "dedicatedBftSequencerDb": true,
-              "enableBftSequencer": false,
-              "migrateBftSequencerDbFromSharedServer": false
+              "enableBftSequencer": false
             },
             "version": {
               "type": "remote",
@@ -368,8 +365,7 @@
             },
             "sequencer": {
               "dedicatedBftSequencerDb": true,
-              "enableBftSequencer": false,
-              "migrateBftSequencerDbFromSharedServer": false
+              "enableBftSequencer": false
             },
             "version": {
               "type": "remote",
@@ -392,8 +388,7 @@
           },
           "sequencer": {
             "dedicatedBftSequencerDb": true,
-            "enableBftSequencer": false,
-            "migrateBftSequencerDbFromSharedServer": false
+            "enableBftSequencer": false
           },
           "version": {
             "type": "remote",
@@ -414,8 +409,7 @@
           },
           "sequencer": {
             "dedicatedBftSequencerDb": true,
-            "enableBftSequencer": true,
-            "migrateBftSequencerDbFromSharedServer": false
+            "enableBftSequencer": true
           },
           "version": {
             "type": "remote",

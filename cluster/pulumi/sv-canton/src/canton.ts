@@ -124,8 +124,6 @@ export async function installCantonComponents(
             sequencerPostgres: sequencerPostgres,
             mediatorPostgres: mediatorPostgres,
             bftSequencerPostgres: bftSequencerPostgres,
-            migrateBftSequencerDbFromSharedServer:
-              migrationInfo.sequencer.migrateBftSequencerDbFromSharedServer,
             setCoreDbNames: svConfig.isCoreSv,
           },
           version,
