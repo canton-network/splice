@@ -703,6 +703,43 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       }
     }
 
+    "listTopNonObserverRewardCouponV2Providers" should {
+
+      "return providers by descending hidden-coupon count, excluding observer coupons" in {
+        val hidden =
+          Seq.fill(3)(userParty(1)) ++ Seq.fill(2)(userParty(2)) ++ Seq(userParty(3))
+        val coupons =
+          hidden.map(p => rewardCouponV2(round = 1, provider = p, providerIsObserver = false)) ++
+            Seq(
+              rewardCouponV2(round = 1, provider = userParty(1), providerIsObserver = true),
+              rewardCouponV2(round = 1, provider = userParty(4), providerIsObserver = true),
+            )
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(coupons)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          all <- store.listTopNonObserverRewardCouponV2Providers(
+            couponScanLimit = 10000,
+            maxProviders = 10,
+          )
+          topTwo <- store.listTopNonObserverRewardCouponV2Providers(
+            couponScanLimit = 10000,
+            maxProviders = 2,
+          )
+          scanCapped <- store.listTopNonObserverRewardCouponV2Providers(
+            couponScanLimit = 1,
+            maxProviders = 10,
+          )
+        } yield {
+          // Ordered by descending count
+          all shouldBe Seq(userParty(1) -> 3L, userParty(2) -> 2L, userParty(3) -> 1L)
+          topTwo shouldBe Seq(userParty(1) -> 3L, userParty(2) -> 2L)
+          scanCapped.map(_._2).sum shouldBe 1L
+        }
+      }
+    }
+
     "listConfirmations" should {
 
       "list all confirmations with a matching action" in {

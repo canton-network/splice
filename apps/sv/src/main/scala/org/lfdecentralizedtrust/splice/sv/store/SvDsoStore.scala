@@ -768,6 +768,21 @@ trait SvDsoStore
     Seq[Contract[splice.amulet.RewardCouponV2.ContractId, splice.amulet.RewardCouponV2]]
   ]
 
+  /** Returns the providers with the most hidden ('providerIsObserver' is false) `RewardCouponV2` contracts,
+    * together with their coupon counts.
+    *
+    * couponScanLimit - max number of coupons/rows scanned.
+    *                   Useful for avoiding potentially very slow queries.
+    * maxProviders - max number of parties to count the coupons for.
+    *
+    * Due the couponScanLimit the coupon count could be lower than actual,
+    * but it is fine if the data is to be used for metrics.
+    */
+  def listTopNonObserverRewardCouponV2Providers(
+      couponScanLimit: Int,
+      maxProviders: Int,
+  )(implicit tc: TraceContext): Future[Seq[(PartyId, Long)]]
+
   def listSvOnboardingConfirmed(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[

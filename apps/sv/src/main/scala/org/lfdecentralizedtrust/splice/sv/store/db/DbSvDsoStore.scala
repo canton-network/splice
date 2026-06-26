@@ -1384,6 +1384,40 @@ class DbSvDsoStore(
     )
   }
 
+  override def listTopNonObserverRewardCouponV2Providers(
+      couponScanLimit: Int,
+      maxProviders: Int,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[(PartyId, Long)]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select reward_party, count(*) as coupon_count
+             from (
+               select reward_party
+               from #${DsoTables.acsTableName}
+               where store_id = $acsStoreId
+                 and migration_id = $domainMigrationId
+                 and package_name = ${RewardCouponV2.PACKAGE_NAME}
+                 and template_id_qualified_name = ${QualifiedName(
+              RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and reward_beneficiary_is_observer = false
+               limit $couponScanLimit
+             ) sub
+             group by reward_party
+             order by coupon_count desc
+             limit $maxProviders
+           """).as[(String, Long)],
+          "listTopNonObserverRewardCouponV2Providers",
+        )
+    } yield result.map { case (party, count) =>
+      PartyId.tryFromProtoPrimitive(party) -> count
+    }
+  }
+
   override def listSvAmuletPriceVotes(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[AmuletPriceVote.ContractId, AmuletPriceVote]]] = waitUntilAcsIngested {
