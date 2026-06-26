@@ -2692,8 +2692,8 @@ class HttpScanHandler(
           definitions.Lsu(
             topologyFreezeTime = announcement.base.validFrom.atOffset(ZoneOffset.UTC),
             upgradeTime = announcement.mapping.upgradeTime.toInstant.atOffset(ZoneOffset.UTC),
-            successorPhysicalSynchronizerSerial =
-              announcement.mapping.successorSynchronizerId.serial.unwrap.toLong,
+            successorPhysicalSynchronizerId =
+              announcement.mapping.successorSynchronizerId.toProtoPrimitive,
           )
         }
       )

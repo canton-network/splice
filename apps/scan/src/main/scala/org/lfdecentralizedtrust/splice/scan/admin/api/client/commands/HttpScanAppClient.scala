@@ -2745,7 +2745,8 @@ object HttpScanAppClient {
               topologyFreezeTime =
                 CantonTimestamp.assertFromInstant(lsu.topologyFreezeTime.toInstant),
               upgradeTime = CantonTimestamp.assertFromInstant(lsu.upgradeTime.toInstant),
-              successorPhysicalSynchronizerSerial = lsu.successorPhysicalSynchronizerSerial,
+              successorPhysicalSynchronizerId =
+                PhysicalSynchronizerId.tryFromString(lsu.successorPhysicalSynchronizerId),
             )
           )
         )
@@ -2755,12 +2756,12 @@ object HttpScanAppClient {
   case class Lsu(
       topologyFreezeTime: CantonTimestamp,
       upgradeTime: CantonTimestamp,
-      successorPhysicalSynchronizerSerial: Long,
+      successorPhysicalSynchronizerId: PhysicalSynchronizerId,
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("topologyFreezeTime", _.topologyFreezeTime),
       param("upgradeTime", _.upgradeTime),
-      param("successorPhysicalSynchronizerSerial", _.successorPhysicalSynchronizerSerial),
+      param("successorPhysicalSynchronizerSerial", _.successorPhysicalSynchronizerId),
     )
   }
 

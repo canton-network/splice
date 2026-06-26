@@ -428,7 +428,7 @@ class LsuIntegrationTest
           .validFrom
         lsu.topologyFreezeTime shouldBe CantonTimestamp.assertFromInstant(actualTopologyFreezeTime)
         lsu.upgradeTime shouldBe upgradeTime
-        lsu.successorPhysicalSynchronizerSerial shouldBe newSynchronizerSerial.value.toLong
+        lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
 
       clue("new nodes are initialized") {

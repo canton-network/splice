@@ -2132,7 +2132,7 @@ components:
       required:
         - topologyFreezeTime
         - upgradeTime
-        - successorPhysicalSynchronizerSerial
+        - successorPhysicalSynchronizerId
       properties:
         topologyFreezeTime:
           description: The time when topology freeze starts
@@ -2142,10 +2142,9 @@ components:
           description: The time at which to upgrade
           type: string
           format: date-time
-        successorPhysicalSynchronizerSerial:
-          description: The successor physical synchronizer serial
-          type: integer
-          format: int64
+        successorPhysicalSynchronizerId:
+          description: The successor physical synchronizer ID
+          type: string
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
       required: ["serial"]
