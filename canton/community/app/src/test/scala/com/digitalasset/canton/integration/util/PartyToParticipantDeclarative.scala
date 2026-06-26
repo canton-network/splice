@@ -16,7 +16,11 @@ import com.digitalasset.canton.integration.util.PartyToParticipantDeclarativeCom
   PartyHostingState,
   Serial,
 }
-import com.digitalasset.canton.integration.{PartyTopologyUtils, TestEnvironment}
+import com.digitalasset.canton.integration.{
+  CantonTestEnvironment,
+  PartyTopologyUtils,
+  TestEnvironment,
+}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.transaction.{
   HostingParticipant,

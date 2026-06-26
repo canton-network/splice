@@ -4,7 +4,6 @@ import cats.data.Chain
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppConfigs_
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV1, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2.members
@@ -14,7 +13,6 @@ import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTrigger
 import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
 import com.digitalasset.canton.ScalaFuturesWithPatience
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.logging.SuppressingLogger
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
@@ -33,7 +31,7 @@ import scala.concurrent.duration.*
 class UpdateHistorySanityCheckPlugin(
     skipAcsSnapshotChecks: Boolean,
     protected val loggerFactory: SuppressingLogger,
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with Matchers
     with Eventually
     with Inspectors
@@ -47,8 +45,7 @@ class UpdateHistorySanityCheckPlugin(
   }
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     TraceContext.withNewTraceContext("beforeEnvironmentDestroyed") { implicit tc =>
       // A scan might not be initialized if the test uses `manualStart` and it wasn't ever started.

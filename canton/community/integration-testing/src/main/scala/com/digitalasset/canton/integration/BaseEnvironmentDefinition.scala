@@ -4,7 +4,7 @@
 package com.digitalasset.canton.integration
 
 import com.digitalasset.canton.config.{SharedCantonConfig, TestingConfigInternal}
-import com.digitalasset.canton.environment.{Environment, EnvironmentFactory}
+import com.digitalasset.canton.environment.Environment
 import com.digitalasset.canton.logging.NamedLoggerFactory
 
 /** Definition of how a environment should be configured and setup.
@@ -25,7 +25,7 @@ abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
 ], E <: Environment[C]](
     val baseConfig: C,
     val testingConfig: TestingConfigInternal,
-    val setups: List[TestConsoleEnvironment[C, E] => Unit] = Nil,
+    val setups: List[BaseTestConsoleEnvironment[C, E] => Unit] = Nil,
     val teardown: Unit => Unit = _ => (),
     val configTransforms: Seq[C => C],
 ) {
@@ -37,10 +37,8 @@ abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
   def generateConfig: C =
     configTransforms.foldLeft(baseConfig)((config, transform) => transform(config))
 
-  def environmentFactory: EnvironmentFactory[C, E]
-
   def createTestConsole(
       environment: E,
       loggerFactory: NamedLoggerFactory,
-  ): TestConsoleEnvironment[C, E]
+  ): BaseTestConsoleEnvironment[C, E]
 }

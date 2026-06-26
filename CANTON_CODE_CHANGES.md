@@ -10,7 +10,7 @@ to know which and/or what changes we'll need to upstream before the switch.
 
 ## Methods or classes with changed visibility
 * `idHelper`, `tryParticipantNodeParametersByString`,
-    `MetricsFactory.registerReporter`, `BaseIntegrationTest` made public
+    `MetricsFactory.registerReporter` made public
 * `testingTimeService` made protected
 * `PrettyInstances.treeOfIterable` and `PrettyInstances.prettyUidString` made public
 * pretty-printing of hex-only contract-ids shortends the contract-id using readable-hash
@@ -28,7 +28,6 @@ to know which and/or what changes we'll need to upstream before the switch.
 * `ProofOfOwnership` made public
 ## Misc
 * Added support for interface filters in ledger api ACS commands. TODO (#638): This should be upstreamed.
-* Generalization of `Environment`
 * Generalization of `MetricsFactory`
 * Removed a trailing comma in many places because the CC Scala compiler doesn't like it (e.g. `.authorize(op, domain, mediator, side, key.some, )` -> `.authorize(op, domain, mediator, side, key.some)`)
 * Temporarily added a new release version in `CantonVersion.scala`
@@ -54,7 +53,6 @@ to know which and/or what changes we'll need to upstream before the switch.
 * Decreases the `maxPollInterval` to 100ms from 5s, in the `eventually` methods in `BaseTest`
 * Compute the minimum poll interval used in `eventually` to 10% of the `maxPollInterval`
 * Added `suppressFailedClues` to `BaseTest` trait.
-* Added `logAppVersion()` to `CantonAppDriver` abstract class and replaced canton version log with `logAppVersion()`.
 * Added `tryFromProtoPrimitive` to `Member` trait.
 * Support specifying `darData` on `upload.dars`.
 * Turned `synchronize_topology` into a noop.

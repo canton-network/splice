@@ -298,6 +298,12 @@ class BftScanConnection(
     bftCall(_.lookupRollForwardLsu(), "lookupRollForwardLsu")
   }
 
+  override def getLsu()(implicit
+      tc: TraceContext
+  ): Future[Option[HttpScanAppClient.Lsu]] = {
+    bftCall(_.getLsu(), "getLsu")
+  }
+
   override def getPartyToParticipant(
       synchronizerId: SynchronizerId,
       partyId: PartyId,

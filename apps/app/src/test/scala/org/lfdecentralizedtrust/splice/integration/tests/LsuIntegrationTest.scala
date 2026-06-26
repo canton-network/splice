@@ -419,6 +419,18 @@ class LsuIntegrationTest
         waitForLsuAnnouncement()
       }
 
+      clue(s"Scan API returns proper LSU info after LSU announcement") {
+        val lsu = sv1ScanBackend.getLsu().value
+        val actualTopologyFreezeTime = sv1ScanBackend.participantClient.topology.lsu.announcement
+          .list(Some(Synchronizer(decentralizedSynchronizerId)))
+          .head
+          .context
+          .validFrom
+        lsu.topologyFreezeTime shouldBe CantonTimestamp.assertFromInstant(actualTopologyFreezeTime)
+        lsu.upgradeTime shouldBe upgradeTime
+        lsu.successorPhysicalSynchronizerId shouldBe successorPsid
+      }
+
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
           val upgradeSequencerClient = backend.sequencerClientFor(_.successor.value)
