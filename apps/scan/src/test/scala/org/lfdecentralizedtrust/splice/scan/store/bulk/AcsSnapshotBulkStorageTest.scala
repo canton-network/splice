@@ -199,7 +199,7 @@ class AcsSnapshotBulkStorageTest
         updateHistoryBulkStorageCommitted = null, // not needed for this test
         bulkStorageTestConfig,
         s3BucketConnection,
-        committedS3Connection = null, // FIXME: use once we start using the committed bucket
+        s3BucketConnection,
         loggerFactory,
       )
 
@@ -212,7 +212,7 @@ class AcsSnapshotBulkStorageTest
       def assertLatestSnapshotInMetrics(ts: CantonTimestamp) = {
         val latestSnapshotMetrics = metricsFactory.metrics.gauges
           .get(
-            SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-acs-snapshot"
+            SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ s"latest-acs-snapshot-staging"
           )
           .value
         latestSnapshotMetrics
@@ -220,7 +220,7 @@ class AcsSnapshotBulkStorageTest
           .value
           .value
           .get()
-          ._1 shouldBe ts.toEpochMilli * 1000
+          ._1 shouldBe ts.toEpochMilli * 1000 withClue s"Latest snapshot timestamp in staging bucket should be $ts"
       }
       def assertGetObjects(
           queryTs: CantonTimestamp,
