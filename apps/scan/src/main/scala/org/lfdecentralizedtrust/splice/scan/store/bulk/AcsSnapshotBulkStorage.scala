@@ -17,9 +17,9 @@ import org.lfdecentralizedtrust.splice.{PekkoRetryingService, RetryableService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider}
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
-import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
@@ -104,8 +104,7 @@ class AcsSnapshotBulkStorage(
     writer: AcsSnapshotBulkStorageWriter,
     val persistentProgress: AcsSnapshotBulkStoragePersistentProgress,
     appConfig: BulkStorageConfig,
-    acsSnapshotStore: AcsSnapshotStore,
-    updateHistory: UpdateHistory,
+    backfillingCompleteGate: Source[Boolean, Cancellable],
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
@@ -149,18 +148,6 @@ class AcsSnapshotBulkStorage(
     *   It is an infinite source that should never complete.
     */
   private def mksrc()(implicit tc: TraceContext): Source[TimestampWithMigrationId, Cancellable] = {
-
-    // Wait for update history to initialize and for history backfilling to complete before starting bulk storage dumps
-    val backfillingCompleteGate =
-      Source
-        .tick(0.seconds, appConfig.snapshotPollingInterval.underlying, ())
-        .mapAsync(1)(_ =>
-          if (updateHistory.isReady)
-            updateHistory.isHistoryBackfilled(acsSnapshotStore.currentMigrationId)
-          else Future.successful(false)
-        )
-        .filter(identity)
-        .take(1)
 
     backfillingCompleteGate.flatMap { _ =>
       Source

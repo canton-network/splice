@@ -18,7 +18,8 @@ import com.digitalasset.canton.time.WallClock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import io.grpc.StatusRuntimeException
-import org.apache.pekko.stream.scaladsl.Keep
+import org.apache.pekko.actor.Cancellable
+import org.apache.pekko.stream.scaladsl.{Keep, Source}
 import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
@@ -245,8 +246,7 @@ class UpdateHistoryBulkStorageTest
           writer,
           progress,
           appConfig,
-          mockStore.store,
-          migrationId,
+          Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
           loggerFactory,
         )
 

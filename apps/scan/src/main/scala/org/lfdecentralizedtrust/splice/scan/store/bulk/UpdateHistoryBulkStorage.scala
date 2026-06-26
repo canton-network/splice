@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
@@ -77,8 +76,7 @@ class UpdateHistoryBulkStorage(
     writer: UpdateHistoryBulkStorageWriter,
     val persistentProgress: UpdateHistoryBulkStoragePersistentProgress,
     appConfig: BulkStorageConfig,
-    updateHistory: UpdateHistory,
-    currentMigrationId: Long,
+    backfillingCompleteGate: Source[Boolean, Cancellable],
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
@@ -132,17 +130,17 @@ class UpdateHistoryBulkStorage(
       tc: TraceContext,
   ): Source[UpdatesSegment, Cancellable] = {
 
-    // Wait for update history to initialize and for history backfilling to complete before starting bulk storage dumps
-    val backfillingCompleteGate =
-      Source
-        .tick(0.seconds, appConfig.updatesPollingInterval.underlying, ())
-        .mapAsync(1)(_ =>
-          if (updateHistory.isReady)
-            updateHistory.isHistoryBackfilled(currentMigrationId)
-          else Future.successful(false)
-        )
-        .filter(identity)
-        .take(1)
+//    // Wait for update history to initialize and for history backfilling to complete before starting bulk storage dumps
+//    val backfillingCompleteGate =
+//      Source
+//        .tick(0.seconds, appConfig.updatesPollingInterval.underlying, ())
+//        .mapAsync(1)(_ =>
+//          if (updateHistory.isReady)
+//            updateHistory.isHistoryBackfilled(currentMigrationId)
+//          else Future.successful(false)
+//        )
+//        .filter(identity)
+//        .take(1)
 
     backfillingCompleteGate.flatMap { _ =>
       Source
