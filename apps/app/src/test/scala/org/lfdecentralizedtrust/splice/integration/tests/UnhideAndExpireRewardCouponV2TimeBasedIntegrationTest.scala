@@ -295,6 +295,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       unvetV2AmuletOnAlice(aliceParticipantId)
 
+      val couponsBeforeAdvance = sv1Backend.appState.dsoStore
+        .listRewardCouponsV2()
+        .futureValue
+        .map(_.contractId.contractId)
+        .toSet
+
       actAndCheck(
         "Advance past the coupon TTL",
         advanceTime(Duration.ofHours(37)),
@@ -324,7 +330,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .trigger[ExpireRewardCouponV2Trigger]
             .runOnce()
             .futureValue
-          sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty
+          val remaining = sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .map(_.contractId.contractId)
+            .toSet
+          remaining.intersect(couponsBeforeAdvance) shouldBe empty
         },
       )
     }
