@@ -14,13 +14,19 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.time.WallClock
+import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Cancellable
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.store.{HasS3Mock, HistoryMetrics, StoreTestBase, TimestampWithMigrationId}
+import org.lfdecentralizedtrust.splice.store.{
+  HasS3Mock,
+  HistoryMetrics,
+  StoreTestBase,
+  TimestampWithMigrationId,
+}
 
 import scala.concurrent.Future
 import scala.util.Using
@@ -145,13 +151,13 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         stagingConnection
           .createObject(
             s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_0.zstd",
-            "dummy acs snapshot 2 (object 1)".getBytes,
+            "dummy acs snapshot 3 (object 1)".getBytes,
           )
           .futureValue
         stagingConnection
           .createObject(
             s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_1.zstd",
-            "dummy acs snapshot 2 (object 2)".getBytes,
+            "dummy acs snapshot 3 (object 2)".getBytes,
           )
           .futureValue
 
@@ -159,30 +165,73 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
             _.timestamp
           ) shouldBe Some(ts2)
-          reader
-            .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1)
-            .futureValue
-            .objects
-            .map(_.key) should contain theSameElementsAs Seq(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts1, None)}/ACS_0.zstd"
-          )
-          reader
-            .getCommittedObjectsForAcsSnapshotAtOrBefore(ts2)
-            .futureValue
-            .objects
-            .map(_.key) should contain theSameElementsAs Seq(
+        }
+        reader
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1)
+          .futureValue
+          .objects
+          .map(_.key) should contain theSameElementsAs
+          Seq(s"${bulkStorageTestConfig.getSegmentFolder(ts1, None)}/ACS_0.zstd")
+        reader
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts2)
+          .futureValue
+          .objects
+          .map(_.key) should contain theSameElementsAs
+          Seq(
             s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_0.zstd",
             s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_1.zstd",
           )
-        }
+        reader
+          .getStagingObjectsForAcsSnapshotAt(ts1)
+          .failed
+          .futureValue
+          .asInstanceOf[StatusRuntimeException]
+          .getStatus
+          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+        reader
+          .getStagingObjectsForAcsSnapshotAt(ts2)
+          .failed
+          .futureValue
+          .asInstanceOf[StatusRuntimeException]
+          .getStatus
+          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+        reader.getStagingObjectsForAcsSnapshotAt(ts3).futureValue.objects should not be empty
+
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.DEBUG))(
           {},
           logEntries => {
             forAtLeast(1, logEntries)(entry =>
-              entry.message should include(s"Latest snapshot in staging bulk storage is at $ts2, which is not after the requested timestamp $ts2")
+              entry.message should include(
+                s"Latest snapshot in staging bulk storage is at $ts2, which is not after the requested timestamp $ts2"
+              )
             )
-          }
+          },
         )
+
+        acsStagingProgress
+          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts3, 0))
+          .futureValue
+        eventually() {
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
+            _.timestamp
+          ) shouldBe Some(ts3)
+        }
+        reader
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1)
+          .futureValue
+          .objects
+          .map(_.key) should contain theSameElementsAs
+          Seq(
+            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_0.zstd",
+            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_1.zstd",
+          )
+        reader
+          .getStagingObjectsForAcsSnapshotAt(ts3)
+          .failed
+          .futureValue
+          .asInstanceOf[StatusRuntimeException]
+          .getStatus
+          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
 
         succeed
       }
