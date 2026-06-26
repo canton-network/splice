@@ -8,7 +8,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
-import org.lfdecentralizedtrust.splice.store.S3BucketConnection
+import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -33,5 +33,17 @@ class UpdateHistoryBulkStorageCommitFromStaging(
       loggerFactory,
     )
 
-  override def getNextSegmentAfter(afterO: Option[UpdatesSegment])(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = ???
+  override def getNextSegmentAfter(
+      after: Option[UpdatesSegment]
+  )(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = {
+    getBulkReader.getStagingSegmentStartingAt(
+      after.map(_.toTimestamp.timestamp)
+    ).map(_.map(segment =>
+      // We don't care about migration IDs in commit-from-staging pipelines
+      UpdatesSegment(
+        TimestampWithMigrationId(segment._1, -1L),
+        TimestampWithMigrationId(segment._2, -1L)
+      )
+    ))
+  }
 }

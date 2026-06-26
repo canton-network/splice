@@ -55,7 +55,8 @@ trait AcsSnapshotBulkStorageWriter {
 }
 
 class AcsSnapshotBulkStoragePersistentProgress(
-    kvStoreKey: String,
+    latestSnapshotKvStoreKey: String,
+    firstSnapshotKvStoreKey: String,
     kvProvider: ScanKeyValueProvider,
     metric: MetricHandle.Gauge[CantonTimestamp],
     override val loggerFactory: NamedLoggerFactory,
@@ -68,21 +69,33 @@ class AcsSnapshotBulkStoragePersistentProgress(
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Option[TimestampWithMigrationId]] = {
-    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+    kvProvider.store.readValueAndLogOnDecodingFailure(latestSnapshotKvStoreKey).value
+  }
+
+  def readFirstSnapshotTimestamp(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Option[TimestampWithMigrationId]] = {
+    kvProvider.store.readValueAndLogOnDecodingFailure(firstSnapshotKvStoreKey).value
   }
 
   def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] = {
+
     metric.updateValue(ts.timestamp)
-    kvProvider.store
-      .setValue(kvStoreKey, ts)
-      .map(_ => {
-        logger.info(
-          s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
-        )
-      })
+    for {
+      _ <- kvProvider.store
+        .setValueIfNotExists(firstSnapshotKvStoreKey, ts)
+      _ <- kvProvider.store
+        .setValue(latestSnapshotKvStoreKey, ts)
+        .map(_ => {
+          logger.info(
+            s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
+          )
+        })
+    } yield {}
   }
 }
 

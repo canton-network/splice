@@ -71,14 +71,16 @@ class BulkStorageReader(
           logger.debug(
             "snapshots exist in staging bulk storage, but `afterTimestamp` is at minimum value, finding the first snapshot expected in staging bulk storage"
           )
-          getFirstAcsSnapshotTimestampAfterGenesis.map(Some(_)).recover {
-            case ex if Status.fromThrowable(ex).getCode == Status.Code.NOT_FOUND =>
-              // FIXME: once we have committed updates, update this message to be "have not been copied to committed bulk storage yet"
-              logger.debug(
-                "Could not yet find the first snapshot, most probably because the first updates have not been dumped to bulk storage yet, returning None to retry later"
-              )
-              None
-          }
+          getFirstAcsSnapshotTimestampAfterGenesis
+            .map {
+              case None =>
+                throw Status.INTERNAL
+                  .withDescription(
+                    "Snapshots should exist in bulk storage, but first snapshot timestamp could not be found in kv store"
+                  )
+                  .asRuntimeException()
+              case Some(firstSnapshotTs) => Some(firstSnapshotTs)
+            }
         case Some(ts) =>
           logger.trace(
             s"Latest snapshot in staging bulk storage is at ${ts.timestamp}, which is after the requested timestamp $afterTimestamp, computing the next snapshot timestamp after $afterTimestamp (which is larger than min time of ${CantonTimestamp.MinValue})"
@@ -119,6 +121,43 @@ class BulkStorageReader(
       updateHistoryBulkStorageCommitted.persistentProgress.readLatestProcessedSegment,
     )
 
+  def getStagingSegmentStartingAt(
+      startTimestamp: Option[CantonTimestamp]
+  ): Future[Option[(CantonTimestamp, CantonTimestamp)]] = {
+    val minTs = startTimestamp.getOrElse(CantonTimestamp.MinValue)
+
+    updateHistoryBulkStorageStaging.persistentProgress.readLatestProcessedSegment
+      .flatMap {
+        case None =>
+          logger.debug(
+            s"No updates in staging bulk storage yet, returning None for segment starting at $minTs"
+          )
+          Future.successful(None)
+        case Some(latestStagingTs) if latestStagingTs.toTimestamp.timestamp <= minTs =>
+          logger.debug(
+            s"Latest updates in staging bulk storage ending at $latestStagingTs, which is not after the requested timestamp $minTs, returning None for segment starting at $minTs"
+          )
+          Future.successful(None)
+        case Some(latestStagingTs) =>
+          getSegmentStartingAt(startTimestamp)
+      }
+  }
+
+  private def getSegmentStartingAt(
+      startTimestamp: Option[CantonTimestamp]
+  ): Future[Option[(CantonTimestamp, CantonTimestamp)]] =
+    startTimestamp match {
+      case None =>
+        getFirstAcsSnapshotTimestampAfterGenesis
+          .map(
+            _.map(firstAcs => (CantonTimestamp.MinValue, firstAcs))
+          )
+      case Some(ts) =>
+        Future.successful(
+          Some((ts, storageConfig.computeBulkSnapshotTimeAfter(ts)))
+        )
+    }
+
   private def getAcsSnapshotObjects(
       timestamp: CantonTimestamp,
       s3Connection: S3BucketConnection,
@@ -150,36 +189,10 @@ class BulkStorageReader(
     }
   }
 
-  private def getFirstAcsSnapshotTimestampAfterGenesis: Future[CantonTimestamp] = {
-    val genesisPrefix =
-      storageConfig.findSegmentFolderPrefixByStartTimestamp(CantonTimestamp.MinValue)
-
-    // FIXME: once we have committed updates, this needs to use committed instead of staging
-    stagingS3Connection.listObjects(genesisPrefix, _ => true, PageLimit.tryCreate(1)).map {
-      objects =>
-        val firstObject = objects.headOption.getOrElse(
-          throw Status.NOT_FOUND
-            .withDescription(
-              s"No updates found in staging bulk storage for the genesis segment"
-            )
-            .asRuntimeException()
-        )
-        val folderPrefix = firstObject.substring(0, firstObject.lastIndexOf('/') + 1)
-        storageConfig.getStartAndEndTimestampsForFolder(folderPrefix) match {
-          case Left(err) =>
-            throw Status.INTERNAL
-              .withDescription(
-                s"Cannot parse folder name $folderPrefix, error: $err"
-              )
-              .asRuntimeException()
-          case Right((_, segmentEnd)) =>
-            logger.debug(
-              s"Found first snapshot in staging bulk storage, ending at timestamp $segmentEnd, (based on object: $firstObject)"
-            )
-            segmentEnd
-        }
-    }
-  }
+  private def getFirstAcsSnapshotTimestampAfterGenesis: Future[Option[CantonTimestamp]] =
+    acsSnapshotBulkStorageStaging.persistentProgress.readFirstSnapshotTimestamp.map(
+      _.map(_.timestamp)
+    )
 
   private def getUpdatesBetweenDatesFromBucket(
       afterRecordTime: CantonTimestamp,

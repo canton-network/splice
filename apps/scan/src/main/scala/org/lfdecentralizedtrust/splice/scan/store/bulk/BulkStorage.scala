@@ -21,10 +21,11 @@ import scala.concurrent.ExecutionContext
 import cats.implicits.*
 import org.lfdecentralizedtrust.splice.RetryableService
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
-  acsStagingKvStoreKey,
   acsCommittedKvStoreKey,
-  updatesStagingKvStoreKey,
+  acsStagingKvStoreKey,
+  firstAcsSnapshotTimestampKvStoreKey,
   updatesCommittedKvStoreKey,
+  updatesStagingKvStoreKey,
 }
 
 class BulkStorage(
@@ -69,6 +70,7 @@ class BulkStorage(
     acsStagingWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
       acsStagingKvStoreKey,
+      firstAcsSnapshotTimestampKvStoreKey,
       kvProvider,
       historyMetrics.BulkStorage.latestAcsSnapshotStaging,
       loggerFactory,
@@ -89,6 +91,7 @@ class BulkStorage(
     acsCommittedWriter,
     new AcsSnapshotBulkStoragePersistentProgress(
       acsCommittedKvStoreKey,
+      firstAcsSnapshotTimestampKvStoreKey,
       kvProvider,
       historyMetrics.BulkStorage.latestAcsSnapshotCommitted,
       loggerFactory,
@@ -166,6 +169,7 @@ object BulkStorage {
   val acsCommittedKvStoreKey = "latest_acs_snapshot_in_bulk_storage_committed"
   val updatesStagingKvStoreKey = "latest_updates_segment_in_bulk_storage_staging"
   val updatesCommittedKvStoreKey = "latest_updates_segment_in_bulk_storage_committed"
+  val firstAcsSnapshotTimestampKvStoreKey = "first_acs_snapshot_timestamp_in_bulk_storage"
 
   def apply(
       storageConfig: ScanStorageConfig,
