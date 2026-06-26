@@ -13,7 +13,6 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{PollingTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
-import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger.RewardMetrics
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
@@ -23,7 +22,8 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
 class RewardMetricsTrigger(
     override protected val context: TriggerContext,
     dsoStore: SvDsoStore,
-    hiddenCouponProvidersSampleSize: Int,
+    hiddenCouponScanLimit: Int = 10_000,
+    hiddenCouponMaxProviders: Int = 50,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -34,6 +34,9 @@ class RewardMetricsTrigger(
 
   override def performWorkIfAvailable()(implicit traceContext: TraceContext): Future[Boolean] =
     for {
+      // These listings are capped at the default page size (1000), so the dryRun/minting counts
+      // may underestimate if there are more than that. That's acceptable: we log a warning when
+      // the cap is hit, and an alert already fires when either count is above 1.
       calculateRewards <- dsoStore.listCalculateRewardsV2()
       _ = {
         val (dryRun, minting) = calculateRewards.partition(_.payload.dryRun)
@@ -46,15 +49,17 @@ class RewardMetricsTrigger(
         rewardMetrics.processRewardsActiveContractsDryRun.updateValue(dryRun.size)
         rewardMetrics.processRewardsActiveContractsMinting.updateValue(minting.size)
       }
-      providers <- dsoStore.listNonObserverRewardCouponsV2ProvidersSample(
-        PageLimit.tryCreate(hiddenCouponProvidersSampleSize)
+      // Gauge for the providers with the most hidden coupons.
+      providerCoupons <- dsoStore.listTopNonObserverRewardCouponV2Providers(
+        couponScanLimit = hiddenCouponScanLimit,
+        maxProviders = hiddenCouponMaxProviders,
       )
-      _ <- Future.traverse(providers) { provider =>
-        dsoStore
-          .listNonObserverRewardCouponsV2ForProvider(provider, PageLimit.Max)
-          .map(coupons => rewardMetrics.updateHiddenCoupons(provider, coupons.size.toLong))
+      _ = {
+        providerCoupons.foreach { case (provider, count) =>
+          rewardMetrics.updateHiddenCoupons(provider, count)
+        }
+        rewardMetrics.pruneHiddenCouponGauges(providerCoupons.map(_._1))
       }
-      _ = rewardMetrics.pruneHiddenCouponGauges(providers)
     } yield false
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =

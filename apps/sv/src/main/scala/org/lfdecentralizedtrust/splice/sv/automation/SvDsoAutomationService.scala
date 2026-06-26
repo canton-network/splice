@@ -601,7 +601,6 @@ class SvDsoAutomationService(
       new RewardMetricsTrigger(
         triggerContext,
         dsoStore,
-        config.delegatelessAutomationUnhideRewardCouponV2SampleSize,
       )
     )
 
