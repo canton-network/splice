@@ -2032,7 +2032,7 @@ synchronizerMigration:
     sequencer:
       dedicatedBftSequencerDb: false
       enableBftSequencer: true
-    version: '0.6.10-snapshot.20260625.3229.0.ve0766216'
+    version: '0.6.11-snapshot.20260626.3244.0.vbc0c0fbf'
   frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'
@@ -2047,6 +2047,35 @@ validator1:
     maxDuration: '5m'
     retention: '1h'
 validators:
+  party-allocator:
+    namespace: 'party-allocator'
+    onboardingSecret: 'eyJzcG9uc29yaW5nU3YiOiJEaWdpdGFsLUFzc2V0LTI6OjEyMjBmZWE2ZThlOGM5MmVmMWY3NmIwNTAxY2MzNWY2M2IyMzU2ZWEyY2VmYjkxOTA1MWJlMzcwZDRlYWJhZjljN2FiIiwic2VjcmV0IjoicjJDQ2l4dFdrb29taVk3MjVXR0xiWVBiMEorOE5GT1NVZDBHMTVaQ3lZST0iLCJwYXJ0eUhpbnQiOiJkaWdpdGFsYXNzc2V0LXBhcnR5YWxsb2NhdG9yLTEifQ=='
+    participant:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
+          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_BATCH_SIZE'
+          value: "canton.participants.participant.topology.broadcast-batch-size = 50\n"
+      resources:
+        limits:
+          memory: '20Gi'
+        requests:
+          memory: '16Gi'
+    participantPruningSchedule:
+      cron: '0 /10 * * * ?'
+      maxDuration: '5m'
+      retention: '14d'
+    partyAllocator:
+      enable: true
+      maxParties: 500000
+      parallelism: 4
+      pvcSize: '100Gi'
+    partyHint: 'digitalassset-partyallocator-1'
+    postgresPvcSize: '200Gi'
+    validatorApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_DISABLE_TRANSFER_PREAPPROVAL_DEDUP'
+          value: "canton.validator-apps.validator_backend.transfer-preapproval.proposal-acceptance-deduplication = false\n"
   validator-runbook:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
