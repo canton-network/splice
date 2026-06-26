@@ -70,11 +70,7 @@ object DbAppActivityRecordStore {
       runningUser: Int,
       storedCode: Int,
       storedUser: Int,
-  ) extends MetaCheckResult {
-    def message: String =
-      s"Activity ingestion version downgrade detected: " +
-        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser)."
-  }
+  ) extends MetaCheckResult
 
   def checkMetaVersions(
       existing: Option[(Int, Int)],
@@ -355,9 +351,23 @@ class DbAppActivityRecordStore(
       }
     } yield ensureResult match {
       case d: DowngradeDetected =>
-        logger.error(s"${d.message} Shutting down to prevent data corruption.")
+        logger.error(
+          s"App activity ingestion version downgrade detected: " +
+            s"running=(${d.runningCode},${d.runningUser}), stored=(${d.storedCode},${d.storedUser}). " +
+            s"Make sure you did not accidentally remove or downgrade the 'activity-ingestion-user-version' field" +
+            s"in the scan app config. Shutting down to prevent data corruption."
+        )
         sys.exit(1)
-      case _ => ()
+      case Resume =>
+        logger.info(
+          s"App activity ingestion resumed with existing meta row for " +
+            s"codeVersion=${ingestionVersions.code}, userVersion=${ingestionVersions.user}."
+        )
+      case InsertMeta =>
+        logger.info(
+          s"App activity ingestion inserted new meta row for " +
+            s"codeVersion=${ingestionVersions.code}, userVersion=${ingestionVersions.user}."
+        )
     }
   }
 
