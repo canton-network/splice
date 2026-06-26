@@ -156,7 +156,7 @@ final case class EnvironmentDefinition(
     new CantonConsoleEnvironment(
       environment,
       new TestConsoleOutput(loggerFactory),
-    ) with TestEnvironment[CantonConfig]
+    ) with CantonTestEnvironment
 }
 
 /** Default testing environments for integration tests

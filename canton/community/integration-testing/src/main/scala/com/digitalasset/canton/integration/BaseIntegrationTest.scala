@@ -13,8 +13,8 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
-import com.digitalasset.canton.config.{CantonConfig, SharedCantonConfig}
-import com.digitalasset.canton.environment.{CantonEnvironment, Environment}
+import com.digitalasset.canton.config.SharedCantonConfig
+import com.digitalasset.canton.environment.Environment
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
@@ -207,8 +207,4 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
         .flatMap(_.asScalaProtoCreated)
         .toList
   }
-}
-
-object BaseIntegrationTest {
-  type Canton = BaseIntegrationTest[CantonConfig, CantonEnvironment]
 }

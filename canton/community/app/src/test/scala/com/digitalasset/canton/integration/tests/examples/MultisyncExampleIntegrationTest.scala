@@ -14,7 +14,7 @@ import com.digitalasset.canton.integration.bootstrap.{
 }
 import com.digitalasset.canton.integration.util.MultiSynchronizerFeatureFlag
 import com.digitalasset.canton.integration.{
-  BaseIntegrationTest,
+  CantonBaseIntegrationTest,
   CommunityIntegrationTest,
   ConfigTransforms,
   EnvironmentDefinition,

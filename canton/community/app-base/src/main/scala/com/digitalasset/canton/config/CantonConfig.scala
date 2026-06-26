@@ -393,8 +393,9 @@ final case class CantonFeatures(
 /** The commonality between [[CantonConfig]] and `SpliceConfig` in the Splice repo, so that either
   * Canton or Splice can initialize Canton components that require these configuration elements.
   *
-  * Prefer accepting this type over [[CantonConfig]] if possible. `SharedCantonConfig[?]` is
-  * frequently a specific-enough type.
+  * Prefer accepting this type over [[CantonConfig]] at least within app-base, environment setup,
+  * and integration test framework code. `SharedCantonConfig[?]` is frequently a specific-enough
+  * type for a function or class argument.
   */
 trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self] { self: Self =>
   def portDescription: String
