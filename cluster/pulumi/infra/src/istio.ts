@@ -649,6 +649,12 @@ function configureDocsAndReleases(
                 prefix: '/cn-release-bundles',
               },
             },
+            {
+              port: 80,
+              uri: {
+                prefix: '/cn-release-bundles',
+              },
+            },
           ],
           route: [
             {
@@ -683,6 +689,9 @@ function configureDocsAndReleases(
               match: [
                 {
                   port: 443,
+                },
+                {
+                  port: 80,
                 },
               ],
               route: [
