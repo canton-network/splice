@@ -15,7 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class AcsSnapshotBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
-    getBulkReader: => BulkStorageReader,
+    bulkStorageReader: BulkStorageReader,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends AcsSnapshotBulkStorageWriter
@@ -24,7 +24,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
   override def getNextSnapshotTimestampAfter(
       last: TimestampWithMigrationId
   )(implicit tc: TraceContext): Future[Option[TimestampWithMigrationId]] = {
-    getBulkReader
+    bulkStorageReader
       .getTimestampOfStagingAcsSnapshotAfter(last.timestamp)
       .map(
         _.map(ts => TimestampWithMigrationId(ts, -1L))
@@ -43,7 +43,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
       stagingS3Connection,
       committedS3Connection,
       ts =>
-        getBulkReader
+        bulkStorageReader
           .getStagingObjectsForAcsSnapshotAt(ts.timestamp)
           .map(objects => objects.objects),
       loggerFactory,

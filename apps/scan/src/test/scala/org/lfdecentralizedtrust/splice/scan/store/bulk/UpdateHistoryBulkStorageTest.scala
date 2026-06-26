@@ -362,36 +362,19 @@ class UpdateHistoryBulkStorageTest
         )
       )
       val mockKvProvider = new ScanKeyValueProvider(mockKvStore, loggerFactory)
-      val writer = new UpdateHistoryBulkStorageWriterFromDb(
-        bulkStorageTestConfig,
-        appConfig,
-        mock[UpdateHistory],
-        bucketConnection,
-        new HistoryMetrics(new InMemoryMetricsFactory)(MetricsContext.Empty),
-        1L,
-        loggerFactory,
-      )
-      val svc = new UpdateHistoryBulkStorage(
-        "UpdateHistoryBulkStorageUnitTest",
-        writer,
-        new UpdateHistoryBulkStoragePersistentProgress(
-          "latest_updates_segment_in_bulk_storage",
-          mockKvProvider,
-          new HistoryMetrics(new InMemoryMetricsFactory)(
-            MetricsContext.Empty
-          ).BulkStorage.latestUpdatesSegmentStaging,
-          loggerFactory,
-        ),
-        appConfig,
-        mock[UpdateHistory],
-        1L,
+      val progress = new UpdateHistoryBulkStoragePersistentProgress(
+        "latest_updates_segment_in_bulk_storage",
+        mockKvProvider,
+        new HistoryMetrics(new InMemoryMetricsFactory)(
+          MetricsContext.Empty
+        ).BulkStorage.latestUpdatesSegmentStaging,
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotBulkStorageStaging = null, // not needed for this test
-        acsSnapshotBulkStorageCommitted = null, // not needed for this test
-        updateHistoryBulkStorageStaging = svc,
-        updateHistoryBulkStorageCommitted = svc,
+        acsSnapshotStagingProgress =  null, // no ACS snapshots in this test
+        acsSnapshotCommittedProgress = null, // no ACS snapshots in this test
+        updateHistoryStagingProgress = progress,
+        updateHistoryCommittedProgress = null, // we don't test committed progress in this test
         storageConfig = bulkStorageTestConfig,
         stagingS3Connection = bucketConnection,
         committedS3Connection =

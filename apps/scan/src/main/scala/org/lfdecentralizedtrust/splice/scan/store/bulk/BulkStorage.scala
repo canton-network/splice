@@ -51,11 +51,47 @@ class BulkStorage(
     with FlagCloseableAsync
     with RetryProvider.Has {
 
-  def getReader: BulkStorageReader = reader
-
   val stagingConnection = S3BucketConnection(stagingS3Config, loggerFactory)
   val committedConnection = S3BucketConnection(committedS3Config, loggerFactory)
   val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
+
+  val acsStagingProgress = new AcsSnapshotBulkStoragePersistentProgress(
+    acsStagingKvStoreKey,
+    firstAcsSnapshotTimestampKvStoreKey,
+    kvProvider,
+    historyMetrics.BulkStorage.latestAcsSnapshotStaging,
+    loggerFactory,
+  )
+  val acsCommittedProgress = new AcsSnapshotBulkStoragePersistentProgress(
+    acsCommittedKvStoreKey,
+    firstAcsSnapshotTimestampKvStoreKey,
+    kvProvider,
+    historyMetrics.BulkStorage.latestAcsSnapshotCommitted,
+    loggerFactory,
+  )
+  private val updatesStagingProgress = new UpdateHistoryBulkStoragePersistentProgress(
+    updatesStagingKvStoreKey,
+    kvProvider,
+    historyMetrics.BulkStorage.latestUpdatesSegmentStaging,
+    loggerFactory,
+  )
+  private val updatesCommittedProgress = new UpdateHistoryBulkStoragePersistentProgress(
+    updatesCommittedKvStoreKey,
+    kvProvider,
+    historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
+    loggerFactory,
+  )
+
+  val reader = new BulkStorageReader(
+    acsStagingProgress,
+    acsCommittedProgress,
+    updatesStagingProgress,
+    updatesCommittedProgress,
+    storageConfig,
+    stagingConnection,
+    committedConnection,
+    loggerFactory,
+  )
 
   val acsStagingWriter = new AcsSnapshotBulkStorageWriterFromDb(
     storageConfig,
@@ -68,13 +104,7 @@ class BulkStorage(
   val acsStaging = new AcsSnapshotBulkStorage(
     "AcsSnapshotBulkStorageStaging",
     acsStagingWriter,
-    new AcsSnapshotBulkStoragePersistentProgress(
-      acsStagingKvStoreKey,
-      firstAcsSnapshotTimestampKvStoreKey,
-      kvProvider,
-      historyMetrics.BulkStorage.latestAcsSnapshotStaging,
-      loggerFactory,
-    ),
+    acsStagingProgress,
     appConfig,
     acsSnapshotStore,
     updateHistory,
@@ -83,19 +113,13 @@ class BulkStorage(
   val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
     stagingConnection,
     committedConnection,
-    getReader,
+    reader,
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
     "AcsSnapshotBulkStorageCommitted",
     acsCommittedWriter,
-    new AcsSnapshotBulkStoragePersistentProgress(
-      acsCommittedKvStoreKey,
-      firstAcsSnapshotTimestampKvStoreKey,
-      kvProvider,
-      historyMetrics.BulkStorage.latestAcsSnapshotCommitted,
-      loggerFactory,
-    ),
+    acsCommittedProgress,
     appConfig,
     acsSnapshotStore,
     updateHistory,
@@ -113,12 +137,7 @@ class BulkStorage(
   val updatesStaging = new UpdateHistoryBulkStorage(
     "UpdateHistoryBulkStorageStaging",
     updatesStagingWriter,
-    new UpdateHistoryBulkStoragePersistentProgress(
-      updatesStagingKvStoreKey,
-      kvProvider,
-      historyMetrics.BulkStorage.latestUpdatesSegmentStaging,
-      loggerFactory,
-    ),
+    updatesStagingProgress,
     appConfig,
     updateHistory,
     currentMigrationId,
@@ -127,31 +146,16 @@ class BulkStorage(
   val updatesCommittedWriter = new UpdateHistoryBulkStorageCommitFromStaging(
     stagingConnection,
     committedConnection,
-    getReader,
+    reader,
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
     "UpdateHistoryBulkStorageCommitted",
     updatesCommittedWriter,
-    new UpdateHistoryBulkStoragePersistentProgress(
-      updatesCommittedKvStoreKey,
-      kvProvider,
-      historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
-      loggerFactory,
-    ),
+    updatesCommittedProgress,
     appConfig,
     updateHistory,
     currentMigrationId,
-    loggerFactory,
-  )
-  val reader = new BulkStorageReader(
-    acsStaging,
-    acsCommitted,
-    updatesStaging,
-    updatesCommitted,
-    storageConfig,
-    stagingConnection,
-    committedConnection,
     loggerFactory,
   )
 

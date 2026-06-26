@@ -55,7 +55,7 @@ import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
 import scala.util.Using
 
-class AcsSnapshotBulkStorageTest
+class AcsSnapshotBulkStorageWriterFromDbTest
     extends StoreTestBase
     with HasExecutionContext
     with HasActorSystem
@@ -193,13 +193,13 @@ class AcsSnapshotBulkStorageTest
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotBulkStorageStaging = bulkStorage,
-        acsSnapshotBulkStorageCommitted = bulkStorage,
-        updateHistoryBulkStorageStaging = null, // not needed for this test
-        updateHistoryBulkStorageCommitted = null, // not needed for this test
+        acsSnapshotStagingProgress = progress,
+        acsSnapshotCommittedProgress = null, // we don't test committed progress in this test
+        updateHistoryStagingProgress = null, // no updates history in this test
+        updateHistoryCommittedProgress = null, // no updates history in this test
         bulkStorageTestConfig,
         s3BucketConnection,
-        s3BucketConnection,
+        s3BucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
         loggerFactory,
       )
 

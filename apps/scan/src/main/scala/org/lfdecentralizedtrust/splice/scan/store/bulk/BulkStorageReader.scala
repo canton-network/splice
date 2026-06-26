@@ -16,10 +16,10 @@ import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, S3Buc
 import scala.concurrent.{ExecutionContext, Future}
 
 class BulkStorageReader(
-    val acsSnapshotBulkStorageStaging: AcsSnapshotBulkStorage,
-    val acsSnapshotBulkStorageCommitted: AcsSnapshotBulkStorage,
-    val updateHistoryBulkStorageStaging: UpdateHistoryBulkStorage,
-    val updateHistoryBulkStorageCommitted: UpdateHistoryBulkStorage,
+    val acsSnapshotStagingProgress: AcsSnapshotBulkStoragePersistentProgress,
+    val acsSnapshotCommittedProgress: AcsSnapshotBulkStoragePersistentProgress,
+    val updateHistoryStagingProgress: UpdateHistoryBulkStoragePersistentProgress,
+    val updateHistoryCommittedProgress: UpdateHistoryBulkStoragePersistentProgress,
     storageConfig: ScanStorageConfig,
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
@@ -32,7 +32,7 @@ class BulkStorageReader(
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
     for {
       snapshotTs <-
-        acsSnapshotBulkStorageCommitted.persistentProgress.readLatestProcessedSnapshotTimestamp
+        acsSnapshotCommittedProgress.readLatestProcessedSnapshotTimestamp
           .map {
             case None =>
               throw Status.NOT_FOUND
@@ -55,7 +55,7 @@ class BulkStorageReader(
       afterTimestamp: CantonTimestamp
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Option[CantonTimestamp]] = {
     logger.trace(s"Looking for the next snapshot in staging bulk storage after $afterTimestamp")
-    acsSnapshotBulkStorageStaging.persistentProgress.readLatestProcessedSnapshotTimestamp
+    acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp
       .flatMap {
         case None =>
           logger.debug(
@@ -118,7 +118,7 @@ class BulkStorageReader(
       limit,
       nextPageTokenO,
       committedS3Connection,
-      updateHistoryBulkStorageCommitted.persistentProgress.readLatestProcessedSegment,
+      updateHistoryCommittedProgress.readLatestProcessedSegment,
     )
 
   def getStagingSegmentStartingAt(
@@ -126,7 +126,7 @@ class BulkStorageReader(
   ): Future[Option[(CantonTimestamp, CantonTimestamp)]] = {
     val minTs = startTimestamp.getOrElse(CantonTimestamp.MinValue)
 
-    updateHistoryBulkStorageStaging.persistentProgress.readLatestProcessedSegment
+    updateHistoryStagingProgress.readLatestProcessedSegment
       .flatMap {
         case None =>
           logger.debug(
@@ -190,7 +190,7 @@ class BulkStorageReader(
   }
 
   private def getFirstAcsSnapshotTimestampAfterGenesis: Future[Option[CantonTimestamp]] =
-    acsSnapshotBulkStorageStaging.persistentProgress.readFirstSnapshotTimestamp.map(
+    acsSnapshotStagingProgress.readFirstSnapshotTimestamp.map(
       _.map(_.timestamp)
     )
 

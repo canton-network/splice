@@ -15,7 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class UpdateHistoryBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
-    getBulkReader: => BulkStorageReader,
+    bulkStorageReader: BulkStorageReader,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, actorSystem: ActorSystem)
     extends UpdateHistoryBulkStorageWriter
@@ -27,7 +27,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
       stagingS3Connection,
       committedS3Connection,
       segment =>
-        getBulkReader
+        bulkStorageReader
           .getStagingObjectsForUpdateHistorySegment(segment)
           .map(objects => objects.objects),
       loggerFactory,
@@ -36,7 +36,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
   override def getNextSegmentAfter(
       after: Option[UpdatesSegment]
   )(implicit tc: TraceContext): Future[Option[UpdatesSegment]] = {
-    getBulkReader
+    bulkStorageReader
       .getStagingSegmentStartingAt(
         after.map(_.toTimestamp.timestamp)
       )
