@@ -28,7 +28,7 @@
     "@daml.js/splice-wallet": "file:common/frontend/daml.js/splice-wallet-0.1.22",
     "@daml.js/splice-wallet-payments": "file:common/frontend/daml.js/splice-wallet-payments-0.1.21",
     "@daml.js/splitwell": "file:common/frontend/daml.js/splitwell-0.1.22",
-    "@daml/types": "^3.5.1",
+    "@daml/types": "^3.5.2",
     "@dmsnell/diff-match-patch": "^1.1.0",
     "dompurify": "^3.4.2",
     "eslint": "^9.39.4",

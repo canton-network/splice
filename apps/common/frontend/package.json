@@ -14,7 +14,7 @@
     ]
   },
   "dependencies": {
-    "@daml/types": "^3.5.1",
+    "@daml/types": "^3.5.2",
     "@js-temporal/polyfill": "^0.4.4",
     "@canton-network/splice-common-frontend-utils": "0.1.0",
     "@dmsnell/diff-match-patch": "^1.1.0",

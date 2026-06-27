@@ -139,7 +139,7 @@
       ``Splice.Util.Token.Wallet.BatchingUtilityV2`` template for batching
       multiple token standard V1 or V2 actions in a single transaction.
 
-    - Switch to Daml SDK 3.5.1 for all non-API packages and the token standard V2 APIs,
+    - Switch to Daml SDK 3.5.2 for all non-API packages and the token standard V2 APIs,
       which is the reason for why the version of ```splice-*`` packages unrelated to Token Standard V2
       implementation was bumped as well.
 
