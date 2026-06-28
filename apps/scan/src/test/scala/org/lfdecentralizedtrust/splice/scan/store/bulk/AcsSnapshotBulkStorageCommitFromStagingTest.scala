@@ -54,8 +54,6 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
     snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
   )
 
-  // FIXME: quite a lot of duplication with AcsSnapshotBulkStorageWriterFromDbTest, consider consolidating
-
   override val initialBuckets: Seq[String] = Seq("staging", "committed")
 
   "AcsSnapshotBulkStorageCommitFromStaging" should {
@@ -120,81 +118,64 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         retryProvider,
       )
 
+      def createDummySnapshot(ts: CantonTimestamp, objectCount: Int): Unit = {
+        createDummySnapshotWithoutMarkingProcessed(ts, objectCount)
+        acsStagingProgress
+          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts, 0))
+          .futureValue
+      }
+
+      def createDummySnapshotWithoutMarkingProcessed(
+          ts: CantonTimestamp,
+          objectCount: Int,
+      ): Unit = {
+        (0 until objectCount).foreach { i =>
+          stagingConnection
+            .createObject(
+              s"${bulkStorageTestConfig.getSegmentFolder(ts, None)}/ACS_$i.zstd",
+              s"dummy acs snapshot at $ts (object $i)".getBytes,
+            )
+            .futureValue
+        }
+      }
+
       Using.resources(svc, retryProvider) { (_, _) =>
         // Create full dummy ACS snapshots for first two timestamps
-        stagingConnection
-          .createObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts1, None)}/ACS_0.zstd",
-            "dummy acs snapshot 1".getBytes,
-          )
-          .futureValue
-        acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts1, 0))
-          .futureValue
-        stagingConnection
-          .createObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_0.zstd",
-            "dummy acs snapshot 2 (object 1)".getBytes,
-          )
-          .futureValue
-        stagingConnection
-          .createObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_1.zstd",
-            "dummy acs snapshot 2 (object 2)".getBytes,
-          )
-          .futureValue
-        acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts2, 0))
-          .futureValue
+        createDummySnapshot(ts1, 1)
+        createDummySnapshot(ts2, 2)
         // Create a third snapshot with two objects, but do not mark it as processed yet
         // (simulating that the writer from DB is still not done with it)
-        stagingConnection
-          .createObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_0.zstd",
-            "dummy acs snapshot 3 (object 1)".getBytes,
-          )
-          .futureValue
-        stagingConnection
-          .createObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_1.zstd",
-            "dummy acs snapshot 3 (object 2)".getBytes,
-          )
-          .futureValue
+        createDummySnapshotWithoutMarkingProcessed(ts3, 2)
 
         eventually() {
           acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
             _.timestamp
           ) shouldBe Some(ts2)
         }
-        reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1)
-          .futureValue
-          .objects
-          .map(_.key) should contain theSameElementsAs
-          Seq(s"${bulkStorageTestConfig.getSegmentFolder(ts1, None)}/ACS_0.zstd")
-        reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts2)
-          .futureValue
-          .objects
-          .map(_.key) should contain theSameElementsAs
-          Seq(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_0.zstd",
-            s"${bulkStorageTestConfig.getSegmentFolder(ts2, None)}/ACS_1.zstd",
-          )
-        reader
-          .getStagingObjectsForAcsSnapshotAt(ts1)
-          .failed
-          .futureValue
-          .asInstanceOf[StatusRuntimeException]
-          .getStatus
-          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
-        reader
-          .getStagingObjectsForAcsSnapshotAt(ts2)
-          .failed
-          .futureValue
-          .asInstanceOf[StatusRuntimeException]
-          .getStatus
-          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+        def assertCommittedObjectsForSnapshot(ts: CantonTimestamp, expectedCount: Int): Unit = {
+          val expectedKeys = (0 until expectedCount).map { i =>
+            s"${bulkStorageTestConfig.getSegmentFolder(ts, None)}/ACS_$i.zstd"
+          }
+          reader
+            .getCommittedObjectsForAcsSnapshotAtOrBefore(ts)
+            .futureValue
+            .objects
+            .map(_.key) should contain theSameElementsAs
+            expectedKeys
+        }
+        assertCommittedObjectsForSnapshot(ts1, 1)
+        assertCommittedObjectsForSnapshot(ts2, 2)
+        def assertNoStagingObjectsForSnapshot(ts: CantonTimestamp): Unit = {
+          reader
+            .getStagingObjectsForAcsSnapshotAt(ts)
+            .failed
+            .futureValue
+            .asInstanceOf[StatusRuntimeException]
+            .getStatus
+            .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+        }
+        assertNoStagingObjectsForSnapshot(ts1)
+        assertNoStagingObjectsForSnapshot(ts2)
         reader.getStagingObjectsForAcsSnapshotAt(ts3).futureValue.objects should not be empty
 
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.DEBUG))(
@@ -216,25 +197,11 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
             _.timestamp
           ) shouldBe Some(ts3)
         }
-        reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts3)
-          .futureValue
-          .objects
-          .map(_.key) should contain theSameElementsAs
-          Seq(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_0.zstd",
-            s"${bulkStorageTestConfig.getSegmentFolder(ts3, None)}/ACS_1.zstd",
-          )
-        reader
-          .getStagingObjectsForAcsSnapshotAt(ts3)
-          .failed
-          .futureValue
-          .asInstanceOf[StatusRuntimeException]
-          .getStatus
-          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
-
-        succeed
+        assertCommittedObjectsForSnapshot(ts3, 2)
+        assertNoStagingObjectsForSnapshot(ts3)
       }
+
+      succeed
     }
   }
 

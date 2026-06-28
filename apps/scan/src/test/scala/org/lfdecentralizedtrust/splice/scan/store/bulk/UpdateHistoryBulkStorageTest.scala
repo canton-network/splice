@@ -371,7 +371,7 @@ class UpdateHistoryBulkStorageTest
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotStagingProgress =  null, // no ACS snapshots in this test
+        acsSnapshotStagingProgress = null, // no ACS snapshots in this test
         acsSnapshotCommittedProgress = null, // no ACS snapshots in this test
         updateHistoryStagingProgress = progress,
         updateHistoryCommittedProgress = null, // we don't test committed progress in this test

@@ -25,11 +25,23 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider,
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider, ScanKeyValueStore}
+import org.lfdecentralizedtrust.splice.scan.store.{
+  AcsSnapshotStore,
+  ScanKeyValueProvider,
+  ScanKeyValueStore,
+}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
-import org.lfdecentralizedtrust.splice.store.{HardLimit, HasS3Mock, HistoryMetrics, Limit, S3BucketConnection, StoreTestBase, TimestampWithMigrationId}
+import org.lfdecentralizedtrust.splice.store.{
+  HardLimit,
+  HasS3Mock,
+  HistoryMetrics,
+  Limit,
+  S3BucketConnection,
+  StoreTestBase,
+  TimestampWithMigrationId,
+}
 import org.lfdecentralizedtrust.splice.util.PackageQualifiedName
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito
@@ -189,7 +201,6 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         loggerFactory,
       )
 
-
       def assertLatestSnapshotInMetrics(ts: CantonTimestamp) = {
         val latestSnapshotMetrics = metricsFactory.metrics.gauges
           .get(
@@ -235,7 +246,6 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       )
 
       Using.resources(svc, retryProvider) { (_, _) =>
-
         clue("Initially, a single snapshot is dumped") {
           eventually(4.minutes) {
             val persistedTs1 = progress.readLatestProcessedSnapshotTimestamp.futureValue

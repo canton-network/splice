@@ -21,7 +21,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.RetryableService
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{acsCommittedKvStoreKey, acsStagingKvStoreKey, firstAcsSnapshotTimestampKvStoreKey, updatesCommittedKvStoreKey, updatesStagingKvStoreKey}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
+  acsCommittedKvStoreKey,
+  acsStagingKvStoreKey,
+  firstAcsSnapshotTimestampKvStoreKey,
+  updatesCommittedKvStoreKey,
+  updatesStagingKvStoreKey,
+}
 
 import scala.concurrent.duration.*
 
