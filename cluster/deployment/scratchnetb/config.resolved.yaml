@@ -10,7 +10,6 @@ cloudArmor:
         maxRequestsBeforeHttp429: 0
         withinIntervalSeconds: 60
     tokenRegistry:
-      hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
       pathPrefix: '/registry'
       throttleAcrossAllEndpointsAllIps:
         maxRequestsBeforeHttp429: 200

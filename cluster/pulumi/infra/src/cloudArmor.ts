@@ -147,9 +147,11 @@ function addThrottleAndBanRules(
       // this makes the pulumi update cleaner if toggling just one service
       if (throttleAcrossAllEndpointsAllIps.maxRequestsBeforeHttp429 > 0) {
         const ruleName = `throttle-all-endpoints-all-ips-${confEntryHead}`;
-
+        const hostnameRegex = hostname
+          ? _.escapeRegExp(hostname)
+          : `scan\\.[\\w-]+\\.${_.escapeRegExp(config.clusterHostname)}`;
         const pathExpr = allowedPathsCondition(scanExternalRateLimits, pathPrefix);
-        const hostExpr = `request.headers['host'].matches(R"^${_.escapeRegExp(hostname)}(?::[0-9]+)?$")`;
+        const hostExpr = `request.headers['host'].matches(R"^${hostnameRegex}(?::[0-9]+)?$")`;
         const matchExpr = `${pathExpr} && ${hostExpr}`;
 
         new PolicyRule(
