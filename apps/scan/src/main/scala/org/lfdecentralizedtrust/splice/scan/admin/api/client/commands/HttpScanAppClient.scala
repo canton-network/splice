@@ -44,6 +44,7 @@ import org.lfdecentralizedtrust.splice.http.v0.scan.{
   ForceAcsSnapshotNowResponse,
   GetDateOfFirstSnapshotAfterResponse,
   GetDateOfMostRecentSnapshotBeforeResponse,
+  GetLsuResponse,
   ListBulkAcsSnapshotObjectsResponse,
   ListBulkUpdateHistoryObjectsResponse,
 }
@@ -2426,6 +2427,27 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetPreviousSvRewardWeight(
+      svParty: String,
+      effectiveBefore: Option[String],
+  ) extends InternalBaseCommand[http.GetPreviousSvRewardWeightResponse, Option[Long]] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetPreviousSvRewardWeightResponse] =
+      client.getPreviousSvRewardWeight(
+        body = definitions.PreviousSvRewardWeightRequest(svParty, effectiveBefore),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetPreviousSvRewardWeightResponse.OK(response) =>
+      Right(response.rewardWeight.map(_.toLong))
+    }
+  }
+
   case class ListVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId]
   ) extends InternalBaseCommand[http.ListVoteRequestsByTrackingCidResponse, Seq[
@@ -2705,6 +2727,44 @@ object HttpScanAppClient {
       param("upgradeTime", _.upgradeTime),
     )
   }
+
+  case class GetLsu() extends InternalBaseCommand[http.GetLsuResponse, Option[Lsu]] {
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], GetLsuResponse] =
+      client.getLsu()
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[GetLsuResponse, Either[String, Option[Lsu]]] = {
+      case http.GetLsuResponse.OK(response) =>
+        Right(
+          response.lsu.map(lsu =>
+            Lsu(
+              topologyFreezeTime =
+                CantonTimestamp.assertFromInstant(lsu.topologyFreezeTime.toInstant),
+              upgradeTime = CantonTimestamp.assertFromInstant(lsu.upgradeTime.toInstant),
+              successorPhysicalSynchronizerId =
+                PhysicalSynchronizerId.tryFromString(lsu.successorPhysicalSynchronizerId),
+            )
+          )
+        )
+    }
+  }
+
+  case class Lsu(
+      topologyFreezeTime: CantonTimestamp,
+      upgradeTime: CantonTimestamp,
+      successorPhysicalSynchronizerId: PhysicalSynchronizerId,
+  ) extends PrettyPrinting {
+    override def pretty: Pretty[this.type] = prettyOfClass(
+      param("topologyFreezeTime", _.topologyFreezeTime),
+      param("upgradeTime", _.upgradeTime),
+      param("successorPhysicalSynchronizerSerial", _.successorPhysicalSynchronizerId),
+    )
+  }
+
   case class GetRewardAccountingEarliestAvailableRound()
       extends InternalBaseCommand[
         http.GetRewardAccountingEarliestAvailableRoundResponse,

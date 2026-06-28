@@ -400,3 +400,193 @@ tests:
         matchRegex:
           path: spec.template.spec.containers[?(@.name=='scan-web-ui')].image
           pattern: "^secure-registry\\.example\\.com/custom-scan-ui:"
+
+  - it: "allows overriding scan database and bulk storage secret env vars with raw strings"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+        secretOverrides:
+          postgresPassword: "vault:kv/data/scan/postgres-password"
+      bulkStorage:
+        s3:
+          endpoint: "mock-endpoint"
+          region: "mock-region"
+          bucketName: "mock-bucket"
+          secretName: "mock-secret"
+          secretOverrides:
+            accessKey: "vault:kv/data/scan/s3-access-key"
+            secretAccessKey: "vault:kv/data/scan/s3-secret-key"
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        audience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/scan/auth-user"
+          audience: "vault:kv/data/scan/auth-aud"
+          token: "vault:kv/data/scan/auth-token"
+          url: "vault:kv/data/scan/auth-url"
+          clientId: "vault:kv/data/scan/auth-client-id"
+          clientSecret: "vault:kv/data/scan/auth-client-secret"
+          scope: "vault:kv/data/scan/auth-scope"
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/scan/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='scan-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/scan/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID')].value
+          pattern: "vault:kv/data/scan/s3-access-key"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY')].value
+          pattern: "vault:kv/data/scan/s3-secret-key"
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_SCAN_LEDGER_API_AUTH_USER_NAME')].value
+          pattern: "vault:kv/data/scan/auth-user"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_SCAN_LEDGER_API_AUTH_AUDIENCE')].value
+          pattern: "vault:kv/data/scan/auth-aud"
+
+  - it: "injects custom serviceAccountName into Deployments when specified"
+    set:
+      serviceAccountName: "custom-scan-sa"
+      participantAddress: "dummy"
+      sequencerAddress: "dummy"
+      mediatorAddress: "dummy"
+      persistence.host: "dummy"
+      persistence.schema: "dummy"
+      spliceInstanceNames.networkName: "dummy"
+      spliceInstanceNames.networkFaviconUrl: "http://dummy"
+      spliceInstanceNames.amuletName: "dummy"
+      spliceInstanceNames.amuletNameAcronym: "dummy"
+      spliceInstanceNames.nameServiceName: "dummy"
+      spliceInstanceNames.nameServiceNameAcronym: "dummy"
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-scan-sa"
+      - documentIndex: 2
+        equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-scan-sa"
+
+  - it: "pvc creates volume and mount for heap dumps at /persistent-data"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: scan-app
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scan-volume
+            mountPath: /persistent-data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scan-volume
+            persistentVolumeClaim:
+              claimName: scan-scan-pvc
+
+  - it: "pvc creates a PersistentVolumeClaim resource"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      pvc:
+        size: "5Gi"
+        volumeStorageClass: "standard"
+    documentSelector:
+      path: metadata.name
+      value: scan-scan-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "5Gi"
+      - equal:
+          path: spec.storageClassName
+          value: "standard"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "pvc is not created by default"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scan-volume
+            mountPath: /persistent-data

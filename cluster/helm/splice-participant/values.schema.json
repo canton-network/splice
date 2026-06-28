@@ -9,6 +9,9 @@
     "imageName"
   ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
       "type": "string"
     },
@@ -76,6 +79,14 @@
         },
         "enableParticipantDbConflictCheck": {
           "type": "boolean"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -109,6 +120,14 @@
         },
         "targetAudience": {
           "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "ledgerApiUser": {
+              "type": "string"
+            }
+          }
         }
       }
     },

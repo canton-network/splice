@@ -65,7 +65,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
   ValidatorPackageVettingTrigger,
 }
 import org.lfdecentralizedtrust.splice.validator.config.*
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 import org.lfdecentralizedtrust.splice.validator.migration.ParticipantPartyMigrator
 import org.lfdecentralizedtrust.splice.validator.store.{
@@ -188,7 +188,7 @@ class ValidatorApp(
             domainMigrationId <- appInitStep("Resolving domain migration id") {
               resolveDomainMigrationId(scanConnection)
             }
-            domainConnector = new DomainConnector(
+            domainConnector = new SynchronizerConnector(
               config,
               participantAdminConnection,
               scanConnection,
@@ -197,8 +197,7 @@ class ValidatorApp(
               loggerFactory,
             )
             domainAlreadyRegistered <- participantAdminConnection
-              .lookupSynchronizerConnectionConfig(config.domains.global.alias)
-              .map(_.isDefined)
+              .isSynchronizerRegistered(config.domains.global.alias)
             now = clock.now
             // This is used by the ReconcileSequencerConnectionsTrigger to avoid travelling back in time if the domain time is behind this.
             // We want to avoid using this when we already have a synchronizer connection as then synchronizer time should be used so we
@@ -220,48 +219,60 @@ class ValidatorApp(
             _ <- appInitStep("Ensuring extra domains registered") {
               domainConnector.ensureExtraDomainsRegistered()
             }
-            // Prevet early to make sure we have the required packages even
-            // before the automation kicks in.
-            _ <- appInitStep("Vet packages") {
-              for {
-                amuletRules <- retryProvider.retry(
-                  RetryFor.WaitingOnInitDependency,
-                  "get_amulet_rules_init",
-                  "retrieving AmuletRules from scan",
-                  scanConnection.getAmuletRules(),
-                  logger,
+            // Vet eagerly on first-initialization where no party exists, all other runs rely on the vetting trigger to vet async.
+            alreadyInitialized <- connection
+              .getOptionalPrimaryParty(config.ledgerApiUser)
+              .map(_.isDefined)
+            _ <-
+              if (alreadyInitialized)
+                Future.successful(
+                  logger.info(
+                    s"Validator user ${config.ledgerApiUser} already has a primary party, skipping eager package vetting"
+                  )
                 )
-                globalSynchronizerId: SynchronizerId <- scanConnection.getAmuletRulesDomain()(
-                  traceContext
-                )
-                // vet on extra synchronizers as well
-                // TODO(#2742) make sure we also vet on later connection + on upgrades (and maybe move below logic)
-                extraSynchronizerAliases: Set[SynchronizerAlias] = config.domains.extra
-                  .map(_.alias)
-                  .toSet
-                allConnectedSynchronizers <- participantAdminConnection.listConnectedSynchronizers()
-                extraSynchronizerIds: Seq[SynchronizerId] = allConnectedSynchronizers
-                  .filter(result => extraSynchronizerAliases.contains(result.synchronizerAlias))
-                  .map(_.physicalSynchronizerId.logical)
-                packageVetting = new PackageVetting(
-                  ValidatorPackageVettingTrigger.packages,
-                  clock,
-                  participantAdminConnection,
-                  loggerFactory,
-                  config.latestPackagesOnly,
-                  config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
-                )
-                _ <-
-                  MonadUtil.sequentialTraverse_(Seq(globalSynchronizerId) ++ extraSynchronizerIds) {
-                    synchronizerId =>
-                      packageVetting.vetCurrentPackages(
-                        synchronizerId,
-                        amuletRules,
-                        config.additionalPackagesToUnvet,
-                      )
-                  }
-              } yield ()
-            }
+              else
+                appInitStep("Vet packages") {
+                  for {
+                    amuletRules <- retryProvider.retry(
+                      RetryFor.WaitingOnInitDependency,
+                      "get_amulet_rules_init",
+                      "retrieving AmuletRules from scan",
+                      scanConnection.getAmuletRules(),
+                      logger,
+                    )
+                    globalSynchronizerId: SynchronizerId <- scanConnection.getAmuletRulesDomain()(
+                      traceContext
+                    )
+                    // vet on extra synchronizers as well
+                    // TODO(#2742) make sure we also vet on later connection + on upgrades (and maybe move below logic)
+                    extraSynchronizerAliases: Set[SynchronizerAlias] = config.domains.extra
+                      .map(_.alias)
+                      .toSet
+                    allConnectedSynchronizers <- participantAdminConnection
+                      .listConnectedSynchronizers()
+                    extraSynchronizerIds: Seq[SynchronizerId] = allConnectedSynchronizers
+                      .filter(result => extraSynchronizerAliases.contains(result.synchronizerAlias))
+                      .map(_.physicalSynchronizerId.logical)
+                    packageVetting = new PackageVetting(
+                      ValidatorPackageVettingTrigger.packages,
+                      clock,
+                      participantAdminConnection,
+                      loggerFactory,
+                      config.latestPackagesOnly,
+                      config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
+                    )
+                    _ <-
+                      MonadUtil.sequentialTraverse_(
+                        Seq(globalSynchronizerId) ++ extraSynchronizerIds
+                      ) { synchronizerId =>
+                        packageVetting.vetCurrentPackages(
+                          synchronizerId,
+                          amuletRules,
+                          config.additionalPackagesToUnvet,
+                        )
+                      }
+                  } yield ()
+                }
             _ <- (config.migrateValidatorParty, config.participantBootstrappingDump) match {
               case (
                     Some(MigrateValidatorPartyConfig(scanConfig, partiesToMigrate)),
@@ -761,7 +772,7 @@ class ValidatorApp(
         ledgerClient,
         participantAdminConnection,
         participantIdentitiesStore,
-        new DomainConnector(
+        new SynchronizerConnector(
           config,
           participantAdminConnection,
           scanConnection,

@@ -71,7 +71,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.I
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Accepted
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
+  VRO_Accepted,
+  VRO_Rejected,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
   DsoRules_AddSv,
@@ -524,6 +527,7 @@ abstract class StoreTestBase
       amount: Numeric.Numeric = numeric(1.0),
       beneficiary: Option[PartyId] = None,
       expiresAt: Instant = Instant.now().plusSeconds(3600),
+      providerIsObserver: Boolean = true,
       contractId: String = nextCid(),
   ): Contract[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2] =
     contract(
@@ -535,7 +539,7 @@ abstract class StoreTestBase
         new Round(round),
         amount,
         expiresAt,
-        true,
+        providerIsObserver,
         beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
       ),
     )
@@ -728,6 +732,17 @@ abstract class StoreTestBase
     util.List.of(),
     util.List.of(),
     new VRO_Accepted(effectiveAt),
+  )
+
+  protected def mkRejectedVoteRequestResult(
+      voteRequestContract: Contract[VoteRequest.ContractId, VoteRequest],
+      completedAt: Instant,
+  ): DsoRules_CloseVoteRequestResult = new DsoRules_CloseVoteRequestResult(
+    voteRequestContract.payload,
+    completedAt,
+    util.List.of(),
+    util.List.of(),
+    new VRO_Rejected(damlUnit.getInstance()),
   )
 
   protected def mkCloseVoteRequest(

@@ -1,0 +1,17 @@
+name: 'Backport Reminder'
+description: 'Remind to backport a PR to the relevant release branches.'
+inputs:
+  pr_number:
+    description: "The number of the PR to check for backporting."
+    required: true
+    type: number
+  lookup_prod_cluster_configs:
+    description: "Whether to determine backport branches from prod cluster configs."
+    required: true
+    type: boolean
+  token:
+    description: "The GitHub token to use for API calls."
+    default: ${{ github.token }}
+runs:
+  using: 'node24'
+  main: 'index.js'

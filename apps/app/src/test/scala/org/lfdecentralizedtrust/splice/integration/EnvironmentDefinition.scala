@@ -10,12 +10,7 @@ import com.digitalasset.canton.config.{
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.console.TestConsoleOutput
-import com.digitalasset.canton.environment.EnvironmentFactory
-import com.digitalasset.canton.integration.{
-  BaseEnvironmentDefinition,
-  TestConsoleEnvironment,
-  TestEnvironment,
-}
+import com.digitalasset.canton.integration.{BaseEnvironmentDefinition, TestEnvironment}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, SuppressingLogger}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
@@ -33,7 +28,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResources,
   SpliceConsoleEnvironment,
   SpliceEnvironment,
-  SpliceEnvironmentFactory,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.{
@@ -563,19 +557,15 @@ case class EnvironmentDefinition(
       )
       .withSequencerConnectionsFromScanDisabled(10_000)
 
-  override lazy val environmentFactory: EnvironmentFactory[SpliceConfig, SpliceEnvironment] =
-    SpliceEnvironmentFactory
-
   override def createTestConsole(
       environment: SpliceEnvironment,
       loggerFactory: NamedLoggerFactory,
-  ): TestConsoleEnvironment[SpliceConfig, SpliceEnvironment] = {
+  ): SpliceTestConsoleEnvironment = {
     val env = new SpliceConsoleEnvironment(
       environment,
       new TestConsoleOutput(loggerFactory),
     ) with TestEnvironment[SpliceConfig] {
       override lazy val actorSystem = super[TestEnvironment].actorSystem
-      override val actualConfig: SpliceConfig = this.environment.config
     }
     this.preAppStart(env)
     env

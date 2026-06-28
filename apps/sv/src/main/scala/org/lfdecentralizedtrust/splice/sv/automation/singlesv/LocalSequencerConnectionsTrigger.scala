@@ -103,6 +103,7 @@ class LocalSequencerConnectionsTrigger(
               }
               participantAdminConnection.modifySynchronizerConnectionConfigAndReconnect(
                 decentralizedSynchronizerAlias,
+                Some(participantConnectedPSId),
                 reconnectOnSynchronizerConfigurationChange,
                 setLocalSequencerConnection(
                   localSequencerConnection

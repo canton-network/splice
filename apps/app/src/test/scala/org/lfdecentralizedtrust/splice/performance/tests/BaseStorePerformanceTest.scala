@@ -3,17 +3,19 @@ package org.lfdecentralizedtrust.splice.performance.tests
 import cats.data.NonEmptyList
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.daml.metrics.api.{HistogramInventory, MetricName, MetricsContext}
+import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.metrics.{DbStorageHistograms, DbStorageMetrics}
-import com.digitalasset.canton.resource.{DbMigrations, DbStorage, StorageSingleFactory}
+import com.digitalasset.canton.resource.{DbLockCounter, DbMigrations, DbStorage}
 import com.digitalasset.canton.time.WallClock
 import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.environment.SpliceStorageFactory
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItemV2,
@@ -28,6 +30,20 @@ import java.lang.management.ManagementFactory
 import java.nio.file.{Files, Path}
 import java.nio.file.{Paths, StandardOpenOption}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
+
+object BaseStorePerformanceTest {
+
+  /** Dedicated DB advisory-lock counters for the performance suite.
+    *
+    * Chosen above Canton's range (1–76) and Splice's app range (100–107, see
+    * `SpliceDbLockCounters`) to avoid collisions. These are object-level vals so each counter is
+    * registered with `DbLockCounter`'s global uniqueness check exactly once per JVM, even when
+    * multiple perf-test classes run in the same sbt session.
+    */
+  private val PerfMainLockCounter: DbLockCounter = DbLockCounter(108)
+  private val PerfPoolLockCounter: DbLockCounter = DbLockCounter(109)
+}
 
 /** Shared base class for store ingestion and read performance tests.
   *
@@ -54,27 +70,51 @@ abstract class BaseStorePerformanceTest(
   /** A short name for this test, used as the metrics file name and Pushgateway label. */
   protected def testName: String = this.getClass.getSimpleName.stripSuffix("$")
 
+  /** Whether to acquire the production DB instance lock (i.e. use `DbStorageMulti`).
+    *
+    * Defaults to `true` so the perf suite exercises the same storage path as production apps
+    * (which default to `instanceLockEnabled = true` → `DbStorageMulti` on Postgres). Override to
+    * `false` to measure the unlocked `DbStorageSingle` path for comparison.
+    */
+  protected def instanceLockEnabled: Boolean = true
+
   protected def initializeStorage(): DbStorage = {
-    val storageFactory = new StorageSingleFactory(storageConfig)
+    val metrics = new DbStorageMetrics(
+      new DbStorageHistograms(MetricName("store", "perftest"))(new HistogramInventory),
+      NoOpMetricsFactory,
+    )(MetricsContext())
+    // Build storage through the production factory so the perf suite exercises DbStorageMulti
+    // (write-connection pool holding an exclusive advisory lock) exactly as the apps do, rather
+    // than bypassing it with a hard-coded StorageSingleFactory.
     val storage =
-      storageFactory.tryCreate(
-        connectionPoolForParticipant = false,
-        None,
-        new WallClock(timeouts, loggerFactory),
-        None,
-        new DbStorageMetrics(
-          new DbStorageHistograms(MetricName("store", "perftest"))(new HistogramInventory),
-          NoOpMetricsFactory,
-        )(MetricsContext()),
-        timeouts,
-        loggerFactory,
-      )(
-        ec,
-        TraceContext.empty,
-        closeContext,
-      ) match {
-        case storage: DbStorage => storage
-        case storageType => throw new RuntimeException(s"Unsupported storage type $storageType")
+      SpliceStorageFactory.createWithDeferredClose[DbStorage](
+        storage = storageConfig,
+        instanceLockEnabled = instanceLockEnabled,
+        mainLockCounter = BaseStorePerformanceTest.PerfMainLockCounter,
+        poolLockCounter = BaseStorePerformanceTest.PerfPoolLockCounter,
+        exitOnFatalFailures = false,
+        futureSupervisor = FutureSupervisor.Noop,
+        loggerFactory = loggerFactory,
+      ) { storageFactory =>
+        storageFactory.tryCreate(
+          connectionPoolForParticipant = false,
+          None,
+          new WallClock(timeouts, loggerFactory),
+          None,
+          metrics,
+          timeouts,
+          loggerFactory,
+        )(
+          ec,
+          TraceContext.empty,
+          closeContext,
+        ) match {
+          case dbStorage: DbStorage => Right(dbStorage)
+          case storageType => Left(s"Unsupported storage type $storageType")
+        }
+      } match {
+        case Right(s) => s
+        case Left(err) => throw new RuntimeException(s"Failed to create storage: $err")
       }
 
     /** Suppress Flyway ClassPathScanner warnings about unloadable test jars (apps-app_2.13-0.1.0-SNAPSHOT-tests.jar)
@@ -90,6 +130,25 @@ abstract class BaseStorePerformanceTest(
       .map(_ => storage)
       .getOrElse(throw new RuntimeException("Failed to run migrations."))
       .onShutdown(throw new IllegalStateException("Shutdown should not be happening here"))
+  }
+
+  /** Initializes storage, runs `body`, and always closes the storage afterwards (on success or
+    * failure).
+    *
+    * Closing is essential with `DbStorageMulti`: it releases the exclusive write-pool advisory
+    * lock. The perf workflow runs several tests sequentially in a single, non-forked sbt JVM
+    * (`apps-app / Test / fork = false`) against one shared database, so a leaked lock from one test
+    * would block the next test's storage initialization.
+    */
+  protected def withStorage(body: DbStorage => Future[Unit]): Future[Unit] = {
+    val storage = initializeStorage()
+    val started =
+      try body(storage)
+      catch { case NonFatal(e) => Future.failed(e) }
+    started.transformWith { result =>
+      storage.close()
+      Future.fromTry(result)
+    }(ec)
   }
 
   /** Load and parse all transactions in memory so that reading doesn't bottleneck. */

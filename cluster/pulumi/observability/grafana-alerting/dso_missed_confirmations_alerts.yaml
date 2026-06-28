@@ -1,0 +1,62 @@
+apiVersion: 1
+groups:
+    - orgId: 1
+      name: dso party missed confirmations
+      folder: canton-network
+      interval: 1m
+      rules:
+        - uid: ddso1miss0conf0a
+          title: DSO Party Missed Confirmations
+          condition: missed confirmations threshold exceeded
+          data:
+            - refId: missed confirmation rate
+              relativeTimeRange:
+                from: $DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS
+                to: 0
+              datasourceUid: prometheus
+              model:
+                editorMode: code
+                expr: sum by (namespace) (increase(daml_mediator_timeout_non_responsive_participants_total{party=~"DSO::.*"}[$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTESm])) / sum by (namespace) (increase(daml_mediator_requests_total[$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTESm]))
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: missed confirmation rate
+            - refId: missed confirmations threshold exceeded
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - $DSO_MISSED_CONFIRMATIONS_THRESHOLD
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: missed confirmation rate
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: missed confirmations threshold exceeded
+                type: threshold
+          dashboardUid: cnck4jp
+          panelId: 1
+          noDataState: OK
+          execErrState: Alerting
+          for: 0m
+          annotations:
+            __dashboardUid__: cnck4jp
+            __panelId__: "1"
+            severity: critical
+            summary: The DSO party in namespace {{ $labels.namespace }} is missing more than $DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT% of its confirmations over the last $DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES minutes.
+          labels: {}
+          isPaused: false

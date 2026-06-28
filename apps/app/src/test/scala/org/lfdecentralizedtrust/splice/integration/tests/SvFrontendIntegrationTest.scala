@@ -166,7 +166,6 @@ class SvFrontendIntegrationTest
           _ => {
             checkValidatorLicenseRow(
               licenseRows.size.toLong,
-              sv1Backend.getDsoInfo().svParty,
               newValidatorParty,
             )
           },
@@ -1454,12 +1453,12 @@ class SvFrontendIntegrationTest
           else voteRequest.contractId
         }
 
+        // With 4 SVs, 3 votes pass a request: sv1 (requester) and sv2 already
+        // voted in assertCreateProposal, so sv3's vote here reaches the threshold
+        // and archives the VoteRequest. We don't cast sv4's redundant vote: it
+        // races the archival and ~once a month fails with NOT_FOUND, flaking.
         eventuallySucceeds() {
           sv3Backend.castVote(grantTrackingCid, true, "", "")
-        }
-
-        eventuallySucceeds() {
-          sv4Backend.castVote(grantTrackingCid, true, "", "")
         }
 
         eventually() {

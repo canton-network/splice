@@ -8,6 +8,9 @@
     "imageName": {
       "type": "string"
     },
+    "serviceAccountName": {
+      "type": "string"
+    },
     "genesis": {
       "type": "object",
       "required": [

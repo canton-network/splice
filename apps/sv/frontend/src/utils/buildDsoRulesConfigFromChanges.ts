@@ -18,13 +18,15 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
   const changeMap = new Map<string, string>();
 
   dsoConfigChanges.forEach(change => {
-    changeMap.set(change.fieldName, change.newValue.toString());
+    changeMap.set(change.fieldName, change.newValue);
   });
 
-  const getValue = (fieldName: string, fallbackValue: string = '') => {
+  function getValue(fieldName: string, nullable: true): string | null;
+  function getValue(fieldName: string, nullable: false): string;
+  function getValue(fieldName: string, nullable: boolean): string | null {
     const value = changeMap.get(fieldName);
-    return value ? value : fallbackValue;
-  };
+    return value === undefined || value === '' ? (nullable ? null : '') : value;
+  }
 
   const synchronizerCount = Array.from(changeMap.keys()).filter(key =>
     key.match(/^decentralizedSynchronizer\d+$/)
@@ -33,77 +35,91 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
   let synchronizers = damlTypes.emptyMap<string, SynchronizerConfig>();
 
   for (let i = 1; i <= synchronizerCount; i++) {
-    const key = getValue(`decentralizedSynchronizer${i}`);
+    const key = getValue(`decentralizedSynchronizer${i}`, false);
     const value = {
-      state: getValue(`decentralizedSynchronizerState${i}`) as SynchronizerState,
-      cometBftGenesisJson: getValue(`decentralizedSynchronizerCometBftGenesisJson${i}`),
+      state: getValue(`decentralizedSynchronizerState${i}`, false) as SynchronizerState,
+      cometBftGenesisJson: getValue(`decentralizedSynchronizerCometBftGenesisJson${i}`, false),
       acsCommitmentReconciliationInterval: getValue(
-        `decentralizedSynchronizerAcsCommitmentReconciliationInterval${i}`
+        `decentralizedSynchronizerAcsCommitmentReconciliationInterval${i}`,
+        true
       ),
     };
     synchronizers = synchronizers.set(key, value);
   }
 
-  const upgradeTime = getValue('nextScheduledSynchronizerUpgradeTime');
-  const upgradeMigrationId = getValue('nextScheduledSynchronizerUpgradeMigrationId');
+  const upgradeTime = getValue('nextScheduledSynchronizerUpgradeTime', true);
   const logicalSyncUpgradeTopologyFreezeTime = getValue(
-    'nextScheduledLogicalSynchronizerUpgradeTopologyFreezeTime'
+    'nextScheduledLogicalSynchronizerUpgradeTopologyFreezeTime',
+    true
   );
-  const voteCooldownTime = getValue('voteCooldownTime');
+  const voteCooldownTime = getValue('voteCooldownTime', true);
 
   const dsoConfig: DsoRulesConfig = {
-    numUnclaimedRewardsThreshold: getValue('numUnclaimedRewardsThreshold'),
-    numMemberTrafficContractsThreshold: getValue('numMemberTrafficContractsThreshold'),
+    numUnclaimedRewardsThreshold: getValue('numUnclaimedRewardsThreshold', false),
+    numMemberTrafficContractsThreshold: getValue('numMemberTrafficContractsThreshold', false),
     actionConfirmationTimeout: {
-      microseconds: getValue('actionConfirmationTimeout'),
+      microseconds: getValue('actionConfirmationTimeout', false),
     },
     svOnboardingRequestTimeout: {
-      microseconds: getValue('svOnboardingRequestTimeout'),
+      microseconds: getValue('svOnboardingRequestTimeout', false),
     },
     svOnboardingConfirmedTimeout: {
-      microseconds: getValue('svOnboardingConfirmedTimeout'),
+      microseconds: getValue('svOnboardingConfirmedTimeout', false),
     },
-    maxTextLength: getValue('maxTextLength'),
+    maxTextLength: getValue('maxTextLength', false),
     voteRequestTimeout: {
-      microseconds: getValue('voteRequestTimeout'),
+      microseconds: getValue('voteRequestTimeout', false),
     },
     dsoDelegateInactiveTimeout: {
-      microseconds: getValue('dsoDelegateInactiveTimeout'),
+      microseconds: getValue('dsoDelegateInactiveTimeout', false),
     },
     synchronizerNodeConfigLimits: {
       cometBft: {
-        maxNumSequencingKeys: getValue('synchronizerNodeConfigLimitsCometBftMaxNumSequencingKeys'),
-        maxNodeIdLength: getValue('synchronizerNodeConfigLimitsCometBftMaxNodeIdLength'),
-        maxNumGovernanceKeys: getValue('synchronizerNodeConfigLimitsCometBftMaxNumGovernanceKeys'),
-        maxNumCometBftNodes: getValue('synchronizerNodeConfigLimitsCometBftMaxNumCometBftNodes'),
-        maxPubKeyLength: getValue('synchronizerNodeConfigLimitsCometBftMaxPubKeyLength'),
+        maxNumSequencingKeys: getValue(
+          'synchronizerNodeConfigLimitsCometBftMaxNumSequencingKeys',
+          false
+        ),
+        maxNodeIdLength: getValue('synchronizerNodeConfigLimitsCometBftMaxNodeIdLength', false),
+        maxNumGovernanceKeys: getValue(
+          'synchronizerNodeConfigLimitsCometBftMaxNumGovernanceKeys',
+          false
+        ),
+        maxNumCometBftNodes: getValue(
+          'synchronizerNodeConfigLimitsCometBftMaxNumCometBftNodes',
+          false
+        ),
+        maxPubKeyLength: getValue('synchronizerNodeConfigLimitsCometBftMaxPubKeyLength', false),
       },
     },
     decentralizedSynchronizer: {
-      lastSynchronizerId: getValue('decentralizedSynchronizerLastSynchronizerId'),
-      activeSynchronizerId: getValue('decentralizedSynchronizerActiveSynchronizerId'),
+      lastSynchronizerId: getValue('decentralizedSynchronizerLastSynchronizerId', false),
+      activeSynchronizerId: getValue('decentralizedSynchronizerActiveSynchronizerId', false),
       synchronizers: synchronizers,
     },
 
     nextScheduledSynchronizerUpgrade:
-      upgradeTime && upgradeTime !== ''
-        ? { time: upgradeTime, migrationId: upgradeMigrationId }
-        : null,
+      upgradeTime === null
+        ? null
+        : {
+            time: upgradeTime,
+            migrationId: getValue('nextScheduledSynchronizerUpgradeMigrationId', false),
+          },
     nextScheduledLogicalSynchronizerUpgrade:
-      logicalSyncUpgradeTopologyFreezeTime && logicalSyncUpgradeTopologyFreezeTime !== ''
-        ? {
+      logicalSyncUpgradeTopologyFreezeTime === null
+        ? null
+        : {
             topologyFreezeTime: logicalSyncUpgradeTopologyFreezeTime,
-            upgradeTime: getValue('nextScheduledLogicalSynchronizerUpgradeUpgradeTime'),
+            upgradeTime: getValue('nextScheduledLogicalSynchronizerUpgradeUpgradeTime', false),
             newPhysicalSynchronizerSerial: getValue(
-              'nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerSerial'
+              'nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerSerial',
+              false
             ),
             newPhysicalSynchronizerProtocolVersion: getValue(
-              'nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerProtocolVersion'
+              'nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerProtocolVersion',
+              false
             ),
-          }
-        : null,
-    voteCooldownTime:
-      voteCooldownTime && voteCooldownTime !== '' ? { microseconds: voteCooldownTime } : null,
+          },
+    voteCooldownTime: voteCooldownTime === null ? null : { microseconds: voteCooldownTime },
   };
 
   return dsoConfig;

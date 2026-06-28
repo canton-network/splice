@@ -153,6 +153,11 @@ class CachingScanStore(
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]] =
     store.listFeaturedAppRightsByProvider(providerPartyId)
 
+  override def lookupLatestSvRewardWeightChange(svParty: PartyId, effectiveBefore: Option[String])(
+      implicit tc: TraceContext
+  ): Future[Option[Long]] =
+    store.lookupLatestSvRewardWeightChange(svParty, effectiveBefore)
+
   override def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[ContractWithState[AnsEntry.ContractId, AnsEntry]]] =

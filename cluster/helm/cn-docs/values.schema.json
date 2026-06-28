@@ -5,6 +5,9 @@
     "networkName"
   ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "networkName": {
       "type": "string"
     },

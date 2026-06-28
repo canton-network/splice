@@ -31,6 +31,9 @@ object SpliceApp extends CantonAppDriver {
   ): Either[CantonConfigError, SpliceConfig] =
     SpliceConfig.load(config)
 
+  override final protected[this] def startupConfigFileMonitoring(environment: E): Unit =
+    () // disabled for Splice CLI
+
   override protected def environmentFactory: EnvironmentFactory[SpliceConfig, SpliceEnvironment] =
     SpliceEnvironmentFactory
 

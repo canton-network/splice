@@ -3,6 +3,9 @@
   "type": "object",
   "required": ["db", "persistence", "imageName"],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
       "type": "string"
     },
@@ -86,6 +89,14 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },
