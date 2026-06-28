@@ -66,12 +66,9 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       val metricsFactory = new InMemoryMetricsFactory
 //      val historyMetrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
       val kvProvider = mkKvProvider.futureValue
-      val retryProvider = {
-        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-      }
-      val ts1 = CantonTimestamp.tryFromInstant(Instant.parse("2026-01-02T00:00:00Z"))
-      val ts2 = CantonTimestamp.tryFromInstant(Instant.parse("2026-01-03T00:00:00Z"))
-      val ts3 = CantonTimestamp.tryFromInstant(Instant.parse("2026-01-04T00:00:00Z"))
+      def ts(day: Int): CantonTimestamp = CantonTimestamp.tryFromInstant(
+        Instant.parse(s"2026-01-01T00:00:00Z").plus(day.toLong, java.time.temporal.ChronoUnit.DAYS)
+      )
 
       val acsStagingProgress = new AcsSnapshotBulkStoragePersistentProgress(
         BulkStorage.acsStagingKvStoreKey,
@@ -98,107 +95,130 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         loggerFactory,
       )
 
-      val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
-        stagingConnection,
-        committedConnection,
-        reader,
-        loggerFactory,
-      )
-      val acsCommitted = new AcsSnapshotBulkStorage(
-        "AcsSnapshotBulkStorageCommitted",
-        acsCommittedWriter,
-        acsCommittedProgress,
-        appConfig,
-        Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
-        loggerFactory,
-      )
-      val svc = acsCommitted.asRetryableService(
-        AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
-        new WallClock(timeouts, loggerFactory),
-        retryProvider,
-      )
+      def retryProvider = RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
+      def commitService = {
+        val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
+          stagingConnection,
+          committedConnection,
+          reader,
+          loggerFactory,
+        )
+        new AcsSnapshotBulkStorage(
+          "AcsSnapshotBulkStorageCommitted",
+          acsCommittedWriter,
+          acsCommittedProgress,
+          appConfig,
+          Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
+          loggerFactory,
+        ).asRetryableService(
+          AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
+          new WallClock(timeouts, loggerFactory),
+          retryProvider,
+        )
+      }
 
-      def createDummySnapshot(ts: CantonTimestamp, objectCount: Int): Unit = {
-        createDummySnapshotWithoutMarkingProcessed(ts, objectCount)
+      def createDummySnapshot(day: Int, objectCount: Int): Unit = {
+        createDummySnapshotWithoutMarkingProcessed(day, objectCount)
         acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts, 0))
+          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts(day), 0))
           .futureValue
       }
 
       def createDummySnapshotWithoutMarkingProcessed(
-          ts: CantonTimestamp,
+          day: Int,
           objectCount: Int,
       ): Unit = {
         (0 until objectCount).foreach { i =>
           stagingConnection
             .createObject(
-              s"${bulkStorageTestConfig.getSegmentFolder(ts, None)}/ACS_$i.zstd",
-              s"dummy acs snapshot at $ts (object $i)".getBytes,
+              s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd",
+              s"dummy acs snapshot at ${ts(day)} (object $i)".getBytes,
             )
             .futureValue
         }
       }
 
-      Using.resources(svc, retryProvider) { (_, _) =>
+      def assertCommittedObjectsForSnapshot(day: Int, expectedCount: Int): Unit = {
+        val expectedKeys = (0 until expectedCount).map { i =>
+          s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd"
+        }
+        reader
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts(day))
+          .futureValue
+          .objects
+          .map(_.key) should contain theSameElementsAs
+          expectedKeys
+      }
+      def assertNoStagingObjectsForSnapshot(day: Int): Unit = {
+        reader
+          .getStagingObjectsForAcsSnapshotAt(ts(day))
+          .failed
+          .futureValue
+          .asInstanceOf[StatusRuntimeException]
+          .getStatus
+          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+      }
+
+      Using.resources(commitService, retryProvider) { (_, _) =>
         // Create full dummy ACS snapshots for first two timestamps
-        createDummySnapshot(ts1, 1)
-        createDummySnapshot(ts2, 2)
+        createDummySnapshot(day = 1, objectCount = 1)
+        createDummySnapshot(day = 2, objectCount = 2)
         // Create a third snapshot with two objects, but do not mark it as processed yet
         // (simulating that the writer from DB is still not done with it)
-        createDummySnapshotWithoutMarkingProcessed(ts3, 2)
+        createDummySnapshotWithoutMarkingProcessed(day = 3, objectCount = 2)
 
         eventually() {
           acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
             _.timestamp
-          ) shouldBe Some(ts2)
+          ) shouldBe Some(ts(2))
         }
-        def assertCommittedObjectsForSnapshot(ts: CantonTimestamp, expectedCount: Int): Unit = {
-          val expectedKeys = (0 until expectedCount).map { i =>
-            s"${bulkStorageTestConfig.getSegmentFolder(ts, None)}/ACS_$i.zstd"
-          }
-          reader
-            .getCommittedObjectsForAcsSnapshotAtOrBefore(ts)
-            .futureValue
-            .objects
-            .map(_.key) should contain theSameElementsAs
-            expectedKeys
-        }
-        assertCommittedObjectsForSnapshot(ts1, 1)
-        assertCommittedObjectsForSnapshot(ts2, 2)
-        def assertNoStagingObjectsForSnapshot(ts: CantonTimestamp): Unit = {
-          reader
-            .getStagingObjectsForAcsSnapshotAt(ts)
-            .failed
-            .futureValue
-            .asInstanceOf[StatusRuntimeException]
-            .getStatus
-            .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
-        }
-        assertNoStagingObjectsForSnapshot(ts1)
-        assertNoStagingObjectsForSnapshot(ts2)
-        reader.getStagingObjectsForAcsSnapshotAt(ts3).futureValue.objects should not be empty
+        assertCommittedObjectsForSnapshot(day = 1, expectedCount = 1)
+        assertCommittedObjectsForSnapshot(day = 2, expectedCount = 2)
+        assertNoStagingObjectsForSnapshot(1)
+        assertNoStagingObjectsForSnapshot(2)
+        reader.getStagingObjectsForAcsSnapshotAt(ts(3)).futureValue.objects should not be empty
 
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.DEBUG))(
           {},
           logEntries => {
             forAtLeast(1, logEntries)(entry =>
               entry.message should include(
-                s"Latest snapshot in staging bulk storage is at $ts2, which is not after the requested timestamp $ts2"
+                s"Latest snapshot in staging bulk storage is at ${ts(2)}, which is not after the requested timestamp ${ts(2)}"
               )
             )
           },
         )
 
         acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts3, 0))
+          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts(3), 0))
           .futureValue
         eventually() {
           acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
             _.timestamp
-          ) shouldBe Some(ts3)
+          ) shouldBe Some(ts(3))
         }
-        assertCommittedObjectsForSnapshot(ts3, 2)
-        assertNoStagingObjectsForSnapshot(ts3)
+        assertCommittedObjectsForSnapshot(day = 3, expectedCount = 2)
+        assertNoStagingObjectsForSnapshot(3)
+      }
+
+      // Create a snapshot, and copy one object before starting the service,
+      // to simulate a restart after copying has started
+      createDummySnapshot(day = 4, objectCount = 3)
+      committedConnection
+        .copyObject(
+          "staging",
+          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/ACS_0.zstd",
+        )
+        .futureValue
+
+      Using.resources(commitService, retryProvider) { (_, _) =>
+        eventually() {
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
+            _.timestamp
+          ) shouldBe Some(ts(4))
+        }
+        assertCommittedObjectsForSnapshot(day = 4, expectedCount = 3)
+        assertNoStagingObjectsForSnapshot(4)
       }
 
       succeed
