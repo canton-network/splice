@@ -247,7 +247,7 @@ multiValidator:
 sv:
   scan:
     externalRateLimits:
-      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml)
+      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml;./rate-limits/token-registry.yaml)
       globalLimits:
         maxTokens: 2147483647
         tokensPerFill: 2147483647
