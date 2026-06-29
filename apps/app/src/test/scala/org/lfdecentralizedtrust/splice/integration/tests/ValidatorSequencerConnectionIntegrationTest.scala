@@ -37,8 +37,6 @@ class ValidatorSequencerConnectionIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
-      // Uses FeaturedAppMarkers: reconnection encounters OpenMiningRound with rewardConfig before packages are fully vetted
-      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllValidatorConfigs {
           case (name, c) if name == "aliceValidator" =>

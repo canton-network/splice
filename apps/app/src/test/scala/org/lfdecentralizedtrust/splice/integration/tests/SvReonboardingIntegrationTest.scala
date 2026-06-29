@@ -95,8 +95,6 @@ class SvReonboardingIntegrationTest
       .simpleTopology4Svs(this.getClass.getSimpleName)
       // Disable user allocation
       .withPreSetup(_ => ())
-      // Uses FeaturedAppMarkers: reonboarding encounters OpenMiningRound with rewardConfig before packages are fully vetted
-      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransformsToFront((_, conf) => ConfigTransforms.bumpCantonPortsBy(22_000)(conf))
       .addConfigTransforms(
         (_, config) =>
