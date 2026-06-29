@@ -1,5 +1,9 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.crypto.*
+// import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
+// import com.digitalasset.canton.crypto.v30 as cryptoProto
 import better.files.File.apply
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
@@ -263,7 +267,7 @@ class LsuIntegrationTest
     }
   }
 
-  "upgrade synchronizer to new physical synchronizer without downtime" ignore { implicit env =>
+  "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
     val allNodes = Seq[AppBackendReference](
       sv1ScanBackend,
       sv2ScanBackend,
@@ -430,6 +434,30 @@ class LsuIntegrationTest
         lsu.upgradeTime shouldBe upgradeTime
         lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
+
+    val generatedKey: SigningPublicKey =
+      aliceValidatorBackend.participantClient.keys.secret
+        .generate_signing_key(
+          UUID.randomUUID().toString,
+          SigningKeyUsage.All,
+          Some(SigningKeySpec.EcCurve25519),
+        )
+    val truePartyHint = "external-party"
+    val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
+      .download(generatedKey.fingerprint, ProtocolVersion.dev)
+
+    // delete the key from the participant to ensure that it won't be actually used there for anything
+    aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
+
+    val keyPair =
+      CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+
+    submitTopologyAndOnboard(
+      aliceValidatorBackend,
+      truePartyHint,
+      keyPair,
+      PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+    )
 
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
@@ -624,6 +652,16 @@ class LsuIntegrationTest
           },
         )
       }
+
+      clue("Can allocate a new party via external party topology endpoints after LSU") {
+        submitTopologyAndOnboard(
+          aliceValidatorBackend,
+          truePartyHint,
+          keyPair,
+          PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+        )
+      }
+
       // new sync nodes are started in process so to avoid log noise we stop everything before the test ends
       clue("Alice can purchase traffic") {
         val aliceParty = aliceValidatorBackend.getValidatorPartyId()
