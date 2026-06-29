@@ -53,7 +53,7 @@ class AcsSnapshotStore(
   override val profile: JdbcProfile = storage.profile.jdbc
   import profile.api.jdbcActionExtensionMethods
 
-  private implicit def rowsAlteredOfOption[A](implicit
+  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
     row: DbStorage.RowsAltered[A]
   ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
 
