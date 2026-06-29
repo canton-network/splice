@@ -599,7 +599,7 @@ final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
     cometBftConfig: Option[SvCometBftConfig] = None,
-    protocolVersion: ProtocolVersion = ProtocolVersion.v34,
+    protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),
