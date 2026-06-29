@@ -478,7 +478,7 @@ class AcsSnapshotStore(
       actualState <- getIncrementalSnapshotAction(table)
       result <-
         if (actualState == expectedState) {
-          action.map(Some(_): Option[R])
+          action.map(Option.apply)
         } else {
           logger.info(
             s"Skipping action because actual state $actualState != expected state $expectedState. " +
