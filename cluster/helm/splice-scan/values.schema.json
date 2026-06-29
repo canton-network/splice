@@ -26,6 +26,12 @@
         "imageName"
       ],
       "properties": {
+        "podSecurityContext": {
+          "type": "object"
+        },
+        "containerSecurityContext": {
+          "type": "object"
+        },
         "serviceAccountName": {
           "type": "string"
         },
