@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanRollForwardLsuConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
 import org.lfdecentralizedtrust.splice.splitwell.config.{
@@ -58,7 +59,7 @@ import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
-import com.digitalasset.canton.participant.config.{ParticipantNodeConfig, RemoteParticipantConfig}
+import com.digitalasset.canton.participant.config.RemoteParticipantConfig
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
@@ -84,17 +85,12 @@ import scala.util.Try
 import scala.util.control.NoStackTrace
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import com.digitalasset.canton.synchronizer.mediator.{MediatorNodeConfig, RemoteMediatorConfig}
-import com.digitalasset.canton.synchronizer.sequencer.config.{
-  RemoteSequencerConfig,
-  SequencerNodeConfig,
-}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 
 case class SpliceConfig(
-    override val name: Option[String] = None,
+    name: Option[String] = None,
     validatorApps: Map[InstanceName, ValidatorAppBackendConfig] = Map.empty,
     validatorAppClients: Map[InstanceName, ValidatorAppClientConfig] = Map.empty,
     svApps: Map[InstanceName, SvAppBackendConfig] = Map.empty,
@@ -121,12 +117,12 @@ case class SpliceConfig(
   override def withDefaults(defaults: Option[DefaultPorts]): SpliceConfig =
     this
 
-  // TODO(DACH-NY/canton-network-node#736): we want to remove all of the configurations options below:
-  override val participants: Map[InstanceName, ParticipantNodeConfig] = Map.empty
-  override val mediators: Map[InstanceName, MediatorNodeConfig] = Map.empty
-  override val remoteMediators: Map[InstanceName, RemoteMediatorConfig] = Map.empty
-  override val sequencers: Map[InstanceName, SequencerNodeConfig] = Map.empty
-  override val remoteSequencers: Map[InstanceName, RemoteSequencerConfig] = Map.empty
+  // TODO(#546): we want to remove all of the configurations options below:
+  override val participants: Map[InstanceName, Nothing] = Map.empty
+  override val mediators: Map[InstanceName, Nothing] = Map.empty
+  override val remoteMediators: Map[InstanceName, Nothing] = Map.empty
+  override val sequencers: Map[InstanceName, Nothing] = Map.empty
+  override val remoteSequencers: Map[InstanceName, Nothing] = Map.empty
   override def portDescription: String = {
     def nodePorts(config: LocalNodeConfig): Seq[String] =
       portDescriptionFromConfig(config)(Seq(("http-api", _.adminApi)))
@@ -308,6 +304,9 @@ case class SpliceConfig(
     import writers.*
     ConfigWriter[SpliceConfig].to(this).render(SpliceConfig.defaultConfigRenderer)
   }
+
+  override def mergeDynamicChanges(newConfig: SpliceConfig) =
+    this // dynamic changes not supported
 }
 
 // NOTE: the below is patterned after CantonCommunityConfig.
@@ -476,6 +475,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigReader
         : ConfigReader[MediatorVerdictIngestionConfig] =
       deriveReader[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigReader
+        : ConfigReader[TokenStandardConfig.SettlementConfig] =
+      deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
@@ -985,6 +987,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigWriter
         : ConfigWriter[MediatorVerdictIngestionConfig] =
       deriveWriter[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigWriter
+        : ConfigWriter[TokenStandardConfig.SettlementConfig] =
+      deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =

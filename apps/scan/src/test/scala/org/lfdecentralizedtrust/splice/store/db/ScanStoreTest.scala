@@ -479,6 +479,135 @@ abstract class ScanStoreTest
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
         }
+
+        "return results in effective-at order, independent of ingestion and record time" in {
+          val baseTime = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          def recordTime(n: Int) = baseTime.plusSeconds(n.toLong)
+          def effectiveAt(n: Int) = baseTime.plus((5 - n).toLong, ChronoUnit.DAYS)
+          val voteRequests = (1 to 4).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 4).map(n =>
+              mkVoteRequestResult(voteRequests(n - 1), effectiveAt = effectiveAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 1)
+            page1 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(1, 2, 3).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(4).map(userParty(_).toProtoPrimitive)
+          }
+        }
+
+        "order by coalesce(effectiveAt, completedAt) across mixed precision, tie-broken by entry_number" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          val sortKeyAt = Map(
+            1 -> base.plusSeconds(1),
+            2 -> base.plusSeconds(2).plusMillis(500),
+            3 -> base.plusSeconds(10),
+            4 -> base.plusSeconds(10),
+            5 -> base.plusSeconds(20).plusNanos(123000),
+            6 -> base.plusSeconds(45).plusMillis(900),
+          )
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 1)
+            _ <- closeVoteRequest(store, 5)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 6)
+            page1 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              None,
+              None,
+              None,
+              None,
+              None,
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(6, 5, 4).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(3, 2, 1).map(userParty(_).toProtoPrimitive)
+          }
+        }
       }
 
       "lookupLatestSvRewardWeightChange" should {
@@ -1282,6 +1411,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
       receiverFeeRatio.bigDecimal,
       amount.bigDecimal,
       Optional.empty(),
+      Optional.empty(),
     )
 
   def mkTransfer(receiver: PartyId, amount: Double) =
@@ -1519,6 +1649,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
           receiver.toProtoPrimitive,
           amuletContract.payload.amount.initialAmount,
           new roundCodegen.OpenMiningRound.ContractId(openMiningRoundCid),
+          Optional.empty(),
         ).toValue,
         new AmuletRules_MintResult(
           new splice.amulet.AmuletCreateSummary[amuletCodegen.Amulet.ContractId](

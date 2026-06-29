@@ -647,7 +647,6 @@ class DbScanStore(
       dbType = EntryType.VoteRequestTxLogEntry,
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
-      effectiveAtColumnName = "vote_effective_at",
       requesterNameColumnName = "vote_requester_name",
       actionName = actionName,
       accepted = accepted,

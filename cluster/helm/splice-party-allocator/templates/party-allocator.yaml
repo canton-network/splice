@@ -33,7 +33,7 @@ spec:
           imagePullPolicy: {{ . }}
           {{- end }}
           env:
-            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens) | indent 12}}
+            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
             - name: EXTERNAL_CONFIG
               value: {{ .Values.config | toJson | quote }}
           volumeMounts:

@@ -15,7 +15,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
+import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
@@ -124,23 +125,50 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     assertOldestOpenRound(0)
 
-    clue("Reward accounting endpoints report Undetermined before any data is available") {
-      sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe None
+    clue(
+      "Reward accounting: earliest available round is 0 after bootstrap but totals are not yet computed"
+    ) {
+      eventually() {
+        sv1ScanBackend.getRewardAccountingEarliestAvailableRound() shouldBe Some(0L)
+      }
+      // Activity totals are still Undetermined at this point because no
+      // CalculateRewardsV2 contract exists yet (no round has closed).
       sv1ScanBackend.getRewardAccountingActivityTotals(0L) shouldBe an[
         GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
       ]
     }
 
-    // Here we perform all settlements with verdict ingestion paused just to
-    // confirm that activity record computations does happen properly even when
-    // the ingestion is catching up, by reading the Tcs store data for the
-    // archived rounds. I.e., pausing is not necessary, it merely improves test coverage.
+    // Settlements are performed with verdict ingestion paused to test
+    // catch-up ingestion. The initial 3 bootstrap round advances are done
+    // below with verdict ingestion active.
     // The pause of CalculateRewardsTrigger is necessary to confirm contracts
     // were created for each round.
     val calculateRewardsTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
     val calculateRewardsDryRunTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
+
+    // 3 initial advances with CalculateRewardsTrigger paused but
+    // verdict ingestion active, so that the meta row is created and
+    // bootstrap rounds have activity data available.
+    setTriggersWithin(triggersToPauseAtStart =
+      calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
+    ) {
+      for (round <- 1 to 3) {
+        advanceTimeAndWaitForRoundOpening
+        assertOldestOpenRound(round.toLong)
+      }
+
+      clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
+        assertZeroTotals(sv1ScanBackend, 0L to 2L)
+      }
+
+      clue("All SVs report zero totals for rounds after bootstrap") {
+        Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
+          assertZeroTotals(scan, 1L to 2L)
+        }
+      }
+    }
 
     // Sequence of actions
     //   Open rounds | Action
@@ -169,12 +197,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         setTriggersWithin(triggersToPauseAtStart =
           calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
         ) {
-
-          // 3 initial advances to get open rounds with staggered opensAt
-          for (round <- 1 to 3) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
 
           val id0 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(splitwellWalletClient)
@@ -634,6 +656,25 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     }
   }
 
+  private def assertZeroTotals(
+      scan: ScanAppBackendReference,
+      rounds: Seq[Long],
+  ): Unit =
+    rounds.foreach { round =>
+      eventually() {
+        inside(scan.getRewardAccountingActivityTotals(round)) {
+          case GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(t) =>
+            t.activityRecordsCount shouldBe 0L withClue
+              s"Round $round should have no activity records on ${scan.name}"
+            t.totalAppActivityWeight shouldBe 0L withClue
+              s"Round $round should have no activity weight on ${scan.name}"
+            BigDecimal(t.totalAppRewardMintingAllowance) shouldBe BigDecimal(0) withClue
+              s"Round $round should have no minting allowance on ${scan.name}"
+        }
+      }
+    }
+
   private def assertOldestOpenRound(
       expectedOldestRound: Long
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
@@ -750,12 +791,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     )(
       show"There exists an allocation from $senderParty",
       _ => {
-        val allocations = walletClient.listAmuletAllocations()
-        allocations should have size 1 withClue "AmuletAllocations"
-        allocations.head
+        inside(walletClient.listAmuletAllocations()) {
+          case (allocationRequest: HttpWalletAppClient.TokenStandard.V1AmuletAllocation) +: Nil =>
+            allocationRequest
+        }
       },
     )
-    new allocationv1.Allocation.ContractId(allocation.contractId.contractId)
+    new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
 }
 

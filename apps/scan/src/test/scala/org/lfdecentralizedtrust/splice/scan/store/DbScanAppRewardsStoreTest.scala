@@ -454,9 +454,9 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "aggregateActivityTotals — succeeds for round 0 when isFirstSv" in {
+    "aggregateActivityTotals — succeeds for round 0 when marked complete" in {
       for {
-        (store, historyId) <- newStore(isFirstSv = true)
+        (store, historyId) <- newStore()
         _ <- markRoundComplete(historyId, 0L)
         _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))
         _ <- insertActivityRecord(historyId, 1L, Seq("sentinel::provider"), Seq(1L))
@@ -468,7 +468,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "aggregateActivityTotals — rejects round 0 when not isFirstSv" in {
+    "aggregateActivityTotals — rejects round 0 when not marked complete" in {
       for {
         (store, historyId) <- newStore()
         _ <- insertActivityRecord(historyId, 0L, Seq("alice::provider"), Seq(500L))

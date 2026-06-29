@@ -6,7 +6,6 @@ package com.digitalasset.canton.integration.plugins.tinyproxy
 import better.files.{File, Resource}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.config.*
-import com.digitalasset.canton.environment.CantonEnvironment
 import com.digitalasset.canton.console.RemoteParticipantReference
 import com.digitalasset.canton.integration.plugins.UseExternalProcess
 import com.digitalasset.canton.integration.plugins.tinyproxy.UseTinyProxy.{
@@ -22,7 +21,7 @@ import scala.concurrent.duration.*
 /** Test plugin for using tinyproxy to place a proxy in front of a node.
   */
 final case class UseTinyProxy(tinyProxyConfig: TinyProxyConfig)
-    extends EnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
+    extends EnvironmentSetupPlugin
     with BaseTest {
   private val backgroundProcessHandler = new BackgroundRunnerHandler[Unit](timeouts, loggerFactory)
   private val tinyProxyPort = UniquePortGenerator.next.unwrap
@@ -57,7 +56,7 @@ final case class UseTinyProxy(tinyProxyConfig: TinyProxyConfig)
 
   override def afterEnvironmentCreated(
       config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment,
   ): Unit = {
     externalPlugin.afterEnvironmentCreated(config, environment)
     externalPlugin.start(
@@ -106,10 +105,9 @@ final case class UseTinyProxy(tinyProxyConfig: TinyProxyConfig)
   }
 
   override def beforeEnvironmentDestroyed(
-      config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment
   ): Unit =
-    externalPlugin.beforeEnvironmentDestroyed(config, environment)
+    externalPlugin.beforeEnvironmentDestroyed(environment)
 }
 
 object UseTinyProxy {

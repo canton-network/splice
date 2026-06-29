@@ -101,6 +101,18 @@ export async function installCantonComponents(
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
+  const bftSequencerPostgres =
+    migrationInfo.sequencer.enableBftSequencer && migrationInfo.sequencer.dedicatedBftSequencerDb
+      ? await installPostgres(
+          xns,
+          `sequencer-bft-${migrationId}-pg`,
+          `sequencer-bft-pg`,
+          version,
+          physicalSynchronizerConfig.sequencer.cloudSql,
+          true,
+          { isActive: migrationStillRunning, migrationId, disableProtection }
+        )
+      : undefined;
   if (migrationStillRunning) {
     const decentralizedSynchronizerNode = migrationInfo.sequencer.enableBftSequencer
       ? new InStackCantonBftDecentralizedSynchronizerNode(
@@ -111,6 +123,7 @@ export async function installCantonComponents(
           {
             sequencerPostgres: sequencerPostgres,
             mediatorPostgres: mediatorPostgres,
+            bftSequencerPostgres: bftSequencerPostgres,
             setCoreDbNames: svConfig.isCoreSv,
           },
           version,

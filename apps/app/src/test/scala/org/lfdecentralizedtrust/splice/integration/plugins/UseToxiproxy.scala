@@ -1,12 +1,11 @@
-package org.lfdecentralizedtrust.splice.integration.plugins.toxiproxy
+package org.lfdecentralizedtrust.splice.integration.plugins
+package toxiproxy
 
 import org.lfdecentralizedtrust.splice.config.{ParticipantClientConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.sv.config.SvParticipantClientConfig
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.{SvMediatorConfig, SvSequencerConfig}
 import com.digitalasset.canton.BaseTest
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import eu.rekawek.toxiproxy.{Proxy, ToxiproxyClient}
 import monocle.macros.syntax.lens.*
 import org.apache.pekko.http.scaladsl.model.Uri
@@ -24,7 +23,7 @@ case class UseToxiproxy(
     createSequencerProxies: Boolean = false,
     createMediatorProxies: Boolean = false,
     instanceFilter: String => Boolean = _ => true,
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with BaseTest {
 
   import UseToxiproxy.*

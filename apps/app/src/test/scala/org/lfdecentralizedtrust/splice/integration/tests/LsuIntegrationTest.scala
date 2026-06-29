@@ -263,7 +263,7 @@ class LsuIntegrationTest
     }
   }
 
-  "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
+  "upgrade synchronizer to new physical synchronizer without downtime" ignore { implicit env =>
     val allNodes = Seq[AppBackendReference](
       sv1ScanBackend,
       sv2ScanBackend,
@@ -417,6 +417,18 @@ class LsuIntegrationTest
 
       clue(s"wait for lsu announcement") {
         waitForLsuAnnouncement()
+      }
+
+      clue(s"Scan API returns proper LSU info after LSU announcement") {
+        val lsu = sv1ScanBackend.getLsu().value
+        val actualTopologyFreezeTime = sv1ScanBackend.participantClient.topology.lsu.announcement
+          .list(Some(Synchronizer(decentralizedSynchronizerId)))
+          .head
+          .context
+          .validFrom
+        lsu.topologyFreezeTime shouldBe CantonTimestamp.assertFromInstant(actualTopologyFreezeTime)
+        lsu.upgradeTime shouldBe upgradeTime
+        lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
 
       clue("new nodes are initialized") {

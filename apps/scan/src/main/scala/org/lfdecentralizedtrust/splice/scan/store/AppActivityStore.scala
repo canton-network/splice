@@ -18,6 +18,18 @@ trait AppActivityStore {
       tc: TraceContext
   ): Future[Option[Long]]
 
+  /** The earliest round for which we have ingested app activity records.
+    * This round may not have all app activity records ingested.
+    *
+    * Returns None if no app activity records have been ingested.
+    *
+    * Return -1 for the first SV, if the ingestion started from beginning of round 0,
+    * indicating that this SV has complete data of round 0.
+    */
+  def earliestIngestedRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]]
+
   /** Find the latest round for which all app activity records have been ingested.
     */
   def latestRoundWithCompleteAppActivity()(implicit

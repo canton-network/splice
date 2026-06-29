@@ -7,7 +7,7 @@ import com.digitalasset.canton.admin.api.client.data.{
   StaticSynchronizerParameters,
   SubmissionRequestAmplification,
 }
-import com.digitalasset.canton.config.{CantonConfig, NonNegativeFiniteDuration}
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.console.{
   InstanceReference,
@@ -23,7 +23,6 @@ import com.digitalasset.canton.topology.{
   SynchronizerId,
 }
 import com.digitalasset.canton.{SynchronizerAlias, protocol}
-import com.digitalasset.canton.environment.CantonEnvironment
 import monocle.syntax.all.*
 
 /** Bootstraps synchronizers given topology descriptions and stores information in
@@ -32,7 +31,7 @@ import monocle.syntax.all.*
   * Starts all sequencers and mediators, and all participants that auto-initialize.
   */
 class NetworkBootstrapper(networks: NetworkTopologyDescription*)(implicit
-    env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+    env: TestConsoleEnvironment
 ) {
   def bootstrap(): Unit = {
     // Start all local nodes needed for bootstrap
@@ -77,7 +76,7 @@ class NetworkBootstrapper(networks: NetworkTopologyDescription*)(implicit
 
 object NetworkBootstrapper {
   def apply(networks: Seq[NetworkTopologyDescription])(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): NetworkBootstrapper = new NetworkBootstrapper(networks*)
 }
 
@@ -122,7 +121,7 @@ object NetworkTopologyDescription {
       overrideStaticSynchronizerParameters: Option[StaticSynchronizerParameters] = None,
       mediatorThreshold: PositiveInt = PositiveInt.one,
   )(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): NetworkTopologyDescription =
     NetworkTopologyDescription(
       synchronizerName = synchronizerAlias.unwrap,

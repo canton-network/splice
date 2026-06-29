@@ -2,6 +2,9 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "ansWebUi": {
       "type": "object",
       "required": ["imageName"],
@@ -410,6 +413,32 @@
               "type": "string",
               "pattern": "^http[s]?://.+$",
               "description": "The URL for the JWKS endpoint for the validator app API"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientSecret": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                }
+              }
             }
           }
         },

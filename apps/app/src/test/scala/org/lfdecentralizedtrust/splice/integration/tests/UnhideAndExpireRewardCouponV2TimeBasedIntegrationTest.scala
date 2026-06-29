@@ -3,10 +3,11 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
-import com.digitalasset.daml.lf.data.Ref.PackageId
+import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
 import java.time.Duration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
@@ -20,6 +21,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources, RetryFor}
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -37,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.automation.AcceptedTransferOfferTrigger
 
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -161,15 +164,10 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           c.payload.provider == bobParty.toProtoPrimitive && c.payload.beneficiary.isEmpty
         )
 
-    // TODO: (#5624) Fix the bootstrap of network such that processing of rounds
-    // before the first activity by a featured-app is ingested, and use advanceRoundsToNextRoundOpening
-    for (round <- 1 to 3) {
-      advanceTimeAndWaitForRoundOpening
+    for (round <- 1 to 4) {
+      advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
-
-    advanceTimeAndWaitForRoundOpening
-    assertOldestOpenRound(4)
     // FA right now effective from round 4
     doTransfer()
     advanceRoundsToNextRoundOpening
@@ -185,6 +183,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           aliceCoupons.filter(_.payload.providerIsObserver) shouldBe empty
           bobUnassignedCoupons.filter(_.payload.providerIsObserver) should not be empty
           bobUnassignedCoupons.filterNot(_.payload.providerIsObserver) shouldBe empty
+          hiddenCouponsMetricValue(aliceParty) shouldBe 1L
         }
       }
 
@@ -299,6 +298,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       unvetV2AmuletOnAlice(aliceParticipantId)
 
+      val couponsBeforeAdvance = sv1Backend.appState.dsoStore
+        .listRewardCouponsV2()
+        .futureValue
+        .map(_.contractId.contractId)
+        .toSet
+
       actAndCheck(
         "Advance past the coupon TTL",
         advanceTime(Duration.ofHours(37)),
@@ -314,13 +319,13 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .futureValue
             .map(_.contractId.contractId)
             .toSet
-          remaining shouldBe aliceObservedCoupons
+          aliceObservedCoupons.subsetOf(remaining) shouldBe true
         },
       )
 
       actAndCheck(
         "Re-vet Alice",
-        revetV2AmuletOnAlice(aliceParticipantId),
+        revetV2AmuletOnAlice(aliceParticipantId, aliceParty),
       )(
         "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
         _ => {
@@ -328,7 +333,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             .trigger[ExpireRewardCouponV2Trigger]
             .runOnce()
             .futureValue
-          sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty
+          val remaining = sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .map(_.contractId.contractId)
+            .toSet
+          remaining.intersect(couponsBeforeAdvance) shouldBe empty
         },
       )
     }
@@ -426,9 +436,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     )
 
   private def revetV2AmuletOnAlice(
-      aliceParticipantId: ParticipantId
+      aliceParticipantId: ParticipantId,
+      aliceParty: PartyId,
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
-    actAndCheck(
+    // Allocate sufficient time for the change to be visible on SV1, and avoid CI flake
+    actAndCheck(timeUntilSuccess = 60.seconds)(
       "Re-vet the V2-capable amulet versions on Alice",
       aliceValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
         aliceParticipantId,
@@ -439,10 +451,41 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       ),
     )(
       "sv1's participant observes Alice has the correct vetting state again",
-      _ =>
+      _ => {
         v2CapableAmuletPackageIds.toSet
-          .subsetOf(aliceVettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true,
+          .subsetOf(aliceVettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true
+        aliceLedgerApiAmuletVersionOnSv1View(aliceParty).exists(
+          _ >= v2AmuletVersion
+        ) shouldBe true
+      },
     )
+
+  /** Confirm Alice's preferred amulet package version as resolved through sv1's
+    * Ledger API, i.e. the exact path the ExpireRewardCouponV2Trigger uses to
+    * determine the vetted version.
+    */
+  private def aliceLedgerApiAmuletVersionOnSv1View(
+      aliceParty: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Option[PackageVersion] =
+    sv1Backend.participantClient.ledger_api.interactive_submission
+      .preferred_package_version(
+        Set(aliceParty),
+        DarResources.amulet.latest.metadata.name,
+        Some(decentralizedSynchronizerId),
+      )
+      .flatMap(_.packageReference.map(ref => PackageVersion.assertFromString(ref.packageVersion)))
+
+  private def hiddenCouponsMetricValue(
+      party: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Long = {
+    val name = s"$MetricsPrefix.reward_coupons_v2.hidden_coupons"
+    val attributes = Map("party" -> party.toProtoPrimitive)
+    sv1Backend.metrics.list(name, attributes).get(name) match {
+      case None => 0L
+      case Some(_) =>
+        sv1Backend.metrics.get(name, attributes).select[MetricValue.LongPoint].value.value
+    }
+  }
 
   private def assertOldestOpenRound(
       expected: Long

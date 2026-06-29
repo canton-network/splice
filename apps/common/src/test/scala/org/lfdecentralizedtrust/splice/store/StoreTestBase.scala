@@ -71,7 +71,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.I
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Accepted
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
+  VRO_Accepted,
+  VRO_Rejected,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
   DsoRules_AddSv,
@@ -459,6 +462,7 @@ abstract class StoreTestBase
     val template = new AmuletAllocation(
       new LockedAmulet.ContractId(nextCid()),
       allocationSpec,
+      java.util.Optional.empty(),
     )
 
     contract(
@@ -729,6 +733,17 @@ abstract class StoreTestBase
     util.List.of(),
     util.List.of(),
     new VRO_Accepted(effectiveAt),
+  )
+
+  protected def mkRejectedVoteRequestResult(
+      voteRequestContract: Contract[VoteRequest.ContractId, VoteRequest],
+      completedAt: Instant,
+  ): DsoRules_CloseVoteRequestResult = new DsoRules_CloseVoteRequestResult(
+    voteRequestContract.payload,
+    completedAt,
+    util.List.of(),
+    util.List.of(),
+    new VRO_Rejected(damlUnit.getInstance()),
   )
 
   protected def mkCloseVoteRequest(

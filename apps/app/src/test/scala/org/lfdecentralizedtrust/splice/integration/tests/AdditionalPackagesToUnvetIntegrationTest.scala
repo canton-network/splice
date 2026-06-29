@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
+import org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, PackageUnvettingUtil}
 
 abstract class AdditionalPackagesToUnvetIntegrationTestBase
@@ -80,6 +81,7 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
 
 /** This test verifies that an SV can unvet packages that still have vetted dependencies
   */
+@RequiresPv35
 class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
   private val missingDependency = DarResources.wallet_0_1_15
