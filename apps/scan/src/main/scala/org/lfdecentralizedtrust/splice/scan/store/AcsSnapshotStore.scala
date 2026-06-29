@@ -484,7 +484,7 @@ class AcsSnapshotStore(
             s"Skipping action because actual state $actualState != expected state $expectedState. " +
               "In production, this is expected only during retries after transient network failures."
           )
-          DBIOAction.successful(None: Option[R])
+          DBIOAction.successful(Option.empty)
         }
     } yield result).transactionally
   }
