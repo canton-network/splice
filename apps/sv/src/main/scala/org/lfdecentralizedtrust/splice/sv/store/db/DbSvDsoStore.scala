@@ -793,7 +793,7 @@ class DbSvDsoStore(
       assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
     )
 
-  override def listProcessRewardsV2Sample(limit: Limit)(implicit
+  override def listProcessRewardsV2Sample(dryRun: Boolean, limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[
     AssignedContract[
@@ -817,6 +817,7 @@ class DbSvDsoStore(
                  and acs.template_id_qualified_name = ${QualifiedName(
               splice.amulet.rewardaccountingv2.ProcessRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID
             )}
+                 and acs.create_arguments->>'dryRun' = ${dryRun.toString}
                limit 1000
              ) sample
              order by random()

@@ -577,7 +577,8 @@ trait SvDsoStore
     * arbitrary (unordered) subset of up to 1000 contracts.
     */
   def listProcessRewardsV2Sample(
-      limit: Limit
+      dryRun: Boolean,
+      limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[AssignedContract[
     splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
     splice.amulet.rewardaccountingv2.ProcessRewardsV2,

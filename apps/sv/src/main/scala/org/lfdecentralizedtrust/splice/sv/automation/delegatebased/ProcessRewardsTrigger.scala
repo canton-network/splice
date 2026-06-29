@@ -70,8 +70,8 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     // This does a random sample from 1k contracts, which should distribute the
     // work among SVs if we have more than 'parallelism' number of pending contracts.
     store
-      .listProcessRewardsV2Sample(PageLimit.tryCreate(context.config.parallelism))
-      .map(_.filter(_.payload.dryRun == isDryRun).map(Task(_)))
+      .listProcessRewardsV2Sample(isDryRun, PageLimit.tryCreate(context.config.parallelism))
+      .map(_.map(Task(_)))
 
   override def completeTask(
       task: Task
