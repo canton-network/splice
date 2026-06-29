@@ -1,0 +1,307 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Daml script tests for the allocation choices of the batching utility.
+--
+-- Note that composite actions are tested as part of the DvP tests, and the
+-- tests for accountable holdings, as all WalletClientV2 actions are executed
+-- using the batching utility.
+module Splice.Util.Token.Wallet.IntegrationTests.TestBatchedAllocations where
+
+import Daml.Script
+
+import DA.Time
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationRequestV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Utils
+import Splice.Testing.Apps.TradingAppV2 qualified as TradingAppV2
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+import Splice.Util.Token.Wallet.IntegrationTests.TestBatchedTransfers qualified as TestBatchedTransfers
+
+
+-- Shared test setup
+--------------------
+
+data TestEnv = TestEnv with
+  registries : MultiRegistry.MultiRegistry
+  alice : Party
+  aliceAccount : V2.Account
+  bob : Party
+  provider : Party
+  custodian : Party
+  instrId : V2.InstrumentId
+  settlementV2 : V2.SettlementInfo
+  allocationV2 : V2.AllocationSpecification
+  allocationV1 : V1.AllocationSpecification
+  mkAccount : Party -> V2.Account
+
+
+setupTest : Bool -> Script TestEnv
+setupTest custodied = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registries = env.registries
+  let instrId = V2.InstrumentId with
+        id = "X2"
+        admin = env.testTokenV2.admin
+
+  alice <- allocatePartyExact "alice"
+  bob <- allocatePartyExact "bob"
+  provider <- allocatePartyExact "provider"
+  custodian <- allocatePartyExact "custodian"
+
+  let mkAccount owner = V2.Account with owner = Some owner; provider = Some custodian; id = "test-account"
+  let mkAccountConfig owner = TestTokenV2.AccountConfig with
+        admin = instrId.admin
+        account = mkAccount owner
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = not custodied
+        providerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = custodied
+
+  -- setup alice
+  WalletClientV2.createBatchingUtility alice
+  TestTokenRegistryV2.makeAccountIfMissing (mkAccountConfig alice)
+  TestTokenRegistryV2.mint env.testTokenV2 (mkAccount alice) instrId.id 1000.0
+
+  -- setup bob
+  WalletClientV2.createBatchingUtility bob
+
+  -- setup custodian
+  WalletClientV2.createBatchingUtility custodian
+
+  now <- getTime
+  pure TestEnv with
+    registries
+    alice
+    aliceAccount = mkAccount alice
+    bob
+    provider
+    custodian
+    instrId
+    mkAccount
+
+    settlementV2 = V2.SettlementInfo with
+      executors = [provider]
+      id = "settlement1"
+      cid = None
+      meta = emptyMetadata
+    allocationV2 = V2.AllocationSpecification with
+      admin = instrId.admin
+      authorizer = mkAccount alice
+      transferLegSides = []
+      committed = False
+      nextIterationFunding = Some $ TextMap.fromList [(instrId.id, 10.0)]
+      settlementDeadline = None
+      meta = emptyMetadata
+
+    allocationV1 = V1.AllocationSpecification with
+      settlement = V1.SettlementInfo with
+        executor = provider
+        settlementRef = V1.Reference with
+          id = "settlement1"
+          cid = None
+        requestedAt = now
+        allocateBefore = now `addRelTime` days 7
+        settleBefore = now `addRelTime` days 14
+        meta = emptyMetadata
+      transferLegId = "leg1"
+      transferLeg = TSU.downcast_v2_v1_TransferLeg instrId.admin $ V2.TransferLeg with
+        transferLegId = "leg1"
+        sender = mkAccount alice
+        receiver = mkAccount bob
+        amount = 10.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+
+
+-- Tests of the batching utility choices for allocation workflows
+-----------------------------------------------------------------
+
+test_AllocationInstruction_WithdrawV2 : Script ()
+test_AllocationInstruction_WithdrawV2 = do
+  TestEnv {..} <- setupTest True
+
+  -- alice initiates creation of allocation
+  registry <- MultiRegistry.getRegistryApiV2 registries allocationV2.admin
+  batch <- WalletClientV2.mkAllocationFactory_AllocateV2 registry alice settlementV2 allocationV2
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ ] -- no change, as the allocation references the input holdings
+
+  -- alice withdraws
+  [allocInstr] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
+  batch <- WalletClientV2.mkAllocationInstruction_WithdrawV2 registries alice allocInstr
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [1000.0]) ]
+    -- note that these were not locked but just referenced by the allocation instruction
+
+  -- check that the allocation is gone
+  [] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
+
+  pure ()
+
+
+test_AllocationInstruction_WithdrawV1 : Script ()
+test_AllocationInstruction_WithdrawV1 = do
+  TestEnv {..} <- setupTest True
+
+  -- alice initiates creation of allocation
+  registry <- MultiRegistry.getRegistryApiV1 registries allocationV1.transferLeg.instrumentId.admin
+  batch <- WalletClientV2.mkAllocationFactory_AllocateV1 registry allocationV1
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ ] -- no change, as the allocation references the input holdings
+
+  -- alice withdraws
+  [allocInstr] <- WalletClientV2.listAllocationInstructionsV1 alice
+  batch <- WalletClientV2.mkAllocationInstruction_WithdrawV1 registries allocInstr
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [1000.0]) ]
+    -- note that these were not locked but just referenced by the allocation instruction
+
+  -- check that the allocation is gone
+  [] <- WalletClientV2.listAllocationInstructionsV1 alice
+
+  pure ()
+
+
+test_Allocation_WithdrawV2 : Script ()
+test_Allocation_WithdrawV2 = do
+  TestEnv {..} <- setupTest True
+
+  -- alice initiates creation of allocation
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+
+  -- custodian must approve
+  [allocInstr] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
+  batch <- WalletClientV2.mkAllocationInstruction_AcceptV2 registries custodian allocInstr
+  result <- WalletClientV2.executeTSABatch registries custodian batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [990.0]) ]  -- change
+
+  -- let custodian withdraw and check that withdraw succeeds
+  [alloc] <- WalletClientV2.listAllocationsV2 aliceAccount custodian
+  batch <- WalletClientV2.mkAllocation_WithdrawV2 registries custodian alloc
+  result <- WalletClientV2.executeTSABatch registries custodian batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [10.0])
+    ]
+
+  -- check that the allocation is gone
+  [] <- WalletClientV2.listAllocationsV2 aliceAccount custodian
+
+  pure ()
+
+
+test_Allocation_WithdrawV1_custodied : Script ()
+test_Allocation_WithdrawV1_custodied = do
+  TestEnv {..} <- setupTest True
+
+  -- create allocation
+  WalletClientV2.allocateV1 registries allocationV1
+
+  -- custodian must approve
+  [allocInstr] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
+  batch <- WalletClientV2.mkAllocationInstruction_AcceptV2 registries custodian allocInstr
+  result <- WalletClientV2.executeTSABatch registries custodian batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [990.0]) ]  -- change
+
+  -- alice initiate the withdraw using their V1 wallet
+  [alloc] <- WalletClientV2.listAllocationsV1 alice
+  batch <- WalletClientV2.mkAllocation_WithdrawV1 registries alloc
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ ] -- no change, as the allocation is not yet withdrawn
+
+  -- custodian confirms using their V2 wallet
+  [alloc] <- WalletClientV2.listAllocationsV2 aliceAccount custodian
+  batch <- WalletClientV2.mkAllocation_WithdrawV2 registries custodian alloc
+  result <- WalletClientV2.executeTSABatch registries custodian batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [10.0])
+    ]
+
+  -- check that the allocation is gone
+  [] <- WalletClientV2.listAllocationsV1 alice
+
+  pure ()
+
+
+-- Uncustodied version to check that the V1 result parsing by the batching utility
+test_Allocation_WithdrawV1_uncustodied : Script ()
+test_Allocation_WithdrawV1_uncustodied = do
+  TestEnv {..} <- setupTest False
+
+  -- create allocation
+  WalletClientV2.allocateV1 registries allocationV1
+
+  -- alice withdraws using their V1 wallet
+  [alloc] <- WalletClientV2.listAllocationsV1 alice
+  batch <- WalletClientV2.mkAllocation_WithdrawV1 registries alloc
+  result <- WalletClientV2.executeTSABatch registries alice batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ (aliceAccount, instrId, [10.0])
+    ]
+
+  -- check that the allocation is gone
+  [] <- WalletClientV2.listAllocationsV1 alice
+
+  pure ()
+
+
+test_AllocationRequest_AcceptV2_and_RejectV2 : Script ()
+test_AllocationRequest_AcceptV2_and_RejectV2 = do
+  TestEnv {..} <- setupTest True
+
+  tradeCid <- submit provider $ createCmd TradingAppV2.OTCTrade with
+    venue = provider
+    tradeLegs =
+      [ TradingAppV2.TradeLeg with
+          admin = instrId.admin
+          leg = V2.TransferLeg with
+            transferLegId = "leg1"
+            sender = mkAccount alice
+            receiver = mkAccount bob
+            amount = 10.0
+            instrumentId = instrId.id
+            meta = emptyMetadata
+      ]
+    createdAt = allocationV1.settlement.requestedAt
+    settleAt = allocationV1.settlement.allocateBefore
+    settlementDeadline = Some allocationV1.settlement.settleBefore
+
+  submit provider $ exerciseCmd tradeCid TradingAppV2.OTCTrade_RequestAllocations
+
+  -- alice accepts
+  [req] <- WalletClientV2.listAllocationRequestsV2 aliceAccount alice
+  WalletClientV2.acceptAndCreateRequestedAllocationsV2 registries alice req
+
+  -- bob rejects
+  [req] <- WalletClientV2.listAllocationRequestsV2 (mkAccount bob) bob
+  batch <- WalletClientV2.mkAllocationRequest_RejectV2 bob req._1
+  result <- WalletClientV2.executeTSABatch registries bob batch
+  TestBatchedTransfers.checkHoldingMap result
+    [ ] -- no change, as allocation request rejection does not affect holdings
+
+  -- no allocation requests are left
+  [] <- queryInterface @V2.AllocationRequest provider
+
+  pure ()

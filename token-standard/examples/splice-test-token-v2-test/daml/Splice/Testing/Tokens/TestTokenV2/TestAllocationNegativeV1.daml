@@ -1,0 +1,236 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Negative tests checking that the required checks are enforced on the V1
+-- interface implementations for both V1 and V2 allocations.
+module Splice.Testing.Tokens.TestTokenV2.TestAllocationNegativeV1 where
+
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.AllocationInstructionV1 qualified as V1
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Utils
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.RegistryApi qualified as V1
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+import Splice.Testing.Tokens.TestTokenV2.TokenStandardTestEnv (TestEnv(..), setupTest, createLockedHoldings)
+
+
+-- Testing V1.AllocationFactory_Allocate
+----------------------------------------
+
+
+test_allocateV1_generic : (TestEnv -> Script (V1.AllocationFactory_Allocate, FailureStatusCheck)) -> Script ()
+test_allocateV1_generic mkTestCase = do
+  env@(TestEnv{..}) <- setupTest
+  (choiceArg, check) <- mkTestCase env
+  registryV1 <- MultiRegistry.getRegistryApiV1 env.registries instrId.admin
+  enrichedChoice <- V1.getAllocationFactory registryV1 choiceArg
+  submitMustFail'' check
+    -- We grant readAs instr.admin to be able to test using holdings from the wrong account
+    (actAs alice <> discloseMany' enrichedChoice.disclosures <> readAs instrId.admin) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+test_allocateV1_requestedAt : Script ()
+test_allocateV1_requestedAt = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now `addRelTime` microseconds 1
+        extraArgs = emptyExtraArgs
+  pure (choiceArg, expectErrorId "stdlib.daml.com/deadline-not-exceeded")
+
+test_allocateV1_settleBefore_inFuture : Script ()
+test_allocateV1_settleBefore_inFuture = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          settlement = allocationV1.settlement with
+            allocateBefore = now `addRelTime` microseconds (-1)
+            settleBefore = now -- it must be in the future
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectErrorId "stdlib.daml.com/deadline-exceeded" <>
+    expectMessageContains "Ledger time is at or past deadline 'allocation.settlementDeadline'"
+
+test_allocateV1_settleBefore_after_allocateBefore : Script ()
+test_allocateV1_settleBefore_after_allocateBefore = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          settlement = allocationV1.settlement with
+            allocateBefore = now `addRelTime` microseconds (2) -- cannot be later than settleBefore
+            settleBefore = now `addRelTime` microseconds (1)
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure (choiceArg, expectMessageContains "Template precondition violated:") --
+
+test_allocateV1_authorizer_wrongAccount : Script ()
+test_allocateV1_authorizer_wrongAccount = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let nonBasicAccount = V2.Account with
+        owner = Some alice
+        provider = None
+        id = "extraAccount"
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          transferLeg = allocationV1.transferLeg with
+            meta = TSU.accountToMeta "sender" nonBasicAccount emptyMetadata
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains "'inputHolding.account' is not equal to 'allocation.authorizer'"
+
+test_allocateV1_cannotUseLockedHoldings : Script ()
+test_allocateV1_cannotUseLockedHoldings = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- createLockedHoldings instrId alice 100.0 (now `addRelTime` days 365)
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    -- The code attempts to unlock in all cases, but fails because the deadline is not yet exceeded
+    expectErrorId "stdlib.daml.com/deadline-not-exceeded" <>
+    expectMessageContains "Ledger time is strictly before deadline 'input holding lock expiresAt' at 2023-01-01T00:00:00Z"
+
+test_allocateV1_noHoldings : Script ()
+test_allocateV1_noHoldings = test_allocateV1_generic $ \TestEnv {..} -> do
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1
+        inputHoldingCids = []
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains ("Not enough funds for allocation of " <> show aliceAccount) <>
+    expectMessageContains "Missing amount: 10.0"
+
+test_allocateV1_insufficientFunds : Script ()
+test_allocateV1_insufficientFunds = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          transferLeg = allocationV1.transferLeg with
+            amount = 10000.0
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains ("Not enough funds for allocation of " <> show aliceAccount) <>
+    expectMessageContains "Missing amount: 9000.0"
+
+test_allocateV1_inputHoldingCids_wrongAdmin : Script ()
+test_allocateV1_inputHoldingCids_wrongAdmin = test_allocateV1_generic $ \TestEnv {..} -> do
+  let wrongInstrId = V2.InstrumentId with
+        admin = charlie
+        id = instrId.id
+  inputHoldingCids <- createLockedHoldings wrongInstrId alice 500.0 (now `addRelTime` days (-365))
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains "'inputHolding.instrumentId.admin' is not equal to 'expected value'" <>
+    expectMessageContains ("expected value: " <> show instrId.admin)
+
+test_allocateV1_inputHoldingCids_wrongOwner : Script ()
+test_allocateV1_inputHoldingCids_wrongOwner = test_allocateV1_generic $ \TestEnv {..} -> do
+  createLockedHoldings instrId bob 500.0 (now `addRelTime` days (-365))
+  bobHoldingCids <- WalletClientV2.listHoldingCids bob instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1
+        inputHoldingCids = map TSU.downcast bobHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains "'inputHolding.account' is not equal to 'allocation.authorizer'." <>
+    expectMessageContains ("allocation.authorizer: " <> show aliceAccount)
+
+test_allocateV1_allocation_wrongAdmin : Script ()
+test_allocateV1_allocation_wrongAdmin = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = bob
+        allocation = allocationV1
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (,) choiceArg $
+    expectMessageContains "'arg.expectedAdmin' is not equal to 'expected value'"
+
+test_allocateV1_transferLeg_unfundedInstrument : Script ()
+test_allocateV1_transferLeg_unfundedInstrument = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let wrongInstrId = V2.InstrumentId with
+        admin = instrId.admin
+        id = "WRONG_INSTRUMENT_ID"
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          transferLeg = allocationV1.transferLeg with
+            instrumentId = TSU.downcast wrongInstrId
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (choiceArg,) $
+    expectMessageContains "Not enough funds for allocation of Account" <>
+    expectMessageContains ("Instrument: " <> show wrongInstrId)
+
+test_allocateV1_transferLeg_negativeAmount : Script ()
+test_allocateV1_transferLeg_negativeAmount = test_allocateV1_generic $ \TestEnv {..} -> do
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+  let choiceArg = V1.AllocationFactory_Allocate with
+        expectedAdmin = instrId.admin
+        allocation = allocationV1 with
+          transferLeg = allocationV1.transferLeg with
+            amount = -10.0
+        inputHoldingCids = map TSU.downcast inputHoldingCids
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+  pure $ (choiceArg,) $
+    expectMessageContains "Template precondition violated:"
+
+
+-- Test V1.Allocation_ExecuteTransfer
+------------------------------------
+
+test_allocationv1_ExecuteTransfer_after_settlementDeadline : Script ()
+test_allocationv1_ExecuteTransfer_after_settlementDeadline = do
+  (TestEnv{..}) <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1
+  setTime allocationV1.settlement.settleBefore
+  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV1 alice
+
+  context <- V1.getAllocation_TransferContext registryV1 aliceAllocCid emptyMetadata
+  submitMustFail''
+    ( expectErrorId "stdlib.daml.com/deadline-exceeded" <>
+      expectMessageContains "Ledger time is at or past deadline 'allocation.settlementDeadline'"
+    )
+    (actAs alice <> actAs bob <> actAs provider <> discloseMany' context.disclosures) $
+    exerciseCmd aliceAllocCid V1.Allocation_ExecuteTransfer with
+      extraArgs = ExtraArgs with
+        context = context.choiceContext
+        meta = emptyMetadata

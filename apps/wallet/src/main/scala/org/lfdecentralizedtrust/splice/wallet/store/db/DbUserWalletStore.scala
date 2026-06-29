@@ -65,7 +65,10 @@ import scala.jdk.OptionConverters.*
 class DbUserWalletTxLogStoreConfig(loggerFactory: NamedLoggerFactory, key: UserWalletStore.Key)
     extends TxLogStore.Config[TxLogEntry] {
   override val parser: org.lfdecentralizedtrust.splice.wallet.store.UserWalletTxLogParser =
-    new UserWalletTxLogParser(loggerFactory, key.endUserParty)
+    new UserWalletTxLogParser(
+      loggerFactory,
+      endUserParty = key.endUserParty,
+    )
   override def entryToRow: org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry => Option[
     org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.UserWalletTxLogStoreRowData
   ] =

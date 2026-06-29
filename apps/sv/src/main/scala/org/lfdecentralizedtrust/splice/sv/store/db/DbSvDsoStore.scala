@@ -1210,6 +1210,52 @@ class DbSvDsoStore(
       }
     }
 
+  override def listExpiredAmuletAllocationsV2(
+      ignoredParties: Set[PartyId]
+  ): ListExpiredContracts[
+    splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+    splice.amuletallocationv2.AmuletAllocationV2,
+  ] = (now, limit) =>
+    implicit tc => {
+      val _ = tc
+      // `not (json_array ?| string_array)` means "arrays do not overlap"
+      // the first ? is to escape the second
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause(
+          "create_arguments->'allocation'->'authorizer'->>'owner'",
+          ignoredParties,
+        ) ++ sql" and not (create_arguments->'settlement'->'executors' ??| ${ignoredParties
+            .map(p => lengthLimited(p.toProtoPrimitive))
+            .toArray[String2066]})").toActionBuilder
+      } else {
+        sql""
+      }
+
+      waitUntilAcsIngested {
+        for {
+          synchronizerId <- getDsoRules().map(_.domain)
+          rows <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
+              additionalWhere = (sql"""
+                and assigned_domain = $synchronizerId
+                and acs.contract_expires_at < ${now}
+              """ ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredAmuletAllocationsV2",
+          )
+        } yield rows.map(
+          assignedContractFromRow(
+            splice.amuletallocationv2.AmuletAllocationV2.COMPANION
+          )(_)
+        )
+      }
+    }
+
   override def listExpiredAmuletTransferInstructions(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[

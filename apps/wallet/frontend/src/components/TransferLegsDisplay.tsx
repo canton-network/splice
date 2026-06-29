@@ -5,7 +5,7 @@ import { Container, Table, TableBody, TableCell, TableHead, TableRow } from '@mu
 import Typography from '@mui/material/Typography';
 import BftAnsEntry from './BftAnsEntry';
 import { TransferLeg } from '@daml.js/splice-api-token-allocation/lib/Splice/Api/Token/AllocationV1/module';
-import MetaDisplay from './MetaDisplay';
+import { TextMapDisplay } from './TextMap';
 import BigNumber from 'bignumber.js';
 
 const TransferLegsDisplay: React.FC<{
@@ -50,7 +50,7 @@ const TransferLegsDisplay: React.FC<{
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <MetaDisplay meta={meta.values} />
+                  <TextMapDisplay textMap={meta.values} />
                 </TableCell>
                 <TableCell>{getActionButton(transferLegId, id)}</TableCell>
               </TableRow>

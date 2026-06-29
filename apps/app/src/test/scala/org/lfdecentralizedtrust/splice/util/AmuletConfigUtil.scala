@@ -54,6 +54,7 @@ trait AmuletConfigUtil extends TestCommon {
         maxNumInputs,
         existingTransferConfig.maxNumOutputs,
         existingTransferConfig.maxNumLockHolders,
+        existingTransferConfig.tokenStandardMaxTTL,
       ),
       existingAmuletConfig.issuanceCurve,
       existingAmuletConfig.decentralizedSynchronizer,
