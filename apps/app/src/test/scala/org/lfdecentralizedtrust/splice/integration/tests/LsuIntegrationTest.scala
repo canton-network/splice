@@ -452,12 +452,13 @@ class LsuIntegrationTest
     val keyPair =
       CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
 
+      scala.util.Try(
     submitTopologyAndOnboard(
       aliceValidatorBackend,
       truePartyHint,
       keyPair,
       PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
-    )
+    ))
 
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
