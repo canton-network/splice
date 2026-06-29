@@ -127,6 +127,7 @@ class BulkStorage(
     stagingConnection,
     committedConnection,
     reader,
+    appConfig,
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -158,6 +159,7 @@ class BulkStorage(
     stagingConnection,
     committedConnection,
     reader,
+    appConfig,
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(

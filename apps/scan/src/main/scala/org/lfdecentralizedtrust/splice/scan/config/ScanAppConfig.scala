@@ -40,6 +40,8 @@ final case class BulkStorageConfig(
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // When more updates are not yet available, how long to wait for more.
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    // When BFT was not reached on objects, how long to wait before retrying.
+    bftRetryInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
     staging: Option[S3Config] = None,

@@ -8,6 +8,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
+import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -16,6 +17,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     bulkStorageReader: BulkStorageReader,
+    appConfig: BulkStorageConfig,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, actorSystem: ActorSystem)
     extends UpdateHistoryBulkStorageWriter
@@ -30,6 +32,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
         bulkStorageReader
           .getStagingObjectsForUpdateHistorySegment(segment)
           .map(objects => objects.objects),
+      appConfig,
       loggerFactory,
     )
 

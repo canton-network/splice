@@ -103,6 +103,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           stagingConnection,
           committedConnection,
           reader,
+          appConfig,
           loggerFactory,
         )
         val commitService = {

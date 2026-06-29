@@ -8,16 +8,17 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
+import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.*
 
 class BulkStorageCommitFromStaging[T](
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+    appConfig: BulkStorageConfig,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit
     tc: TraceContext,
@@ -32,7 +33,7 @@ class BulkStorageCommitFromStaging[T](
     )
     Future.successful(true)
   }
-  // TODO(#XXXX): implement the BFT check
+  // TODO(#5884): implement the BFT check
 
   private def waitForBftAgreement: Flow[
     (T, Seq[ObjectKeyAndChecksum]),
@@ -54,8 +55,7 @@ class BulkStorageCommitFromStaging[T](
             logger.debug(
               s"BFT agreement not yet reached for the objects at $t. Will retry after delay."
             )
-            Source.single((obj, false)).delay(30.seconds)
-          // FIXME: take the delay from the config
+            Source.single((obj, false)).delay(appConfig.bftRetryInterval.underlying)
         }
         .takeWhile({ case (_, bftReached) => !bftReached }, inclusive = true)
         .runWith(Sink.last)
@@ -133,6 +133,7 @@ object BulkStorageCommitFromStaging {
       stagingS3Connection: S3BucketConnection,
       committedS3Connection: S3BucketConnection,
       getStagingObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+      appConfig: BulkStorageConfig,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
@@ -143,6 +144,7 @@ object BulkStorageCommitFromStaging {
       stagingS3Connection,
       committedS3Connection,
       getStagingObjects,
+      appConfig,
       loggerFactory,
     ).getFlow
   }

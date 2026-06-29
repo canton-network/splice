@@ -9,6 +9,7 @@ import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
+import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,6 +18,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     bulkStorageReader: BulkStorageReader,
+    appConfig: BulkStorageConfig,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends AcsSnapshotBulkStorageWriter
@@ -52,6 +54,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
             case ex: StatusRuntimeException if ex.getStatus.getCode == Status.Code.NOT_FOUND =>
               Seq.empty
           },
+      appConfig,
       loggerFactory,
     )
   }

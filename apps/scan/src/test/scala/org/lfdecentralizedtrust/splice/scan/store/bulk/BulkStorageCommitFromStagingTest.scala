@@ -11,6 +11,7 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.slf4j.event.Level
 import org.apache.pekko.stream.scaladsl.Keep
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
+import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
@@ -28,6 +29,7 @@ class BulkStorageCommitFromStagingTest
     with SplicePostgresTest {
 
   override val initialBuckets = Seq("staging", "committed")
+  val appConfig = BulkStorageConfig()
 
   "BulkStorageCommitFromStaging" should {
     "successfully move objects from staging to committed S3 bucket" in {
@@ -70,6 +72,7 @@ class BulkStorageCommitFromStagingTest
       stagingS3Connection,
       committedS3Connection,
       _ => Future.successful(objsWithDigests),
+      appConfig,
       loggerFactory,
     )
 
