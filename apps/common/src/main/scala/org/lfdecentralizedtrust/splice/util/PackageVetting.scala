@@ -32,6 +32,9 @@ class PackageVetting(
     override val loggerFactory: NamedLoggerFactory,
     latestPackagesOnly: Boolean,
     enableUnsupportedDarsUnvetting: Boolean,
+    // When provided, waitForPackages is called after vetting to ensure
+    // packages are available for command preprocessing before returning.
+    ledgerConnection: Option[BaseLedgerConnection] = None,
 )(implicit ec: ExecutionContext, tracer: Tracer)
     extends NamedLogging
     with Spanning {
@@ -277,6 +280,14 @@ class PackageVetting(
           fromDate = validFrom,
           maxVettingDelay = maxVettingDelay,
         )
+      }
+      // Wait for packages to be available for command preprocessing.
+      // The vetting topology transaction may not yet be effective on
+      // the participant even though vetDars returned.
+      _ <- ledgerConnection match {
+        case Some(conn) =>
+          conn.waitForPackages(resources.map(_.packageId).toSet)
+        case None => Future.unit
       }
     } yield {}
   }
