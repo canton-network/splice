@@ -3942,7 +3942,7 @@
           "hour": 8
         },
         "protected": true,
-        "tier": "db-custom-2-7680"
+        "tier": "sequencer-override-tier"
       },
       "defaultUserName": "cnadmin",
       "deletionProtection": true,
@@ -4028,7 +4028,7 @@
           "day": 2,
           "hour": 8
         },
-        "tier": "db-custom-2-7680",
+        "tier": "sequencer-override-tier",
         "userLabels": {
           "cluster": "mock",
           "migration_id": "9"
