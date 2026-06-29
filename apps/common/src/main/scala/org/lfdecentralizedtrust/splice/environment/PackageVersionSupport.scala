@@ -79,6 +79,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.amulet,
       DarResources.amulet_0_1_16,
+      ignoreRedundantCheck = true,
     )
 
   def supports24hSubmissionDelay(
@@ -96,7 +97,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.amulet,
       DarResources.amulet_0_1_17,
-      ignoreRedundantCheck = false,
+      ignoreRedundantCheck = true,
     )
   }
 
@@ -169,6 +170,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.amulet,
       DarResources.amulet_0_1_19,
+      ignoreRedundantCheck = true,
     )
 
   def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
