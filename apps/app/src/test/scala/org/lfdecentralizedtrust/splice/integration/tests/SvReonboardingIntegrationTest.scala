@@ -514,7 +514,10 @@ class SvReonboardingIntegrationTest
         val action: ActionRequiringConfirmation =
           new ARC_DsoRules(
             new SRARC_GrantFeaturedAppRight(
-              new DsoRules_GrantFeaturedAppRight(sv4PartyNew.toProtoPrimitive)
+              new DsoRules_GrantFeaturedAppRight(
+                sv4PartyNew.toProtoPrimitive,
+                java.util.Optional.empty(),
+              )
             )
           )
         actAndCheck(
