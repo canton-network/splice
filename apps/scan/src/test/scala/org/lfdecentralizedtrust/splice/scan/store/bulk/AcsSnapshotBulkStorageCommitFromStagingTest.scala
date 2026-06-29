@@ -21,7 +21,12 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.store.{HasS3Mock, HistoryMetrics, StoreTestBase, TimestampWithMigrationId}
+import org.lfdecentralizedtrust.splice.store.{
+  HasS3Mock,
+  HistoryMetrics,
+  StoreTestBase,
+  TimestampWithMigrationId,
+}
 
 import scala.concurrent.Future
 import scala.util.Using
@@ -92,7 +97,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       )
 
       def withNewCommitService(body: => Assertion): Assertion = {
-        val retryProvider = RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
+        val retryProvider =
+          RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
         val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
           stagingConnection,
           committedConnection,
@@ -108,7 +114,9 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
             Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
             loggerFactory,
           ).asRetryableService(
-            AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
+            AutomationConfig(pollingInterval =
+              NonNegativeFiniteDuration.ofSeconds(1)
+            ), // Fast retries
             new WallClock(timeouts, loggerFactory),
             retryProvider,
           )
@@ -219,6 +227,34 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         assertCommittedObjectsForSnapshot(day = 4, expectedCount = 3)
         assertNoStagingObjectsForSnapshot(4)
       }
+
+      // Create a snapshot, and move it all to committed, but do not mark it as processed yet in the committed progress,
+      // to simulate a restart after moving has completed but before marking as processed
+      createDummySnapshot(day = 5, objectCount = 2)
+      Seq(0, 1).foreach { i =>
+        committedConnection
+          .copyObject(
+            "staging",
+            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd",
+          )
+          .futureValue
+        stagingConnection
+          .deleteObject(
+            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd"
+          )
+          .futureValue
+      }
+
+      withNewCommitService {
+        eventually() {
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
+            _.timestamp
+          ) shouldBe Some(ts(5))
+        }
+        assertCommittedObjectsForSnapshot(day = 5, expectedCount = 2)
+        assertNoStagingObjectsForSnapshot(5)
+      }
+
     }
   }
 
