@@ -69,8 +69,6 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .withTrafficTopupsDisabled
-      // Uses FeaturedAppMarkers: test deliberately uses old packages that lack the rewardConfig field added by TBAR
-      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms(
         (_, c) =>
           ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(c),
