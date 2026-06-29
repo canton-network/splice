@@ -4,7 +4,7 @@ inputs:
   pr_number:
     description: "The number of the PR to check for backporting."
     required: true
-    type: number
+    # type: number
   token:
     description: "The GitHub token to use for API calls."
     default: ${{ github.token }}
