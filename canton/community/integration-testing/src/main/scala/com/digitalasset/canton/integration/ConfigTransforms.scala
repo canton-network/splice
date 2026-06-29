@@ -873,7 +873,7 @@ object ConfigTransforms {
     )
 
   def defaultsForNodes: Seq[ConfigTransform] =
-    setProtocolVersion(ProtocolVersion.v34) :+ enableAchs
+    setProtocolVersion(ProtocolVersion.v35) :+ enableAchs
 
   def setTopologyTransactionRegistrationTimeout(
       timeout: config.NonNegativeFiniteDuration
