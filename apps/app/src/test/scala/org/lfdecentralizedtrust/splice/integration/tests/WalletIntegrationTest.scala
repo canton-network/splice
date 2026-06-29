@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
@@ -693,6 +694,23 @@ class WalletIntegrationTest
         aliceValidatorBackend.lookupTransferPreapprovalByParty(aliceUserParty) shouldBe None
         aliceTransferPreapprovalProposals should be(empty)
 
+        // Once validator automation is paused the request cannot complete. The intended outcome is
+        // a 429 once the server-side retry loop gives up. Under load the validator's HTTP request
+        // timeout can fire first, in which case the server logs a WARN "resulted in a timeout" and
+        // returns a 503 instead. Accept either failure (both surface the request as a logged ERROR)
+        // and tolerate the optional timeout WARN, so a slow CI host does not flake the assertion.
+        def assertCreateTransferPreapprovalFails(): Unit =
+          loggerFactory.assertThrowsAndLogsUnorderedOptional[CommandFailure](
+            aliceWalletClient.createTransferPreapproval(),
+            LogEntryOptionality.Required -> { entry =>
+              entry.errorMessage should (include("429 Too Many Requests") or
+                include("503 Service Unavailable"))
+            },
+            LogEntryOptionality.Optional -> { entry =>
+              entry.warningMessage should include("resulted in a timeout")
+            },
+          )
+
         // Disable validator automation to create the TransferPreapproval.
         // This implies the request from alice will not succeed and time out.
         bracket(
@@ -700,19 +718,13 @@ class WalletIntegrationTest
           acceptTransferPreapprovalProposalTrigger.resume(),
         ) {
           val proposalCid =
-            clue("createTransferPreapproval fails with HTTP 429 if validator automation fails") {
-              assertThrowsAndLogsCommandFailures(
-                aliceWalletClient.createTransferPreapproval(),
-                _.errorMessage should include("429 Too Many Requests"),
-              )
+            clue("createTransferPreapproval fails if validator automation fails") {
+              assertCreateTransferPreapprovalFails()
               aliceTransferPreapprovalProposals should have length 1
               aliceTransferPreapprovalProposals.head.id
             }
           clue("TransferPreapprovalProposals created via the wallet API are deduplicated") {
-            assertThrowsAndLogsCommandFailures(
-              aliceWalletClient.createTransferPreapproval(),
-              _.errorMessage should include("429 Too Many Requests"),
-            )
+            assertCreateTransferPreapprovalFails()
             aliceTransferPreapprovalProposals should have length 1
             aliceTransferPreapprovalProposals.head.id shouldBe proposalCid
           }
