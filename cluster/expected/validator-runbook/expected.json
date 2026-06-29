@@ -420,7 +420,7 @@
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
       "maxHistory": 10,
-      "name": "participant-2",
+      "name": "participant",
       "namespace": "validator",
       "timeout": 600,
       "values": {
@@ -503,7 +503,7 @@
       },
       "version": "0.3.20"
     },
-    "name": "validator-participant-2",
+    "name": "validator-participant",
     "provider": "",
     "type": "kubernetes:helm.sh/v3:Release"
   },
@@ -548,7 +548,7 @@
           "name": "cn-mocknet"
         },
         "config": {
-          "jsonLedgerApiUrl": "http://participant-2:7575",
+          "jsonLedgerApiUrl": "http://participant:7575",
           "keyDirectory": "/keys",
           "maxParties": 1234,
           "parallelism": 321,
@@ -737,7 +737,7 @@
           },
           "migrateValidatorParty": false,
           "nodeIdentifier": "validator-runbook",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

@@ -62,7 +62,6 @@ export async function installSplitwell(
 
   const participant = await installParticipant(
     splitwellConfig,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     false,
