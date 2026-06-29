@@ -477,15 +477,15 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
   private def hiddenCouponsMetricValue(
       party: PartyId
-  )(implicit env: SpliceTestConsoleEnvironment): Long =
-    sv1Backend.metrics
-      .get(
-        s"$MetricsPrefix.reward_coupons_v2.hidden_coupons",
-        Map("party" -> party.toProtoPrimitive),
-      )
-      .select[MetricValue.LongPoint]
-      .value
-      .value
+  )(implicit env: SpliceTestConsoleEnvironment): Long = {
+    val name = s"$MetricsPrefix.reward_coupons_v2.hidden_coupons"
+    val attributes = Map("party" -> party.toProtoPrimitive)
+    sv1Backend.metrics.list(name, attributes).get(name) match {
+      case None => 0L
+      case Some(_) =>
+        sv1Backend.metrics.get(name, attributes).select[MetricValue.LongPoint].value.value
+    }
+  }
 
   private def assertOldestOpenRound(
       expected: Long
