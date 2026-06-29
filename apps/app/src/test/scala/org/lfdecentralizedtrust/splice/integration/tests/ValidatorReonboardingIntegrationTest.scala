@@ -88,6 +88,7 @@ trait ValidatorReonboardingIntegrationTestBase
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withPreSetup(_ => ())
       .withAllocatedUsers(extraIgnoredValidatorPrefixes = Seq("aliceValidator"))
+      // Uses FeaturedAppMarkers: reonboarding encounters OpenMiningRound with rewardConfig before packages are fully vetted
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) => {
         val defaultAliceValidatorConfig =

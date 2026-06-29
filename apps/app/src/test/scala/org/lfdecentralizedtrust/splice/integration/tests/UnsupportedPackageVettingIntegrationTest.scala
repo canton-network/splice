@@ -45,6 +45,7 @@ class UnsupportedPackageVettingIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test deliberately uses old packages that lack the rewardConfig field added by TBAR
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withoutAliceValidatorConnectingToSplitwell
       // if other tests run before, packages that break this test might already be vetted

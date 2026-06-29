@@ -31,6 +31,7 @@ class WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       // Set a non-unit amulet price to better test CC-USD conversion.
       .addConfigTransform((_, config) => ConfigTransforms.setAmuletPrice(amuletPrice)(config))
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms(
         (_, config) =>
