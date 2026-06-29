@@ -109,7 +109,10 @@ abstract class AcsSnapshotTriggerBase(
         )
         .map(size => {
           snapshotMetrics.latestRecordTimeSave.updateValue(snapshot.recordTime)
-          snapshotMetrics.snapshotSize.updateValue(size)
+          size match {
+            case Some(v) => snapshotMetrics.snapshotSize.updateValue(v)
+            case None => ()
+          }
           TaskSuccess(s"Saved incremental snapshot at ${snapshot.recordTime}")
         })
     case AcsSnapshotTriggerBase.DeleteIncrementalSnapshotTask(snapshot) =>
