@@ -21,16 +21,12 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.store.{
-  HasS3Mock,
-  HistoryMetrics,
-  StoreTestBase,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{HasS3Mock, HistoryMetrics, StoreTestBase, TimestampWithMigrationId}
 
 import scala.concurrent.Future
 import scala.util.Using
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
+import org.scalatest.Assertion
 import org.slf4j.event.Level
 
 import java.time.Instant
@@ -95,26 +91,29 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         loggerFactory,
       )
 
-      def retryProvider = RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-      def commitService = {
+      def withNewCommitService(body: => Assertion): Assertion = {
+        val retryProvider = RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
         val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
           stagingConnection,
           committedConnection,
           reader,
           loggerFactory,
         )
-        new AcsSnapshotBulkStorage(
-          "AcsSnapshotBulkStorageCommitted",
-          acsCommittedWriter,
-          acsCommittedProgress,
-          appConfig,
-          Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
-          loggerFactory,
-        ).asRetryableService(
-          AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
-          new WallClock(timeouts, loggerFactory),
-          retryProvider,
-        )
+        val commitService = {
+          new AcsSnapshotBulkStorage(
+            "AcsSnapshotBulkStorageCommitted",
+            acsCommittedWriter,
+            acsCommittedProgress,
+            appConfig,
+            Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
+            loggerFactory,
+          ).asRetryableService(
+            AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
+            new WallClock(timeouts, loggerFactory),
+            retryProvider,
+          )
+        }
+        Using.resources(commitService, retryProvider) { (_, _) => body }
       }
 
       def createDummySnapshot(day: Int, objectCount: Int): Unit = {
@@ -138,7 +137,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         }
       }
 
-      def assertCommittedObjectsForSnapshot(day: Int, expectedCount: Int): Unit = {
+      def assertCommittedObjectsForSnapshot(day: Int, expectedCount: Int): Assertion = {
         val expectedKeys = (0 until expectedCount).map { i =>
           s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd"
         }
@@ -149,7 +148,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           .map(_.key) should contain theSameElementsAs
           expectedKeys
       }
-      def assertNoStagingObjectsForSnapshot(day: Int): Unit = {
+      def assertNoStagingObjectsForSnapshot(day: Int): Assertion = {
         reader
           .getStagingObjectsForAcsSnapshotAt(ts(day))
           .failed
@@ -159,7 +158,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
       }
 
-      Using.resources(commitService, retryProvider) { (_, _) =>
+      withNewCommitService {
         // Create full dummy ACS snapshots for first two timestamps
         createDummySnapshot(day = 1, objectCount = 1)
         createDummySnapshot(day = 2, objectCount = 2)
@@ -211,7 +210,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         )
         .futureValue
 
-      Using.resources(commitService, retryProvider) { (_, _) =>
+      withNewCommitService {
         eventually() {
           acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
             _.timestamp
@@ -220,8 +219,6 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         assertCommittedObjectsForSnapshot(day = 4, expectedCount = 3)
         assertNoStagingObjectsForSnapshot(4)
       }
-
-      succeed
     }
   }
 
