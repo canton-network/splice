@@ -645,6 +645,7 @@ featureApp : AmuletApp -> AmuletUser -> Script (ContractId FeaturedAppRight)
 featureApp app provider = do
   result <- submitExerciseAmuletRulesByKey' app provider AmuletRules_DevNet_FeatureApp with
     provider = provider.primaryParty
+    activityWeight = None
   return result.featuredAppRightCid
 
 getNormalizedBalance: Party -> Script Decimal
