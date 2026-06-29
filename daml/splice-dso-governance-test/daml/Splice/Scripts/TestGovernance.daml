@@ -51,6 +51,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = Some 11.0
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
@@ -89,7 +90,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     sv = Some sv1
 
   [(rightCid, right)] <- query @FeaturedAppRight provider
-  right === FeaturedAppRight with dso; provider
+  right === FeaturedAppRight with dso; provider; activityWeight = Some 11.0
 
   -- the request has been archived
   [] <- query @VoteRequest dso
@@ -125,6 +126,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime) -- the right will be granted in 8 days
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote with the possibility to change their vote
@@ -183,10 +185,34 @@ testVoteRequestAcceptanceWithEffectivity = do
   result.outcome === VRO_Accepted with effectiveAt = effectiveTime
 
   [(rightCid, right)] <- query @FeaturedAppRight provider
-  right === FeaturedAppRight with dso; provider
+  right === FeaturedAppRight with dso; provider; activityWeight = None
 
   -- the request has been archived
   [] <- query @VoteRequest dso
+
+  -- let's test updating the right
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
+    ARC_DsoRules with
+      dsoAction = SRARC_UpdateFeaturedAppRight DsoRules_UpdateFeaturedAppRight with
+        rightCid
+        update = FeaturedAppRight_Update with
+          reason = "tier 1"
+          newActivityWeight = 1.5
+
+  [(rightCid, right)] <- query @FeaturedAppRight provider
+  right === FeaturedAppRight with dso; provider; activityWeight = Some 1.5
+
+  -- let's test updating the right back to the default
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
+    ARC_DsoRules with
+      dsoAction = SRARC_UpdateFeaturedAppRight DsoRules_UpdateFeaturedAppRight with
+        rightCid
+        update = FeaturedAppRight_Update with
+          reason = "default tier"
+          newActivityWeight = 1.0
+
+  [(rightCid, right)] <- query @FeaturedAppRight provider
+  right === FeaturedAppRight with dso; provider; activityWeight = None
 
   -- we can remove the granted right using a vote request, provided enough parties answer in time
   -- This uses early closure of the vote request, which is only possible if a super-majority of svs have voted
@@ -215,6 +241,7 @@ testVoteRequestRejectionWithoutEffectivity = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = Some 11.0
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
@@ -260,6 +287,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = Some (days 3) -- give everybody 3 days to vote
@@ -305,6 +333,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (addRelTime now (days 1))
     voteRequestTimeout = Some (days 2)
@@ -315,6 +344,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = Some (days 3) -- give everybody 3 days to vote
@@ -913,6 +943,7 @@ testVoteRequestExpireWithoutEffectivity = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = None
@@ -955,6 +986,7 @@ testVoteRequestExpireWithEffectivity = do
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
         provider
+        activityWeight = None
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = None

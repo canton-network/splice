@@ -393,10 +393,11 @@ template AmuletRules
     nonconsuming choice AmuletRules_DevNet_FeatureApp : AmuletRules_DevNet_FeatureAppResult
       with
         provider : Party
+        activityWeight : Optional Decimal
       controller provider
       do
         require "isDevNet flag is true" isDevNet
-        featuredAppRightCid <- create FeaturedAppRight with dso; provider
+        featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight
         return AmuletRules_DevNet_FeatureAppResult with ..
 
     -- Bootstrap the open mining rounds by creating
@@ -1264,7 +1265,7 @@ summarizeAndValidateContext eventLogCid context dso tf = do
 
   -- check the featured app right, if present
   featuredAppProvider <- forA context.featuredAppRight $ \featuredAppRightCid -> do
-    requireMatchingContract featuredAppRightCid (FeaturedAppRight with dso; provider = tf.provider)
+    _ <- fetchReferenceData (ForOwner with dso; owner = tf.provider) featuredAppRightCid
     pure tf.provider
 
   -- pre-resolve issuing mining rounds
@@ -1297,7 +1298,7 @@ summarizeAndValidateExternalPartyContext context dso tf = do
 
   -- check the featured app right, if present
   featuredAppProvider <- forA context.featuredAppRight $ \featuredAppRightCid -> do
-    requireMatchingContract featuredAppRightCid (FeaturedAppRight with dso; provider = tf.provider)
+    _ <- fetchReferenceData (ForOwner with dso; owner = tf.provider) featuredAppRightCid
     pure tf.provider
 
   return TransferContextSummaryV2 with
