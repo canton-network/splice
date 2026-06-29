@@ -2808,7 +2808,7 @@ object DarResources {
   )
   val amulet = PackageResource(
     amulet_current,
-    amulet_0_1_15,
+    amulet_0_1_19,
     Seq(
       amulet_0_1_0,
       amulet_0_1_1,
