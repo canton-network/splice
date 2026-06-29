@@ -148,27 +148,29 @@ class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetInte
   */
 class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
-  private val darsFromUpgrade_0_5_16 = Seq(
-    DarResources.amulet_0_1_17,
-    DarResources.amuletNameService_0_1_18,
-    DarResources.dsoGovernance_0_1_23,
-    DarResources.walletPayments_0_1_17,
-    DarResources.wallet_0_1_18,
-    DarResources.amulet_0_1_17,
+  // Use current-1 versions that are above the rewardConfig boundary (0.1.19)
+  // so that TBAR's rewardConfig field on OpenMiningRound doesn't cause
+  // upgrade translation failures during bootstrap.
+  private val darsToDowngradeTo = Seq(
+    DarResources.amulet_0_1_19,
+    DarResources.amuletNameService_0_1_20,
+    DarResources.dsoGovernance_0_1_25,
+    DarResources.walletPayments_0_1_19,
+    DarResources.wallet_0_1_20,
+    DarResources.amulet_0_1_19,
   )
 
-  // initialize network with the versions from the upgrade 0.5.16
   override val initialPackageConfig: InitialPackageConfig = new InitialPackageConfig(
-    DarResources.amulet_0_1_17.metadata.version.toString(),
-    DarResources.amuletNameService_0_1_18.metadata.version.toString(),
-    DarResources.dsoGovernance_0_1_23.metadata.version.toString(),
+    DarResources.amulet_0_1_19.metadata.version.toString(),
+    DarResources.amuletNameService_0_1_20.metadata.version.toString(),
+    DarResources.dsoGovernance_0_1_25.metadata.version.toString(),
     DarResources.validatorLifecycle_0_1_6.metadata.version.toString(),
-    DarResources.wallet_0_1_18.metadata.version.toString(),
-    DarResources.walletPayments_0_1_17.metadata.version.toString(),
+    DarResources.wallet_0_1_20.metadata.version.toString(),
+    DarResources.walletPayments_0_1_19.metadata.version.toString(),
   )
-  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsFromUpgrade_0_5_16
+  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsToDowngradeTo
   override val additionalPackagesToUnvetSv1Local: Seq[DarResource] = Seq(
-    DarResources.wallet_0_1_16
+    DarResources.wallet_0_1_19
   )
 
   "sv1 can unvet all upgraded sv packages" in { implicit env =>
@@ -188,7 +190,7 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
         getVettedPackageIds(
           sv1Backend.appState.participantAdminConnection,
           synchronizerId,
-        ) should contain noElementsOf darsFromUpgrade_0_5_16.map(_.packageId)
+        ) should contain noElementsOf darsToDowngradeTo.map(_.packageId)
       }
       stopAllAsync(
         sv1Backend,
@@ -209,8 +211,8 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
           sv1LocalBackend.appState.participantAdminConnection,
           synchronizerId,
         )
-        vettedPackageIds should contain allElementsOf darsFromUpgrade_0_5_16.map(_.packageId)
-        vettedPackageIds should not contain DarResources.wallet_0_1_16.packageId
+        vettedPackageIds should contain allElementsOf darsToDowngradeTo.map(_.packageId)
+        vettedPackageIds should not contain DarResources.wallet_0_1_19.packageId
       }
       stopAllAsync(
         sv1LocalBackend,
