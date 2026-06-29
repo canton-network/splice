@@ -404,8 +404,9 @@ lazy val `splice-api-token-holding-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-holding-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-transfer-events-v2-daml` =
@@ -414,9 +415,9 @@ lazy val `splice-api-token-transfer-events-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-transfer-events-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-transfer-instruction-v1-daml` =
@@ -452,9 +453,9 @@ lazy val `splice-api-token-transfer-instruction-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-transfer-instruction-v2-1.0.0.dar"
+      ),
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
       Compile / sourceGenerators +=
         Def.taskDyn {
@@ -489,9 +490,9 @@ lazy val `splice-api-token-allocation-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-allocation-request-v1-daml` =
@@ -511,10 +512,9 @@ lazy val `splice-api-token-allocation-request-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-allocation-v2-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-request-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-allocation-instruction-v1-daml` =
@@ -534,10 +534,9 @@ lazy val `splice-api-token-allocation-instruction-v2-daml` =
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
-      Compile / damlDependencies :=
-        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v2-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-allocation-v2-daml` / Compile / damlBuild).value,
+      Compile / damlPrebuiltDar := Some(
+        (LocalRootProject / baseDirectory).value / "daml" / "dars" / "splice-api-token-allocation-instruction-v2-1.0.0.dar"
+      ),
     )
 
 lazy val `splice-api-token-burn-mint-v1-daml` =

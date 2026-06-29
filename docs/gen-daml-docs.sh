@@ -32,6 +32,12 @@ NON_COMPILED_DAML_PROJECTS=(
     "$SPLICE_ROOT/token-standard/splice-api-token-metadata-v1"
     "$SPLICE_ROOT/token-standard/splice-api-token-holding-v1"
     "$SPLICE_ROOT/token-standard/splice-api-token-burn-mint-v1"
+    "$SPLICE_ROOT/token-standard/splice-api-token-holding-v2"
+    "$SPLICE_ROOT/token-standard/splice-api-token-transfer-events-v2"
+    "$SPLICE_ROOT/token-standard/splice-api-token-transfer-instruction-v2"
+    "$SPLICE_ROOT/token-standard/splice-api-token-allocation-v2"
+    "$SPLICE_ROOT/token-standard/splice-api-token-allocation-request-v2"
+    "$SPLICE_ROOT/token-standard/splice-api-token-allocation-instruction-v2"
 )
 
 DAML_PROJECT_FILES="\
