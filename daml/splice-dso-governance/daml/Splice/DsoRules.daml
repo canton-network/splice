@@ -136,6 +136,15 @@ data SvInfo = SvInfo with
     participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
   deriving (Eq, Show)
 
+data SvNameInfo = SvNameInfo with
+    governanceParty : Optional Party
+    nodeParty : Optional Party
+    -- FIXME: consider if we need separate governance and node operator weights
+    voteWeight : Int -- ^ can be zero
+    rewardWeight : Int -- ^ can be zero
+  deriving (Eq, Show)
+
+
 -- | Information about offboarded svs
 data OffboardedSvInfo = OffboardedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.
@@ -516,13 +525,17 @@ data TrafficState = TrafficState with
 template DsoRules with
     dso : Party
     epoch : Int
+    -- FIXME: replace
     svs : Map.Map Party SvInfo
+    -- FIXME: revisit
     offboardedSvs : Map.Map Party OffboardedSvInfo
     dsoDelegate : Party
       -- ^ __Deprecated__ in favor of delegateless automation.
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
+    svNames : Map.Map Text
+
   where
     ensure
       config.numUnclaimedRewardsThreshold > 0
