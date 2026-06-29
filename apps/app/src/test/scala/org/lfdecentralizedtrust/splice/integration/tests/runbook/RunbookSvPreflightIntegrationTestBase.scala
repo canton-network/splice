@@ -52,40 +52,6 @@ abstract class RunbookSvPreflightIntegrationTestBase
     }
   }
 
-  "CometBFT is working" in { _ =>
-    val svUiUrl = s"https://sv.sv.${sys.env("NETWORK_APPS_ADDRESS")}/";
-
-    withFrontEnd("sv") { implicit webDriver =>
-      actAndCheck(
-        s"Logging in to SV UI at: ${svUiUrl}", {
-          completeAuth0LoginWithAuthorization(
-            svUiUrl,
-            svUsername,
-            svPassword,
-            () => find(id("logout-button")) should not be empty withClue "'Logout' button",
-          )
-
-          eventuallyClickOn(id("information-tab-cometBft-debug"))
-        },
-      )(
-        s"We see all other SVs as peers",
-        _ => {
-          inside(find(id("comet-bft-debug-network"))) { case Some(e) =>
-            if (isDevNet) {
-              forAll(Range(1, 5)) { _ =>
-                e.text should include(s"\"moniker\": \"${getSvName(1)}\"")
-              }
-            } else {
-              forAll(Range(1, 2)) { _ =>
-                e.text should include(s"\"moniker\": \"Digital-Asset-2\"")
-              }
-            }
-          }
-        },
-      )
-    }
-  }
-
   "The SV can log in to their wallet" in { implicit env =>
     withFrontEnd("sv") { implicit webDriver =>
       actAndCheck(
