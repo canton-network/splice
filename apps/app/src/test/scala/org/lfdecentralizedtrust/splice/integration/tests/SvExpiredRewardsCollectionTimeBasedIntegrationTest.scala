@@ -19,6 +19,7 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
 
   override def environmentDefinition =
     super.environmentDefinition
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllValidatorConfigs_(

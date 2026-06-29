@@ -36,6 +36,7 @@ class BatchedFeaturedAppActivityMarkerIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test exercises the FeaturedAppActivityMarker mechanism
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAutomationConfig(ConfigTransforms.ConfigurableApp.Sv)(

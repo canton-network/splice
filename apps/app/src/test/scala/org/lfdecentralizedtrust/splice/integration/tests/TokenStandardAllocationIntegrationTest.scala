@@ -51,6 +51,7 @@ class TokenStandardAllocationIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
       .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withAdditionalSetup(implicit env => {
         Seq(
