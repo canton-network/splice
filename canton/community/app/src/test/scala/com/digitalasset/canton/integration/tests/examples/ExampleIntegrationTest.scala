@@ -10,7 +10,7 @@ import com.digitalasset.canton.console.BufferedProcessLogger
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.environment.Environment
 import com.digitalasset.canton.integration.{
-  BaseIntegrationTest,
+  CantonBaseIntegrationTest,
   ConfigTransform,
   EnvironmentDefinition,
   IsolatedEnvironments,

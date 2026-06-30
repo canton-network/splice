@@ -218,14 +218,28 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           )}
 
           <form.AppField name="common.action">
-            {field => (
-              <field.TextField
-                title="Action"
-                id="set-amulet-config-rules-action"
-                muiTextFieldProps={{ disabled: true }}
-              />
-            )}
+            {field => <field.ProposalTypeField id="set-amulet-config-rules-action" />}
           </form.AppField>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+
+            {allAmuletConfigChanges.map((change, index) => (
+              <form.AppField name={`config.${change.fieldName}`} key={index}>
+                {field => (
+                  <field.ConfigField
+                    configChange={change}
+                    key={index}
+                    pendingFieldInfo={pendingConfigFields.find(
+                      f => f.fieldName === change.fieldName
+                    )}
+                  />
+                )}
+              </form.AppField>
+            ))}
+          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -276,26 +290,6 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           >
             {field => <field.TextField title="URL" id="set-amulet-config-rules-url" />}
           </form.AppField>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
-
-            {allAmuletConfigChanges.map((change, index) => (
-              <form.AppField name={`config.${change.fieldName}`} key={index}>
-                {field => (
-                  <field.ConfigField
-                    configChange={change}
-                    key={index}
-                    pendingFieldInfo={pendingConfigFields.find(
-                      f => f.fieldName === change.fieldName
-                    )}
-                  />
-                )}
-              </form.AppField>
-            ))}
-          </Box>
         </>
       )}
 

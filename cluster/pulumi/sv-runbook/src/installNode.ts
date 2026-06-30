@@ -43,6 +43,7 @@ import {
   failOnAppVersionMismatch,
   networkWideConfig,
   getAdditionalJvmOptions,
+  persistentHeapDumpsPvc,
   installSvAppSecrets,
   getSvAppApiAudience,
   getValidatorAppApiAudience,
@@ -321,6 +322,7 @@ async function installSvAndValidator(
     logAsyncFlush: svConfig.logging?.appsAsync,
     additionalJvmOptions: getAdditionalJvmOptions(svConfig.svApp?.additionalJvmOptions),
     resources: svConfig.svApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const svValuesWithSpecifiedAud: ChartValues = {
@@ -418,6 +420,7 @@ async function installSvAndValidator(
     },
     ...synchronizerValues,
     resources: svConfig.scanApp?.resources,
+    pvc: persistentHeapDumpsPvc(),
   };
 
   const scanValuesWithFixedTokens = {
@@ -471,6 +474,7 @@ async function installSvAndValidator(
     ...spliceInstanceNames,
     maxVettingDelay: networkWideConfig?.maxVettingDelay,
     resources: svConfig.validatorApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const validatorValuesWithSpecifiedAud: ChartValues = {

@@ -5,7 +5,8 @@ package org.lfdecentralizedtrust.splice.wallet.admin.http
 
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletAllocationCodegen
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletAllocationV1Codegen
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocationv2 as amuletAllocationV2Codegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorLicenseCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
@@ -49,7 +50,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.wallet.{UserWalletManager, UserWalletService}
 import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore}
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
-import TreasuryService.AmuletOperationDedupConfig
+import TreasuryService.{AmuletOperationDedupConfig, basicAccount}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
@@ -61,27 +62,24 @@ import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1.allocationinstructionresult_output.{
-  AllocationInstructionResult_Completed,
-  AllocationInstructionResult_Failed,
-  AllocationInstructionResult_Pending,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1.allocationinstructionresult_output as instructionresultv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.allocationinstructionresult_output as instructionresultv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.AnyContract
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
+  allocationinstructionv2,
   allocationrequestv1,
+  allocationrequestv2,
   allocationv1,
+  allocationv2,
   holdingv1,
   metadatav1,
   transferinstructionv1,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.transferinstructionresult_output.{
-  TransferInstructionResult_Completed,
-  TransferInstructionResult_Failed,
-  TransferInstructionResult_Pending,
+  transferinstructionv2,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AllocateAmuletRequest,
+  AllocateAmuletV2Request,
   AllocateDevelopmentFundCouponRequest,
   AllocateDevelopmentFundCouponResponse,
   CreateTokenStandardTransferRequest,
@@ -98,6 +96,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
 import scala.jdk.CollectionConverters.*
 import scala.reflect.ClassTag
+import cats.data.{Chain, OptionT}
 
 class HttpWalletHandler(
     override protected val walletManager: UserWalletManager,
@@ -879,7 +878,7 @@ class HttpWalletHandler(
         dedupDuration,
       )
       (for {
-        result <- userWallet.treasury.enqueueTokenStandardTransferOperation(
+        result <- userWallet.treasury.enqueueTokenStandardTransferOperationV1(
           Codec.tryDecode(Codec.Party)(request.receiverPartyId),
           BigDecimal(request.amount),
           request.description,
@@ -899,12 +898,34 @@ class HttpWalletHandler(
   ): d0.TransferInstructionResultResponse = {
     d0.TransferInstructionResultResponse(
       result.output match {
-        case completed: TransferInstructionResult_Completed =>
+        case completed: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Completed =>
           d0.TransferInstructionCompleted(
             completed.receiverHoldingCids.asScala.map(_.contractId).toVector
           )
-        case _: TransferInstructionResult_Failed => d0.TransferInstructionFailed()
-        case pending: TransferInstructionResult_Pending =>
+        case _: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Failed =>
+          d0.TransferInstructionFailed()
+        case pending: transferinstructionv1.transferinstructionresult_output.TransferInstructionResult_Pending =>
+          d0.TransferInstructionPending(pending.transferInstructionCid.contractId)
+        case x =>
+          throw new IllegalArgumentException(s"Unexpected TransferInstructionResult: $x")
+      },
+      result.senderChangeCids.asScala.map(_.contractId).toVector,
+      result.meta.values.asScala.toMap,
+    )
+  }
+
+  private def transferInstructionResultToResponse(
+      result: transferinstructionv2.TransferInstructionResult
+  ): d0.TransferInstructionResultResponse = {
+    d0.TransferInstructionResultResponse(
+      result.output match {
+        case completed: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed =>
+          d0.TransferInstructionCompleted(
+            completed.receiverHoldingCids.asScala.map(_.contractId).toVector
+          )
+        case _: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Failed =>
+          d0.TransferInstructionFailed()
+        case pending: transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Pending =>
           d0.TransferInstructionPending(pending.transferInstructionCid.contractId)
         case x =>
           throw new IllegalArgumentException(s"Unexpected TransferInstructionResult: $x")
@@ -919,6 +940,7 @@ class HttpWalletHandler(
   )()(tuser: WalletUserRequest): Future[WalletResource.ListTokenStandardTransfersResponse] = {
     implicit val WalletUserRequest(user, userWallet, traceContext) = tuser
     listContracts(
+      // Note that AmuletTransferInstruction implements both V1 and V2 of the Token Standard
       AmuletTransferInstruction.COMPANION,
       userWallet.store,
       contracts =>
@@ -941,7 +963,7 @@ class HttpWalletHandler(
         contractId
       )
       for {
-        choiceContext <- scanConnection.getTransferInstructionAcceptContext(requestCid)
+        choiceContext <- scanConnection.getTransferInstructionAcceptContextV2(requestCid)
         outcome <- exerciseWalletAction((installCid, _) => {
           Future.successful(
             installCid
@@ -1024,10 +1046,147 @@ class HttpWalletHandler(
     }
   }
 
+  override def createTokenStandardTransferV2(
+      respond: WalletResource.CreateTokenStandardTransferV2Response.type
+  )(request: CreateTokenStandardTransferRequest)(
+      extracted: WalletUserRequest
+  ): Future[WalletResource.CreateTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = extracted
+    withSpan(s"$workflowId.createTokenStandardTransferV2") { _ => _ =>
+      val commandId = CommandId(
+        "org.lfdecentralizedtrust.splice.wallet.createTokenStandardTransferV2",
+        Seq(userWallet.store.key.endUserParty),
+        request.trackingId,
+      )
+      val dedupConfig = AmuletOperationDedupConfig(
+        commandId,
+        dedupDuration,
+      )
+      (for {
+        result <- userWallet.treasury.enqueueTokenStandardTransferOperationV2(
+          Codec.tryDecode(Codec.Party)(request.receiverPartyId),
+          BigDecimal(request.amount),
+          request.description,
+          Codec.tryDecode(Codec.Timestamp)(request.expiresAt),
+          dedup = Some(dedupConfig),
+        )
+      } yield WalletResource.CreateTokenStandardTransferV2Response.OK(
+        transferInstructionResultToResponse(result)
+      )).transform(
+        HttpErrorHandler.onGrpcAlreadyExists("CreateTokenStandardTransfer duplicate command")
+      )
+    }
+  }
+
+  override def acceptTokenStandardTransferV2(
+      respond: WalletResource.AcceptTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      tUser: WalletUserRequest
+  ): Future[WalletResource.AcceptTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.acceptTokenStandardTransferV2") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionAcceptContextV2(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Accept(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Accept(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.AcceptTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
+
+  override def rejectTokenStandardTransferV2(
+      respond: WalletResource.RejectTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      tUser: WalletUserRequest
+  ): Future[WalletResource.RejectTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(_, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.rejectTokenStandardTransfer") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionRejectContextV2(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Reject(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Reject(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.RejectTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
+
+  override def withdrawTokenStandardTransferV2(
+      respond: WalletResource.WithdrawTokenStandardTransferV2Response.type
+  )(contractId: String)(
+      tUser: WalletUserRequest
+  ): Future[WalletResource.WithdrawTokenStandardTransferV2Response] = {
+    implicit val WalletUserRequest(_, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.withdrawTokenStandardTransferV2") { implicit traceContext => _ =>
+      val requestCid = Codec.tryDecodeJavaContractIdInterface(
+        transferinstructionv2.TransferInstruction.INTERFACE
+      )(
+        contractId
+      )
+      for {
+        choiceContext <- scanConnection.getTransferInstructionWithdrawContextV2(requestCid)
+        outcome <- exerciseWalletAction((installCid, _) => {
+          Future.successful(
+            installCid
+              .exerciseWalletAppInstall_TransferInstructionV2_Withdraw(
+                requestCid,
+                new transferinstructionv2.TransferInstruction_Withdraw(
+                  java.util.List.of(userWallet.store.key.endUserParty.toProtoPrimitive),
+                  choiceContext.toExtraArgs(),
+                ),
+              )
+          )
+        })(
+          userWallet,
+          disclosedContracts = _ => DisclosedContracts.fromProto(choiceContext.disclosedContracts),
+        )
+      } yield WalletResource.WithdrawTokenStandardTransferV2ResponseOK(
+        transferInstructionResultToResponse(outcome.exerciseResult)
+      )
+    }
+  }
+
   override def allocateAmulet(respond: WalletResource.AllocateAmuletResponse.type)(
       body: AllocateAmuletRequest
   )(extracted: WalletUserRequest): Future[WalletResource.AllocateAmuletResponse] = {
-    implicit val WalletUserRequest(user, userWallet, traceContext) = extracted
+    implicit val WalletUserRequest(_, userWallet, traceContext) = extracted
     withSpan(s"$workflowId.allocateAmulet") { _ => _ =>
       val now = walletManager.clock.now.toInstant
       val sender = userWallet.store.key.endUserParty
@@ -1076,18 +1235,95 @@ class HttpWalletHandler(
     }
   }
 
+  override def allocateAmuletV2(respond: WalletResource.AllocateAmuletV2Response.type)(
+      body: AllocateAmuletV2Request
+  )(extracted: WalletUserRequest): Future[WalletResource.AllocateAmuletV2Response] = {
+    implicit val WalletUserRequest(_, userWallet, traceContext) = extracted
+    withSpan(s"$workflowId.allocateAmuletV2") { _ => _ =>
+      val now = walletManager.clock.now.toInstant
+      val authorizer = userWallet.store.key.endUserParty
+      val authorizerAccount = TreasuryService.basicAccount(authorizer)
+      val commandId = CommandId(
+        "org.lfdecentralizedtrust.splice.wallet.allocateAmulet",
+        Seq(authorizer),
+        Seq(
+          body.settlement.settlementRef.id,
+          body.settlement.settlementRef.cid.getOrElse(""),
+        ) ++ body.settlement.executors,
+      )
+      val transferLegSides = body.transferLegSides.map { side =>
+        new allocationv2.TransferLegSide(
+          side.transferLegId,
+          side.side match {
+            case d0.TransferLegSide.Side.Receiverside =>
+              allocationv2.TransferSide.RECEIVERSIDE
+            case d0.TransferLegSide.Side.Senderside =>
+              allocationv2.TransferSide.SENDERSIDE
+            case other =>
+              throw Status.INVALID_ARGUMENT
+                .withDescription(
+                  s"$other is not a valid TransferLegSide. Must be one of ${d0.TransferLegSide.Side.values
+                      .map(_.value)}"
+                )
+                .asRuntimeException()
+          },
+          basicAccount(side.otherside),
+          Codec.tryDecode(Codec.JavaBigDecimal)(side.amount),
+          "Amulet",
+          new metadatav1.Metadata(side.meta.getOrElse(Map.empty).asJava),
+        )
+      }
+      val settlement =
+        new allocationv2.SettlementInfo(
+          body.settlement.executors.asJava,
+          body.settlement.settlementRef.id,
+          body.settlement.settlementRef.cid.map(cid => new AnyContract.ContractId(cid)).toJava,
+          new metadatav1.Metadata(body.settlement.meta.getOrElse(Map.empty).asJava),
+        )
+      val specification = new allocationv2.AllocationSpecification(
+        userWallet.store.key.dsoParty.toProtoPrimitive,
+        authorizerAccount,
+        transferLegSides.asJava,
+        body.settlement.settlementDeadline
+          .map(Codec.tryDecode(Codec.Timestamp))
+          .map(_.toInstant)
+          .toJava,
+        body.nextIterationFunding
+          .map(_.map { case (instrument, amount) =>
+            instrument -> Codec.tryDecode(Codec.BigDecimal)(amount).bigDecimal
+          }.asJava)
+          .toJava,
+        body.committed,
+        new metadatav1.Metadata(body.meta.getOrElse(Map.empty).asJava),
+      )
+      val dedupConfig = AmuletOperationDedupConfig(
+        commandId,
+        // Overriden to be low enough (5m) that we allow the same allocation to be re-created after being withdrawn
+        DedupDuration(com.google.protobuf.Duration.newBuilder().setSeconds(5L * 60L).build()),
+      )
+      for {
+        result <- userWallet.treasury.enqueueAmuletAllocationOperation(
+          settlement,
+          specification,
+          requestedAt = now,
+          dedup = Some(dedupConfig),
+        )
+      } yield WalletResource.AllocateAmuletV2Response.OK(allocationResultToResponse(result))
+    }
+  }
+
   private def allocationResultToResponse(
       result: allocationinstructionv1.AllocationInstructionResult
   ): d0.AllocateAmuletResponse = {
     d0.AllocateAmuletResponse(
       result.output match {
-        case completed: AllocationInstructionResult_Completed =>
+        case completed: instructionresultv1.AllocationInstructionResult_Completed =>
           d0.AllocationInstructionResultCompleted(allocationCid =
             completed.allocationCid.contractId
           )
-        case _: AllocationInstructionResult_Failed =>
+        case _: instructionresultv1.AllocationInstructionResult_Failed =>
           d0.AllocationInstructionResultFailed()
-        case pending: AllocationInstructionResult_Pending =>
+        case pending: instructionresultv1.AllocationInstructionResult_Pending =>
           d0.AllocationInstructionResultPending(allocationInstructionCid =
             pending.allocationInstructionCid.contractId
           )
@@ -1099,15 +1335,53 @@ class HttpWalletHandler(
     )
   }
 
+  private def allocationResultToResponse(
+      result: allocationinstructionv2.AllocationInstructionResult
+  ): d0.AllocateAmuletV2Response = {
+    d0.AllocateAmuletV2Response(
+      result.output match {
+        case completed: instructionresultv2.AllocationInstructionResult_Completed =>
+          d0.AllocationInstructionResultCompleted(allocationCid =
+            completed.allocationCid.contractId
+          )
+        case _: instructionresultv2.AllocationInstructionResult_Failed =>
+          d0.AllocationInstructionResultFailed()
+        case pending: instructionresultv2.AllocationInstructionResult_Pending =>
+          d0.AllocationInstructionResultPending(allocationInstructionCid =
+            pending.allocationInstructionCid.contractId
+          )
+        case x =>
+          throw new IllegalArgumentException(s"Unexpected AllocationInstructionResult: $x")
+      },
+      result.authorizerChangeCids
+        .getOrDefault("Amulet", java.util.List.of())
+        .asScala
+        .map(_.contractId)
+        .toVector,
+      result.meta.values.asScala.toMap,
+    )
+  }
+
   override def listAmuletAllocations(
       respond: WalletResource.ListAmuletAllocationsResponse.type
   )()(tUser: WalletUserRequest): Future[WalletResource.ListAmuletAllocationsResponse] = {
-    implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
-    listContracts(
-      amuletAllocationCodegen.AmuletAllocation.COMPANION,
-      userWallet.store,
-      contracts => d0.ListAllocationsResponse(contracts.map(d0.Allocation(_))),
-    )
+    implicit val WalletUserRequest(_, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.listAmuletAllocations") { implicit traceContext => _ =>
+      for {
+        v1Contracts <- userWallet.store.multiDomainAcsStore.listContracts(
+          amuletAllocationV1Codegen.AmuletAllocation.COMPANION
+        )
+        v2Contracts <- userWallet.store.multiDomainAcsStore.listContracts(
+          amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+        )
+      } yield {
+        val contracts = (Chain.fromSeq(v2Contracts) ++ Chain.fromSeq(v1Contracts))
+          .map(_.contract.toHttp)
+          .sortBy(_.createdAt)
+          .toVector
+        d0.ListAllocationsResponse(contracts.toVector.map(d0.AmuletAllocation(_)))
+      }
+    }
   }
 
   private def amuletToAmuletPosition(
@@ -1141,7 +1415,7 @@ class HttpWalletHandler(
     implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
     withSpan(s"$workflowId.withdrawAmuletAllocation") { implicit traceContext => _ =>
       val allocationCid = Codec.tryDecodeJavaContractId(
-        amuletAllocationCodegen.AmuletAllocation.COMPANION
+        amuletAllocationV1Codegen.AmuletAllocation.COMPANION
       )(
         contractId
       )
@@ -1149,7 +1423,7 @@ class HttpWalletHandler(
       for {
         allocation <- store.multiDomainAcsStore
           .getContractById(
-            amuletAllocationCodegen.AmuletAllocation.COMPANION
+            amuletAllocationV1Codegen.AmuletAllocation.COMPANION
           )(allocationCid)
           .map(
             _.toAssignedContract.getOrElse(
@@ -1158,7 +1432,7 @@ class HttpWalletHandler(
                 .asRuntimeException()
             )
           )
-        context <- scanConnection.getAllocationWithdrawContext(
+        context <- scanConnection.getAllocationWithdrawContextV1(
           allocation.contractId.toInterface(allocationv1.Allocation.INTERFACE)
         )
         result <- userWallet.connection
@@ -1177,6 +1451,96 @@ class HttpWalletHandler(
       } yield WalletResource.WithdrawAmuletAllocationResponseOK(
         d0.AmuletAllocationWithdrawResult(
           result.exerciseResult.senderHoldingCids.asScala.map(_.contractId).toVector,
+          result.exerciseResult.meta.values.asScala.toMap,
+        )
+      )
+    }
+  }
+
+  override def withdrawAmuletAllocationV2(
+      respond: WalletResource.WithdrawAmuletAllocationV2Response.type
+  )(contractId: String)(
+      tUser: WalletUserRequest
+  ): Future[WalletResource.WithdrawAmuletAllocationV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.withdrawAmuletAllocationV2") { implicit traceContext => _ =>
+      val allocationV2Cid = Codec.tryDecodeJavaContractId(
+        amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+      )(
+        contractId
+      )
+      val allocationV1Cid = Codec.tryDecodeJavaContractId(
+        amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+      )(
+        contractId
+      )
+      val store = userWallet.store
+      val actAs = Seq(store.key.validatorParty, store.key.endUserParty)
+      val readAs = Seq.empty
+      for {
+        context <- scanConnection.getAllocationWithdrawContextV2(
+          new allocationv2.Allocation.ContractId(contractId)
+        )
+        exerciseArgs = new allocationv2.Allocation_Withdraw(
+          java.util.List.of(store.key.endUserParty.toProtoPrimitive),
+          context.toExtraArgs(),
+        )
+        result <- OptionT(
+          store.multiDomainAcsStore
+            .lookupContractById(
+              amuletAllocationV2Codegen.AmuletAllocationV2.COMPANION
+            )(allocationV2Cid)
+        ).subflatMap(_.toAssignedContract)
+          .semiflatMap { v2 =>
+            userWallet.connection
+              .submit(
+                actAs,
+                readAs,
+                // This returns a type containing `this.type`, which means that it doesn't match v1.
+                // The common type is thus the one from the yieldResult
+                v2.exercise(
+                  _.toInterface(allocationv2.Allocation.INTERFACE)
+                    .exerciseAllocation_Withdraw(exerciseArgs)
+                ),
+              )
+              .noDedup
+              .withSynchronizerId(v2.domain)
+              .withDisclosedContracts(DisclosedContracts.fromProto(context.disclosedContracts))
+              .yieldResult()
+          }
+          .orElse(
+            OptionT(
+              store.multiDomainAcsStore
+                .getContractById(
+                  amuletAllocationV1Codegen.AmuletAllocation.COMPANION
+                )(allocationV1Cid)
+                .map(_.toAssignedContract)
+            ).semiflatMap { v1 =>
+              userWallet.connection
+                .submit(
+                  actAs,
+                  readAs,
+                  v1.exercise(
+                    _.toInterface(allocationv2.Allocation.INTERFACE)
+                      .exerciseAllocation_Withdraw(exerciseArgs)
+                  ),
+                )
+                .noDedup
+                .withSynchronizerId(v1.domain)
+                .withDisclosedContracts(DisclosedContracts.fromProto(context.disclosedContracts))
+                .yieldResult()
+            }
+          )
+          .getOrElse(
+            throw Status.Code.FAILED_PRECONDITION.toStatus
+              .withDescription(s"AmuletAllocation is not assigned to a synchronizer.")
+              .asRuntimeException()
+          )
+      } yield WalletResource.WithdrawAmuletAllocationV2ResponseOK(
+        d0.AmuletAllocationV2WithdrawResult(
+          result.exerciseResult.authorizerHoldingCids.asScala.map { case (instrumentId, holdings) =>
+            instrumentId -> holdings.asScala.map(_.contractId).toVector
+          }.toMap,
           result.exerciseResult.meta.values.asScala.toMap,
         )
       )
@@ -1248,17 +1612,26 @@ class HttpWalletHandler(
       respond: WalletResource.ListAllocationRequestsResponse.type
   )()(tuser: WalletUserRequest): Future[WalletResource.ListAllocationRequestsResponse] = {
     implicit val WalletUserRequest(user, userWallet, traceContext) = tuser
-    withSpan(s"$workflowId.listInterfaces") { _ => _ =>
+    withSpan(s"$workflowId.listAllocationRequests") { _ => _ =>
       for {
-        contracts <- userWallet.store.multiDomainAcsStore.listInterfaceViews(
+        v1Contracts <- userWallet.store.multiDomainAcsStore.listInterfaceViews(
           allocationrequestv1.AllocationRequest.INTERFACE
         )
-      } yield d0.ListAllocationRequestsResponse(
-        contracts
+        v2Contracts <- userWallet.store.multiDomainAcsStore.listInterfaceViews(
+          allocationrequestv2.AllocationRequest.INTERFACE
+        )
+      } yield {
+        // If a contract implements both V1 and V2, V2 will win
+        val contracts = (Chain.fromSeq(v2Contracts) ++ Chain.fromSeq(v1Contracts))
           .map(_.toHttp)
+          .distinctBy(_.contractId)
+          .sortBy(_.createdAt)
           .toVector
-          .map(d0.AllocationRequest(_))
-      )
+
+        d0.ListAllocationRequestsResponse(
+          contracts.map(d0.AllocationRequest(_))
+        )
+      }
     }
   }
 
@@ -1287,7 +1660,7 @@ class HttpWalletHandler(
                 .asRuntimeException()
             ).toAssignedContract.getOrElse(
               throw Status.Code.FAILED_PRECONDITION.toStatus
-                .withDescription(s"AmuletAllocation is not assigned to a synchronizer.")
+                .withDescription(s"AllocationRequest is not assigned to a synchronizer.")
                 .asRuntimeException()
             )
           )
@@ -1306,6 +1679,55 @@ class HttpWalletHandler(
           .withSynchronizerId(allocationRequest.domain)
           .yieldResult()
       } yield WalletResource.RejectAllocationRequestResponseOK(
+        d0.ChoiceExecutionMetadata(result.exerciseResult.meta.values.asScala.toMap)
+      )
+    }
+  }
+
+  override def rejectAllocationRequestV2(
+      respond: WalletResource.RejectAllocationRequestV2Response.type
+  )(contractId: String)(
+      tUser: WalletUserRequest
+  ): Future[WalletResource.RejectAllocationRequestV2Response] = {
+    implicit val WalletUserRequest(user, userWallet, traceContext) = tUser
+    withSpan(s"$workflowId.rejectAllocationRequestV2") { implicit traceContext => _ =>
+      val allocationRequestCid = Codec.tryDecodeJavaContractIdInterface(
+        allocationrequestv2.AllocationRequest.INTERFACE
+      )(
+        contractId
+      )
+      val store = userWallet.store
+      for {
+        allocationRequest <- store.multiDomainAcsStore
+          .findInterfaceViewByContractId(
+            allocationrequestv2.AllocationRequest.INTERFACE
+          )(allocationRequestCid)
+          .map(
+            _.getOrElse(
+              throw Status.NOT_FOUND
+                .withDescription(s"No AllocationRequest v2 with contract id $contractId found.")
+                .asRuntimeException()
+            ).toAssignedContract.getOrElse(
+              throw Status.Code.FAILED_PRECONDITION.toStatus
+                .withDescription(s"AllocationRequest v2 is not assigned to a synchronizer.")
+                .asRuntimeException()
+            )
+          )
+        result <- userWallet.connection
+          .submit(
+            Seq(store.key.validatorParty, store.key.endUserParty),
+            Seq.empty,
+            allocationRequest.exercise(
+              _.exerciseAllocationRequest_Reject(
+                java.util.List.of(store.key.endUserParty.toProtoPrimitive),
+                ChoiceContextWithDisclosures.emptyExtraArgs,
+              )
+            ),
+          )
+          .noDedup
+          .withSynchronizerId(allocationRequest.domain)
+          .yieldResult()
+      } yield WalletResource.RejectAllocationRequestV2ResponseOK(
         d0.ChoiceExecutionMetadata(result.exerciseResult.meta.values.asScala.toMap)
       )
     }

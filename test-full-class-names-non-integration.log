@@ -5,6 +5,7 @@ org.lfdecentralizedtrust.splice.automation.RoundBasedRewardTriggerTest
 org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTriggerStoreTest
 org.lfdecentralizedtrust.splice.build_tools.DarLockCheckerTest
 org.lfdecentralizedtrust.splice.config.SpliceConfigTest
+org.lfdecentralizedtrust.splice.config.SpliceDbConfigTest
 org.lfdecentralizedtrust.splice.config.ThresholdsTest
 org.lfdecentralizedtrust.splice.environment.ActiveContractsRestartTest
 org.lfdecentralizedtrust.splice.environment.CommandCircuitBreakerTest
@@ -19,6 +20,7 @@ org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringCompl
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
+org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfigTest
 org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputationTest
 org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputsTest
 org.lfdecentralizedtrust.splice.scan.store.DbAppActivityRecordStoreTest
@@ -45,6 +47,7 @@ org.lfdecentralizedtrust.splice.store.db.DbSvDsoStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
+org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNodeTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftRequestSignerTest
 org.lfdecentralizedtrust.splice.sv.onboarding.SequencerBftPeerReconcilerSpec

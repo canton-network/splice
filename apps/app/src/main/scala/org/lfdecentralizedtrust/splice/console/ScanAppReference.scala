@@ -53,8 +53,11 @@ import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, Synchro
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
+  allocationinstructionv2,
   allocationv1,
+  allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
@@ -645,11 +648,33 @@ abstract class ScanAppReference(
     }
   }
 
+  def getTransferFactoryV2(
+      choiceArgs: transferinstructionv2.TransferFactory_Transfer
+  ): (
+      FactoryChoiceWithDisclosures[
+        transferinstructionv2.TransferFactory.ContractId,
+        transferinstructionv2.TransferFactory_Transfer,
+      ],
+      transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+  ) = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferFactoryV2(choiceArgs))
+    }
+  }
+
   def getTransferInstructionAcceptContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetTransferInstructionAcceptContext(transferInstructionId))
+    }
+  }
+
+  def getTransferInstructionAcceptContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionAcceptContextV2(transferInstructionId))
     }
   }
 
@@ -661,11 +686,27 @@ abstract class ScanAppReference(
     }
   }
 
+  def getTransferInstructionRejectContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionRejectContextV2(transferInstructionId))
+    }
+  }
+
   def getTransferInstructionWithdrawContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetTransferInstructionWithdrawContext(transferInstructionId))
+    }
+  }
+
+  def getTransferInstructionWithdrawContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionWithdrawContextV2(transferInstructionId))
     }
   }
 
@@ -710,11 +751,33 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationFactoryV2(
+      choiceArgs: allocationinstructionv2.AllocationFactory_Allocate
+  ): FactoryChoiceWithDisclosures[
+    allocationinstructionv2.AllocationFactory.ContractId,
+    allocationinstructionv2.AllocationFactory_Allocate,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationFactoryV2(choiceArgs))
+    }
+  }
+
   def getAllocationTransferContext(
       allocationId: allocationv1.Allocation.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationTransferContext(allocationId))
+    }
+  }
+
+  def getSettlementFactoryV2(
+      choiceArgs: allocationv2.SettlementFactory_SettleBatch
+  ): FactoryChoiceWithDisclosures[
+    allocationv2.SettlementFactory.ContractId,
+    allocationv2.SettlementFactory_SettleBatch,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetSettlementFactoryV2(choiceArgs))
     }
   }
 
@@ -726,11 +789,27 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationV2CancelContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationV2CancelContext(allocationId))
+    }
+  }
+
   def getAllocationWithdrawContext(
       allocationId: allocationv1.Allocation.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationWithdrawContext(allocationId))
+    }
+  }
+
+  def getAllocationV2WithdrawContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationWithdrawContextV2(allocationId))
     }
   }
 
@@ -854,6 +933,16 @@ abstract class ScanAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.GetActivePhysicalSynchronizerSerial()
+      )
+    }
+
+  @Help.Summary(
+    "Retrieve information on the next logical synchronizer upgrade (LSU)"
+  )
+  def getLsu(): Option[HttpScanAppClient.Lsu] =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetLsu()
       )
     }
 }

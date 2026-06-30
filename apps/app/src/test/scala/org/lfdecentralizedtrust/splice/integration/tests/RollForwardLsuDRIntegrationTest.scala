@@ -85,7 +85,7 @@ class RollForwardLsuDRIntegrationTest
   val trafficExportTimeFile = File.newTemporaryFile()
 
   // This needs to be long enough in the future that we can start Canton and initialize for SVs.
-  val maxSequencingTime = CantonTimestamp.now().plusSeconds(180)
+  val maxSequencingTime = CantonTimestamp.now().plusSeconds(210)
   // 5s chosen by fair dice roll
   val lowerBoundSequencingTimeExclusive = maxSequencingTime.plusSeconds(5)
   val upgradeTime = lowerBoundSequencingTimeExclusive
@@ -140,7 +140,7 @@ class RollForwardLsuDRIntegrationTest
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v34,
+                          ProtocolVersion.v35,
                           exportTimes = Some(
                             SvOnboardingConfig.RollForwardLsuTimestampConfig(
                               topologyExportTime = LsuRollForwardTimestamp.TimestampFromFile(

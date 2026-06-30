@@ -24,6 +24,7 @@ import {
   participantBootstrapDumpSecretName,
   ParticipantPruningConfig,
   PersistenceConfig,
+  persistentHeapDumpsPvc,
   pvcSuffix,
   spliceInstanceNames,
   standardStorageClassName,
@@ -164,6 +165,7 @@ export async function installValidatorApp(
       maxBalanceUSD: config.sweep.maxBalance,
       minBalanceUSD: config.sweep.minBalance,
       receiver: config.sweep.toParty,
+      useTransferPreapproval: config.sweep.useTransferPreapproval,
     },
   };
 
@@ -246,6 +248,7 @@ export async function installValidatorApp(
         volumeStorageClass: standardStorageClassName,
         volumeName: `domain-migration-validator-${pvcSuffix}`,
       },
+      persistentDataPvc: persistentHeapDumpsPvc(),
     },
     config.version,
     { dependsOn }

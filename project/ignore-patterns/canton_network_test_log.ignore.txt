@@ -161,4 +161,4 @@ Gave up waiting for.*as we are shutting down
 Ryuk has been disabled
 
 # Calls to this have retries; if the retries were not enough, we'll get a louder error.
-api/sv/v0/onboard/validator (POST) resulted in a timeout
+api/sv/v0/onboard/validator \(POST\) resulted in a timeout

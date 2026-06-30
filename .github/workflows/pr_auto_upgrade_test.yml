@@ -7,21 +7,15 @@ on:
     paths:
       - 'cluster/pulumi/**/package.json'
       - 'nix/**'
-permissions:
+permissions: # permissions have to match pr_cluster_test permissions as called workflows cannot escalate their own permissions
   contents: read
   issues: read
-  pull-requests: write # To comment back on the PR
+  pull-requests: write
+  id-token: write
 jobs:
   request_upgrade_test:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Add a comment to the PR to request an upgrade test
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script : |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "Requesting an /upgrade_test due to changes in Pulumi or Nix package versions."
-            });
+    uses: ./.github/workflows/pr_cluster_test.yml
+    secrets: inherit
+    with:
+      workflow: upgrade_test
+      pr_number: ${{ github.event.pull_request.number }}

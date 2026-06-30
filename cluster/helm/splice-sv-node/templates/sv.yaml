@@ -43,8 +43,8 @@ spec:
           env:
             - name: JAVA_TOOL_OPTIONS
               value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
-            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens) | indent 12}}
-            {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator") | indent 12}}
+            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
+            {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "validator" "keyName" "validator" "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
             - name: SPLICE_APP_SV_PARTICIPANT_ADDRESS
               value: {{ .Values.participantAddress | quote }}
             {{- if .Values.joinWithKeyOnboarding }}
@@ -55,17 +55,25 @@ spec:
                   sv-client.admin-api.url = "{{ .Values.joinWithKeyOnboarding.sponsorApiUrl }}"
                 }
             - name: SPLICE_APP_SV_PUBLIC_KEY
+              {{- if ((.Values.secretOverrides).svPublicKey) }}
+              value: {{ .Values.secretOverrides.svPublicKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: public
                   name: "splice-app-sv-key"
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_SV_PRIVATE_KEY
+              {{- if ((.Values.secretOverrides).svPrivateKey) }}
+              value: {{ .Values.secretOverrides.svPrivateKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: private
                   name: "splice-app-sv-key"
                   optional: false
+              {{- end }}
             {{- else if .Values.rollForwardLsu }}
             - name: ADDITIONAL_CONFIG_SV_ONBOARDING
               value: |
@@ -167,10 +175,14 @@ spec:
                   }
                 }
             - name: SPLICE_APP_POSTGRES_PASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ $.Values.persistence.secretName }}
                   key: postgresPassword
+              {{- end }}
             {{- end }}
             - name: ADDITIONAL_CONFIG_GLOBAL_DOMAIN_UPGRADE_DUMP_PATH
               value: |
@@ -349,17 +361,25 @@ spec:
             {{- end }}
             {{- if $anyGovernanceKey }}
             - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY
+              {{- if ((.Values.cometBFT).secretOverrides).governancePublicKey }}
+              value: {{ .Values.cometBFT.secretOverrides.governancePublicKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: public
                   name: "splice-app-sv-cometbft-governance-key"
                   optional: false
+              {{- end }}
             - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY
+              {{- if ((.Values.cometBFT).secretOverrides).governancePrivateKey }}
+              value: {{ .Values.cometBFT.secretOverrides.governancePrivateKey | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: private
                   name: "splice-app-sv-cometbft-governance-key"
                   optional: false
+              {{- end }}
             {{- end }}
             - name: SPLICE_APP_UI_NETWORK_NAME
               value: {{ .Values.spliceInstanceNames.networkName | quote }}
@@ -408,10 +428,14 @@ spec:
                   prefix = {{ .prefix | quote }}
                 }
             - name: SPLICE_APP_SV_IDS_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+              {{- if ((.bucket).secretOverrides).jsonCredentials }}
+              value: {{ .bucket.secretOverrides.jsonCredentials | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: "json-credentials"
                   name: {{ .bucket.secretName }}
+              {{- end }}
             {{- end }}
             {{- with .Values.participantIdentitiesDumpImport }}
             - name: ADDITIONAL_CONFIG_SPLICE_APP_SV_PARTICIPANT_IDENTITIES_DUMP_IMPORT
@@ -510,10 +534,14 @@ spec:
                   backup-interval = {{ .backupInterval | quote }}
                 }
             - name: SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+              {{- if ((.location.bucket).secretOverrides).jsonCredentials }}
+              value: {{ .location.bucket.secretOverrides.jsonCredentials | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: "json-credentials"
                   name: {{ .location.bucket.secretName }}
+              {{- end }}
             {{- end }}
           ports:
             - name: sv-api
@@ -552,6 +580,10 @@ spec:
               mountPath: /domain-upgrade-dump
           {{- end }}
           {{- end }}
+          {{- if .Values.persistentDataPvc }}
+            - name: sv-app-volume
+              mountPath: /persistent-data
+          {{- end }}
           {{- with .Values.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -560,10 +592,14 @@ spec:
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -590,6 +626,11 @@ spec:
         - name: domain-upgrade-dump-volume
           persistentVolumeClaim:
             claimName: {{ .Values.pvc.volumeName }}
+      {{- end }}
+      {{- if .Values.persistentDataPvc }}
+        - name: sv-app-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-sv-app-pvc
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -638,6 +679,25 @@ spec:
       storage: 20G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
 {{- end }}
+{{- if .Values.persistentDataPvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-sv-app-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $appIdentifier) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistentDataPvc.size }}
+  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -649,5 +709,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

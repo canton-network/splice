@@ -3,8 +3,18 @@
   "type": "object",
   "required": ["imageName"],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageName": {
       "type": "string"
+    },
+    "secretOverrides": {
+      "type": "object",
+      "properties": {
+        "svPublicKey": { "type": "string" },
+        "svPrivateKey": { "type": "string" }
+      }
     },
     "ui": {
       "type": "object",
@@ -12,6 +22,17 @@
       "properties": {
         "imageName": {
           "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -312,6 +333,12 @@
                 },
                 "secretName": {
                   "type": "string"
+                },
+                "secretOverrides": {
+                  "type": "object",
+                  "properties": {
+                    "jsonCredentials": { "type": "string" }
+                  }
                 }
               },
               "required": [
@@ -445,6 +472,32 @@
             },
             "targetAudience": {
               "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientSecret": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -482,6 +535,12 @@
             },
             "initImageName": {
               "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": { "type": "string" }
+              }
             }
           }
         },

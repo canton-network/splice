@@ -50,7 +50,7 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
 
   const actionInput = await screen.findByTestId(testId);
   const action = createProposalActions.find(a => a.value === actionValue);
-  expect(actionInput.getAttribute('value')).toBe(action!.name);
+  expect(actionInput.textContent).toBe(action!.name);
 }
 
 describe('Create Proposal', () => {

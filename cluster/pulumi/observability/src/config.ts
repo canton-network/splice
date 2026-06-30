@@ -57,6 +57,15 @@ const MonitoringConfigSchema = z
             overMinutes: z.number(),
           }),
         }),
+        dsoMissedConfirmations: z.object({
+          // Fraction (0-1) of confirmation requests (as measured by the mediator) in
+          // which the DSO party may miss its confirmation within the rolling window
+          // before the alert fires.
+          threshold: z.number(),
+          // Rolling window (in minutes) over which the DSO party missed confirmation
+          // rate is computed.
+          windowMinutes: z.number(),
+        }),
         cloudSql: z.object({
           maintenance: z.boolean(),
         }),

@@ -62,6 +62,9 @@ monitoring:
         thresholdPerNamespace: 0.05
       deployment:
         pendingPeriodMinutes: 5
+      dsoMissedConfirmations:
+        threshold: 0.01
+        windowMinutes: 10
       gcpQuotas:
         excludedApproachingMetrics: []
         excludedMetrics:
@@ -89,6 +92,7 @@ monitoring:
         excludedConnections: []
         excludedRequests:
           - 'getTransferInstructionAcceptContext'
+          - 'getOpenAndIssuingMiningRounds'
         successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
@@ -274,6 +278,9 @@ sv:
           type: 'unlimited'
         /api/scan/v0/internal/reward-accounting-process:
           name: 'reward-accounting-process'
+          type: 'unlimited'
+        /api/scan/v0/lsu:
+          name: 'lsu'
           type: 'unlimited'
         /api/scan/v0/migrations:
           name: 'migrations-schedule'

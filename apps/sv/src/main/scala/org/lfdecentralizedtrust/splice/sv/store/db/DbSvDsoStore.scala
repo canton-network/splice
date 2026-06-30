@@ -312,6 +312,27 @@ class DbSvDsoStore(
     } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
   }
 
+  override def listAllConfirmations(
+      limit: Limit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[Confirmation.ContractId, Confirmation]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            Confirmation.COMPANION,
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listAllConfirmations",
+        )
+      limited = applyLimit("listAllConfirmations", limit, result)
+    } yield limited.map(contractFromRow(Confirmation.COMPANION)(_))
+  }
+
   override def listAppRewardCouponsOnDomain(
       round: Long,
       synchronizerId: SynchronizerId,
@@ -772,6 +793,43 @@ class DbSvDsoStore(
       assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
     )
 
+  override def listProcessRewardsV2Sample(dryRun: Boolean, limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+              "sample."
+            )}
+             from (
+               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               from #${DsoTables.acsTableName} acs
+               where acs.store_id = $acsStoreId
+                 and acs.migration_id = $domainMigrationId
+                 and acs.package_name = ${splice.amulet.rewardaccountingv2.ProcessRewardsV2.PACKAGE_NAME}
+                 and acs.template_id_qualified_name = ${QualifiedName(
+              splice.amulet.rewardaccountingv2.ProcessRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and acs.create_arguments->>'dryRun' = ${dryRun.toString}
+               limit 1000
+             ) sample
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+          "listProcessRewardsV2Sample",
+        )
+      limited = applyLimit("listProcessRewardsV2Sample", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+    )
+
   override def listRewardCouponsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[
@@ -1152,6 +1210,52 @@ class DbSvDsoStore(
       }
     }
 
+  override def listExpiredAmuletAllocationsV2(
+      ignoredParties: Set[PartyId]
+  ): ListExpiredContracts[
+    splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+    splice.amuletallocationv2.AmuletAllocationV2,
+  ] = (now, limit) =>
+    implicit tc => {
+      val _ = tc
+      // `not (json_array ?| string_array)` means "arrays do not overlap"
+      // the first ? is to escape the second
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause(
+          "create_arguments->'allocation'->'authorizer'->>'owner'",
+          ignoredParties,
+        ) ++ sql" and not (create_arguments->'settlement'->'executors' ??| ${ignoredParties
+            .map(p => lengthLimited(p.toProtoPrimitive))
+            .toArray[String2066]})").toActionBuilder
+      } else {
+        sql""
+      }
+
+      waitUntilAcsIngested {
+        for {
+          synchronizerId <- getDsoRules().map(_.domain)
+          rows <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
+              additionalWhere = (sql"""
+                and assigned_domain = $synchronizerId
+                and acs.contract_expires_at < ${now}
+              """ ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredAmuletAllocationsV2",
+          )
+        } yield rows.map(
+          assignedContractFromRow(
+            splice.amuletallocationv2.AmuletAllocationV2.COMPANION
+          )(_)
+        )
+      }
+    }
+
   override def listExpiredAmuletTransferInstructions(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
@@ -1245,6 +1349,40 @@ class DbSvDsoStore(
       }
     }
 
+  override def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[RewardCouponV2.ContractId, RewardCouponV2] = {
+    (now, limit) => implicit tc =>
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      // Ignore only if (reward_beneficiary_is_observer = true)
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and (reward_beneficiary_is_observer = false or (" ++
+          notInClause("reward_party", ignoredParties) ++
+          sql" and (create_arguments->>'beneficiary' is null or " ++
+          notInClause("create_arguments->>'beneficiary'", ignoredParties) ++
+          sql")))").toActionBuilder
+      } else {
+        sql""
+      }
+      waitUntilAcsIngested {
+        for {
+          result <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              RewardCouponV2.COMPANION,
+              additionalWhere =
+                (sql"""and acs.contract_expires_at < $now""" ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredRewardCouponsV2",
+          )
+          limited = applyLimit("listExpiredRewardCouponsV2", limit, result)
+        } yield limited.map(assignedContractFromRow(RewardCouponV2.COMPANION)(_))
+      }
+  }
+
   override def listMemberTrafficContracts(
       memberId: Member,
       synchronizerId: SynchronizerId,
@@ -1269,6 +1407,98 @@ class DbSvDsoStore(
     } yield applyLimit("listMemberTrafficContracts", limit, result).map(
       contractFromRow(MemberTraffic.COMPANION)(_)
     )
+  }
+
+  override def listNonObserverRewardCouponsV2ProvidersSample(
+      limit: Limit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[PartyId]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          // To do the `order by random()` the dedup/distinct must be a subquery.
+          // Only the reward_party is fetched here to keep the query index-only.
+          (sql"""
+             select reward_party
+             from (
+               select distinct on (reward_party) reward_party
+               from #${DsoTables.acsTableName}
+               where store_id = $acsStoreId
+                 and migration_id = $domainMigrationId
+                 and package_name = ${RewardCouponV2.PACKAGE_NAME}
+                 and template_id_qualified_name = ${QualifiedName(
+              RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and reward_beneficiary_is_observer = false
+               order by reward_party
+             ) sub
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[String],
+          "listNonObserverRewardCouponsV2ProvidersSample",
+        )
+    } yield applyLimit("listNonObserverRewardCouponsV2ProvidersSample", limit, result)
+      .map(PartyId.tryFromProtoPrimitive)
+  }
+
+  override def listNonObserverRewardCouponsV2ForProvider(
+      provider: PartyId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            RewardCouponV2.COMPANION,
+            where =
+              sql"reward_beneficiary_is_observer = false and reward_party = ${lengthLimited(provider.toProtoPrimitive)}",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listNonObserverRewardCouponsV2ForProvider",
+        )
+    } yield applyLimit("listNonObserverRewardCouponsV2ForProvider", limit, result).map(
+      contractFromRow(RewardCouponV2.COMPANION)(_)
+    )
+  }
+
+  override def listTopNonObserverRewardCouponV2Providers(
+      couponScanLimit: Int,
+      maxProviders: Int,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[(PartyId, Long)]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select reward_party, count(*) as coupon_count
+             from (
+               select reward_party
+               from #${DsoTables.acsTableName}
+               where store_id = $acsStoreId
+                 and migration_id = $domainMigrationId
+                 and package_name = ${RewardCouponV2.PACKAGE_NAME}
+                 and template_id_qualified_name = ${QualifiedName(
+              RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and reward_beneficiary_is_observer = false
+               limit $couponScanLimit
+             ) sub
+             group by reward_party
+             order by coupon_count desc
+             limit $maxProviders
+           """).as[(String, Long)],
+          "listTopNonObserverRewardCouponV2Providers",
+        )
+    } yield result.map { case (party, count) =>
+      PartyId.tryFromProtoPrimitive(party) -> count
+    }
   }
 
   override def listSvAmuletPriceVotes(limit: Limit = defaultLimit)(implicit

@@ -42,6 +42,8 @@ trait ExternalPartyWalletStore extends TransferInputStore with NamedLogging {
   /** The key identifying the parties considered by this store. */
   def key: ExternalPartyWalletStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   def listAmulets(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[Amulet.ContractId, Amulet]]] =

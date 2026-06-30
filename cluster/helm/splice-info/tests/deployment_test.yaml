@@ -37,3 +37,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SERIAL_ID')].value
           value: "101"
+
+  - it: "injects custom serviceAccountName into Deployment when specified"
+    template: deployment.yaml
+    set:
+      serviceAccountName: "custom-splice-info-sa"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-splice-info-sa"

@@ -4,6 +4,8 @@
 module Splice.Scripts.TestAmuletRulesTransferLimits where
 
 import DA.Time
+import DA.Foldable (foldMap)
+
 import Daml.Script
 import Splice.AmuletRules
 import Splice.Expiry
@@ -20,8 +22,9 @@ testTransferExceedsMaxInputs = do
       pure $ InputAmulet amulet
     paymentContext <- getPaymentTransferContext app alice
     -- More than the maximum number of inputs
-    submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/maximum-inputs-exceeded")
-      [alice.primaryParty, bob.primaryParty, charlie.primaryParty, app.dso] [] $
+    submitMustFail''
+      (expectErrorId "splice.lfdecentralizedtrust.org/maximum-inputs-exceeded")
+      (foldMap actAs [alice.primaryParty, bob.primaryParty, charlie.primaryParty, app.dso]) $
         exerciseCmd paymentContext.amuletRules AmuletRules_Transfer with
           transfer = Transfer with
             sender = alice.primaryParty
@@ -37,12 +40,12 @@ testTransferExceedsMaxOutputs: Script ()
 testTransferExceedsMaxOutputs = do
     DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
     amulet <- tap app alice 100.0
-    let outputAmulet = TransferOutput with receiver = alice.primaryParty; amount = 1.0; lock = None; receiverFeeRatio = 0.0
+    let outputAmulet = TransferOutput with receiver = alice.primaryParty; amount = 1.0; lock = None; receiverFeeRatio = 0.0; meta = None
         outputAmulets = map (const outputAmulet) [1..101]
     paymentContext <- getPaymentTransferContext app alice
     -- More than the maximum number of outputs
-    submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/maximum-outputs-exceeded")
-      [alice.primaryParty, bob.primaryParty, charlie.primaryParty, app.dso] [] $
+    submitMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/maximum-outputs-exceeded")
+      (foldMap actAs [alice.primaryParty, bob.primaryParty, charlie.primaryParty, app.dso]) $
         exerciseCmd paymentContext.amuletRules AmuletRules_Transfer with
           transfer = Transfer with
             sender = alice.primaryParty
@@ -67,8 +70,8 @@ testTransferExceedsMaxLockHolders = do
     let bobParties = map (.primaryParty) bobs
     -- More than the allowed number of lock holders
     -- Note: here we don't check the errorId as in other cases, since this error originates from a require statement
-    submitMultiMustFail'' (expectMessageContains "Fewer than the allowed number of lock holders")
-      ([alice.primaryParty, charlie.primaryParty, app.dso] ++ bobParties) [] $
+    submitMustFail'' (expectMessageContains "Fewer than the allowed number of lock holders")
+      (foldMap actAs ([alice.primaryParty, charlie.primaryParty, app.dso] ++ bobParties)) $
         exerciseCmd paymentContext.amuletRules AmuletRules_Transfer with
           transfer = Transfer with
             sender = alice.primaryParty
@@ -83,6 +86,7 @@ testTransferExceedsMaxLockHolders = do
                     expiresAt = now `addRelTime` (minutes 1)
                     optContext = None
                   receiverFeeRatio = 0.0
+                  meta = None
               ]
             beneficiaries = None
           context = paymentContext.context

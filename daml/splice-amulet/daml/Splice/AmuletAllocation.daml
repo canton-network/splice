@@ -1,74 +1,143 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
+-- | V1 amulet allocation.
 module Splice.AmuletAllocation (
   AmuletAllocation(..),
-  AmuletAllocation_DsoExpireResult,
-  allocationToTwoStepTransfer,
+
+  -- * Construction
+  mkAllocationLockContext,
+
+  -- * Expiry
   AmuletAllocation_DsoExpire(..),
+  AmuletAllocation_DsoExpireResult,
 ) where
 
-import DA.Text as Text
+import DA.Assert (assertDeadlineExceeded, assertWithinDeadline)
+import DA.Optional (fromOptional)
+import DA.TextMap qualified as TextMap
 
 import Splice.Api.Token.MetadataV1
-import Splice.Api.Token.HoldingV1
-import Splice.Api.Token.AllocationV1
+import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.AllocationV1 qualified as V1
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.TokenStandard.Utils as TSU hiding (require)
 
 import Splice.Amulet
+import Splice.AmuletRules (getExternalPartyConfigStateFromChoiceContext)
 import Splice.Amulet.TwoStepTransfer
-import DA.TextMap qualified as TextMap
-import DA.Assert (assertDeadlineExceeded)
 import Splice.Amulet.TokenApiUtils
 import Splice.Types
 import Splice.Util
 
 
-data AmuletAllocation_DsoExpireResult = AmuletAllocation_DsoExpireResult 
+data AmuletAllocation_DsoExpireResult = AmuletAllocation_DsoExpireResult
   with
-    senderHoldingCids : [ContractId Holding]
+    senderHoldingCids : [ContractId V1.Holding]
     meta : Metadata
   deriving (Show, Eq)
 
-
--- | Amulet allocated in locked form to a trade.
+-- | V1 amulet allocation, which was created using a V1 allocation factory and
+-- can be settled on its own using `V1.Allocation_ExecuteTransfer` or by
+-- providing it as an input to a batch settlement executed using
+-- `V2.SettlementFactory_SettleBatch`.
 template AmuletAllocation
   with
     lockedAmulet : ContractId LockedAmulet -- ^ Locked amulet that holds the funds for the allocation
-    allocation : AllocationSpecification
+    allocation : V1.AllocationSpecification
+    expiresAt : Optional Time
+      -- ^ When this allocation and its locked amulet expire, which can be earlier than the settlement
+      -- deadline specified in the allocation. This is used as a DoS protection mechanism.
   where
     signatory allocationInstrumentAdmin allocation, allocation.transferLeg.sender
     observer allocation.settlement.executor
 
-    interface instance Allocation for AmuletAllocation where
-      view = AllocationView with
+    ensure isValidAllocationSpecificationV1 allocation &&
+      allocation.transferLeg.instrumentId.id == amuletInstrumentIdName
+
+    interface instance V1.Allocation for AmuletAllocation where
+      view = V1.AllocationView with
         allocation
         holdingCids = [toInterfaceContractId lockedAmulet]
-        meta = emptyMetadata
+        meta = TSU.expiresAtToMeta expiresAt emptyMetadata
 
-      allocation_executeTransferImpl _self Allocation_ExecuteTransfer{..} = transferAmuletAllocation this extraArgs
+      allocation_executeTransferImpl _self V1.Allocation_ExecuteTransfer{..} =
+        transferAmuletAllocation this extraArgs
 
-      allocation_withdrawImpl _self Allocation_Withdraw{..} = do
+      allocation_withdrawImpl _self V1.Allocation_Withdraw{..} = do
         senderHoldingCids <- unlockAmuletAllocation this extraArgs
-        pure Allocation_WithdrawResult
+        pure V1.Allocation_WithdrawResult
           with
             senderHoldingCids
             meta = emptyMetadata
 
-      allocation_cancelImpl _self Allocation_Cancel{..} = do
+      allocation_cancelImpl _self V1.Allocation_Cancel{..} = do
         senderHoldingCids <- unlockAmuletAllocation this extraArgs
-        pure Allocation_CancelResult
+        pure V1.Allocation_CancelResult
           with
             senderHoldingCids
             meta = emptyMetadata
+
+    interface instance V2.Allocation for AmuletAllocation where
+      view = upcast_v1_v2_AllocationView None expiresAt availableActions v1View
+        where
+          v1View = view (toInterface @V1.Allocation this)
+          availableActions = allocationV1_availableActionsDefault v1View
+
+      -- Uniformly add the observers as extra observers to ensure they see
+      -- the nonconsuming choice in all cases independent of the actors.
+      allocation_settleExtraObservers _arg = observer this
+      allocation_cancelExtraObservers _arg = observer this
+      allocation_withdrawExtraObservers _arg = observer this
+
+      allocation_withdrawImpl = allocationV2_withdrawDefaultImplUsingV1 (toInterface this)
+
+      allocation_cancelImpl self arg =
+        allocationV2_cancelDefaultImpl (toInterface this) self arg $ do
+          senderHoldingCids <- unlockAmuletAllocation this arg.extraArgs
+          let authorizerHoldingCids = TextMap.fromList
+                [(allocation.transferLeg.instrumentId.id, map upcast senderHoldingCids)]
+          pure (authorizerHoldingCids, emptyMetadata)
+
+      allocation_settleImpl self (V2.Allocation_Settle actors extraTransferLegSides nextIterationFunding extraArgs) = do
+        -- check all arguments
+        let leg = allocation.transferLeg
+        let dso = leg.instrumentId.admin
+        archiveAndCheckActors self actors [[dso, allocation.settlement.executor]]
+        -- prudent engineering: these args are in principle already checked by SettlementFactory_SettleBatch,
+        -- but we defensively check them here as well to avoid surprises for burn allocations settled
+        -- directly via a call by the DSO party to Allocation_Settle.
+        requireMatchExpected ("arg.extraTransferLegSides", extraTransferLegSides) []
+        requireMatchExpected ("arg.nextIterationFunding", nextIterationFunding) None
+
+        -- check allocation constraints
+        assertWithinDeadline "allocation.settlement.settleBefore" allocation.settlement.settleBefore
+        -- Note: we do not enforce 'expiresAt', as that is only a DoS protection mechanism
+
+        -- Archive locked amulet to execute the debit (extra checks part of defensive programming)
+        la <- fetchAndArchive (ForOwner with dso, owner = leg.sender) lockedAmulet
+        requireMatchExpected ("lockedAmulet.amount", la.amulet.amount.initialAmount) leg.amount
+
+        -- report transfer events for V2 transaction history parsing
+        (configStateCid, _) <- getExternalPartyConfigStateFromChoiceContext dso extraArgs.context
+        logAllocationSettlement (toInterfaceContractId configStateCid) [toInterfaceContractId lockedAmulet] (upcast allocation) []
+
+         -- construct metadata to aid V1 tx history parsers
+        pure V2.AllocationResult with
+          output = V2.AllocationResult_Settled with
+            nextIterationAllocationCid = None -- no iterative settlement for V1 allocations
+          authorizerHoldingCids = mempty
+          meta = allocationSettlementTxHistoryV1ToMeta (upcast allocation) emptyMetadata
+
 
     -- Implemented on the concrete template as you cannot upgrade interfaces so we cannot add a choice to the Allocation interface.
-    
     choice AmuletAllocation_DsoExpire : AmuletAllocation_DsoExpireResult
       with
         expireLock : Bool
       controller allocationInstrumentAdmin allocation
       do
-        assertDeadlineExceeded "allocation.settlement.settleBefore" allocation.settlement.settleBefore
+        let actualExpiresAt = fromOptional allocation.settlement.settleBefore expiresAt
+        assertDeadlineExceeded "AmuletAllocation.expiresAt" actualExpiresAt
 
         let extraArgs = ExtraArgs with
               context = ChoiceContext with
@@ -79,17 +148,20 @@ template AmuletAllocation
 
         pure AmuletAllocation_DsoExpireResult with
           senderHoldingCids
-          meta = Metadata with 
-            values = TextMap.fromList [(reasonMetaKey, "expired as settleBefore has passed")]        
-
-allocationInstrumentAdmin : AllocationSpecification -> Party
-allocationInstrumentAdmin AllocationSpecification{..} = transferLeg.instrumentId.admin
+          meta = TSU.reasonToMeta "cancelled expired allocation" emptyMetadata
 
 
 -- Allocation usage
 -------------------
 
-allocationToTwoStepTransfer : AllocationSpecification -> TwoStepTransfer
+-- | Brief description of lock context.
+mkAllocationLockContext : V1.Reference -> Text
+mkAllocationLockContext ref = "allocation for settlement of " <> ref.id
+
+allocationInstrumentAdmin : V1.AllocationSpecification -> Party
+allocationInstrumentAdmin V1.AllocationSpecification{..} = transferLeg.instrumentId.admin
+
+allocationToTwoStepTransfer : V1.AllocationSpecification -> TwoStepTransfer
 allocationToTwoStepTransfer allocation =
   TwoStepTransfer with
     dso = allocationInstrumentAdmin allocation
@@ -100,25 +172,24 @@ allocationToTwoStepTransfer allocation =
     transferBefore = allocation.settlement.settleBefore
     transferBeforeDeadline = "allocation.settlement.settleBefore"
     allowFeaturing = True
-    lockContext = Text.implode
-      -- We don't show more context to avoid bloating the response here.
-      ["allocation for transfer leg ", show allocation.transferLegId, " to ", show allocation.transferLeg.receiver]
+    lockContext = mkAllocationLockContext allocation.settlement.settlementRef
 
-transferAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update Allocation_ExecuteTransferResult
+transferAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update V1.Allocation_ExecuteTransferResult
 transferAmuletAllocation amuletAllocation extraArgs = do
   let twoStepTransfer = allocationToTwoStepTransfer amuletAllocation.allocation
+  let transferMeta = amuletAllocation.allocation.transferLeg.meta
   (senderHoldingCids, receiverHoldingCids, meta) <-
-    executeTwoStepTransfer twoStepTransfer amuletAllocation.lockedAmulet extraArgs
-  pure Allocation_ExecuteTransferResult
+    executeTwoStepTransfer twoStepTransfer amuletAllocation.lockedAmulet transferMeta extraArgs
+  pure V1.Allocation_ExecuteTransferResult
     with
       senderHoldingCids
       receiverHoldingCids
       meta
 
-unlockAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update [ContractId Holding]
+unlockAmuletAllocation : AmuletAllocation -> ExtraArgs -> Update [ContractId V1.Holding]
 unlockAmuletAllocation amuletAllocation extraArgs = do
-  let twoStepTransfer = allocationToTwoStepTransfer amuletAllocation.allocation
-  abortTwoStepTransfer twoStepTransfer amuletAllocation.lockedAmulet extraArgs
+  let expiresAt = fromOptional amuletAllocation.allocation.settlement.settleBefore amuletAllocation.expiresAt
+  abortTwoStepTransfer expiresAt amuletAllocation.lockedAmulet extraArgs
 
 
 instance HasCheckedFetch AmuletAllocation ForDso where

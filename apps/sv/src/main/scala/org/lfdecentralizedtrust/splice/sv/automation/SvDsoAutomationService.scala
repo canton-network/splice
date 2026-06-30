@@ -531,6 +531,13 @@ class SvDsoAutomationService(
       )
     )
 
+    registerTrigger(
+      new ConfirmationMismatchReportTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+
     registerTrigger(restartDsoDelegateBasedAutomationTrigger)
 
     registerTrigger(
@@ -586,6 +593,12 @@ class SvDsoAutomationService(
     )
     registerTrigger(
       new AmuletPriceMetricsTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+    registerTrigger(
+      new RewardMetricsTrigger(
         triggerContext,
         dsoStore,
       )
@@ -723,6 +736,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[ArchiveClosedMiningRoundsTrigger],
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
+      aTrigger[ConfirmationMismatchReportTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],
@@ -751,6 +765,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[FollowAmuletConversionRateFeedTrigger],
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
+      aTrigger[RewardMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],
       aTrigger[LsuAnnouncementTrigger],
