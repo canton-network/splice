@@ -21,6 +21,9 @@ spec:
       - port: 443
         uri:
           prefix: "/cn-release-bundles"
+      - port: 80
+        uri:
+          prefix: "/cn-release-bundles"
     route:
       - destination:
           port:
@@ -29,6 +32,7 @@ spec:
   {{- end }}
   - match:
       - port: 443
+      - port: 80
     route:
       - destination:
           port:
@@ -52,6 +56,7 @@ spec:
   http:
   - match:
       - port: 443
+      - port: 80
     route:
       - destination:
           port:
