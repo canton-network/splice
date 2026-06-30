@@ -92,14 +92,27 @@ enableReloader: true
 #    clientSecret: ""
 #    scope: ""
 
-podSecurityContext:
-  runAsNonRoot: true
-  seccompProfile:
-    type: RuntimeDefault
-
-containerSecurityContext:
-  allowPrivilegeEscalation: false
-  privileged: false
-  capabilities:
-    drop:
-      - ALL
+securityContexts:
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  scan:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  persistence:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  ui:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL

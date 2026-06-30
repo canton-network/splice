@@ -30,13 +30,13 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
-      {{- with .Values.podSecurityContext }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
       - name: scan-app
-        {{- with .Values.containerSecurityContext }}
+        {{- with .Values.securityContexts.scan }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -276,7 +276,7 @@ spec:
         {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
-          {{- with .Values.containerSecurityContext }}
+          {{- with .Values.securityContexts.persistence}}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -390,7 +390,7 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
-      {{- with .Values.podSecurityContext }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -412,7 +412,7 @@ spec:
           value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
         - name: SPLICE_APP_UI_POLL_INTERVAL
           value: {{ .Values.uiPollInterval | default 90000 | quote }}
-        {{- with .Values.containerSecurityContext }}
+        {{- with .Values.securityContexts.ui }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

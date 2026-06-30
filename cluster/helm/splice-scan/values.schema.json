@@ -26,11 +26,22 @@
         "imageName"
       ],
       "properties": {
-        "podSecurityContext": {
-          "type": "object"
-        },
-        "containerSecurityContext": {
-          "type": "object"
+        "securityContexts": {
+          "type": "object",
+          "properties": {
+            "pod": {
+              "type": "object"
+            },
+            "scan": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            },
+            "ui": {
+              "type": "object"
+            }
+          }
         },
         "serviceAccountName": {
           "type": "string"
