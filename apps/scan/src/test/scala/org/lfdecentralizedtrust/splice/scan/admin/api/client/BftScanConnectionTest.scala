@@ -97,6 +97,7 @@ class BftScanConnectionTest
       when(m.config).thenReturn(
         ScanAppClientConfig(NetworkAppClientConfig(scanUrl(n)))
       )
+      when(m.url).thenReturn(Uri(scanUrl(n)))
       m
     }
     connections.foreach { connection =>
@@ -1043,7 +1044,7 @@ class BftScanConnectionTest
       connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
 
       for {
-        result <- BftScanConnection.executeCall(call, connections, nTargetSuccess = 1, logger)
+        (result, _) <- BftScanConnection.executeCall(call, connections, nTargetSuccess = 1, logger)
       } yield result should be(partyIdA)
     }
 
@@ -1111,7 +1112,7 @@ class BftScanConnectionTest
         }
 
       for {
-        result <- BftScanConnection.executeCall(
+        (result, _) <- BftScanConnection.executeCall(
           call,
           connections,
           nTargetSuccess = 2,
@@ -1158,7 +1159,7 @@ class BftScanConnectionTest
       makeMockFail(connections(2), notFoundFailure)
 
       for {
-        result <- BftScanConnection.executeCall(
+        (result, _) <- BftScanConnection.executeCall(
           call,
           connections,
           nTargetSuccess = 2,
@@ -1194,7 +1195,7 @@ class BftScanConnectionTest
       }
 
       for {
-        result <- BftScanConnection.executeCall(
+        (result, _) <- BftScanConnection.executeCall(
           call,
           connections,
           nTargetSuccess = 2,
@@ -1245,29 +1246,22 @@ class BftScanConnectionTest
 
       // With n=4, we query only two connections randomly, and even with
       // retries a single call can fail to reach consensus.
-      def attempt(remaining: Int): Future[GetRewardAccountingRootHashResponse] =
-        bft.getRewardAccountingRootHash(round).flatMap {
-          case ok: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk =>
-            Future.successful(ok)
+      def attempt(remaining: Int): Future[(GetRewardAccountingRootHashResponse, List[Uri])] =
+        bft.getRewardAccountingRootHashWithScanUris(round).flatMap {
+          case (ok : GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk, uris) =>
+            Future.successful((ok, uris))
           case _ if remaining > 1 => attempt(remaining - 1)
           case other => Future.successful(other)
         }
 
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-          attempt(100).map { resp =>
-            inside(resp) {
-              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                ok.rootHash should be("aabb")
-                ok.roundNumber should be(round)
-            }
-          },
-          logs =>
-            logs.exists(l =>
-              l.level == Level.INFO && l.message.contains("Reached consensus from")
-            ) should be(true),
-        )
-        .map(_ => succeed)
+      attempt(100).map { resp =>
+        inside(resp) {
+          case (GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok), uris) =>
+            ok.rootHash should be("aabb")
+            ok.roundNumber should be(round)
+            uris.size should be >= 2
+        }
+      }
     }
 
     "returns Undetermined when no quorum agrees on a hash" in {
@@ -1325,7 +1319,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs disagreements at WARN level" in {
+    "logs disagreements at INFO level" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1335,11 +1329,11 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
           bft.getRewardAccountingRootHash(round),
           logs =>
             logs.exists(log =>
-              log.level == Level.WARN && log.message.contains(
+              log.level == Level.INFO && log.message.contains(
                 "disagreed with consensus"
               )
             ) should be(true),
@@ -1366,32 +1360,27 @@ class BftScanConnectionTest
 
       // With n=4, we query only two connections randomly, and even with
       // retries a single call can fail to reach consensus.
-      def attempt(remaining: Int): Future[GetRewardAccountingActivityTotalsResponse] =
-        bft.getRewardAccountingActivityTotals(round).flatMap {
-          case ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk =>
-            Future.successful(ok)
+      def attempt(remaining: Int): Future[(GetRewardAccountingActivityTotalsResponse, List[Uri])] =
+        bft.getRewardAccountingActivityTotalsWithScanUris(round).flatMap {
+          case (ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk, uris) =>
+            Future.successful((ok, uris))
           case _ if remaining > 1 => attempt(remaining - 1)
           case other => Future.successful(other)
         }
 
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-          attempt(100).map { resp =>
-            inside(resp) {
-              case GetRewardAccountingActivityTotalsResponse.members
-                    .RewardAccountingActivityTotalsOk(ok) =>
-                ok.roundNumber should be(round)
-                ok.totalAppActivityWeight should be(100L)
-                ok.activePartiesCount should be(10L)
-                ok.activityRecordsCount should be(5L)
-            }
-          },
-          logs =>
-            logs.exists(l =>
-              l.level == Level.INFO && l.message.contains("Reached consensus from")
-            ) should be(true),
-        )
-        .map(_ => succeed)
+      attempt(100).map { resp =>
+        inside(resp) {
+          case ( GetRewardAccountingActivityTotalsResponse.members
+                 .RewardAccountingActivityTotalsOk(ok)
+               , uris
+               ) =>
+            ok.roundNumber should be(round)
+            ok.totalAppActivityWeight should be(100L)
+            ok.activePartiesCount should be(10L)
+            ok.activityRecordsCount should be(5L)
+            uris.size should be >= 2
+        }
+      }
     }
 
     "returns Undetermined when no quorum agrees on the totals" in {
@@ -1449,7 +1438,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs disagreements at WARN level" in {
+    "logs disagreements at INFO level" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1459,11 +1448,11 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
           bft.getRewardAccountingActivityTotals(round),
           logs =>
             logs.exists(log =>
-              log.level == Level.WARN && log.message.contains(
+              log.level == Level.INFO && log.message.contains(
                 "disagreed with consensus"
               )
             ) should be(true),
