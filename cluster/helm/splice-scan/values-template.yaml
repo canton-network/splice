@@ -120,4 +120,3 @@ securityContexts:
     capabilities:
       drop:
         - ALL
-
