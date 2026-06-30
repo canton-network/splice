@@ -10,7 +10,6 @@ import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeLong}
-import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPrivateKey}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
