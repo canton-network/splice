@@ -10,6 +10,7 @@ import {
   installPostgresPasswordSecret,
 } from '@canton-network/splice-pulumi-common';
 import { clusterProdLike, config } from '@canton-network/splice-pulumi-common/src/config';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import {
   Postgres,
   CloudPostgres,
@@ -21,8 +22,6 @@ import {
   CLUSTER_BASENAME,
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
-
-import { spliceConfig } from '../../common/src/config/config';
 
 interface ScanBigQueryConfig {
   dataset: string;
