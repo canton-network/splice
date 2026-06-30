@@ -98,6 +98,8 @@ securityContexts:
       type: RuntimeDefault
   scan:
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:
@@ -111,6 +113,8 @@ securityContexts:
         - ALL
   ui:
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:
