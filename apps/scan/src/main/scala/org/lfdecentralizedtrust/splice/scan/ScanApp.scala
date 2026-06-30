@@ -252,6 +252,7 @@ class ScanApp(
         participantAdminConnection,
         config.globalSynchronizerAlias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
         loggerFactory,
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
