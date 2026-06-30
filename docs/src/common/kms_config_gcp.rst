@@ -7,6 +7,8 @@ The mock configuration below for GCP KMS is included in ``splice-node/examples/s
 
 .. literalinclude:: ../../../apps/app/src/pack/examples/sv-helm/kms-participant-gcp-values.yaml
     :language: yaml
+    :start-after: KMS_PARTICIPANT_GCP_VALUES_START
+    :end-before: KMS_PARTICIPANT_GCP_VALUES_END
 
 Please refer to the `Canton documentation <https://docs.daml.com/canton/usermanual/kms/kms_gcp_setup.html>`_
 for a list of supported configuration options and their meaning,

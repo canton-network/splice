@@ -1,3 +1,4 @@
+# KMS_PARTICIPANT_GCP_VALUES_START
 # Participant using GCP KMS (mock values; please modify to match your setup)
 # See https://docs.daml.com/canton/usermanual/kms/kms_gcp_setup.html
 
@@ -27,3 +28,4 @@ extraVolumes:
   - name: gcp-credentials
     secret:
       secretName: gke-credentials
+# KMS_PARTICIPANT_GCP_VALUES_END
