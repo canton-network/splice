@@ -113,10 +113,11 @@ securityContexts:
         - ALL
   ui:
     runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
+    runAsUser: 101
+    runAsGroup: 101
     allowPrivilegeEscalation: false
     privileged: false
-#    capabilities:
-#      drop:
-#        - ALL
+    capabilities:
+      drop:
+        - ALL
+
