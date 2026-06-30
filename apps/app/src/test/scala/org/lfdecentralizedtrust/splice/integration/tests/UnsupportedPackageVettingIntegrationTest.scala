@@ -3,14 +3,12 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.automation.PackageVettingTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   PackageConfig,
 }
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -55,22 +53,12 @@ class UnsupportedPackageVettingIntegrationTest
           _.withPausedTrigger[SvPackageVettingTrigger]
         )(config)
       )
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Validator)(
-          _.withPausedTrigger[ValidatorPackageVettingTrigger]
-        )(config)
-      )
-      .addConfigTransform((_, conf) =>
-        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
-          // Reduce the cache TTL. Otherwise alice validator takes forever to see the new amulet rules version
-          c.copy(scanClient =
-            c.scanClient.setAmuletRulesCacheTimeToLive(NonNegativeFiniteDuration.ofSeconds(1))
-          )
-        )(conf)
-      )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
     implicit env =>
+      val aliceValidatorTrigger =
+        aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger]
+      aliceValidatorTrigger.pause().futureValue
       val unsupportedDarsToVetSv = Seq(
         DarResources.dsoGovernance_0_1_0,
         DarResources.walletPayments_0_1_0,
@@ -99,7 +87,7 @@ class UnsupportedPackageVettingIntegrationTest
         synchronizerId,
         unsupportedDarsToVetValidator,
         unsupportedDarsToVetValidator,
-        aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
+        aliceValidatorTrigger,
       )
   }
 
