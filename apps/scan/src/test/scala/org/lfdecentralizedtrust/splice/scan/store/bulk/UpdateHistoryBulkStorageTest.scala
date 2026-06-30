@@ -210,7 +210,7 @@ class UpdateHistoryBulkStorageTest
       val metricsFactory = new InMemoryMetricsFactory
       def latestSegmentMetrics = metricsFactory.metrics.gauges
         .get(
-          SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment"
+          SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment-staging"
         )
         .value
       val metrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
@@ -337,7 +337,7 @@ class UpdateHistoryBulkStorageTest
       val mockKvStore = mock[KeyValueStore]
       when(
         mockKvStore.readValueAndLogOnDecodingFailure[UpdatesSegment](
-          eqTo("latest_updates_segment_in_bulk_storage")
+          eqTo("latest_updates_segment_in_bulk_storage_staging")
         )(
           any[Decoder[UpdatesSegment]],
           any[TraceContext],
@@ -363,7 +363,7 @@ class UpdateHistoryBulkStorageTest
       )
       val mockKvProvider = new ScanKeyValueProvider(mockKvStore, loggerFactory)
       val progress = new UpdateHistoryBulkStoragePersistentProgress(
-        "latest_updates_segment_in_bulk_storage",
+        "latest_updates_segment_in_bulk_storage_staging",
         mockKvProvider,
         new HistoryMetrics(new InMemoryMetricsFactory)(
           MetricsContext.Empty
@@ -374,7 +374,7 @@ class UpdateHistoryBulkStorageTest
         acsSnapshotStagingProgress = null, // no ACS snapshots in this test
         acsSnapshotCommittedProgress = null, // no ACS snapshots in this test
         updateHistoryStagingProgress = progress,
-        updateHistoryCommittedProgress = null, // we don't test committed progress in this test
+        updateHistoryCommittedProgress = progress,
         storageConfig = bulkStorageTestConfig,
         stagingS3Connection = bucketConnection,
         committedS3Connection =
@@ -521,7 +521,7 @@ class UpdateHistoryBulkStorageTest
       // Update the kvStore mock to report that up to 10-27 everything was dumped
       when(
         mockKvStore.readValueAndLogOnDecodingFailure[UpdatesSegment](
-          eqTo("latest_updates_segment_in_bulk_storage")
+          eqTo("latest_updates_segment_in_bulk_storage_staging")
         )(
           any[Decoder[UpdatesSegment]],
           any[TraceContext],
