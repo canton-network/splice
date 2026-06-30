@@ -81,15 +81,18 @@ or from within your Kubernetes cluster.
 First, please confirm that your egress IP in the terminal in which you are
 running the command is indeed the one you provided for whitelisting by running:
 
+.. CF_DOCS_SPLICE_SNIPPET_131_START
 .. parsed-literal::
 
    curl -sSL http://checkip.amazonaws.com
+.. CF_DOCS_SPLICE_SNIPPET_131_END
 
 and confirming that the IP matches what you have provided for whitelisting. If it does,
 run the following command to check to which instance of Scan you can connect.
 
 Note that the following snippet requires installing `jq <https://jqlang.org/>`_.
 
+.. CF_DOCS_SPLICE_SNIPPET_132_START
 .. parsed-literal::
 
    (set -o pipefail
@@ -98,10 +101,12 @@ Note that the following snippet requires installing `jq <https://jqlang.org/>`_.
      echo -n "$url: "
      $CURL "$url"/api/scan/version | jq -r '.version'
    done)
+.. CF_DOCS_SPLICE_SNIPPET_132_END
 
 You should see output in the form shown below, where each line indicates one SV and the version it is on. If you see timeouts that SV has not yet added you to their allowlist,
 if you do not get any errors, then all SVs have added you. Note that the URLs and versions will vary over time so don't try to compare exactly.
 
+.. CF_DOCS_SPLICE_SNIPPET_128_START
 .. code-block:: bash
 
    https://scan.sv-2.test.global.canton.network.digitalasset.com: 0.3.6
@@ -114,6 +119,7 @@ if you do not get any errors, then all SVs have added you. Note that the URLs an
    https://scan.sv-2.test.global.canton.network.cumberland.io: 0.3.6
    https://scan.sv-1.test.global.canton.network.c7.digital: 0.3.6
    https://scan.sv-1.test.global.canton.network.digitalasset.com: 0.3.6
+.. CF_DOCS_SPLICE_SNIPPET_128_END
 
 Apart from connectivity to Scan, your validator must also be able to connect to the sequencer endpoints of the SVs.
 If you are encountering issues related to connecting to the synchronizer,
@@ -121,6 +127,7 @@ you can use the following snippet to confirm that you are able to reach those en
 (i.e., that SVs have whitelisted your IP for those endpoints as well).
 Note that the following snippet requires installing `jq <https://jqlang.org/>`_ and `grpcurl <https://github.com/fullstorydev/grpcurl>`_.
 
+.. CF_DOCS_SPLICE_SNIPPET_130_START
 .. parsed-literal::
 
    (set -o pipefail
@@ -128,9 +135,11 @@ Note that the following snippet requires installing `jq <https://jqlang.org/>`_ 
      echo -n "$url: "
      grpcurl --max-time 10 "$url":443 grpc.health.v1.Health/Check
    done)
+.. CF_DOCS_SPLICE_SNIPPET_130_END
 
 Sequencers that are functional and have whitelisted your IP correctly will return ``"status": "SERVING"`` in the ``grpcurl`` output.
 
+.. CF_DOCS_SPLICE_SNIPPET_129_START
 .. code-block:: bash
 
    sequencer-1.sv-2.test.global.canton.network.digitalasset.com: {
@@ -163,6 +172,7 @@ Sequencers that are functional and have whitelisted your IP correctly will retur
    sequencer-1.sv-1.test.global.canton.network.digitalasset.com: {
      "status": "SERVING"
    }
+.. CF_DOCS_SPLICE_SNIPPET_129_END
 
 The default configuration for both of these requires access to at least 2/3 of the SVs for each of scans and sequencers.
 You may, at your option and own risk, configure connection to a single trusted scan and sequencer as described under :ref:`validator helm chart configuration <helm-validator-install>`, at the cost of losing BFT integrity guarantees.

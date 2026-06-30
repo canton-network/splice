@@ -6,6 +6,8 @@
 Required Network Parameters
 +++++++++++++++++++++++++++
 
+.. CF_DOCS_SPLICE_SNIPPET_135_START
+
 To initialize your validator node, you need the following parameters
 that define the network you're onboarding to and the secret
 required for doing so.
@@ -33,3 +35,5 @@ ONBOARDING_SECRET
      Make sure to use the **SV app URL** (starting with ``sv.``), not the Scan URL (starting with ``scan.``).
 
      Note that this self-served secret is only valid for 1 hour.
+
+.. CF_DOCS_SPLICE_SNIPPET_135_END

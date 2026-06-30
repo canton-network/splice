@@ -60,9 +60,11 @@ Preparing a Cluster for Installation
 
 Create the application namespace within Kubernetes.
 
+.. CF_DOCS_SPLICE_SNIPPET_123_START
 .. code-block:: bash
 
     kubectl create ns validator
+.. CF_DOCS_SPLICE_SNIPPET_123_END
 
 .. note::
 
@@ -77,11 +79,13 @@ HTTP Proxy configuration
 If you need to use an HTTP forward proxy for egress in your environment, you need to set ``https.proxyHost`` and ``https.proxyPort``
 in ``additionalJvmOptions`` in the validator and participant helm charts to use the HTTP proxy for outgoing connections:
 
+.. CF_DOCS_SPLICE_SNIPPET_127_START
 .. code-block:: yaml
 
   additionalJvmOptions: |
     -Dhttps.proxyHost=your.proxy.host
     -Dhttps.proxyPort=your_proxy_port
+.. CF_DOCS_SPLICE_SNIPPET_127_END
 
 Replace ``your.proxy.host`` and ``your_proxy_port`` with the actual host and port of your HTTP proxy.
 Proxy authentication is currently not supported.
@@ -122,12 +126,14 @@ external traffic but bypasses the proxy for ``localhost`` / ``127.0.0.1``, any
 host in the ``.internal`` domain, and any IPv4 address whose literal string
 representation starts with ``10.``:
 
+.. CF_DOCS_SPLICE_SNIPPET_126_START
 .. code-block:: yaml
 
   additionalJvmOptions: |
     -Dhttps.proxyHost=your.proxy.host
     -Dhttps.proxyPort=your_proxy_port
     -Dhttp.nonProxyHosts=localhost|127.0.0.1|*.internal|10.*
+.. CF_DOCS_SPLICE_SNIPPET_126_END
 
 .. _validator-postgres-auth:
 
@@ -467,11 +473,13 @@ With these files in place, you can execute the following helm commands
 in sequence. It's generally a good idea to wait until each deployment
 reaches a stable state prior to moving on to the next step.
 
+.. CF_DOCS_SPLICE_SNIPPET_124_START
 .. parsed-literal::
 
     helm install postgres |helm_repo_prefix|/splice-postgres -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-validator-participant.yaml --wait
     helm install participant |helm_repo_prefix|/splice-participant -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/participant-values.yaml -f splice-node/examples/sv-helm/standalone-participant-values.yaml --wait
     helm install validator |helm_repo_prefix|/splice-validator -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/validator-values.yaml -f splice-node/examples/sv-helm/standalone-validator-values.yaml --wait
+.. CF_DOCS_SPLICE_SNIPPET_124_END
 
 Once this is running, you should be able to inspect the state of the
 cluster and observe pods running in the new
@@ -652,9 +660,11 @@ A reference Helm chart is provided for that, which can be installed after
 using:
 
 
+.. CF_DOCS_SPLICE_SNIPPET_125_START
 .. parsed-literal::
 
     helm install cluster-ingress-validator |helm_repo_prefix|/splice-cluster-ingress-runbook -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/validator-cluster-ingress-values.yaml
+.. CF_DOCS_SPLICE_SNIPPET_125_END
 
 
 .. _helm-validator-wallet-ui:

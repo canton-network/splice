@@ -34,10 +34,12 @@ Requirements
    The serial ID is 0 for the initial synchronizer deployment and is incremented by 1 for each :ref:`logical synchronizer upgrade <sv-logical-synchronizer-upgrades>`.
    The serial ID is used for helm release names, DNS entries, database names, and deployment naming.
 
+.. CF_DOCS_SPLICE_SNIPPET_037_START
 .. code-block:: bash
 
    export MIGRATION_ID=0
    export SERIAL_ID=0
+.. CF_DOCS_SPLICE_SNIPPET_037_END
 
 .. include:: ../common/backup_suggestion.rst
 
@@ -50,7 +52,10 @@ SV operators are identified by a human-readable name and an EC public key.
 This identification is stable across deployments of the Global Synchronizer.
 You are, for example, expected to reuse your SV name and public key between (test-)network resets.
 
-Use the following shell commands to generate a keypair in the format expected by the SV node software: ::
+Use the following shell commands to generate a keypair in the format expected by the SV node software:
+
+.. CF_DOCS_SPLICE_SNIPPET_039_START
+.. code-block:: bash
 
   # Generate the keypair
   openssl ecparam -name prime256v1 -genkey -noout -out sv-keys.pem
@@ -65,14 +70,19 @@ Use the following shell commands to generate a keypair in the format expected by
 
   # Clean up
   rm sv-keys.pem
+.. CF_DOCS_SPLICE_SNIPPET_039_END
 
 ..
   Based on `scripts/generate-sv-keys.sh`
 
-These commands should result in an output similar to ::
+These commands should result in an output similar to:
+
+.. CF_DOCS_SPLICE_SNIPPET_059_START
+.. code-block:: text
 
   public-key = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1eb+JkH2QFRCZedO/P5cq5d2+yfdwP+jE+9w3cT6BqfHxCd/PyA0mmWMePovShmf97HlUajFuN05kZgxvjcPQw=="
   private-key = "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCBsFuFa7Eumkdg4dcf/vxIXgAje2ULVz+qTKP3s/tHqKw=="
+.. CF_DOCS_SPLICE_SNIPPET_059_END
 
 Store both keys in a safe location.
 You will be using them every time you want to deploy a new SV node, i.e., also when deploying an SV node to a different deployment of the Global Synchronizer and for redeploying an SV node after a (test-)network reset.
@@ -88,9 +98,11 @@ Preparing a Cluster for Installation
 
 Create the application namespace within Kubernetes.
 
+.. CF_DOCS_SPLICE_SNIPPET_047_START
 .. code-block:: bash
 
     kubectl create ns sv
+.. CF_DOCS_SPLICE_SNIPPET_047_END
 
 .. _helm-sv-auth:
 
@@ -297,6 +309,7 @@ We are now going to configure your SV node software based on the OIDC provider c
 
 The following kubernetes secret will instruct the participant to create a service user for your SV app (omit the scope if it is not needed in your setup).
 
+.. CF_DOCS_SPLICE_SNIPPET_033_START
 .. code-block:: bash
 
     kubectl create --namespace sv secret generic splice-app-sv-ledger-api-auth \
@@ -306,9 +319,11 @@ The following kubernetes secret will instruct the participant to create a servic
         "--from-literal=client-secret=${SV_CLIENT_SECRET}" \
         "--from-literal=audience=${OIDC_AUTHORITY_LEDGER_API_AUDIENCE}"
         "--from-literal=scope=${OIDC_AUTHORITY_LEDGER_API_SCOPE}"
+.. CF_DOCS_SPLICE_SNIPPET_033_END
 
 The validator app backend requires the following secret (omit the scope if it is not needed in your setup).
 
+.. CF_DOCS_SPLICE_SNIPPET_034_START
 .. code-block:: bash
 
     kubectl create --namespace sv secret generic splice-app-validator-ledger-api-auth \
@@ -318,9 +333,11 @@ The validator app backend requires the following secret (omit the scope if it is
         "--from-literal=client-secret=${VALIDATOR_CLIENT_SECRET}" \
         "--from-literal=audience=${OIDC_AUTHORITY_LEDGER_API_AUDIENCE}" \
         "--from-literal=scope=${OIDC_AUTHORITY_LEDGER_API_SCOPE}"
+.. CF_DOCS_SPLICE_SNIPPET_034_END
 
 To setup the wallet, CNS and SV UI, create the following two secrets.
 
+.. CF_DOCS_SPLICE_SNIPPET_035_START
 .. code-block:: bash
 
     kubectl create --namespace sv secret generic splice-app-wallet-ui-auth \
@@ -334,6 +351,7 @@ To setup the wallet, CNS and SV UI, create the following two secrets.
     kubectl create --namespace sv secret generic splice-app-cns-ui-auth \
         "--from-literal=url=${OIDC_AUTHORITY_URL}" \
         "--from-literal=client-id=${CNS_UI_CLIENT_ID}"
+.. CF_DOCS_SPLICE_SNIPPET_035_END
 
 Configuring your CometBFT node
 ------------------------------
@@ -349,6 +367,7 @@ To generate the node config you use the CometBFT docker image provided through G
 
 Use the following shell commands to generate the proper keys:
 
+.. CF_DOCS_SPLICE_SNIPPET_051_START
 .. parsed-literal::
 
   # Create a folder to store the config
@@ -358,13 +377,18 @@ Use the following shell commands to generate the proper keys:
   docker run --rm -v "$(pwd):/init" |docker_repo_prefix|/cometbft:|version| init --home /init
   # Read the node id and keep a note of it for the deployment
   docker run --rm -v "$(pwd):/init" |docker_repo_prefix|/cometbft:|version| show-node-id --home /init
+.. CF_DOCS_SPLICE_SNIPPET_051_END
 
 Please keep a note of the node ID printed out above.
 
-In addition, please retain some of the configuration files generated, as follows (you might need to change the permissions/ownership for them as they are accessible only by the root user): ::
+In addition, please retain some of the configuration files generated, as follows (you might need to change the permissions/ownership for them as they are accessible only by the root user):
+
+.. CF_DOCS_SPLICE_SNIPPET_058_START
+.. code-block:: text
 
   cometbft/config/node_key.json
   cometbft/config/priv_validator_key.json
+.. CF_DOCS_SPLICE_SNIPPET_058_END
 
 Any other files can be ignored.
 
@@ -376,11 +400,13 @@ Configuring your CometBFT node keys
 The CometBFT node is configured with a secret, based on the output from :ref:`Generating the CometBFT node identity <cometbft-identity>`
 The secret is created as follows, with the `node_key.json` and `priv_validator_key.json` files representing the files generated as part of the node identity:
 
+.. CF_DOCS_SPLICE_SNIPPET_036_START
 .. code-block:: bash
 
     kubectl create --namespace sv secret generic cometbft-keys \
         "--from-file=node_key.json=node_key.json" \
         "--from-file=priv_validator_key.json=priv_validator_key.json"
+.. CF_DOCS_SPLICE_SNIPPET_036_END
 
 .. _helm-cometbft-state-sync:
 
@@ -435,27 +461,33 @@ To do so, SV operators must perform the following steps.
 
 Step 1. In ``sv-validator-values.yaml``, add the following ``synchronizer`` config.
 
+.. CF_DOCS_SPLICE_SNIPPET_060_START
 .. code-block:: yaml
 
     synchronizer:
       connectionType: "trust-single"
       url: "SEQUENCER_PUBLIC_URI" # synchronizers.current.sequencerPublicUrl from sv-values.yaml
+.. CF_DOCS_SPLICE_SNIPPET_060_END
 
 Step 2. In ``validator-values.yaml``, add the following or an equivalent :ref:`config override <configuration_ad_hoc>`:
 
+.. CF_DOCS_SPLICE_SNIPPET_061_START
 .. code-block:: yaml
 
     additionalEnvVars:
         - name: ADDITIONAL_CONFIG_NO_BFT_SEQUENCER_CONNECTION
           value: "canton.validator-apps.validator_backend.disable-sv-validator-bft-sequencer-connection = true"
+.. CF_DOCS_SPLICE_SNIPPET_061_END
 
 Step 3. In ``sv-values.yaml``, add the following or an equivalent :ref:`config override <configuration_ad_hoc>`:
 
+.. CF_DOCS_SPLICE_SNIPPET_062_START
 .. code-block:: yaml
 
     additionalEnvVars:
         - name: ADDITIONAL_CONFIG_NO_BFT_SEQUENCER_CONNECTION
           value: "canton.sv-apps.sv.bft-sequencer-connection = false"
+.. CF_DOCS_SPLICE_SNIPPET_062_END
 
 The default behavior is restored by undoing above changes.
 
@@ -463,6 +495,7 @@ To confirm the current configuration of your SV participant,
 open a :ref:`Canton console <console_access>` to it and execute ``participant.synchronizers.config("global")``.
 In case BFT sequencer connections are disabled, this should return a single sequencer connection in an output similar to the following:
 
+.. CF_DOCS_SPLICE_SNIPPET_052_START
 .. parsed-literal::
 
     @ participant.synchronizers.config("global")
@@ -478,6 +511,7 @@ In case BFT sequencer connections are disabled, this should return a single sequ
         timeTracker = SynchronizerTimeTrackerConfig(minObservationDuration = 30m)
       )
     )
+.. CF_DOCS_SPLICE_SNIPPET_052_END
 
 Alternatively, you can also search your participant logs for a ``DEBUG``-level entry such as
 ``Connecting to synchronizer with config: SynchronizerConnectionConfig(...)``,
@@ -502,6 +536,7 @@ All apps support reading the Postgres password from a Kubernetes secret.
 Currently, all apps use the Postgres user ``cnadmin``.
 The password can be setup with the following command, assuming you set the environment variables ``POSTGRES_PASSWORD_XXX`` to secure values:
 
+.. CF_DOCS_SPLICE_SNIPPET_038_START
 .. code-block:: bash
 
     kubectl create secret generic sequencer-pg-secret \
@@ -516,6 +551,7 @@ The password can be setup with the following command, assuming you set the envir
     kubectl create secret generic apps-pg-secret \
         --from-literal=postgresPassword=${POSTGRES_PASSWORD_APPS} \
         -n sv
+.. CF_DOCS_SPLICE_SNIPPET_038_END
 
 
 Postgres in the Cluster
@@ -523,12 +559,14 @@ Postgres in the Cluster
 
 If you wish to run the Postgres instances as pods in your cluster, you can use the `splice-postgres` Helm chart to install them:
 
+.. CF_DOCS_SPLICE_SNIPPET_053_START
 .. parsed-literal::
 
     helm install sequencer-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-sequencer.yaml --wait
     helm install mediator-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-mediator.yaml --wait
     helm install participant-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-participant.yaml --wait
     helm install apps-pg |helm_repo_prefix|/splice-postgres -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-apps.yaml --wait
+.. CF_DOCS_SPLICE_SNIPPET_053_END
 
 Cloud-Hosted Postgres
 +++++++++++++++++++++
@@ -622,11 +660,13 @@ and register a name and keypair for your SV. Replace
 and ``private-key`` values obtained as part of generating your SV
 identity.
 
+.. CF_DOCS_SPLICE_SNIPPET_040_START
 .. code-block:: bash
 
     kubectl create secret --namespace sv generic splice-app-sv-key \
         --from-literal=public=YOUR_PUBLIC_KEY \
         --from-literal=private=YOUR_PRIVATE_KEY
+.. CF_DOCS_SPLICE_SNIPPET_040_END
 
 For configuring your sv app, please modify the file ``splice-node/examples/sv-helm/sv-values.yaml`` as follows:
 
@@ -682,33 +722,41 @@ reaches a stable state prior to moving on to the next step.
 
 Install the Canton and CometBFT components:
 
+.. CF_DOCS_SPLICE_SNIPPET_054_START
 .. parsed-literal::
 
     helm install global-domain-${SERIAL_ID}-cometbft |helm_repo_prefix|/splice-cometbft -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/cometbft-values.yaml --wait
     helm install global-domain-${SERIAL_ID} |helm_repo_prefix|/splice-global-domain -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/global-domain-values.yaml --wait
+.. CF_DOCS_SPLICE_SNIPPET_054_END
 
 Note that we use the serial ID when naming Canton synchronizer components.
 This is to support operating multiple instances of these components side by side as part of a :ref:`logical synchronizer upgrade <sv-logical-synchronizer-upgrades>`.
 
 Install the participant:
 
+.. CF_DOCS_SPLICE_SNIPPET_055_START
 .. parsed-literal::
 
     helm install participant |helm_repo_prefix|/splice-participant -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/participant-values.yaml --wait
+.. CF_DOCS_SPLICE_SNIPPET_055_END
 
 Install the SV node apps:
 
+.. CF_DOCS_SPLICE_SNIPPET_056_START
 .. parsed-literal::
 
     helm install sv |helm_repo_prefix|/splice-sv-node -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/sv-values.yaml -f ${SV_IDENTITIES_FILE} -f ${UI_CONFIG_VALUES_FILE} --wait
     helm install scan |helm_repo_prefix|/splice-scan -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/scan-values.yaml -f ${UI_CONFIG_VALUES_FILE} --wait
     helm install validator |helm_repo_prefix|/splice-validator -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/validator-values.yaml -f splice-node/examples/sv-helm/sv-validator-values.yaml -f ${UI_CONFIG_VALUES_FILE} --wait
+.. CF_DOCS_SPLICE_SNIPPET_056_END
 
 Install the INFO app, which is used to provide information about the SV node and its configuration:
 
+.. CF_DOCS_SPLICE_SNIPPET_057_START
 .. parsed-literal::
 
     helm install info |helm_repo_prefix|/splice-info -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/info-values.yaml
+.. CF_DOCS_SPLICE_SNIPPET_057_END
 
 
 
@@ -716,6 +764,7 @@ Once everything is running, you should be able to inspect the state of the
 cluster and observe pods running in the new
 namespace. A typical query might look as follows:
 
+.. CF_DOCS_SPLICE_SNIPPET_041_START
 .. code-block:: bash
 
     $ kubectl get pods -n sv
@@ -736,6 +785,7 @@ namespace. A typical query might look as follows:
     sv-web-ui-67bfbdfc77-wwvp9                   2/2     Running   0             13m
     validator-app-667445fdfc-rcztx               2/2     Running   0             10m
     wallet-web-ui-648f86f9f9-lffz5               2/2     Running   0             10m
+.. CF_DOCS_SPLICE_SNIPPET_041_END
 
 
 Note also that ``Pod`` restarts may happen during bringup,
@@ -826,20 +876,24 @@ Your SV node should be configured with a url to your ``global-domain-sequencer``
 Make sure your cluster's ingress is correctly configured for the sequencer service and can be accessed through the provided URL.
 To check whether the sequencer is accessible, we can use the command below with the `grpcurl tool <https://github.com/fullstorydev/grpcurl>`_ :
 
+.. CF_DOCS_SPLICE_SNIPPET_042_START
 .. code-block:: bash
 
     grpcurl <sequencer host>:<sequencer port> grpc.health.v1.Health/Check
+.. CF_DOCS_SPLICE_SNIPPET_042_END
 
 If you are using the ingress configuration of this runbook, the ``<sequencer host>:<sequencer port>`` should be ``sequencer-SERIAL_ID.sv.YOUR_HOSTNAME:443``
 Please replace ``YOUR_HOSTNAME`` with your host name and ``SERIAL_ID`` with the serial ID of the synchronizer that the sequencer is part of.
 
 If you see the response below, it means the sequencer is up and accessible through the URL.
 
+.. CF_DOCS_SPLICE_SNIPPET_043_START
 .. code-block:: bash
 
     {
       "status": "SERVING"
     }
+.. CF_DOCS_SPLICE_SNIPPET_043_END
 
 
 Requirements
@@ -852,27 +906,32 @@ In order to install the reference charts, the following must be satisfied in you
 
 **Example of Istio installation:**
 
+.. CF_DOCS_SPLICE_SNIPPET_044_START
 .. code-block:: bash
 
     helm repo add istio https://istio-release.storage.googleapis.com/charts
     helm repo update
     helm install istio-base istio/base -n istio-system --set defaults.global.istioNamespace=cluster-ingress --wait
     helm install istiod istio/istiod -n cluster-ingress --set global.istioNamespace="cluster-ingress" --set meshConfig.accessLogFile="/dev/stdout"  --wait
+.. CF_DOCS_SPLICE_SNIPPET_044_END
 
 Installation Instructions
 +++++++++++++++++++++++++
 
 Create a `cluster-ingress` namespace:
 
+.. CF_DOCS_SPLICE_SNIPPET_045_START
 .. code-block:: bash
 
     kubectl create ns cluster-ingress
+.. CF_DOCS_SPLICE_SNIPPET_045_END
 
 
 Ensure that there is a cert-manager certificate available in a secret
 named ``cn-net-tls``.  An example of a suitable certificate
 definition:
 
+.. CF_DOCS_SPLICE_SNIPPET_063_START
 .. code-block:: yaml
 
     apiVersion: cert-manager.io/v1
@@ -886,11 +945,13 @@ definition:
         issuerRef:
             name: letsencrypt-production
         secretName: cn-net-tls
+.. CF_DOCS_SPLICE_SNIPPET_063_END
 
 
 Create a file named ``istio-gateway-values.yaml`` with the following content
 (Tip: on GCP you can get the cluster IP from ``gcloud compute addresses list``):
 
+.. CF_DOCS_SPLICE_SNIPPET_064_START
 .. code-block:: yaml
 
     service:
@@ -900,14 +961,17 @@ Create a file named ``istio-gateway-values.yaml`` with the following content
             - "35.198.147.95/32"
             - "35.189.40.124/32"
             - "34.132.91.75/32"
+.. CF_DOCS_SPLICE_SNIPPET_064_END
 
 
 
 And install it to your cluster:
 
+.. CF_DOCS_SPLICE_SNIPPET_046_START
 .. code-block:: bash
 
     helm install istio-ingress istio/gateway -n cluster-ingress -f istio-gateway-values.yaml
+.. CF_DOCS_SPLICE_SNIPPET_046_END
 
 
 Create Istio Gateway resources in the `cluster-ingress` namespace. Save the following to a file named `gateways.yaml`,
@@ -917,6 +981,7 @@ with the following modifications:
 - The second gateway (cn-apps-gateway) exposes ports for three migration IDs (0, 1, and 2) for the CometBFT apps of the SV node.
   If a higher migration ID is reached, expand that list using the same pattern.
 
+.. CF_DOCS_SPLICE_SNIPPET_065_START
 .. code-block:: yaml
 
     apiVersion: networking.istio.io/v1alpha3
@@ -978,12 +1043,15 @@ with the following modifications:
           protocol: TCP
         hosts:
           - "*"
+.. CF_DOCS_SPLICE_SNIPPET_065_END
 
 And apply them to your cluster:
 
+.. CF_DOCS_SPLICE_SNIPPET_048_START
 .. code-block:: bash
 
     kubectl apply -f gateways.yaml -n cluster-ingress
+.. CF_DOCS_SPLICE_SNIPPET_048_END
 
 
 The http gateway terminates tls using the secret that you configured above, and exposes raw http traffic in its outbound port 443.
@@ -996,9 +1064,11 @@ A reference Helm chart is provided for that, which can be installed after
 using:
 
 
+.. CF_DOCS_SPLICE_SNIPPET_050_START
 .. parsed-literal::
 
     helm install cluster-ingress-sv |helm_repo_prefix|/splice-cluster-ingress-runbook -n sv --version ${CHART_VERSION} -f splice-node/examples/sv-helm/sv-cluster-ingress-values.yaml
+.. CF_DOCS_SPLICE_SNIPPET_050_END
 
 
 
@@ -1024,9 +1094,11 @@ It might also be required in the future to support the operation of the ordering
 To get a list of all current scan instances, you can query the ``/api/scan/v0/scans`` endpoint on any scan instances known to you.
 For example using the sponsor's scan instance (and with some optional post-processing using `jq <https://jqlang.org/>`_):
 
+.. CF_DOCS_SPLICE_SNIPPET_032_START
 .. code-block:: bash
 
     curl https://scan.sv-1.<TARGET_HOSTNAME>/api/scan/v0/scans | jq -r '.scans.[].scans.[].publicUrl'
+.. CF_DOCS_SPLICE_SNIPPET_032_END
 
 .. _helm-sv-wallet-ui:
 
@@ -1126,6 +1198,7 @@ Note that SVs must wait ``voteCooldownTime`` (a governance parameter
 that defaults to 1min) between updates to their rate. Therefore updates made
 by the publisher will not propagate immediately.
 
+.. CF_DOCS_SPLICE_SNIPPET_049_START
 .. code::
 
   - name: ADDITIONAL_CONFIG_FOLLOW_AMULET_CONVERSION_RATE_FEED
@@ -1137,3 +1210,4 @@ by the publisher will not propagate immediately.
           max = 100.0
         }
       }
+.. CF_DOCS_SPLICE_SNIPPET_049_END

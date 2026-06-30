@@ -180,11 +180,13 @@ Here is one possible way to do so:
    * You only need to restore and scale up the participant, i.e., you can ignore the validator app and its database.
    * In case the restored participant shuts down immediately due to failures, add the following :ref:`additional configuration <configuration_ad_hoc>`:
 
+    .. CF_DOCS_SPLICE_SNIPPET_122_START
     .. code-block:: yaml
 
         additionalEnvVars:
             - name: ADDITIONAL_CONFIG_EXIT_ON_FATAL_FAILURES
               value: canton.parameters.exit-on-fatal-failures = false
+    .. CF_DOCS_SPLICE_SNIPPET_122_END
 
 #. Open a :ref:`Canton console <console_access>` to the temporary participant.
 #. Run below commands in the opened console. This will store the backup into a *local* file
@@ -235,18 +237,22 @@ To address a failed :term:`ACS` import, you can usually:
    <console_access>` to any participant on the network (i.e., you can also ask another validator or SV operator for this information) and running the
    following query where <namespace> is the part after the ``::`` in, for example, your validator party ID.
 
+   .. CF_DOCS_SPLICE_SNIPPET_114_START
    .. code::
 
       val syncId = participant.synchronizers.list_connected().head.synchronizerId
       participant.topology.party_to_participant_mappings.list(syncId, filterParticipant = <namespace>)
+   .. CF_DOCS_SPLICE_SNIPPET_114_END
 
    If all parties are on the same node, proceed to the next step. If some are on the old node and some are on the new node, migrate the ones on the old node to the new node by opening a console to the new node and running the following command
    (adjust the parameters as required for your parties):
 
+   .. CF_DOCS_SPLICE_SNIPPET_115_START
    .. code::
 
       val participantId = participant.id // ID of the new participant
       participant.topology.party_to_participant_mappings.propose(<party-id>, Seq((participantId, <participant-permission>)), store = syncId)
+   .. CF_DOCS_SPLICE_SNIPPET_115_END
 
 2. If all parties are on the new node already, you can attempt to (re-)import the ACS for those parties manually.
    The following steps concern your new validator node:
@@ -255,17 +261,21 @@ To address a failed :term:`ACS` import, you can usually:
    b. Open a :ref:`participant console <console_access>` to that new validator and keep it open for the next steps.
    c. From the Canton console, run:
 
+      .. CF_DOCS_SPLICE_SNIPPET_116_START
       .. code::
 
          participant.synchronizers.disconnect_all()
+      .. CF_DOCS_SPLICE_SNIPPET_116_END
 
    d. For each ``PARTY_ID`` you want to migrate / re-import the ACS for:
 
       Run from a regular shell (same working directory like the one you started your Canton console from):
 
+      .. CF_DOCS_SPLICE_SNIPPET_120_START
       .. parsed-literal::
 
          curl -sSL --fail-with-body '|gsf_scan_url|/api/scan/v0/acs/YOUR_PARTY_ID' -H 'Content-Type: application/json' | jq -r .acs_snapshot | base64 -d > acs_snapshot
+      .. CF_DOCS_SPLICE_SNIPPET_120_END
 
       From the Canton console:
 
@@ -294,10 +304,12 @@ onboarded on Splice 0.4.1 or earlier, which used a Canton version that did not r
 the mapped keys to co-sign ``OwnerToKeyMapping`` transactions.
 You can identify this issue by looking for the following messages in your participant logs:
 
+.. CF_DOCS_SPLICE_SNIPPET_117_START
 .. code::
 
    Missing authorizers: ReferencedAuthorizations(extraKeys = <key-id>...)
    Rejected transaction ... OwnerToKeyMapping(...) ... due to Not authorized
+.. CF_DOCS_SPLICE_SNIPPET_117_END
 
 To work around this, follow these steps:
 
@@ -309,6 +321,7 @@ To work around this, follow these steps:
    those from the rejected ``OwnerToKeyMapping`` in your participant logs, and replace the
    old participant ID with your actual old participant ID:
 
+   .. CF_DOCS_SPLICE_SNIPPET_118_START
    .. code::
 
       val keys = Seq("<signing-key-id-prefix>", "<encryption-key-id-prefix>").map(prefix =>
@@ -317,6 +330,7 @@ To work around this, follow these steps:
       val oldParticipantId = ParticipantId.fromProtoPrimitive("<old-participant-id>", "participant").toOption.get
       val otk = OwnerToKeyMapping(member = oldParticipantId, keys = NonEmpty.from(keys).get)
       participant.topology.owner_to_key_mappings.propose(otk, force = ForceFlag.AlienMember)
+   .. CF_DOCS_SPLICE_SNIPPET_118_END
 
 3. Start the validator app using your original identities dump configuration.
 
@@ -438,10 +452,12 @@ In this example, the validFrom time is ``2025-05-14T10:19:33.534074Z``.
 
 We can now query CC Scan to get the active contract set (ACS) for a party and write it to the file ``acs_snapshot``:
 
+.. CF_DOCS_SPLICE_SNIPPET_121_START
 .. parsed-literal::
 
     // Make sure to adjust YOUR_VALID_FROM to the time you got from the previous query and YOUR_PARY_ID
     curl -sSL --fail-with-body '|gsf_scan_url|/api/scan/v0/acs/YOUR_PARTY_ID?record_time=YOUR_VALID_FROM' -H 'Content-Type: application/json' | jq -r .acs_snapshot | base64 -d > acs_snapshot
+.. CF_DOCS_SPLICE_SNIPPET_121_END
 
 
 Lastly, we can import the ACS:
@@ -480,6 +496,7 @@ Validators then need to:
 
 2. Initiate the roll forward LSU through a :ref:`Canton console <console_access>`:
 
+.. CF_DOCS_SPLICE_SNIPPET_119_START
 .. code::
 
     val existingPhysicalSynchronizerId = participant.synchronizers.list_connected().find(_.synchronizerAlias == "global").head.physicalSynchronizerId
@@ -489,6 +506,7 @@ Validators then need to:
       upgradeTime = None,
       sequencerSuccessors,
     )
+.. CF_DOCS_SPLICE_SNIPPET_119_END
 
 .. _validator_acs_mismatches:
 

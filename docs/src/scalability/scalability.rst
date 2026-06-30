@@ -112,8 +112,10 @@ To do so, add the following :ref:`environment variables
 experiment with the batch size but batch sizes above 20 are not
 recommended as batches that are too large can cause issues.
 
+.. CF_DOCS_SPLICE_SNIPPET_030_START
 .. code::
 
     - name: ADDITIONAL_CONFIG_TOPOLOGY_BATCH_SIZE
       value: |
         canton.participants.participant.topology.broadcast-batch-size = 20
+.. CF_DOCS_SPLICE_SNIPPET_030_END
