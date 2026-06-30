@@ -435,30 +435,32 @@ class LsuIntegrationTest
         lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
 
-    val generatedKey: SigningPublicKey =
-      aliceValidatorBackend.participantClient.keys.secret
-        .generate_signing_key(
-          UUID.randomUUID().toString,
-          SigningKeyUsage.All,
-          Some(SigningKeySpec.EcCurve25519),
-        )
-    val truePartyHint = "external-party"
-    val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
-      .download(generatedKey.fingerprint, ProtocolVersion.dev)
+      val generatedKey: SigningPublicKey =
+        aliceValidatorBackend.participantClient.keys.secret
+          .generate_signing_key(
+            UUID.randomUUID().toString,
+            SigningKeyUsage.All,
+            Some(SigningKeySpec.EcCurve25519),
+          )
+      val truePartyHint = "external-party"
+      val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
+        .download(generatedKey.fingerprint, ProtocolVersion.dev)
 
-    // delete the key from the participant to ensure that it won't be actually used there for anything
-    aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
+      // delete the key from the participant to ensure that it won't be actually used there for anything
+      aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
 
-    val keyPair =
-      CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+      val keyPair =
+        CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
 
-      scala.util.Try(
-    submitTopologyAndOnboard(
-      aliceValidatorBackend,
-      truePartyHint,
-      keyPair,
-      PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
-    ))
+      assertThrowsAndLogsCommandFailures(
+        submitTopologyAndOnboard(
+          aliceValidatorBackend,
+          truePartyHint,
+          keyPair,
+          PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+        ),
+        _.errorMessage should include("TOPOLOGY_LSU_TOPOLOGY_FREEZE"),
+      )
 
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
