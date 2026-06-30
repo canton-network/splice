@@ -534,7 +534,7 @@ template DsoRules with
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
-    svNames : Map.Map Text
+    svNames : Map.Map Text SvNameInfo
 
   where
     ensure
@@ -544,6 +544,12 @@ template DsoRules with
     -- validating choices on this contract. Instead, the svs are indirect signatories by being
     -- hosting the DSO party with confirmation rights.
     signatory dso
+
+   -- FIXME: missing choices for
+   -- - add non-operator node
+   -- - remove sv fully
+   -- - change weights (tbd: how does it integrate with locking)
+   -- - change node operator used for reward minting
 
 
     -- Sv management
@@ -565,33 +571,35 @@ template DsoRules with
         sv : Party
       controller dso
       do
-        require "There is more than one sv" (Map.size svs > 1)
-        case Map.lookup sv svs of
-          None -> fail "Not a sv"
-          Some info -> do
-            -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
-            -- revoking that sv's rights in the CometBFT network and the topology state.
-            let newSvs = Map.delete sv svs
-            -- We optimize for prompt removal of a sv if the vote said so.
-            -- and instead just choose the sv with the lexicographically smallest name.
-            let (newDsoDelegate, newEpoch)
-                  | sv == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
-                  | otherwise        = (dsoDelegate, epoch)
-            let offboardedSvInfo = OffboardedSvInfo with
-                    name = info.name
-                    participantId = info.participantId
-            -- create the new rules contract
-            newDsoRules <- create DsoRules with
-              dso
-              epoch = newEpoch
-              dsoDelegate = newDsoDelegate
-              svs = newSvs
-              offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
-              config
-              initialTrafficState
-              isDevNet
+        -- FIXME: Remove the nodeParty fom SvNodeInfo but keep as SV
+        -- require "There is more than one sv" (Map.size svs > 1)
+        -- case Map.lookup sv svs of
+        --   None -> fail "Not a sv"
+        --   Some info -> do
+        --     -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
+        --     -- revoking that sv's rights in the CometBFT network and the topology state.
+        --     let newSvs = Map.delete sv svs
+        --     -- We optimize for prompt removal of a sv if the vote said so.
+        --     -- and instead just choose the sv with the lexicographically smallest name.
+        --     let (newDsoDelegate, newEpoch)
+        --           | sv == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
+        --           | otherwise        = (dsoDelegate, epoch)
+        --     let offboardedSvInfo = OffboardedSvInfo with
+        --             name = info.name
+        --             participantId = info.participantId
+        --     -- create the new rules contract
+        --     newDsoRules <- create DsoRules with
+        --       dso
+        --       epoch = newEpoch
+        --       dsoDelegate = newDsoDelegate
+        --       svs = newSvs
+        --       offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
+        --       config
+        --       initialTrafficState
+        --       isDevNet
 
-            return DsoRules_OffboardSvResult with ..
+        --     return DsoRules_OffboardSvResult with ..
+        abort "FIXME"
 
     -- Update an SV's Status report
     nonconsuming choice DsoRules_SubmitStatusReport : DsoRules_SubmitStatusReportResult
@@ -600,18 +608,19 @@ template DsoRules with
         previousReportCid : ContractId SvStatusReport
         status : SvStatus
       controller sv
-      do
-        newReport <- case Map.lookup sv svs of
-          None -> fail "SV is not an SV"
-          Some info -> do
-            previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = info.name) previousReportCid
-            create SvStatusReport with
-              dso
-              sv
-              svName = info.name
-              number = previousReport.number + 1
-              status = Some status
-        return DsoRules_SubmitStatusReportResult with ..
+      do -- FIXME: Only for nodes with nodeParty
+        -- newReport <- case Map.lookup sv svs of
+        --   None -> fail "SV is not an SV"
+        --   Some info -> do
+        --     previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = info.name) previousReportCid
+        --     create SvStatusReport with
+        --       dso
+        --       sv
+        --       svName = info.name
+        --       number = previousReport.number + 1
+        --       status = Some status
+        -- return DsoRules_SubmitStatusReportResult with ..
+        abort "FIXME"
 
     -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
@@ -627,27 +636,29 @@ template DsoRules with
         -- No longer used, but must be kept for smart-contract upgrading compatibility.
         -- (This was used when the current round number was tracked in the AmuletRules contract.)
       controller sv
-      do
+      do -- FIXME: Probably want to change onboarding flow in two steps:
+         -- first: add sv as non node operator, then this choice will promote it to a node operator
+         abort "FIXME"
 
-        svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
-        assertWithinDeadline "svOnboardingConfirmed.expiresAt" svOnboardingConfirmed.expiresAt
+        -- svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
+        -- assertWithinDeadline "svOnboardingConfirmed.expiresAt" svOnboardingConfirmed.expiresAt
 
-        let forDso = ForDso with dso
-        earliestRound <- fetchReferenceData forDso earliestRoundCid
-        middleRound <- fetchReferenceData forDso middleRoundCid
-        latestRound <- fetchReferenceData forDso latestRoundCid
-        require "middleRound is one after earliestRound" (middleRound.round.number == earliestRound.round.number + 1)
-        require "latestRound is one after middleRound" (latestRound.round.number == middleRound.round.number + 1)
+        -- let forDso = ForDso with dso
+        -- earliestRound <- fetchReferenceData forDso earliestRoundCid
+        -- middleRound <- fetchReferenceData forDso middleRoundCid
+        -- latestRound <- fetchReferenceData forDso latestRoundCid
+        -- require "middleRound is one after earliestRound" (middleRound.round.number == earliestRound.round.number + 1)
+        -- require "latestRound is one after middleRound" (latestRound.round.number == middleRound.round.number + 1)
 
-        addSvResult <- exercise self DsoRules_AddSv with
-          newSvParty = sv
-          newSvName = svOnboardingConfirmed.svName
-          newSvRewardWeight = svOnboardingConfirmed.svRewardWeight
-          newSvParticipantId = svOnboardingConfirmed.svParticipantId
-          joinedAsOfRound = earliestRound.round
+        -- addSvResult <- exercise self DsoRules_AddSv with
+        --   newSvParty = sv
+        --   newSvName = svOnboardingConfirmed.svName
+        --   newSvRewardWeight = svOnboardingConfirmed.svRewardWeight
+        --   newSvParticipantId = svOnboardingConfirmed.svParticipantId
+        --   joinedAsOfRound = earliestRound.round
 
-        return DsoRules_AddConfirmedSvResult with
-          newDsoRules = addSvResult.newDsoRules
+        -- return DsoRules_AddConfirmedSvResult with
+        --   newDsoRules = addSvResult.newDsoRules
 
 
     -- Decentralized synchronizer config management
@@ -662,6 +673,7 @@ template DsoRules with
         nodeStateCid : ContractId SvNodeState
       controller sv
       do
+        -- fixme: maybe add check that node is still a node operator
         -- check that the synchronizer is known
         require "Synchronizer with this id is configured" (synchronizerId `Map.member` config.decentralizedSynchronizer.synchronizers)
         -- check validity of config and constraint on voting power
