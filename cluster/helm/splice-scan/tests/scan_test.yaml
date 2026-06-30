@@ -160,7 +160,7 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
       participantAddress: "mock-address"
       persistence:
@@ -188,12 +188,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         successor:
           sequencer: "successor-sequencer-address"
           mediator: "successor-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-successor:5678"
       participantAddress: "mock-address"
       persistence:
@@ -224,12 +224,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:
@@ -260,12 +260,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:
@@ -297,12 +297,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:

@@ -28,7 +28,7 @@ trait BaseScanAppConfig {}
 final case class ScanSynchronizerConfig(
     sequencer: FullClientConfig,
     mediator: FullClientConfig,
-    bftSequencerConfig: Option[BftSequencerConfig],
+    cantonBft: Option[BftSequencerConfig],
 )
 
 final case class MediatorVerdictIngestionConfig(

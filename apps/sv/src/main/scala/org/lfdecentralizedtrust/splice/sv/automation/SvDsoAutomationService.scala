@@ -380,7 +380,7 @@ class SvDsoAutomationService(
       new ReconcileSequencingParametersTrigger(
         triggerContext,
         participantAdminConnection,
-        config.bftSequencingParameters,
+        config.cantonBftSequencingParameters,
         config.domains.global.alias,
       )
     )

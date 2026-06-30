@@ -430,7 +430,7 @@ object ConfigTransforms {
           .some
           .modify(
             portTransform(bump, _)
-              .focus(_.bftSequencerConfig)
+              .focus(_.cantonBft)
               .some
               .modify(_.focus(_.p2pUrl).modify(bumpUrl(bump, _)))
           )
@@ -451,7 +451,7 @@ object ConfigTransforms {
           .some
           .modify(
             portTransform(bump, _)
-              .focus(_.bftSequencerConfig)
+              .focus(_.cantonBft)
               .some
               .modify(_.focus(_.p2pUrl).modify(bumpUrl(bump, _)))
           )
@@ -478,7 +478,7 @@ object ConfigTransforms {
           conf
             .focus(_.synchronizerNodes)
             .modify(portTransform(bump, _))
-            .focus(_.synchronizerNodes.current.bftSequencerConfig)
+            .focus(_.synchronizerNodes.current.cantonBft)
             .modify(_.map(c => c.copy(p2pUrl = bumpUrl(bump, c.p2pUrl))))
         else conf
       ),
@@ -744,7 +744,7 @@ object ConfigTransforms {
       basePort: Int = 5010,
   ): ScanAppBackendConfig =
     config
-      .focus(_.synchronizerNodes.current.bftSequencerConfig)
+      .focus(_.synchronizerNodes.current.cantonBft)
       .replace(bftScanConfig(name, basePort))
 
   def withBftSequencerSuccessor(
@@ -754,7 +754,7 @@ object ConfigTransforms {
   ): ScanAppBackendConfig =
     config
       .focus(_.synchronizerNodes.successor)
-      .modify(_.map(_.focus(_.bftSequencerConfig).replace(bftScanConfig(name, basePort))))
+      .modify(_.map(_.focus(_.cantonBft).replace(bftScanConfig(name, basePort))))
 
   private def withBftSequencersFor(
       svTransform: SvAppBackendConfig => SvAppBackendConfig,
