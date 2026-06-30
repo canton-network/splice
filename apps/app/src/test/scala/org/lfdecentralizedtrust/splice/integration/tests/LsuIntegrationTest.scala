@@ -2,8 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.crypto.*
-// import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
-// import com.digitalasset.canton.crypto.v30 as cryptoProto
 import better.files.File.apply
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
