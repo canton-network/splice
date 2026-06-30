@@ -56,22 +56,15 @@ class SvReconcileBftSequencingParametersIntegrationTest
     )() {
       sv1Backend.startSync()
       sv1Backend.stop()
-      sv1Backend.participantClient.topology.sequencing_parameters
-        .list(decentralizedSynchronizerId) shouldBe empty
-      actAndCheck("Restart with sequencing parameters set", sv1LocalBackend.startSync())(
-        "sequencing parameters are set",
-        _ => {
-          val parameters = sv1Backend.participantClient.topology.sequencing_parameters
-            .list(decentralizedSynchronizerId)
-            .loneElement
-          val bytes = parameters.item.payload.value
-          val bftParameters = SequencingParameters
-            .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
-            .value
-          bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
-            .tryOfSeconds(5)
-        },
-      )
+      val parameters = sv1Backend.participantClient.topology.sequencing_parameters
+        .list(decentralizedSynchronizerId)
+        .loneElement
+      val bytes = parameters.item.payload.value
+      val bftParameters = SequencingParameters
+        .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
+        .value
+      bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
+        .tryOfSeconds(5)
       sv1LocalBackend.stop()
       actAndCheck("Restart with sequencing parameters unset", sv1Backend.startSync())(
         "sequencing parameters are unset",
