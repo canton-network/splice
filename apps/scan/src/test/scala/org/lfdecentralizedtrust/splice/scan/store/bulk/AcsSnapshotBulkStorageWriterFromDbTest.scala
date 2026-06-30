@@ -192,7 +192,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       )
       val reader = new BulkStorageReader(
         acsSnapshotStagingProgress = progress,
-        acsSnapshotCommittedProgress = null, // we don't test committed progress in this test
+        acsSnapshotCommittedProgress = progress,
         updateHistoryStagingProgress = null, // no updates history in this test
         updateHistoryCommittedProgress = null, // no updates history in this test
         bulkStorageTestConfig,
