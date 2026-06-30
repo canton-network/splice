@@ -434,33 +434,37 @@ class LsuIntegrationTest
         lsu.upgradeTime shouldBe upgradeTime
         lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
+      val externalPartyHint = "external-party"
+      val (keyPair, externalPartyId) = clue("Try to onboard a party which fails due to topology freeze being active") {
+        val generatedKey: SigningPublicKey =
+          aliceValidatorBackend.participantClient.keys.secret
+            .generate_signing_key(
+              UUID.randomUUID().toString,
+              SigningKeyUsage.All,
+              Some(SigningKeySpec.EcCurve25519),
+            )
+        val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
+          .download(generatedKey.fingerprint, ProtocolVersion.dev)
 
-      val generatedKey: SigningPublicKey =
-        aliceValidatorBackend.participantClient.keys.secret
-          .generate_signing_key(
-            UUID.randomUUID().toString,
-            SigningKeyUsage.All,
-            Some(SigningKeySpec.EcCurve25519),
-          )
-      val truePartyHint = "external-party"
-      val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
-        .download(generatedKey.fingerprint, ProtocolVersion.dev)
+        // delete the key from the participant to ensure that it won't be actually used there for anything
+        aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
 
-      // delete the key from the participant to ensure that it won't be actually used there for anything
-      aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
+        val keyPair =
+          CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
 
-      val keyPair =
-        CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+        val partyId = PartyId.tryCreate(externalPartyHint, generatedKey.fingerprint)
 
-      assertThrowsAndLogsCommandFailures(
-        submitTopologyAndOnboard(
-          aliceValidatorBackend,
-          truePartyHint,
-          keyPair,
-          PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
-        ),
-        _.errorMessage should include("TOPOLOGY_LSU_TOPOLOGY_FREEZE"),
-      )
+        assertThrowsAndLogsCommandFailures(
+          submitTopologyAndOnboard(
+            aliceValidatorBackend,
+            externalPartyHint,
+            keyPair,
+            partyId,
+          ),
+          _.errorMessage should include("TOPOLOGY_LSU_TOPOLOGY_FREEZE"),
+        )
+        (keyPair, partyId)
+      }
 
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
@@ -656,12 +660,12 @@ class LsuIntegrationTest
         )
       }
 
-      clue("Can allocate a new party via external party topology endpoints after LSU") {
+      clue("Retrying external party allocation after LSU works") {
         submitTopologyAndOnboard(
           aliceValidatorBackend,
-          truePartyHint,
+          externalPartyHint,
           keyPair,
-          PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+          externalPartyId,
         )
       }
 
