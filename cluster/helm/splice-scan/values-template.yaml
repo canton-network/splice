@@ -117,6 +117,6 @@ securityContexts:
     runAsGroup: 1001
     allowPrivilegeEscalation: false
     privileged: false
-    capabilities:
-      drop:
-        - ALL
+#    capabilities:
+#      drop:
+#        - ALL
