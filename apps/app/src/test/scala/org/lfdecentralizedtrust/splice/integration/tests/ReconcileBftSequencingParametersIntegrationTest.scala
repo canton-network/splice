@@ -29,7 +29,7 @@ class SvReconcileBftSequencingParametersIntegrationTest
               (InstanceName.tryCreate("sv1Local") ->
                 c.svApps(InstanceName.tryCreate("sv1"))
                   .copy(
-                    bftSequencingParameters = Some(
+                    cantonBftSequencingParameters = Some(
                       BftSequencingParameters(
                         pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
                         segmentLength = SequencingParameters.DefaultSegmentLength.length,

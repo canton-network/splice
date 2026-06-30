@@ -64,11 +64,11 @@ class ScanIntegrationTest
           config.copy(
             synchronizerNodes = config.synchronizerNodes.copy(
               current = config.synchronizerNodes.current.copy(
-                bftSequencerConfig = Some(BftSequencerConfig("http://testUrl:8081"))
+                cantonBft = Some(BftSequencerConfig("http://testUrl:8081"))
               ),
               legacy = Some(
                 config.synchronizerNodes.current.copy(
-                  bftSequencerConfig = Some(BftSequencerConfig("http://legacyUrl:8082"))
+                  cantonBft = Some(BftSequencerConfig("http://legacyUrl:8082"))
                 )
               ),
             ),

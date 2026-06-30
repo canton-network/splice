@@ -26,8 +26,7 @@ import {
   StaticSvConfig,
   SvOnboarding,
 } from '@canton-network/splice-pulumi-common-sv';
-
-import { InstalledSv, installSvNode } from './sv';
+import { InstalledSv, installSvNode } from '@canton-network/splice-pulumi-common-sv/src/sv';
 
 interface DsoArgs {
   auth0Client: Auth0Client;

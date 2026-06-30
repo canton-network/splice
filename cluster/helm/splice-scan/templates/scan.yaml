@@ -91,27 +91,27 @@ spec:
             canton.scan-apps.scan-app.sponsor-scan-url.url = "{{ . }}"
         {{- end }}
         {{- if .Values.synchronizers }}
-        {{- with .Values.synchronizers.current.bftSequencerConfig }}
+        {{- with .Values.synchronizers.current.cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_CURRENT
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.current.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.current.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}
         {{- with .Values.synchronizers.successor }}
-        {{- with .bftSequencerConfig }}
+        {{- with .cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_SUCCESSOR
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.successor.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.successor.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}
         {{- end }}
         {{- with .Values.synchronizers.legacy }}
-        {{- with .bftSequencerConfig }}
+        {{- with .cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_LEGACY
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.legacy.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.legacy.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}

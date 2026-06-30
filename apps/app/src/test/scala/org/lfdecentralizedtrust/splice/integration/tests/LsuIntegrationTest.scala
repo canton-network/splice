@@ -1,5 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.crypto.*
 import better.files.File.apply
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
@@ -8,7 +10,6 @@ import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeLong}
-import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPrivateKey}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
@@ -430,6 +431,38 @@ class LsuIntegrationTest
         lsu.upgradeTime shouldBe upgradeTime
         lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
+      val externalPartyHint = "external-party"
+      val (keyPair, externalPartyId) =
+        clue("Try to onboard a party which fails due to topology freeze being active") {
+          val generatedKey: SigningPublicKey =
+            aliceValidatorBackend.participantClient.keys.secret
+              .generate_signing_key(
+                UUID.randomUUID().toString,
+                SigningKeyUsage.All,
+                Some(SigningKeySpec.EcCurve25519),
+              )
+          val signingKeyPairByteString = aliceValidatorBackend.participantClient.keys.secret
+            .download(generatedKey.fingerprint, ProtocolVersion.dev)
+
+          // delete the key from the participant to ensure that it won't be actually used there for anything
+          aliceValidatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
+
+          val keyPair =
+            CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+
+          val partyId = PartyId.tryCreate(externalPartyHint, generatedKey.fingerprint)
+
+          assertThrowsAndLogsCommandFailures(
+            submitTopologyAndOnboard(
+              aliceValidatorBackend,
+              externalPartyHint,
+              keyPair,
+              partyId,
+            ),
+            _.errorMessage should include("TOPOLOGY_LSU_TOPOLOGY_FREEZE"),
+          )
+          (keyPair, partyId)
+        }
 
       clue("new nodes are initialized") {
         initialSvNodesDoingTheLsu.map { backend =>
@@ -624,6 +657,16 @@ class LsuIntegrationTest
           },
         )
       }
+
+      clue("Retrying external party allocation after LSU works") {
+        submitTopologyAndOnboard(
+          aliceValidatorBackend,
+          externalPartyHint,
+          keyPair,
+          externalPartyId,
+        )
+      }
+
       // new sync nodes are started in process so to avoid log noise we stop everything before the test ends
       clue("Alice can purchase traffic") {
         val aliceParty = aliceValidatorBackend.getValidatorPartyId()

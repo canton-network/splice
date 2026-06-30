@@ -51,21 +51,21 @@ import {
 import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 import { installValidatorApp } from '@canton-network/splice-pulumi-common-validator/src/validator';
 import {
+  delegatelessAutomationExpectedTaskDuration,
+  delegatelessAutomationExpiredRewardCouponBatchSize,
+  delegatelessAutomationExpiredRewardCouponNumBatches,
+} from '@canton-network/splice-pulumi-common/src/automation';
+import {
   BucketConfig,
   installBucketSecret,
 } from '@canton-network/splice-pulumi-common/src/buckets';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { initialAmuletPrice } from '@canton-network/splice-pulumi-common/src/initialAmuletPrice';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
 import { topologySnapshotConfig } from '@canton-network/splice-pulumi-common/src/topology-snapshot';
 import { Resource } from '@pulumi/pulumi';
 
-import {
-  delegatelessAutomationExpectedTaskDuration,
-  delegatelessAutomationExpiredRewardCouponBatchSize,
-  delegatelessAutomationExpiredRewardCouponNumBatches,
-} from '../../common/src/automation';
-import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
 import { configureScanBigQuery } from './bigQuery';
 import { installInfo } from './info';
 
