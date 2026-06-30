@@ -11,6 +11,7 @@ import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
 import DA.List as List hiding (all)
 import DA.Optional (isNone, fromSome, fromOptional, isSome)
+import DA.Map (Map)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
@@ -23,6 +24,7 @@ import Splice.ExternalPartyAmuletRules
 import Splice.TokenStandard.Utils qualified as TSU
 
 import Splice.ExternalPartyConfigState
+import Splice.HostedSv
 import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
@@ -103,6 +105,7 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to remove an SV
   | SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding
     -- ^ Automated action to confirm that a party can become an SV.
+    -- FIXME: Deprecate
   | SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight
     -- ^ Voted action to grant a featured app right. Not idempotent.
   | SRARC_RevokeFeaturedAppRight DsoRules_RevokeFeaturedAppRight
@@ -111,6 +114,7 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to change the `DsoRulesConfig`. Not idempotent.
   | SRARC_UpdateSvRewardWeight DsoRules_UpdateSvRewardWeight
     -- ^ Voted action to update the reward weight of an SV.
+    -- FIXME: Deprecate
   | SRARC_CreateExternalPartyAmuletRules DsoRules_CreateExternalPartyAmuletRules
     -- ^ Create ExternalPartyAmuletRules contract if it has not been created as part of network bootstrapping.
   | SRARC_CreateTransferCommandCounter DsoRules_CreateTransferCommandCounter
@@ -119,6 +123,18 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to create an UnallocatedUnclaimedActivityRecord contract.
   | SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
+  | SRARC_AddHostedSv DsoRules_AddHostedSv
+    -- ^ Voted action to directly add a hosted SV.
+  | SRARC_InstructUpdateHostedSvWeight DsoRules_InstructUpdateHostedSvWeight
+    -- ^ Voted action to update the weight of a hosted SV.
+  | SRARC_InstructOffboardHostedSv DsoRules_InstructOffboardHostedSv
+    -- ^ Voted action to instruct the offboarding of a hosted SV.
+  | SRARC_InstructUpdateSvOperatorForHostedSv DsoRules_InstructUpdateSvOperatorForHostedSv
+    -- ^ Voted action to instruct the update of the SV operator for a hosted SV.
+  | SRARC_AddSvNode DsoRules_AddSvNode
+    -- ^ Voted action to directly add an SV node.
+  | SRARC_ConfirmSvNodeOnboarding DsoRules_ConfirmSvNodeOnboarding
+    -- ^ Automated action to confirm that a party can become an SV.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -131,8 +147,8 @@ data AnsEntryContext_ActionRequiringConfirmation
 -- | Information about SVs relevant to DSO governance.
 data SvInfo = SvInfo with
     name : Text -- ^ Human-readable name; must be unique.
-    joinedAsOfRound : Round -- ^ Round in which the SV joined
-    svRewardWeight : Int -- ^ Weight of the SV in the SV reward distribution.
+    joinedAsOfRound : Round -- ^ __Deprecated__ in favor of `HostedSvInfo`.
+    svRewardWeight : Int -- ^ __Deprecated__ in favor of `HostedSvInfo`.
     participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
   deriving (Eq, Show)
 
@@ -150,6 +166,20 @@ data DsoSummary = DsoSummary with
       -- ^ The number of votes required for considering a confirmation, or a request for a vote
   deriving (Eq, Show)
 
+-- | Migration data for one hosted SV whose reward weight is being moved from the
+-- legacy SV operator weight model into a `HostedSv` contract.
+--
+-- Each value represents one hosted SV operated by the SV operator performing the
+-- migration. The corresponding `hostedSvRewardWeight` becomes the on-ledger hosted SV
+-- weight for that hosted SV under the migrating SV operator.
+data HostedSvMigrationData = HostedSvMigrationData with
+    hostedSv : Party -- ^ The hosted SV party.
+    hostedSvRewardWeight : Int -- ^ Weight of the hosted SV in the SV reward distribution.
+    hostedSvName : Text -- ^ Human-readable name of the hosted SV.
+    beneficiaries : Map Party Decimal -- ^ Beneficiary parties and their reward percentages for the hosted SV.
+  deriving (Eq, Show)
+
+
 -- | Choice return types
 -------------------------
 -- In order to support upgrades of the Daml models, all choices should return records, which can
@@ -160,6 +190,13 @@ data Confirmation_ExpireResult = Confirmation_ExpireResult
 data DsoRules_AddSvResult = DsoRules_AddSvResult with
     newDsoRules : ContractId DsoRules
 
+data DsoRules_AddSvOperatorResult = DsoRules_AddSvOperatorResult with
+    newDsoRules : ContractId DsoRules
+
+data DsoRules_AddHostedSvResult = DsoRules_AddHostedSvResult with
+    hostedSvCid : ContractId HostedSv
+    hostedSvRewardStateCid : ContractId HostedSvRewardState
+
 data DsoRules_OffboardSvResult = DsoRules_OffboardSvResult with
     newDsoRules : ContractId DsoRules
 
@@ -167,6 +204,9 @@ data DsoRules_SubmitStatusReportResult = DsoRules_SubmitStatusReportResult with
     newReport : ContractId SvStatusReport
 
 data DsoRules_AddConfirmedSvResult = DsoRules_AddConfirmedSvResult with
+    newDsoRules : ContractId DsoRules
+
+data DsoRules_AddConfirmedSvNodeResult = DsoRules_AddConfirmedSvNodeResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_SetSynchronizerNodeConfigResult = DsoRules_SetSynchronizerNodeConfigResult with
@@ -204,6 +244,26 @@ data DsoRules_SetConfigResult = DsoRules_SetConfigResult with
 data DsoRules_UpdateSvRewardWeightResult = DsoRules_UpdateSvRewardWeightResult with
     newDsoRules : ContractId DsoRules
 
+data DsoRules_UpdateHostedSvWeightResult = DsoRules_UpdateHostedSvWeightResult with
+    result : HostedSv_UpdateRewardWeightResult
+
+data DsoRules_InstructOffboardHostedSvResult = DsoRules_InstructOffboardHostedSvResult with
+    instructionCid : ContractId OffboardHostedSvInstruction
+
+data DsoRules_InstructUpdateHostedSvWeightResult = DsoRules_InstructUpdateHostedSvWeightResult with
+    instructionCid : ContractId UpdateHostedSvWeightInstruction
+
+data DsoRules_OffboardHostedSvResult = DsoRules_OffboardHostedSvResult
+
+data DsoRules_UpdateSvOperatorForHostedSvResult = DsoRules_UpdateSvOperatorForHostedSvResult with
+    result : HostedSv_UpdateSvOperatorResult
+
+data DsoRules_InstructUpdateSvOperatorForHostedSvResult = DsoRules_InstructUpdateSvOperatorForHostedSvResult with
+    instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
+
+data DsoRules_MigrateHostedSvsResult = DsoRules_MigrateHostedSvsResult with
+    newDsoRules : ContractId DsoRules
+
 data DsoRules_GrantFeaturedAppRightResult = DsoRules_GrantFeaturedAppRightResult with
     featuredAppRight : ContractId FeaturedAppRight
 
@@ -220,12 +280,22 @@ data DsoRules_StartSvOnboardingResult = DsoRules_StartSvOnboardingResult with
 
 data DsoRules_ExpireSvOnboardingRequestResult = DsoRules_ExpireSvOnboardingRequestResult
 
+data DsoRules_ExpireSvNodeOnboardingRequestResult = DsoRules_ExpireSvNodeOnboardingRequestResult
+
 data DsoRules_ArchiveSvOnboardingRequestResult = DsoRules_ArchiveSvOnboardingRequestResult
+
+data DsoRules_ArchiveSvNodeOnboardingRequestResult = DsoRules_ArchiveSvNodeOnboardingRequestResult
 
 data DsoRules_ConfirmSvOnboardingResult = DsoRules_ConfirmSvOnboardingResult with
     onboardingConfirmed : ContractId SvOnboardingConfirmed
 
+data DsoRules_ConfirmSvNodeOnboardingResult = DsoRules_ConfirmSvNodeOnboardingResult with
+    onboardingConfirmed : ContractId SvNodeOnboardingConfirmed
+
 data DsoRules_ExpireSvOnboardingConfirmedResult = DsoRules_ExpireSvOnboardingConfirmedResult with
+    newDsoRules : ContractId DsoRules
+
+data DsoRules_ExpireSvNodeOnboardingConfirmedResult = DsoRules_ExpireSvNodeOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
 
 data DsoRules_Amulet_ExpireTransferInstructionsResult = DsoRules_Amulet_ExpireTransferInstructionsResult
@@ -267,6 +337,9 @@ data DsoRules_TerminateSubscriptionResult = DsoRules_TerminateSubscriptionResult
 data DsoRules_ReceiveSvRewardCouponResult = DsoRules_ReceiveSvRewardCouponResult with
     svRewardState : ContractId SvRewardState
     svRewardCoupons : [ContractId SvRewardCoupon]
+
+data DsoRules_ReceiveSvRewardCoupon_V2Result = DsoRules_ReceiveSvRewardCoupon_V2Result with
+    hostedSvRewardCouponOutputs : [(ContractId HostedSvRewardState, [ContractId SvRewardCoupon])]
 
 data DsoRules_ClaimExpiredRewardsResult = DsoRules_ClaimExpiredRewardsResult with
     unclaimedReward: Optional (ContractId UnclaimedReward)
@@ -513,10 +586,45 @@ data TrafficState = TrafficState with
     consumedTraffic: Int -- ^ Bytes of extra traffic consumed before the decentralized synchronizer was bootstrapped.
   deriving (Eq, Show)
 
+
+-- | Instruction created by the DSO to authorize updating the reward weight of a
+-- hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV and the new reward weight, and the current 'HostedSv'
+-- contract is resolved and updated when the instruction is consumed by
+-- 'DsoRules_UpdateHostedSvWeight'.
+template UpdateHostedSvWeightInstruction
+  with
+    hostedSv : Party
+      -- ^ The hosted SV party whose reward weight should be updated.
+    newRewardWeight : Int
+      -- ^ The new reward weight to assign to the hosted SV.
+    dso : Party
+      -- ^ The DSO party.
+  where
+    ensure newRewardWeight > 0
+    signatory dso
+
+
+-- This template distinguishes between three kinds of parties:
+--
+-- * SV node operators: parties that operate an SV node. These are tracked in
+--   `svs` and contain node/operator metadata. An SV node operator does not
+--   itself define the reward weight.
+--
+-- * Hosted SVs: first-class SVs that have an on-ledger hosted SV reward weight. These
+--   are represented by `HostedSv` contracts. If an SV node operator party is
+--   also a hosted SV, it also has a corresponding `HostedSv` contract with its
+--   reward weight.
+--
+-- * Beneficiaries: parties that receive a portion of an hosted SV's rewards. These are
+--   configured separately through `HostedSvRewardBeneficiaries` and are not managed as
+--   part of SV governance.
 template DsoRules with
     dso : Party
     epoch : Int
-    svs : Map.Map Party SvInfo
+    svs : Map.Map Party SvInfo -- ^ List of SV nodes.
     offboardedSvs : Map.Map Party OffboardedSvInfo
     dsoDelegate : Party
       -- ^ __Deprecated__ in favor of delegateless automation.
@@ -536,6 +644,7 @@ template DsoRules with
     -- Sv management
     ------------------------
 
+    -- FIXME: Deprecate
     choice DsoRules_AddSv : DsoRules_AddSvResult
       with
         newSvParty : Party
@@ -546,6 +655,15 @@ template DsoRules with
       controller dso
       do newDsoRules <- dsoRules_addSv this arg
          return DsoRules_AddSvResult with ..
+
+    choice DsoRules_AddSvNode : DsoRules_AddSvOperatorResult
+      with
+        newSvOperatorParty : Party
+        newSvNodeName : Text
+        newSvNodeParticipantId : Text
+      controller dso
+      do newDsoRules <- dsoRules_AddSvNode this arg
+         return DsoRules_AddSvOperatorResult with ..
 
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
       with
@@ -580,6 +698,41 @@ template DsoRules with
 
             return DsoRules_OffboardSvResult with ..
 
+    nonconsuming choice DsoRules_AddHostedSv : DsoRules_AddHostedSvResult
+      with
+        newHostedSv : Party
+        newHostedSvName : Text
+        newHostedSvRewardWeight : Int
+        joinedAsOfRound : Round
+        svOperator : Party
+        beneficiaries : Map Party Decimal
+      controller dso
+      do
+        -- Sanity checks
+        let isSvOperator = flip Map.member svs
+        require "svOperator is an SV node operator" $ isSvOperator svOperator
+
+        hostedSvRewardStateCid <- create HostedSvRewardState with
+          dso
+          hostedSv = newHostedSv
+          state = RewardState with
+            lastRoundCollected = Round (joinedAsOfRound.number - 1)
+            numRoundsMissed = 0
+            numRoundsCollected = 0
+            numCouponsIssued = 0
+
+        hostedSvCid <- create HostedSv with
+          dso
+          hostedSv = newHostedSv
+          svOperator
+          rewardWeight = newHostedSvRewardWeight
+          hostedSvName = newHostedSvName
+          beneficiaries
+
+        pure DsoRules_AddHostedSvResult with
+          hostedSvCid
+          hostedSvRewardStateCid
+
     -- Update an SV's Status report
     nonconsuming choice DsoRules_SubmitStatusReport : DsoRules_SubmitStatusReportResult
       with
@@ -600,6 +753,7 @@ template DsoRules with
               status = Some status
         return DsoRules_SubmitStatusReportResult with ..
 
+    -- FIXME: Deprecate
     -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
     -- the first round in which the new SV will receive rewards.
@@ -636,6 +790,25 @@ template DsoRules with
         return DsoRules_AddConfirmedSvResult with
           newDsoRules = addSvResult.newDsoRules
 
+    -- Called by SV node candidates to add themselves to the DsoRules once they are confirmed and ready.
+    -- We use the passed rounds for reliably determining the earliest open round, which will be
+    -- the first round in which the new SV will receive rewards.
+    nonconsuming choice DsoRules_AddConfirmedSvNode : DsoRules_AddConfirmedSvNodeResult
+      with
+        svOperatorCandidate : Party
+        svNodeOnboardingConfirmedCid : ContractId SvNodeOnboardingConfirmed
+      controller svOperatorCandidate
+      do
+        svNodeOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = svOperatorCandidate) svNodeOnboardingConfirmedCid
+        assertWithinDeadline "svNodeOnboardingConfirmed.expiresAt" svNodeOnboardingConfirmed.expiresAt
+
+        addSvNodeResult <- exercise self DsoRules_AddSvNode with
+          newSvOperatorParty = svOperatorCandidate
+          newSvNodeName = svNodeOnboardingConfirmed.svNodeName
+          newSvNodeParticipantId = svNodeOnboardingConfirmed.svNodeParticipantId
+
+        return DsoRules_AddConfirmedSvNodeResult with
+          newDsoRules = addSvNodeResult.newDsoRules
 
     -- Decentralized synchronizer config management
     -----------------------------------
@@ -986,6 +1159,11 @@ template DsoRules with
              create this with config = patch newConfig baseConfig this.config
         return DsoRules_SetConfigResult with ..
 
+
+    -- SV weight management
+    -----------------------
+
+    -- FIXME: Deprecate
     choice DsoRules_UpdateSvRewardWeight : DsoRules_UpdateSvRewardWeightResult
       with
         svParty : Party
@@ -1001,6 +1179,225 @@ template DsoRules with
             newDsoRules <- create this with svs = newSvs
             return DsoRules_UpdateSvRewardWeightResult with ..
 
+   -- | Creates an instruction to update the reward weight of a hosted SV.
+    --
+    -- This is the first step of the hosted-SV reward weight update flow. The DSO
+    -- records which hosted SV should be updated and the new reward weight to assign.
+    -- The current 'HostedSv' contract is resolved when the instruction is consumed
+    -- by 'DsoRules_UpdateHostedSvWeight'.
+    nonconsuming choice DsoRules_InstructUpdateHostedSvWeight : DsoRules_InstructUpdateHostedSvWeightResult
+      with
+        hostedSv : Party
+          -- ^ The hosted SV party whose reward weight should be updated.
+        newRewardWeight : Int
+          -- ^ The new positive reward weight for the hosted SV.
+      controller dso
+      do
+        instructionCid <- create UpdateHostedSvWeightInstruction with
+          hostedSv
+          newRewardWeight
+          dso
+        pure DsoRules_InstructUpdateHostedSvWeightResult with instructionCid
+
+    -- | Completes the update of the reward weight of a hosted SV.
+    --
+    -- This is the second step of the hosted-SV reward weight update flow. It consumes
+    -- the DSO instruction and updates the reward weight stored on the current
+    -- 'HostedSv' contract.
+    --
+    -- The provided 'HostedSv' contract must belong to the hosted SV referenced by the
+    -- instruction.
+    nonconsuming choice DsoRules_UpdateHostedSvWeight : DsoRules_UpdateHostedSvWeightResult
+      with
+        instructionCid : ContractId UpdateHostedSvWeightInstruction
+          -- ^ The DSO instruction authorizing the reward weight update.
+        hostedSvCid : ContractId HostedSv
+          -- ^ The hosted SV contract whose reward weight should be updated.
+        svOperator : Party
+          -- ^ An SV node operator completing the update.
+      controller svOperator
+      do
+        _ <- getAndValidateSvParty this (Some svOperator)
+
+        -- Archive the hosted SV's associated contracts.
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        hostedSvCo <- fetchChecked (ForDso with dso) hostedSvCid
+
+        -- Sanity checks
+        require "The hosted SV party in HostedSv and UpdateHostedSvWeightInstruction contracts must match" $
+          hostedSvCo.hostedSv == instruction.hostedSv
+
+        result <- exercise hostedSvCid HostedSv_UpdateRewardWeight with
+          newRewardWeight = instruction.newRewardWeight
+
+        pure DsoRules_UpdateHostedSvWeightResult with result
+
+    -- | Creates an instruction to offboard a hosted SV.
+    --
+    -- This is the first step of the hosted-SV offboarding flow. The DSO records
+    -- which hosted SV should be offboarded. The hosted SV is validated when the
+    -- instruction is consumed by 'DsoRules_OffboardHostedSv'.
+    nonconsuming choice DsoRules_InstructOffboardHostedSv : DsoRules_InstructOffboardHostedSvResult
+      with
+        hostedSv : Party
+          -- ^ The hosted SV to offboard.
+      controller dso
+      do
+        instructionCid <- create OffboardHostedSvInstruction with hostedSv; dso
+        pure DsoRules_InstructOffboardHostedSvResult with instructionCid
+
+    -- | Completes the offboarding of a hosted SV.
+    --
+    -- This is the second step of the hosted-SV offboarding flow. It consumes the
+    -- DSO instruction and archives the hosted SV's on-ledger reward configuration
+    -- and reward state.
+    --
+    -- The provided 'HostedSvRewardState' contract must belong to the same hosted SV
+    -- as the 'HostedSv' contract being offboarded.
+    nonconsuming choice DsoRules_OffboardHostedSv : DsoRules_OffboardHostedSvResult
+      with
+        instructionCid : ContractId OffboardHostedSvInstruction
+          -- ^ The DSO instruction authorizing the hosted-SV offboarding.
+        hostedSvCid : ContractId HostedSv
+          -- ^ The hosted SV contract being offboarded.
+        hostedSvRewardStateCid : ContractId HostedSvRewardState
+          -- ^ The hosted SV reward state contract for the hosted SV being offboarded.
+        svOperator : Party
+          -- ^ An SV node operator completing the offboarding.
+      controller svOperator
+      do
+        _ <- getAndValidateSvParty this (Some svOperator)
+
+        -- Archive the hosted SV's associated contracts.
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        hostedSvCo <- fetchAndArchive (ForDso with dso) hostedSvCid
+        hostedSvRewardState <- fetchAndArchive (ForDso with dso) hostedSvRewardStateCid
+
+        -- Sanity checks
+        require "The hosted SV party in HostedSv and OffboardHostedSvInstruction contracts must match" $
+          hostedSvCo.hostedSv == instruction.hostedSv
+        require "The HostedSvRewardState contract belongs to the hosted SV to be offboarded" $
+          hostedSvRewardState.hostedSv == hostedSvCo.hostedSv
+
+        pure DsoRules_OffboardHostedSvResult
+
+    -- | Creates an instruction to update the SV operator of a hosted SV.
+    --
+    -- This is the first step of the hosted-SV operator update flow. The DSO records
+    -- which hosted SV should be updated and which SV operator it should be assigned
+    -- to. The hosted SV is validated when the instruction is consumed by
+    -- 'DsoRules_UpdateSvOperatorForHostedSv'.
+    nonconsuming choice DsoRules_InstructUpdateSvOperatorForHostedSv : DsoRules_InstructUpdateSvOperatorForHostedSvResult
+      with
+        hostedSv : Party
+          -- ^ The hosted SV party whose SV operator should be updated.
+        newSvOperator : Party
+          -- ^ The new SV operator party for the hosted SV.
+      controller dso
+      do
+        instructionCid <- create UpdateSvOperatorForHostedSvInstruction with
+          hostedSv
+          newSvOperator
+          dso
+        pure DsoRules_InstructUpdateSvOperatorForHostedSvResult with instructionCid
+
+    -- | Completes the update of the SV operator for a hosted SV.
+    --
+    -- This is the second step of the hosted-SV operator update flow. It consumes the
+    -- DSO instruction, archives the existing 'HostedSv' contract, and recreates it
+    -- with the new SV operator specified by the instruction.
+    nonconsuming choice DsoRules_UpdateSvOperatorForHostedSv : DsoRules_UpdateSvOperatorForHostedSvResult
+      with
+        instructionCid : ContractId UpdateSvOperatorForHostedSvInstruction
+          -- ^ The DSO instruction authorizing the SV operator update.
+        hostedSvCid : ContractId HostedSv
+          -- ^ The hosted SV contract whose SV operator should be updated.
+        svOperator : Party
+          -- ^ An SV node operator completing the update.
+      controller svOperator
+      do
+        _ <- getAndValidateSvParty this (Some svOperator)
+
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        hostedSvCo <- fetchChecked (ForDso with dso) hostedSvCid
+
+        -- Sanity checks
+        require "The hosted SV party in HostedSv and UpdateSvOperatorForHostedSvInstruction contracts must match" $
+          hostedSvCo.hostedSv == instruction.hostedSv
+
+        result <- exercise hostedSvCid HostedSv_UpdateSvOperator with
+          newSvOperator = instruction.newSvOperator
+
+        pure DsoRules_UpdateSvOperatorForHostedSvResult with result
+
+    -- FIXME: Deprecate once all hosted SVs have been migrated.
+    --
+    -- Trust assumption:
+    -- The SV operator is trusted to exercise this choice with the correct migration data.
+    -- This choice validates that the total migrated hosted SV weight matches the SV
+    -- operator's legacy reward weight, but it does not independently verify that the
+    -- per-hosted-SV split or beneficiary distribution matches the SV operator's
+    -- off-ledger configuration.
+    --
+    -- This is consistent with the current model, where the SV operator already configures
+    -- the reward weights and beneficiary distribution in its SV app. Therefore, the SVs
+    -- operated by this SV operator already rely on it to use the correct reward
+    -- distribution.
+    choice DsoRules_MigrateHostedSvs : DsoRules_MigrateHostedSvsResult
+      with
+        -- Complete on-ledger hosted SV reward configuration for the SVs operated by
+        -- this SV operator.
+        --
+        -- Each entry creates a 'HostedSv' contract containing the hosted SV party,
+        -- display name, reward weight, and beneficiary distribution.
+        --
+        -- The sum of all migrated hosted SV weights must match the SV operator's
+        -- current legacy reward weight.
+        --
+        -- Extra beneficiaries previously used only for internal reward sharing must
+        -- not be migrated as independent hosted SVs. They should instead be included
+        -- in the corresponding hosted SV's beneficiary distribution.
+        hostedSvsMigrationData : [HostedSvMigrationData]
+        openRoundCid : ContractId OpenMiningRound
+        rewardStateCid : ContractId SvRewardState
+        svOperator : Party -- ^ The SV node operator performing the migration.
+      controller svOperator
+      do
+        case Map.lookup svOperator svs of
+          None -> fail "SV is not an SV node operator"
+          Some svInfo -> do
+            -- Sanity checks
+            let (hostedSvParties, rewardWeights) = unzip $ (\d -> (d.hostedSv, d.hostedSvRewardWeight)) <$> hostedSvsMigrationData
+            require "Total SV weights match SV operator weight" (sum rewardWeights == svInfo.svRewardWeight)
+            require "Hosted SVs are unique" (unique hostedSvParties)
+
+            -- check round
+            now <- getTime
+            openRound <- fetchReferenceData (ForDso with dso) openRoundCid
+            require "OpenRound is open" (openRound.opensAt <= now)
+
+            -- Invalidate the SV operator's legacy reward weight.
+            let newSv = svInfo with svRewardWeight = 0
+                newSvs = Map.insert svOperator newSv svs
+            newDsoRules <- create this with svs = newSvs
+
+            -- Archive SvRewardState which invalidates the legacy DsoRules_ReceiveSvRewardCoupon flow
+            _ <- fetchAndArchive (ForSv with dso; svName = svInfo.name) rewardStateCid
+
+            -- Add hosted SV reward configurations
+            let addHostedSvAndBeneficiaries hostedSvMigrationData = do
+                  -- Onboard hosted SV with its migrated reward configuration
+                  void $ exercise newDsoRules DsoRules_AddHostedSv with
+                      newHostedSv = hostedSvMigrationData.hostedSv
+                      newHostedSvName = hostedSvMigrationData.hostedSvName
+                      newHostedSvRewardWeight = hostedSvMigrationData.hostedSvRewardWeight
+                      joinedAsOfRound = openRound.round
+                      svOperator
+                      beneficiaries = hostedSvMigrationData.beneficiaries
+
+            forA_ hostedSvsMigrationData addHostedSvAndBeneficiaries
+
+            pure DsoRules_MigrateHostedSvsResult with newDsoRules
 
 
     -- App rights management
@@ -1071,8 +1468,8 @@ template DsoRules with
          pure $ DsoRules_MergeValidatorLicenseResult cid
 
 
-    -- SV onboarding
-    ----------------
+    -- SV node onboarding
+    ---------------------
 
     nonconsuming choice DsoRules_StartSvOnboarding : DsoRules_StartSvOnboardingResult
       with
@@ -1108,11 +1505,12 @@ template DsoRules with
         _ <- getAndValidateSvParty this sv
         -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
         svOnboardingRequest <- fetchAndArchive (ForDso with dso) svOnboardingRequestCid
-        let maybeSv = Map.lookup svOnboardingRequest.candidateParty svs
-        require "SV party is an SV" (isSome maybeSv)
-        require "SV name matches" ((fromSome maybeSv).name == svOnboardingRequest.candidateName)
+        let sv = Map.lookup svOnboardingRequest.candidateParty svs
+        require "SV party is an SV" (isSome sv)
+        require "SV name matches" ((fromSome sv).name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
 
+    -- FIXME: Deprecate
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
       with
         newSvParty : Party
@@ -1139,6 +1537,31 @@ template DsoRules with
           expiresAt
         return DsoRules_ConfirmSvOnboardingResult with ..
 
+    nonconsuming choice DsoRules_ConfirmSvNodeOnboarding : DsoRules_ConfirmSvNodeOnboardingResult
+      with
+        newSvOperatorParty : Party
+        newSvNodeName : Text
+        newNodeParticipantId : Text
+        reason : Text
+      controller dso
+      do
+        ensureNeverOperatedNode newSvOperatorParty this
+        if (not isDevNet)
+          then
+            require "SV name is expected to be new unless in devnet" (newSvNodeName `notElem` (map (.name) (Map.values svs)))
+          else pure ()
+        now <- getTime
+        let expiresAt = now `addRelTime` config.svOnboardingConfirmedTimeout
+        onboardingConfirmed <- create SvNodeOnboardingConfirmed with
+          svOperatorParty = newSvOperatorParty
+          svNodeName = newSvNodeName
+          svNodeParticipantId = newNodeParticipantId
+          reason
+          dso
+          expiresAt
+        return DsoRules_ConfirmSvNodeOnboardingResult with ..
+
+    -- FIXME: Deprecate
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
       with
         cid: ContractId SvOnboardingConfirmed
@@ -1156,6 +1579,25 @@ template DsoRules with
         newDsoRules <- create this with
           offboardedSvs = Map.insert sv offboardingInfo offboardedSvs
         return DsoRules_ExpireSvOnboardingConfirmedResult with ..
+
+    choice DsoRules_ExpireSvNodeOnboardingConfirmed : DsoRules_ExpireSvNodeOnboardingConfirmedResult
+      with
+        cid: ContractId SvNodeOnboardingConfirmed
+        svOperator : Party
+      controller svOperator
+      do
+        _ <- getAndValidateSvParty this (Some svOperator)
+        svOnboardingConfirmed <- fetchButArchiveLater (ForDso with dso) cid
+        exercise cid SvNodeOnboardingConfirmed_Expire
+        -- register the sv as offboarded so it's PartyToParticipant mapping for the DSO party gets removed
+        let svOperator = svOnboardingConfirmed.svOperatorParty
+        let offboardingInfo = OffboardedSvInfo with
+              name = svOnboardingConfirmed.svNodeName
+              participantId = svOnboardingConfirmed.svNodeParticipantId
+        newDsoRules <- create this with
+          offboardedSvs = Map.insert svOperator offboardingInfo offboardedSvs
+        return DsoRules_ExpireSvNodeOnboardingConfirmedResult with ..
+
 
 
     -- Amulet management driven directly by the DSO delegates
@@ -1333,6 +1775,7 @@ template DsoRules with
     -- Reward management driven directly by the DSO delegates
     ---------------------------------------------------------
 
+    -- FIXME: Deprecate once all hosted SVs have been migrated
     nonconsuming choice DsoRules_ReceiveSvRewardCoupon : DsoRules_ReceiveSvRewardCouponResult
       with
         sv : Party
@@ -1381,6 +1824,87 @@ template DsoRules with
                 svRewardState = newRewardStateCid
                 svRewardCoupons = couponCids
 
+    nonconsuming choice DsoRules_ReceiveSvRewardCoupon_V2 : DsoRules_ReceiveSvRewardCoupon_V2Result
+      with
+        openRoundCid : ContractId OpenMiningRound
+        -- Hosted SV reward inputs to collect rewards for in this call.
+        --
+        -- Each entry contains the hosted SV reward configuration and its reward
+        -- state. Each hosted SV must be operated by this SV operator.
+        --
+        -- If the hosted SV has an empty beneficiary list, the hosted SV receives one
+        -- coupon with its full reward weight. Otherwise, one coupon is issued per
+        -- configured beneficiary, and any remaining weight is issued to the hosted SV
+        -- itself.
+        --
+        -- Beneficiary weights are computed from the configured beneficiary
+        -- percentages stored on 'HostedSv', whose total must be less than or equal to 1.0.
+        hostedSvRewardInputs : [(ContractId HostedSv, ContractId HostedSvRewardState)]
+        svOperator : Party -- ^ The SV node operator hosting the hosted SVs.
+      controller svOperator
+      do
+        case Map.lookup svOperator svs of
+          None -> fail "SV is not an SV node operator"
+          Some _ -> do
+            -- Sanity checks
+            now <- getTime
+            openRound <- fetchReferenceData (ForDso with dso) openRoundCid
+            require "OpenRound is open" (openRound.opensAt <= now)
+            require "HostedSv contract ids are unique" (unique $ map fst hostedSvRewardInputs)
+            require "HostedSvRewardState contract ids are unique" (unique $ map snd hostedSvRewardInputs)
+
+            hostedSvRewardCouponOutputs <-
+              forA hostedSvRewardInputs $ \(hostedSvCid, hostedSvRewardStateCid) -> do
+                hostedSvCo <- fetchChecked (ForDso with dso) hostedSvCid
+                hostedSvRewardState <- fetchAndArchive (ForDso with dso) hostedSvRewardStateCid
+                let hostedSv = hostedSvCo.hostedSv
+                    state = hostedSvRewardState.state
+
+                -- Sanity checks
+                require "The hosted SV party in HostedSv and HostedSvRewardState contracts must match" $
+                  hostedSv == hostedSvRewardState.hostedSv
+                require
+                  ("Only SV operator " <> show hostedSvCo.svOperator <> " can create SV rewards for hosted SV " <> show hostedSv) $
+                  hostedSvCo.svOperator == svOperator
+                require
+                  ("Round " <> show openRound.round <> " is greater than the last round a reward has been received for " <> show state.lastRoundCollected)
+                  (state.lastRoundCollected < openRound.round)
+
+                let hostedSvRewardWeight = hostedSvCo.rewardWeight
+                couponRecipients <- case (Map.toList hostedSvCo.beneficiaries) of
+                  [] -> pure [(hostedSv, hostedSvRewardWeight)]
+                  beneficiaries -> do
+                    let beneficiaryWeights =
+                          (\(beneficiary, percentage) ->
+                            (beneficiary, floor (intToDecimal hostedSvRewardWeight * percentage))
+                          ) <$> beneficiaries
+                        assignedWeight = sum (map snd beneficiaryWeights)
+                        remainingWeight = hostedSvRewardWeight - assignedWeight
+
+                    pure $
+                      if remainingWeight > 0
+                        then beneficiaryWeights <> [(hostedSv, remainingWeight)]
+                        else beneficiaryWeights
+
+                newHostedSvRewardStateCid <- create hostedSvRewardState with
+                  state = RewardState with
+                    lastRoundCollected = openRound.round
+                    numRoundsCollected = state.numRoundsCollected + 1
+                    numRoundsMissed =
+                      state.numRoundsMissed + (openRound.round.number - state.lastRoundCollected.number - 1)
+                    numCouponsIssued = state.numCouponsIssued + length couponRecipients
+
+                couponCids <- forA couponRecipients $ \(beneficiary, weight) ->
+                  create SvRewardCoupon with
+                    dso
+                    sv = hostedSv
+                    beneficiary
+                    weight
+                    round = openRound.round
+
+                pure (newHostedSvRewardStateCid, couponCids)
+
+            pure DsoRules_ReceiveSvRewardCoupon_V2Result with hostedSvRewardCouponOutputs
 
     -- Batch expiry of unclaimed rewards for a specific claimed round
     -----------------------------------------------------------------
@@ -1799,6 +2323,12 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_AddHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructUpdateHostedSvWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructOffboardHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_InstructUpdateSvOperatorForHostedSv choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_AddSvNode choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_ConfirmSvNodeOnboarding choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -1880,6 +2410,42 @@ ensureNeverOperatedNode : Party -> DsoRules -> Update ()
 ensureNeverOperatedNode newSvParty this = do
   require "SV party has not yet operated a node" $
     not (newSvParty `Map.member` this.svs || newSvParty `Map.member` this.offboardedSvs)
+
+-- factored out from the choice to avoid mistakes from having the fields of DsoRules{..} in scope
+dsoRules_AddSvNode : DsoRules -> DsoRules_AddSvNode -> Update (ContractId DsoRules)
+dsoRules_AddSvNode this0 DsoRules_AddSvNode{..} = do
+  ensureNeverOperatedNode newSvOperatorParty this0
+  -- in DevNet we allow changing the operator of an existing sv, which we implement as a removal and re-addition
+  this@DsoRules{..} <-
+    if this0.isDevNet
+      then
+        let DsoRules{..} = this0 in -- bring all DsoRules fields into scope
+        case lookupSvInfoByName newSvNodeName this0 of
+          None -> pure this0
+          Some (sv, info) -> do
+            let offboardingInfo = OffboardedSvInfo with
+                  name = info.name
+                  participantId = info.participantId
+            pure $ this0 with
+              svs = Map.delete sv svs
+              offboardedSvs = Map.insert sv offboardingInfo offboardedSvs
+      else do
+        require "SV is not currently onboarded" (isNone $ lookupSvInfoByName newSvNodeName this0)
+        pure this0
+
+  -- create per SV operator party contracts
+  let initialAmuletPriceVote = None
+  createPerSvPartyContracts dso newSvOperatorParty newSvNodeName noSynchronizerNodes initialAmuletPriceVote (getVoteCooldownTime config)
+  -- register the new operator in the DsoRules
+  let svInfo = SvInfo with
+        name = newSvNodeName
+        -- Set to zero because it is no longer relevant for SV operators
+        joinedAsOfRound = Round 0
+        -- Set to zero because it is no longer relevant for SV operators
+        svRewardWeight = 0
+        participantId = newSvNodeParticipantId
+  create this with
+    svs = Map.insert newSvOperatorParty svInfo svs
 
 -- factored out from the choice to avoid mistakes from having the fields of DsoRules{..} in scope
 dsoRules_addSv : DsoRules -> DsoRules_AddSv -> Update (ContractId DsoRules)
@@ -2022,6 +2588,10 @@ instance HasCheckedFetch UnallocatedUnclaimedActivityRecord ForDso where
 instance HasCheckedFetch Confirmation ForDso where
   contractGroupId Confirmation {..} = ForDso with dso
 
+instance HasCheckedFetch UpdateHostedSvWeightInstruction ForDso where
+  contractGroupId UpdateHostedSvWeightInstruction {..} = ForDso with dso
+
+
 instance Patchable DsoRulesConfig where
   patch new base current = DsoRulesConfig with
     numUnclaimedRewardsThreshold = patch new.numUnclaimedRewardsThreshold base.numUnclaimedRewardsThreshold current.numUnclaimedRewardsThreshold
@@ -2052,3 +2622,4 @@ instance Patchable LogicalSynchronizerUpgradeSchedule where
         upgradeTime = patch new.upgradeTime base.upgradeTime current.upgradeTime
         newPhysicalSynchronizerSerial = patch new.newPhysicalSynchronizerSerial base.newPhysicalSynchronizerSerial current.newPhysicalSynchronizerSerial
         newPhysicalSynchronizerProtocolVersion = patch new.newPhysicalSynchronizerProtocolVersion base.newPhysicalSynchronizerProtocolVersion current.newPhysicalSynchronizerProtocolVersion
+
