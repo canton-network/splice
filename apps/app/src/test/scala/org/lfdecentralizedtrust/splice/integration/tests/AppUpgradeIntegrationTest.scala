@@ -30,7 +30,6 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery.HeadState
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 
@@ -84,14 +83,7 @@ class AppUpgradeIntegrationTest
         // Makes the test a bit faster and easier to debug. See #11488
         ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )
-      .addConfigTransform((_, conf) =>
-        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
-          // Reduce the cache TTL so package upgrades are picked up quickly.
-          c.copy(scanClient =
-            c.scanClient.setAmuletRulesCacheTimeToLive(NonNegativeFiniteDuration.ofSeconds(1))
-          )
-        )(conf)
-      )
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransform((_, config) => {
         config
           .focus(_.validatorApps)

@@ -3,12 +3,14 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.automation.PackageVettingTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   PackageConfig,
 }
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -31,8 +33,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.scalatest.concurrent.PatienceConfiguration
-import scala.concurrent.duration.DurationInt
 
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.duration.FiniteDuration
 
 class UnsupportedPackageVettingIntegrationTest
@@ -47,10 +49,24 @@ class UnsupportedPackageVettingIntegrationTest
       .withoutAliceValidatorConnectingToSplitwell
       // if other tests run before, packages that break this test might already be vetted
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[SvPackageVettingTrigger]
         )(config)
+      )
+      .addConfigTransforms((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Validator)(
+          _.withPausedTrigger[ValidatorPackageVettingTrigger]
+        )(config)
+      )
+      .addConfigTransform((_, conf) =>
+        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
+          // Reduce the cache TTL. Otherwise alice validator takes forever to see the new amulet rules version
+          c.copy(scanClient =
+            c.scanClient.setAmuletRulesCacheTimeToLive(NonNegativeFiniteDuration.ofSeconds(1))
+          )
+        )(conf)
       )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
@@ -78,12 +94,11 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
       )
-      // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(
         aliceValidatorBackend.appState.participantAdminConnection,
         synchronizerId,
         unsupportedDarsToVetValidator,
-        Seq.empty,
+        unsupportedDarsToVetValidator,
         aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
       )
   }
@@ -128,7 +143,7 @@ class UnsupportedPackageVettingIntegrationTest
     }
   }
 
-  "SVs unvet package versions above the configured PackageConfig, validators do not" in {
+  "SVs and validators unvet package versions above the configured PackageConfig" in {
     implicit env =>
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
@@ -190,12 +205,12 @@ class UnsupportedPackageVettingIntegrationTest
         }
       }
 
-      clue("alice validator keeps package versions above the downgraded PackageConfig vetted") {
+      clue("alice validator unvets package versions above the downgraded PackageConfig") {
         eventually() {
           getVettedPackageIds(
             aliceValidatorBackend.appState.participantAdminConnection,
             synchronizerId,
-          ) should contain allElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
+          ) should contain noElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
         }
         eventually(40.seconds) {
           alicesTapsWithPackageId(DarResources.amulet_0_1_16.packageId)
