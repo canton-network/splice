@@ -419,6 +419,24 @@ class TokenStandardAllocationIntegrationTest
       }
     }
 
+    clue(s"Wait for allocation ${aliceAllocationId} to be ingested by splitwell participant") {
+      eventuallySucceeds() {
+        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+          .awaitJava(amuletallocationCodegen.AmuletAllocation.COMPANION)(
+            venueParty,
+            predicate = c => c.id == aliceAllocationId,
+          )
+      }
+    }
+
+    clue(s"Wait for allocation ${bobAllocationId} to be ingested by splitwell participant") {
+      splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .awaitJava(amuletallocationCodegen.AmuletAllocation.COMPANION)(
+          venueParty,
+          predicate = c => c.id == bobAllocationId,
+        )
+    }
+
     AllocatedOtcTrade(
       venueParty = venueParty,
       aliceParty = aliceParty,

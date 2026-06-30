@@ -10,6 +10,7 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import java.time.Duration
 import java.util.UUID
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationrequestv1,
   allocationv1,
@@ -732,6 +733,23 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         sv1ScanBackend.getAllocationCancelContext(aliceAllocationId)
         sv1ScanBackend.getAllocationCancelContext(bobAllocationId)
       }
+    }
+
+    clue(s"Wait for allocation ${aliceAllocationId} to be ingested by splitwell participant") {
+      eventuallySucceeds() {
+        splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+          .awaitJava(amuletallocation.AmuletAllocation.COMPANION)(
+            venueParty,
+            predicate = c => c.id == aliceAllocationId,
+          )
+      }
+    }
+    clue(s"Wait for allocation ${bobAllocationId} to be ingested by splitwell participant") {
+      splitwellValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .awaitJava(amuletallocation.AmuletAllocation.COMPANION)(
+          venueParty,
+          predicate = c => c.id == bobAllocationId,
+        )
     }
 
     clue("Settlement venue settles the trade") {
