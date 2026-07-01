@@ -88,12 +88,11 @@ monitoring:
         participantRetentionDays: 30
         sequencerRetentionDays: 30
       scanConnectionDisagreement:
-        disagreementRateThreshold: 0.1
+        alertThreshold: 0.1
         excludedConnections: []
         excludedRequests:
           - 'getTransferInstructionAcceptContext'
           - 'getOpenAndIssuingMiningRounds'
-        successfulDisagreementThreshold: 5
       sequencerClientDelay:
         seconds: 90
       sequencerRateLimits:

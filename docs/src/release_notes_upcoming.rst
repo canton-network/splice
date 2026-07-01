@@ -42,6 +42,11 @@
       wallets can make use of the new batching functionality (see below) on all validator
       nodes.
 
+    - Fix an issue where calling ``external-party/topology/submit``
+      during topology freeze time resulted in retries for the same
+      party after freeze time failing with
+      ``TOPOLOGY_NO_APPROPRIATE_SIGNING_KEY_IN_STORE``.
+
   - Daml
 
     - Release the Token Standard V2 APIs (`CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md>`__).

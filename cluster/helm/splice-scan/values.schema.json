@@ -244,76 +244,13 @@
           ],
           "properties": {
             "current": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             },
             "successor": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             },
             "legacy": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             }
           }
         },
@@ -381,5 +318,32 @@
         }
       }
     }
-  ]
+  ],
+  "$defs": {
+    "synchronizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequencer",
+        "mediator"
+      ],
+      "properties": {
+        "sequencer": {
+          "type": "string"
+        },
+        "mediator": {
+          "type": "string"
+        },
+        "cantonBft": {
+          "type": "object",
+          "required": ["p2pUrl"],
+          "properties": {
+            "p2pUrl": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
 }

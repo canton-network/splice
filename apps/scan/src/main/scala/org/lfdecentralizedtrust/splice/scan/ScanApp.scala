@@ -171,7 +171,7 @@ class ScanApp(
         config.synchronizerNodes.successor.toList ++
         config.synchronizerNodes.legacy.toList
       all.flatMap { syncConfig =>
-        syncConfig.bftSequencerConfig.map { bftConfig =>
+        syncConfig.cantonBft.map { bftConfig =>
           new SequencerAdminConnection(
             syncConfig.sequencer,
             amuletAppParameters.loggingConfig.api,
@@ -252,6 +252,7 @@ class ScanApp(
         participantAdminConnection,
         config.globalSynchronizerAlias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
         loggerFactory,
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)

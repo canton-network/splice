@@ -51,21 +51,21 @@ import {
 import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 import { installValidatorApp } from '@canton-network/splice-pulumi-common-validator/src/validator';
 import {
+  delegatelessAutomationExpectedTaskDuration,
+  delegatelessAutomationExpiredRewardCouponBatchSize,
+  delegatelessAutomationExpiredRewardCouponNumBatches,
+} from '@canton-network/splice-pulumi-common/src/automation';
+import {
   BucketConfig,
   installBucketSecret,
 } from '@canton-network/splice-pulumi-common/src/buckets';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { initialAmuletPrice } from '@canton-network/splice-pulumi-common/src/initialAmuletPrice';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
 import { topologySnapshotConfig } from '@canton-network/splice-pulumi-common/src/topology-snapshot';
 import { Resource } from '@pulumi/pulumi';
 
-import {
-  delegatelessAutomationExpectedTaskDuration,
-  delegatelessAutomationExpiredRewardCouponBatchSize,
-  delegatelessAutomationExpiredRewardCouponNumBatches,
-} from '../../common/src/automation';
-import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
 import { configureScanBigQuery } from './bigQuery';
 import { installInfo } from './info';
 
@@ -540,9 +540,9 @@ function installScan(
   const { active, participant } = synchronizerNodes;
   const scanDbName = `scan_${sanitizedForPostgres(config.nodeName)}`;
 
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -553,7 +553,7 @@ function installScan(
       current: {
         sequencer: active.namespaceInternalSequencerAddress,
         mediator: active.namespaceInternalMediatorAddress,
-        ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(active) : {}),
       },
       ...(synchronizerNodes.upgrade
         ? {
@@ -561,7 +561,7 @@ function installScan(
               sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
               mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(synchronizerNodes.upgrade)
+                ? cantonBftConfigFor(synchronizerNodes.upgrade)
                 : {}),
             },
           }
@@ -572,7 +572,7 @@ function installScan(
               sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
               mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(synchronizerNodes.legacy)
+                ? cantonBftConfigFor(synchronizerNodes.legacy)
                 : {}),
             },
           }

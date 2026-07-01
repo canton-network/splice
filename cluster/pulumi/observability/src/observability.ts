@@ -747,22 +747,22 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   }
   const bareFilter = matchers.join(', ');
   const filter = bareFilter ? `, ${bareFilter}` : '';
-  return (
-    alert
-      // Replace the `_BARE` placeholder first since `$SCAN_DISAGREEMENT_FILTER`
-      // is a prefix of `$SCAN_DISAGREEMENT_FILTER_BARE`.
-      .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
-      .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
-      .replaceAll(
-        '$SCAN_DISAGREEMENT_RATE_THRESHOLD_PERCENT',
-        (config.disagreementRateThreshold * 100).toString()
-      )
-      .replaceAll('$SCAN_DISAGREEMENT_RATE_THRESHOLD', config.disagreementRateThreshold.toString())
-      .replaceAll(
-        '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD',
-        config.successfulDisagreementThreshold.toString()
-      )
-  );
+  const connectionMatchers: string[] = [];
+  if (config.excludedConnections.length > 0) {
+    connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const connectionBareFilter = connectionMatchers.join(', ');
+  const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
+  return alert
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER_BARE', connectionBareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER', connectionFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+    .replaceAll(
+      '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD_PERCENT',
+      (config.alertThreshold * 100).toString()
+    )
+    .replaceAll('$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD', config.alertThreshold.toString());
 }
 
 function substituteDsoMissedConfirmationsAlerts(alert: string): string {

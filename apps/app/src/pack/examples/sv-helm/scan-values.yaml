@@ -6,7 +6,7 @@ participantAddress: "participant"
 synchronizers:
   current:
     # Enable when using CantonBFT
-    # bftSequencerConfig:
+    # cantonBft:
     #   p2pUrl: https://sequencer-p2p-SERIAL_ID.sv.YOUR_HOSTNAME
     sequencer: "global-domain-SERIAL_ID-sequencer"
     mediator: "global-domain-SERIAL_ID-mediator"

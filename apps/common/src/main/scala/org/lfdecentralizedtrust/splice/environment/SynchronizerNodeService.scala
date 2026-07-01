@@ -19,6 +19,7 @@ class SynchronizerNodeService[T <: SynchronizerNode](
     participantAdminConnection: ParticipantAdminConnection,
     globalSynchronizerAlias: SynchronizerAlias,
     cacheExpiration: NonNegativeFiniteDuration,
+    retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends NamedLogging {
@@ -28,7 +29,15 @@ class SynchronizerNodeService[T <: SynchronizerNode](
   private val successorActiveCache =
     ScaffeineCache.buildTracedAsync[Future, Unit, Boolean](
       Scaffeine().expireAfterWrite(cacheExpiration.asFiniteApproximation),
-      implicit tc => _ => successorActiveUncached(),
+      implicit tc =>
+        _ =>
+          retryProvider.getValueWithRetries(
+            RetryFor.WaitingOnInitDependency,
+            "successor_active",
+            "whether the successor synchronizer is active",
+            successorActiveUncached(),
+            logger,
+          ),
     )(logger, "successorActive")
 
   private def successorActive()(implicit tc: TraceContext): Future[Boolean] =
