@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
+import * as pulumi from '@pulumi/pulumi';
 import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
@@ -61,77 +62,98 @@ export function installNodePools(clusterDep?: gcp.container.Cluster): void {
     }
   );
 
-  new gcp.container.NodePool('gke-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: 'e2-standard-4',
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'components.gke.io/gke-managed-components',
-          value: 'true',
-        },
-      ],
-      loggingVariant: 'DEFAULT',
+  new gcp.container.NodePool(
+    'gke-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: 'e2-standard-4',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'components.gke.io/gke-managed-components',
+            value: 'true',
+          },
+        ],
+        loggingVariant: 'DEFAULT',
+      },
+      nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
+      initialNodeCount: 1,
+      autoscaling: {
+        minNodeCount: 1,
+        maxNodeCount: 3,
+      },
     },
-    nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
-    initialNodeCount: 1,
-    autoscaling: {
-      minNodeCount: 1,
-      maxNodeCount: 3,
-    },
-  }, opts);
+    opts
+  );
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string, opts?: any) {
-  new gcp.container.NodePool('cn-apps-node-pool-hd', {
-    cluster,
-    nodeConfig: {
-      machineType: config.nodeType,
-      bootDisk: {
-        diskType: 'hyperdisk-balanced',
-        sizeGb: config.bootDiskSizeGb || 100,
-      },
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+function hyperdiskNodePool(
+  cluster: string,
+  config: GkeNodePoolConfig,
+  location?: string,
+  opts?: pulumi.CustomResourceOptions
+) {
+  new gcp.container.NodePool(
+    'cn-apps-node-pool-hd',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: config.nodeType,
+        bootDisk: {
+          diskType: 'hyperdisk-balanced',
+          sizeGb: config.bootDiskSizeGb || 100,
         },
-      ],
-      labels: {
-        cn_apps: 'hyperdisk',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'cn_apps',
+            value: 'true',
+          },
+        ],
+        labels: {
+          cn_apps: 'hyperdisk',
+        },
+        loggingVariant: 'DEFAULT',
       },
-      loggingVariant: 'DEFAULT',
+      nodeLocations: location ? [location] : undefined,
+      initialNodeCount: 0,
+      autoscaling: {
+        minNodeCount: config.minNodes,
+        maxNodeCount: config.maxNodes,
+      },
     },
-    nodeLocations: location ? [location] : undefined,
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: config.minNodes,
-      maxNodeCount: config.maxNodes,
-    },
-  }, opts);
+    opts
+  );
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig, opts?: any) {
-  new gcp.container.NodePool('cn-apps-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: appsNodePoolConfig.nodeType,
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+function appsNodePool(
+  cluster: string,
+  appsNodePoolConfig: GkeNodePoolConfig,
+  opts?: pulumi.CustomResourceOptions
+) {
+  new gcp.container.NodePool(
+    'cn-apps-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: appsNodePoolConfig.nodeType,
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'cn_apps',
+            value: 'true',
+          },
+        ],
+        labels: {
+          cn_apps: 'standard',
         },
-      ],
-      labels: {
-        cn_apps: 'standard',
+        loggingVariant: 'DEFAULT',
       },
-      loggingVariant: 'DEFAULT',
+      initialNodeCount: 0,
+      autoscaling: {
+        minNodeCount: appsNodePoolConfig.minNodes,
+        maxNodeCount: appsNodePoolConfig.maxNodes,
+      },
     },
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: appsNodePoolConfig.minNodes,
-      maxNodeCount: appsNodePoolConfig.maxNodes,
-    },
-  }, opts);
+    opts
+  );
 }
