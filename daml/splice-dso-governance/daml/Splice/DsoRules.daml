@@ -35,6 +35,7 @@ import Splice.Ans
 import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.SvRightOwner
 import Splice.DSO.SvState
 import Splice.Schedule
 import Splice.Util
@@ -517,16 +518,16 @@ data TrafficState = TrafficState with
 template DsoRules with
     dso : Party
     epoch : Int
-    -- FIXME: replace
     svs : Map.Map Party SvInfo
-    -- FIXME: revisit
+      -- ^ Deprecated in favor of svRightOwners
     offboardedSvs : Map.Map Party OffboardedSvInfo
+      -- ^ Only set for sv node owners to handle DSO party offboarding
     dsoDelegate : Party
       -- ^ __Deprecated__ in favor of delegateless automation.
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
-    svRightOwners : TextMap.TextMap SvInfo
+    svRightOwners : TextMap.TextMap SvRightOwnerInfo
 
   where
     ensure
@@ -601,19 +602,16 @@ template DsoRules with
         previousReportCid : ContractId SvStatusReport
         status : SvStatus
       controller sv
-      do -- FIXME: Only for nodes with nodeParty
-        -- newReport <- case Map.lookup sv svs of
-        --   None -> fail "SV is not an SV"
-        --   Some info -> do
-        --     previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = info.name) previousReportCid
-        --     create SvStatusReport with
-        --       dso
-        --       sv
-        --       svName = info.name
-        --       number = previousReport.number + 1
-        --       status = Some status
-        -- return DsoRules_SubmitStatusReportResult with ..
-        abort "FIXME"
+      do
+        name <- getAndValidateSvNodeOperatorParty this (Some sv)
+        previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = info.name) previousReportCid
+        newReport <- create SvStatusReport with
+          dso
+          sv
+          svName = info.name
+          number = previousReport.number + 1
+          status = Some status
+        return DsoRules_SubmitStatusReportResult with ..
 
     -- Called by SV candidates to add themselves to the DsoRules once they are confirmed and ready.
     -- We use the passed rounds for reliably determining the earliest open round, which will be
@@ -1980,12 +1978,12 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
     state = NodeState with
       synchronizerNodes
 
-getAndValidateSvNodeOperatorParty : DsoRules -> Optional Party -> Update Party
+getAndValidateSvNodeOperatorParty : DsoRules -> Optional Party -> Update Text
 getAndValidateSvNodeOperatorParty _ None = fail "no SV party provided"
 getAndValidateSvNodeOperatorParty rules (Some sv) = do
-  -- FIXME: change to check for node operator
-  require "SV party is an SV node operator" (sv `Map.member` rules.svs)
-  pure sv
+  case find (\(_, info) -> info.nodeOperatorParty == sv) rules.svRightOwners of
+    None -> fail ("SV party " <> show sv <> " is not an SV node operator")
+    Some (name, _) -> pure name
 
 
 -- Rate limiting

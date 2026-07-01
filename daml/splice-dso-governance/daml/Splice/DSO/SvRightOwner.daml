@@ -1,7 +1,7 @@
-module Splice.DSO.SvInfo where
+module Splice.DSO.SvRightOwner where
 
--- | Information about a super validator. A super validator may be a node operator but not necessarily.
-data SvInfo = SvInfo
+-- | Information about a super validator right owner.
+data SvRightOwnerInfo = SvRightOwnerInfo
   with
     governanceParty : Party -- ^ The governance party of an SV that can vote
     nodeOperatorParty : Optional Party
@@ -18,7 +18,7 @@ data SvInfo = SvInfo
       -- For rewards to be minted both the node operator.
   deriving (Eq, Show)
 
-validSvInfo : SvInfo -> Bool
-validSvInfo SvInfo{..} =
+validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
+validSvRightOwnerInfo SvRightOwnerInfo{..} =
   voteWeight >= 0 &&
   rewardWeight >= 0
