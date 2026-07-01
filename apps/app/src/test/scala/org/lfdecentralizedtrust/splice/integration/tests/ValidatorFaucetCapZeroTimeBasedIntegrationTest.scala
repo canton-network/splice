@@ -27,13 +27,15 @@ class ValidatorFaucetCapZeroTimeBasedIntegrationTest
   // Package versions from Splice 0.5.11 — the Daml versions currently deployed on MainNet,
   // which do not include the Daml-side fix for the division-by-zero bug on cap=0 rounds.
   // TODO(canton-network/splice#3461): Remove once MainNet has adopted the Daml versions from 0.5.16 or later
+  // Versions bumped to >= 0.1.19 for TBAR default: amulet_0_1_19 is the minimum version
+  // with the rewardConfig field required by traffic-based app rewards.
   private val initialPackageConfig = InitialPackageConfig(
-    amuletVersion = "0.1.16",
-    amuletNameServiceVersion = "0.1.17",
-    dsoGovernanceVersion = "0.1.22",
+    amuletVersion = "0.1.19",
+    amuletNameServiceVersion = "0.1.20",
+    dsoGovernanceVersion = "0.1.25",
     validatorLifecycleVersion = "0.1.6",
-    walletVersion = "0.1.17",
-    walletPaymentsVersion = "0.1.16",
+    walletVersion = "0.1.20",
+    walletPaymentsVersion = "0.1.19",
   )
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
