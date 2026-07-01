@@ -431,7 +431,9 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
           context = paymentContext
           inputs
           amount = transfer.amount
-          description = None
+          description =
+            -- TODO(tech-debt): remove this once we are sure everybody parses the metadata in the `TransferEventsV2.EventLog_HoldingsChange` and the reason field is no longer needed
+            TextMap.lookup reasonMetaKey transfer.meta.values
           meta = Some transfer.meta
 
       -- return result
