@@ -30,6 +30,10 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" $walletWebUiLabel) | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- with .Values.securityContexts.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - env:
         - name: SPLICE_APP_UI_NETWORK_NAME
@@ -86,6 +90,10 @@ spec:
         imagePullPolicy: {{ . }}
         {{- end }}
         name: wallet-web-ui
+        {{- with .Values.securityContexts.walletWebUi }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - containerPort: 8080
           name: http
