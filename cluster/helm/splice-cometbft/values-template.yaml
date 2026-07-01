@@ -111,3 +111,17 @@ mempool:
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 
+securityContexts:
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  cometbft:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+

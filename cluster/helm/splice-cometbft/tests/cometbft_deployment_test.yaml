@@ -74,3 +74,56 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-cometbft-sa"
+
+  - it: "sets default security contexts for pods and containers"
+    template: deployment.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            seccompProfile:
+              type: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+
+  - it: "allows overriding security contexts via values"
+    template: deployment.yaml
+    set:
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        cometbft:
+          runAsUser: 5000
+          allowPrivilegeEscalation: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 5000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: true
