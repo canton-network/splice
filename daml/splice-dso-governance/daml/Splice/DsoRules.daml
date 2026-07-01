@@ -136,18 +136,6 @@ data SvInfo = SvInfo with
     participantId : Text -- ^ Participant ID of the SV, stored here as PartyToParticipant mappings are tracked via state on the DsoRules + SvOnboardingConfirmed contracts.
   deriving (Eq, Show)
 
-data SvNameInfo = SvNameInfo with
-    governanceParty : Optional Party
-    nodeParty : Optional Party
-    -- FIXME: consider if we need separate governance and node operator weights
-    voteWeight : Int -- ^ can be zero
-    rewardWeight : Int -- ^ can be zero
-    rewardNodeOperator : Text
-      -- ^ Name of the SV node operator through which rewards are minted.
-      -- For rewards to be minted both the node operator.
-  deriving (Eq, Show)
-
-
 -- | Information about offboarded svs
 data OffboardedSvInfo = OffboardedSvInfo with
     name : Text -- ^ Human-readable name; must be unique.

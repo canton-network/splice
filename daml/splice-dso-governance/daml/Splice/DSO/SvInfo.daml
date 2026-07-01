@@ -1,0 +1,24 @@
+module Splice.DSO.SvInfo where
+
+-- | Information about a super validator. A super validator may be a node operator but not necessarily.
+data SvInfo = SvInfo
+  with
+    governanceParty : Party -- ^ The governance party of an SV that can vote
+    nodeOperatorParty : Optional Party
+      -- ^ The party of the SV node operator.
+      -- FIXME: should we allow multiple to handle cases like DA1/DA2. Or is it ok that these are
+      -- two separate SVs?
+    voteWeight : Int
+      -- ^ the weight of an SV for voting, can be zero
+      -- FIXME: do we need separate governance and node operator vote weights
+    rewardWeight : Int
+      -- ^ the weight of an SV for reward minting, can be zero
+    rewardNodeOperator : Text
+      -- ^ Name of the SV node operator through which rewards are minted.
+      -- For rewards to be minted both the node operator.
+  deriving (Eq, Show)
+
+validSvInfo : SvInfo -> Bool
+validSvInfo SvInfo{..} =
+  voteWeight >= 0 &&
+  rewardWeight >= 0
