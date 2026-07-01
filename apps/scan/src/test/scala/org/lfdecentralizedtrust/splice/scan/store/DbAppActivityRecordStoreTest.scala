@@ -1004,7 +1004,7 @@ class DbAppActivityRecordStoreTest
       lastArchivedRoundO: Option[Long] = None,
   ): Future[MetaCheckResult] =
     futureUnlessShutdownToFuture(
-      storage.underlying.queryAndUpdate(
+      storage.queryAndUpdate(
         store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO, exitOnDowngrade = false),
         "test.ensureMeta",
       )(implicitly, implicitly, _ => false)
@@ -1025,7 +1025,7 @@ class DbAppActivityRecordStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       s"app_activity_test_$n",
       participantId,
@@ -1038,7 +1038,7 @@ class DbAppActivityRecordStoreTest
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val store = new DbAppActivityRecordStore(
-        storage.underlying,
+        storage,
         updateHistory,
         versions,
         isFirstSv,
@@ -1054,7 +1054,7 @@ class DbAppActivityRecordStoreTest
   private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       "app_activity_combined_test",
       participantId,
@@ -1067,14 +1067,14 @@ class DbAppActivityRecordStoreTest
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val appStore = new DbAppActivityRecordStore(
-        storage.underlying,
+        storage,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv = false,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
-        storage.underlying,
+        storage,
         updateHistory,
         Some(appStore),
         loggerFactory,

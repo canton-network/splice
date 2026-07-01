@@ -1214,7 +1214,7 @@ class DbScanAppRewardsStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       s"app_rewards_test_$n",
       participantId,
@@ -1227,14 +1227,14 @@ class DbScanAppRewardsStoreTest
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val appActivityRecordStore = new DbAppActivityRecordStore(
-        storage.underlying,
+        storage,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(
-        storage.underlying,
+        storage,
         updateHistory,
         appActivityRecordStore,
         rewardMintingAllowanceTolerance,
