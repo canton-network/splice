@@ -337,6 +337,48 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         }
       }
 
+      "correctly ignore parties added after referencing the party ignore store" in {
+        val party1 = userParty(1)
+        val party2 = userParty(2)
+        val party3 = userParty(3)
+        val expiresAtRound3 = amulet(party2, 1.0, 2, 1.0)
+        val expiresAtRound4 = amulet(party3, 3.0, 1, 1.0)
+        val partiesToIgnore = new IgnoredPartiesStore(Set(party1))
+        val wontExpireAnyTimeSoon = amulet(party1, 10.0, 2, 0.0001)
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- createMiningRoundsTriple(store, startRound = 4L) // oldest is round 4, newest is 6
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(expiresAtRound3, expiresAtRound4, wontExpireAnyTimeSoon)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          expiredAmuletFunction = store.listExpiredAmulets(Some(partiesToIgnore))
+          result_beforeAdd <- expiredAmuletFunction(
+            CantonTimestamp.now(),
+            PageLimit.tryCreate(100),
+          )(
+            traceContext
+          )
+          _ = partiesToIgnore.addAll(Set(party2))
+          result_afterAdd <- expiredAmuletFunction(
+            CantonTimestamp.now(),
+            PageLimit.tryCreate(100),
+          )(
+            traceContext
+          )
+        } yield {
+          result_beforeAdd.map(_.contract) should contain theSameElementsAs Seq(
+            expiresAtRound3,
+            expiresAtRound4,
+          )
+          result_afterAdd.map(_.contract) should contain theSameElementsAs Seq(
+            expiresAtRound4
+          )
+        }
+      }
+
     }
 
     "listLockedExpiredAmulets" should {
