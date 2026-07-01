@@ -14,7 +14,8 @@
         "cometbft": {
           "type": "object"
         }
-      }
+      },
+      "required": ["pod", "cometbft"]
     },
     "imageName": {
       "type": "string"

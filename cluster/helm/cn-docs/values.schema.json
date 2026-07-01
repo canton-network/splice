@@ -17,7 +17,8 @@
         "gcsProxy": {
           "type": "object"
         }
-      }
+      },
+      "required": ["pod", "docs", "gcsProxy"]
     },
     "serviceAccountName": {
       "type": "string"

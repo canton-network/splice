@@ -41,7 +41,7 @@
             "ui": {
               "type": "object"
             }
-          }
+          },"required": ["pod", "scan", "persistence", "ui"]
         },
         "serviceAccountName": {
           "type": "string"

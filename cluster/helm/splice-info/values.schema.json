@@ -53,7 +53,7 @@
         "updater": {
           "type": "object"
         }
-      }
+      },"required": ["pod", "nginx", "updater"]
     },
     "serviceAccountName": {
       "type": "string"

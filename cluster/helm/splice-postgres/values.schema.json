@@ -12,7 +12,7 @@
         "postgres": {
           "type": "object"
         }
-      }
+      },"required": ["pod", "postgres"]
     },
     "serviceAccountName": {
       "type": "string"

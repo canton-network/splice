@@ -14,7 +14,7 @@
         "persistence": {
           "type": ["object", "null"]
         }
-      }
+      },"required": ["pod", "domain", "persistence"]
     }
   }
 }

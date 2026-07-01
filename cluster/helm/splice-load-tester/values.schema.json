@@ -11,7 +11,7 @@
         "loadTester": {
           "type": "object"
         }
-      }
+      },"required": ["pod", "loadTester"]
     }
   }
 }

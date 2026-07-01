@@ -12,7 +12,7 @@
         "splitwellWebUi": {
           "type": ["object", "null"]
         }
-      }
+      },"required": ["pod", "splitwellWebUi"]
     },
     "serviceAccountName": {
       "type": "string"

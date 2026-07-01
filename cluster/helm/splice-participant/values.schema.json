@@ -21,7 +21,7 @@
         "persistence": {
           "type": ["object"]
         }
-      }
+      },"required": ["pod", "participant", "persistence"]
     },
     "serviceAccountName": {
       "type": "string"

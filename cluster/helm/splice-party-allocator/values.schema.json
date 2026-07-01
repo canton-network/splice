@@ -11,7 +11,7 @@
         "partyAllocator": {
           "type": ["object", "null"]
         }
-      }
+      },"required": ["pod", "partyAllocator"]
     }
   }
 }
