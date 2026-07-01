@@ -27,7 +27,7 @@ tests:
               add:
                 - NET_BIND_SERVICE
 
-  - it: "allows overriding security contexts via values"
+  - it: "allows overriding security contexts"
     set:
       networkName: "MockNet"
       securityContexts:
