@@ -238,8 +238,10 @@ class AmuletExpiryWithMinimalPackageIntegrationTest
 class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
     extends AmuletExpiryWithOldPackageIntegrationTestBase {
 
+  // Bumped from amulet_0_1_15 to amulet_0_1_19 for TBAR default: 0.1.15 is
+  // below minimumInitialization and no longer in the supported package set.
   override val ignoredAmuletVersions: Set[String] = Set(
-    DarResources.amulet_0_1_15.metadata.version.toString
+    DarResources.amulet_0_1_19.metadata.version.toString
   )
 
   "Triggers expiring amulet, locked amulet, and reward coupons and featured app markers skip parties when their preferred amulet package version is marked as ignored" in {
