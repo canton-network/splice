@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
@@ -31,7 +32,12 @@ class UpdateHistoryBulkStorageCommitFromStaging(
       segment =>
         bulkStorageReader
           .getStagingObjectsForUpdateHistorySegment(segment)
-          .map(objects => objects.objects),
+          .map(objects => objects.objects)
+          .recover {
+            // If we restart after all objects have been moved already, the staging objects will not be found.
+            case ex: StatusRuntimeException if ex.getStatus.getCode == Status.Code.NOT_FOUND =>
+              Seq.empty
+          },
       appConfig,
       loggerFactory,
     )
