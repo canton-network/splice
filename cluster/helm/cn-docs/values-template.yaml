@@ -24,3 +24,26 @@ service:
   http:
     port: 80
 
+
+securityContexts:
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  docs:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  gcsProxy:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL

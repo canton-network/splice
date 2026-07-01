@@ -23,8 +23,16 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" "gcs-proxy") | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- with .Values.securityContexts.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: gcs-proxy
+          {{- with .Values.securityContexts.docs }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ .Values.imageRepo }}/{{ .Values.gcsProxy.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).gcs_proxy) }}
           {{- with .Values.imagePullPolicy }}
           imagePullPolicy: {{ . }}
