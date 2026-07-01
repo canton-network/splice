@@ -30,14 +30,15 @@ securityContexts:
     seccompProfile:
       type: RuntimeDefault
   docs:
-    runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
+    # runAsUser, runAsGroup, and runAsNonRoot are intentionally omitted.
+    # The existing Docker image requires root to run initialization script
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:
       drop:
         - ALL
+      add:
+        - NET_BIND_SERVICE # Added so the application can bind to 443
   gcsProxy:
     runAsNonRoot: true
     runAsUser: 1001
