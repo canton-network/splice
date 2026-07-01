@@ -14,10 +14,12 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{PollingTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
+import org.lfdecentralizedtrust.splice.store.HardLimit
 import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger.RewardMetrics
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import scala.collection.mutable
+import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
 
 class RewardMetricsTrigger(
@@ -61,6 +63,29 @@ class RewardMetricsTrigger(
         }
         rewardMetrics.pruneHiddenCouponGauges(providerCoupons.map(_._1))
       }
+      rewardCouponCounts <- dsoStore.getRewardCouponsV2AgeHistogram(
+        rewardMetrics.rewardCouponsActiveContractsBucket1.ageUpperBound,
+        rewardMetrics.rewardCouponsActiveContractsBucket2.ageUpperBound,
+        rewardMetrics.rewardCouponsActiveContractsBucket3.ageUpperBound,
+        context.clock.now,
+        // Limit the sequential scan to 100k rows,
+        // which is a reasonable upper bound for the number of active reward coupons.
+        HardLimit.tryCreate(100000, 100000),
+      )
+      _ = {
+        rewardMetrics.rewardCouponsActiveContractsBucket1.gauge.updateValue(
+          rewardCouponCounts._1
+        )
+        rewardMetrics.rewardCouponsActiveContractsBucket2.gauge.updateValue(
+          rewardCouponCounts._2
+        )
+        rewardMetrics.rewardCouponsActiveContractsBucket3.gauge.updateValue(
+          rewardCouponCounts._3
+        )
+        rewardMetrics.rewardCouponsActiveContractsBucket4.gauge.updateValue(
+          rewardCouponCounts._4
+        )
+      }
     } yield false
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] =
@@ -96,6 +121,67 @@ object RewardMetricsTrigger {
       activeContractsGauge("process_rewards_v2", "ProcessRewardsV2", dryRun = true)
     val processRewardsActiveContractsMinting: Gauge[Int] =
       activeContractsGauge("process_rewards_v2", "ProcessRewardsV2", dryRun = false)
+
+    case class HistogramBucketGauge(
+        bucket: Int,
+        gauge: Gauge[Long],
+        ageLowerBound: FiniteDuration,
+        ageUpperBound: FiniteDuration,
+    )
+    private def activeRewardCouponsAgeHistogramGauge(
+        bucket: Int,
+        ageLowerBound: FiniteDuration,
+        ageUpperBound: FiniteDuration,
+    ): HistogramBucketGauge = {
+      val gauge = metricsFactory.gauge[Long](
+        MetricInfo(
+          name = prefix :+ "reward_coupon_v2" :+ "active_contracts",
+          summary =
+            s"The number of active RewardCouponV2 contracts (bucketed by contract age), as seen by the RewardMetricsTrigger",
+          qualification = Saturation,
+        ),
+        initial = -1L,
+      )(
+        MetricsContext.Empty.withExtraLabels(
+          "bucket" -> bucket.toString,
+          "ageLowerBound" -> ageLowerBound.toString,
+          "ageUpperBound" -> ageUpperBound.toString,
+        )
+      )
+      HistogramBucketGauge(bucket, gauge, ageLowerBound, ageUpperBound)
+    }
+
+    object RewardCouponBucketThresholds {
+      val t0: FiniteDuration = 0.seconds
+      val t1: FiniteDuration = 10.minutes
+      val t2: FiniteDuration = 1.hours
+      val t3: FiniteDuration = 12.hours
+      val t4: FiniteDuration = 9999.days // not an actual bound, only used for the metric label
+    }
+    val rewardCouponsActiveContractsBucket1: HistogramBucketGauge =
+      activeRewardCouponsAgeHistogramGauge(
+        0,
+        RewardCouponBucketThresholds.t0,
+        RewardCouponBucketThresholds.t1,
+      )
+    val rewardCouponsActiveContractsBucket2: HistogramBucketGauge =
+      activeRewardCouponsAgeHistogramGauge(
+        1,
+        RewardCouponBucketThresholds.t1,
+        RewardCouponBucketThresholds.t2,
+      )
+    val rewardCouponsActiveContractsBucket3: HistogramBucketGauge =
+      activeRewardCouponsAgeHistogramGauge(
+        2,
+        RewardCouponBucketThresholds.t2,
+        RewardCouponBucketThresholds.t3,
+      )
+    val rewardCouponsActiveContractsBucket4: HistogramBucketGauge =
+      activeRewardCouponsAgeHistogramGauge(
+        3,
+        RewardCouponBucketThresholds.t3,
+        RewardCouponBucketThresholds.t4,
+      )
 
     private val hiddenCouponGauges: mutable.Map[PartyId, Gauge[Long]] = mutable.Map.empty
     private val lock = new Mutex()
@@ -134,6 +220,10 @@ object RewardMetricsTrigger {
       lock.exclusive {
         hiddenCouponGauges.values.foreach(_.close())
       }
+      rewardCouponsActiveContractsBucket1.gauge.close()
+      rewardCouponsActiveContractsBucket2.gauge.close()
+      rewardCouponsActiveContractsBucket3.gauge.close()
+      rewardCouponsActiveContractsBucket4.gauge.close()
     }
   }
 }

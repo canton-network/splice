@@ -74,6 +74,7 @@ import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.canton.SQLActionBuilder
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -854,6 +855,51 @@ class DbSvDsoStore(
     } yield limited.map(
       assignedContractFromRow(splice.amulet.RewardCouponV2.COMPANION)(_)
     )
+
+  override def getRewardCouponsV2AgeHistogram(
+      t1: FiniteDuration,
+      t2: FiniteDuration,
+      t3: FiniteDuration,
+      now: CantonTimestamp,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[(Long, Long, Long, Long)] = {
+    val t1m = t1.toMicros
+    val t2m = t2.toMicros
+    val t3m = t3.toMicros
+    for {
+      result <- storage
+        .query(
+          sql"""
+            with ages as (
+              select $now - created_at as age
+              from #${DsoTables.acsTableName} acs
+              where acs.store_id = $acsStoreId
+                and acs.migration_id = $domainMigrationId
+                and acs.package_name = ${splice.amulet.RewardCouponV2.COMPANION.PACKAGE_NAME}
+                and acs.template_id_qualified_name = ${QualifiedName(
+              splice.amulet.RewardCouponV2.COMPANION.getTemplateIdWithPackageId
+            )}
+              limit ${sqlLimit(limit)}
+            )
+            select
+              count(*) filter (where age <  $t1m)                as bucket_1,
+              count(*) filter (where age >= $t1m and age < $t2m) as bucket_2,
+              count(*) filter (where age >= $t2m and age < $t3m) as bucket_3,
+              count(*) filter (where age >= $t3m)                as bucket_4
+            from ages
+         """.toActionBuilder.as[(Long, Long, Long, Long)].head,
+          "getRewardCouponsV2AgeHistogram",
+        )
+    } yield {
+      if (result._1 + result._2 + result._3 + result._4 > limit.limit) {
+        // Similar to applyLimit(), which warns if the result is truncated
+        logger.warn(
+          s"There are more than ${limit.limit} RewardCouponV2 contracts, the results of the getRewardCouponsV2TtlHistogram query are inaccurate"
+        )
+      }
+      result
+    }
+  }
 
   override def listDryRunRewardAccountingContractsByRounds(rounds: Seq[Long])(implicit
       tc: TraceContext

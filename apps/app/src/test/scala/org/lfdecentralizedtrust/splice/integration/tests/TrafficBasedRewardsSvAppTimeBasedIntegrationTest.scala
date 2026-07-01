@@ -317,6 +317,36 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         }
       }
 
+      clue("RewardMetricsTrigger reports active RewardCouponV2 counts") {
+        setTriggersWithin(
+          triggersToPauseAtStart = Seq(sv1RewardMetricsTrigger)
+        ) {
+          eventually() {
+            sv1RewardMetricsTrigger.runOnce().futureValue
+            metricValue(
+              sv1Backend,
+              "reward_coupon_v2.active_contracts",
+              Map("bucket" -> "0"),
+            ) should be > 0L
+            metricValue(
+              sv1Backend,
+              "reward_coupon_v2.active_contracts",
+              Map("bucket" -> "1"),
+            ) shouldBe 0L
+            metricValue(
+              sv1Backend,
+              "reward_coupon_v2.active_contracts",
+              Map("bucket" -> "2"),
+            ) shouldBe 0L
+            metricValue(
+              sv1Backend,
+              "reward_coupon_v2.active_contracts",
+              Map("bucket" -> "3"),
+            ) shouldBe 0L
+          }
+        }
+      }
+
       confirmBftRead(bobParty)
 
       confirmMismatchingRootHashIsFlagged(bobParty)
