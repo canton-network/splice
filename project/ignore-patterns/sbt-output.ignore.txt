@@ -52,6 +52,10 @@ protoc-jar: caught exception, retrying: java\.io\.IOException: Cannot run progra
 # npm linting command
 .*eslint.*--max-warnings=0.*
 
+# rolldown/vite emits a PLUGIN_TIMINGS performance advisory (e.g. for the built-in
+# `rolldown:vite-resolve` resolver) on otherwise-successful builds. Not an error.
+.*\[PLUGIN_TIMINGS\] Warning:.*
+
 # npm vulnerabilities. Temporarily, we completely ignore those.
 # In i1489, once we introduce blackduck, also consider replacing this with ``--no-audit` for `npm install`:
 .*\[.*info.*\].*vulnerabilities.*
