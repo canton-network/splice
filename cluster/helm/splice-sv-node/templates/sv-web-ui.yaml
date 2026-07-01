@@ -78,7 +78,7 @@ spec:
           name: sv-web-ui
           {{- with .Values.securityContexts.svWebUi }}
           securityContext:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - containerPort: 8080

@@ -38,7 +38,7 @@ spec:
         - name: sv-app
           {{- with .Values.securityContexts.sv }}
           securityContext:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).sv_app) }}
           {{- with .Values.imagePullPolicy }}
