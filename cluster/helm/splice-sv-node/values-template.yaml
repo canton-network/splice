@@ -114,9 +114,7 @@ securityContexts:
       drop:
         - ALL
   svWebUi:
-    runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
+    # granted more priviledges to prevent [FATAL tini (7)] exec /custom-docker-entrypoint.sh failed: Permission denied
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:
