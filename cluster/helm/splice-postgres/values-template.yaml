@@ -43,3 +43,17 @@ persistence:
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+securityContexts:
+  pod:
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  postgres:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
