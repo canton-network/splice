@@ -2367,7 +2367,7 @@ class HttpScanHandler(
           case _ =>
             Future.failed(
               HttpErrorHandler.internalServerError(
-                s"Party ${party} is hosted on multiple participants, which is not currently supported"
+                s"Party ${party} is hosted on multiple participants, which is not supported in this version of the API. Please use the /v1 version instead."
               )
             )
         }
