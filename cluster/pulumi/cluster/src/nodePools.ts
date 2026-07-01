@@ -6,16 +6,17 @@ import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-export function installNodePools(): void {
+export function installNodePools(clusterDep?: gcp.container.Cluster): void {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
 
   const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
+  const opts = clusterDep ? { dependsOn: [clusterDep] } : {};
 
   if (gkeClusterConfig.nodePools.hyperdiskApps) {
-    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation);
+    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation, opts);
   }
   const appsNodePoolConfig = gkeClusterConfig.nodePools.apps;
 
@@ -23,9 +24,9 @@ export function installNodePools(): void {
     hyperdiskSupportConfig.hyperdiskSupport.enabled &&
     !hyperdiskSupportConfig.hyperdiskSupport.migrating
   ) {
-    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation);
+    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation, opts);
   } else {
-    appsNodePool(cluster, appsNodePoolConfig);
+    appsNodePool(cluster, appsNodePoolConfig, opts);
   }
 
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
@@ -56,6 +57,7 @@ export function installNodePools(): void {
     },
     {
       replaceOnChanges: ['nodeConfig.machineType'],
+      ...opts,
     }
   );
 
@@ -78,9 +80,9 @@ export function installNodePools(): void {
       minNodeCount: 1,
       maxNodeCount: 3,
     },
-  });
+  }, opts);
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string) {
+function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string, opts?: any) {
   new gcp.container.NodePool('cn-apps-node-pool-hd', {
     cluster,
     nodeConfig: {
@@ -107,9 +109,9 @@ function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?
       minNodeCount: config.minNodes,
       maxNodeCount: config.maxNodes,
     },
-  });
+  }, opts);
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
+function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig, opts?: any) {
   new gcp.container.NodePool('cn-apps-node-pool', {
     cluster,
     nodeConfig: {
@@ -131,5 +133,5 @@ function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
       minNodeCount: appsNodePoolConfig.minNodes,
       maxNodeCount: appsNodePoolConfig.maxNodes,
     },
-  });
+  }, opts);
 }
