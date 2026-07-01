@@ -152,7 +152,6 @@ class PackageVetting(
       .map(_ => ())
   }
 
-  // See https://github.com/DACH-NY/canton/issues/29834: make it work for non-sv validators as well
   def unvetPackages(
       domainId: SynchronizerId,
       additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],

@@ -31,8 +31,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.scalatest.concurrent.PatienceConfiguration
-import scala.concurrent.duration.DurationInt
 
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.duration.FiniteDuration
 
 class UnsupportedPackageVettingIntegrationTest
@@ -47,6 +47,7 @@ class UnsupportedPackageVettingIntegrationTest
       .withoutAliceValidatorConnectingToSplitwell
       // if other tests run before, packages that break this test might already be vetted
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[SvPackageVettingTrigger]
@@ -55,6 +56,9 @@ class UnsupportedPackageVettingIntegrationTest
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
     implicit env =>
+      val aliceValidatorTrigger =
+        aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger]
+      aliceValidatorTrigger.pause().futureValue
       val unsupportedDarsToVetSv = Seq(
         DarResources.dsoGovernance_0_1_0,
         DarResources.walletPayments_0_1_0,
@@ -78,13 +82,12 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
       )
-      // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(
         aliceValidatorBackend.appState.participantAdminConnection,
         synchronizerId,
         unsupportedDarsToVetValidator,
-        Seq.empty,
-        aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
+        unsupportedDarsToVetValidator,
+        aliceValidatorTrigger,
       )
   }
 
@@ -128,7 +131,7 @@ class UnsupportedPackageVettingIntegrationTest
     }
   }
 
-  "SVs unvet package versions above the configured PackageConfig, validators do not" in {
+  "SVs and validators unvet package versions above the configured PackageConfig" in {
     implicit env =>
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
@@ -190,12 +193,12 @@ class UnsupportedPackageVettingIntegrationTest
         }
       }
 
-      clue("alice validator keeps package versions above the downgraded PackageConfig vetted") {
+      clue("alice validator unvets package versions above the downgraded PackageConfig") {
         eventually() {
           getVettedPackageIds(
             aliceValidatorBackend.appState.participantAdminConnection,
             synchronizerId,
-          ) should contain allElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
+          ) should contain noElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
         }
         eventually(40.seconds) {
           alicesTapsWithPackageId(DarResources.amulet_0_1_16.packageId)

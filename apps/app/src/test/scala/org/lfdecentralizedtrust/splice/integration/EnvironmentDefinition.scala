@@ -278,6 +278,17 @@ case class EnvironmentDefinition(
     )
   }
 
+  def withReducedAmuletRulesCacheTTL(
+      duration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(1)
+  ): EnvironmentDefinition =
+    this
+      .addConfigTransform((_, conf) =>
+        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
+          // Reduce the cache TTL. Otherwise alice validator takes forever to see the new amulet rules version
+          c.copy(scanClient = c.scanClient.setAmuletRulesCacheTimeToLive(duration))
+        )(conf)
+      )
+
   /** Use exactly this setup and replace any previously existing setup. */
   def withThisSetup(setup: SpliceTestConsoleEnvironment => Unit): EnvironmentDefinition =
     copy(setup = setup)

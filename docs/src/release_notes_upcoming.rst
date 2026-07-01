@@ -38,6 +38,10 @@
 
   - Validator
 
+    - Non-SV validators now automatically unvet unsupported package versions via the package vetting automation.
+      Previously, only SV nodes could unvet packages. Validators will now remove vetted packages
+      that are above the version specified in the ``PackageConfig`` or below the minimum supported version.
+
     - Upload and vet the ``splice-util-token-standard-wallet.dar`` by default, so that
       wallets can make use of the new batching functionality (see below) on all validator
       nodes.
