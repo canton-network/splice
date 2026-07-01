@@ -9,6 +9,33 @@
 
   .. note::
 
+    This release includes the Token Standard V2 APIs (`CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md>`__)
+    and their implementation for Amulet.
+
+    **Wallet providers**: consider adding support for the Token Standard V2 APIs in your wallet.
+    Adding support for the V2 allocation workflows unlocks valuable new functionality for
+    your users. Using the V2 tx history events simplifies presenting the transaction
+    history to your users. Furthermore, adding support for accounts in your UIs enables
+    interacting with assets with rich account structures, which are commonly used in the TradFi world.
+
+    **Registry providers**: consider implementing support for the Token Standard V2 APIs for your tokens,
+    so they can be used by apps and wallets that rely on the V2 token standard.
+
+    **App providers**: review the V2 APIs and consider where their use allows you to improve your app's UX
+    and/or reduce its traffic cost. Trading apps in particular can benefit from the improved
+    functionality of the V2 allocation APIs.
+
+  - Wallet
+
+    - Support token standard V2 allocations and transfers of Amulet in the Splice Amulet Wallet UI.
+
+      Creating all requested allocations in a single transaction
+      `as documented in CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md#423-traders-accept-allocation-requests-and-create-allocations>`__
+      is not supported by the Splice Amulet Wallet UI, as it only works for Amulet allocations.
+      It therefore also does not call ``V2.AllocationRequest_Accept`` on the allocation request,
+      to avoid archiving the allocation request while it is still required to create allocations
+      of other assets using their registry-specific UIs.
+
   - Validator
 
     - Non-SV validators now automatically unvet unsupported package versions via the package vetting automation.
