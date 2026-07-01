@@ -40,12 +40,16 @@ spec:
         {{- end }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: mediator
+        {{- with .Values.securityContexts.mediator }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         image: {{ .Values.imageRepo }}/{{ .Values.mediator.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_mediator) }}
         env:
         - name: JAVA_TOOL_OPTIONS
@@ -117,6 +121,10 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
+          {{- with .Values.securityContexts.persistence }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ .Values.mediator.persistence.initImageName}}
           env:
             - name: PGPASSWORD

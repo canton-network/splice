@@ -32,12 +32,16 @@ spec:
         {{- end }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: sequencer
+          {{- with .Values.securityContexts.sequencer }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
         {{- if eq .Values.sequencer.driver.type "cometbft"}}
           image: {{ .Values.imageRepo }}/{{ .Values.sequencer.cometbft.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_cometbft_sequencer) }}
         {{- else}}
@@ -189,6 +193,10 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
+          {{- with .Values.securityContexts.persistence }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ .Values.sequencer.persistence.initImageName}}
           env:
             - name: PGPASSWORD
@@ -221,6 +229,10 @@ spec:
         {{- $dbName := $p.databaseName | default .Values.sequencer.persistence.databaseName }}
         {{- $dbSecret := $p.secretName | default .Values.sequencer.persistence.secretName }}
         - name: pg-init-bft-driver
+          {{- with .Values.securityContexts.persistence }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ $p.initImageName | default "postgres:14" }}
           env:
             - name: PGPASSWORD
