@@ -14,6 +14,7 @@ import DA.Optional (isNone, fromSome, fromOptional, isSome)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
+import qualified DA.TextMap as TextMap
 import DA.Time
 
 import Splice.Amulet
@@ -525,7 +526,7 @@ template DsoRules with
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
-    -- svNames : Map.Map Text SvNameInfo
+    svRightOwners : TextMap.TextMap SvInfo
 
   where
     ensure
