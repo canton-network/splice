@@ -84,6 +84,7 @@ tests:
       - equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             seccompProfile:
               type: RuntimeDefault
       - equal:
@@ -103,6 +104,7 @@ tests:
     set:
       securityContexts:
         pod:
+          fsGroup: 1001
           runAsNonRoot: true
           seccompProfile:
             type: Localhost
@@ -117,6 +119,7 @@ tests:
       - equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             runAsNonRoot: true
             seccompProfile:
               type: Localhost

@@ -102,9 +102,9 @@ spec:
             - -x
             - -e
             - |
-              cp -a "${HOME}"/initial-config/. "${HOME}"/config/
+              cp -rL "${HOME}"/initial-config/. "${HOME}"/config/
               "${HOME}"/configure-state-sync.sh "${HOME}"/config/config.toml
-              cp -n "${HOME}"/initial-data/* "${HOME}"/data || :
+              cp -rnL "${HOME}"/initial-data/* "${HOME}"/data || :
               cometbft-canton-network start \
               {{ include "cliArgs" (list $.Values) | indent 14 | trim }}
           {{- with $.Values.resources }}
