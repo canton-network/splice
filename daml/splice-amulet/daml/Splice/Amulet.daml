@@ -439,7 +439,7 @@ template RewardCouponV2
       -- If not set, this is the provider.
   where
     signatory dso
-    observer if providerIsObserver then provider :: optionalToList beneficiary else []
+    observer if providerIsObserver then [provider] ++ optionalToList beneficiary else []
     ensure amount > 0.0
 
     interface instance Api.RewardAssignmentV1.RewardCoupon for RewardCouponV2 where
