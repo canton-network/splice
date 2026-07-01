@@ -604,11 +604,11 @@ template DsoRules with
       controller sv
       do
         name <- getAndValidateSvNodeOperatorParty this (Some sv)
-        previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = info.name) previousReportCid
+        previousReport <- fetchAndArchive (ForSvNode with dso; sv; svName = name) previousReportCid
         newReport <- create SvStatusReport with
           dso
           sv
-          svName = info.name
+          svName = name
           number = previousReport.number + 1
           status = Some status
         return DsoRules_SubmitStatusReportResult with ..
@@ -1981,7 +1981,7 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
 getAndValidateSvNodeOperatorParty : DsoRules -> Optional Party -> Update Text
 getAndValidateSvNodeOperatorParty _ None = fail "no SV party provided"
 getAndValidateSvNodeOperatorParty rules (Some sv) = do
-  case find (\(_, info) -> info.nodeOperatorParty == sv) rules.svRightOwners of
+  case find (\(_, info) -> info.nodeOperatorParty == Some sv) (TextMap.toList rules.svRightOwners) of
     None -> fail ("SV party " <> show sv <> " is not an SV node operator")
     Some (name, _) -> pure name
 
