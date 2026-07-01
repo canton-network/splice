@@ -372,9 +372,9 @@ async function installSvAndValidator(
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -384,7 +384,7 @@ async function installSvAndValidator(
     synchronizers: {
       current: {
         ...defaultScanValues.synchronizers.current,
-        ...(useCantonBft ? bftSequencerConfigFor(canton.active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(canton.active) : {}),
       },
       ...(canton.upgrade
         ? {
@@ -392,7 +392,7 @@ async function installSvAndValidator(
               sequencer: canton.upgrade.namespaceInternalSequencerAddress,
               mediator: canton.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.upgrade)
+                ? cantonBftConfigFor(canton.upgrade)
                 : {}),
             },
           }
@@ -403,7 +403,7 @@ async function installSvAndValidator(
               sequencer: canton.legacy.namespaceInternalSequencerAddress,
               mediator: canton.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.legacy)
+                ? cantonBftConfigFor(canton.legacy)
                 : {}),
             },
           }

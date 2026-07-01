@@ -540,9 +540,9 @@ function installScan(
   const { active, participant } = synchronizerNodes;
   const scanDbName = `scan_${sanitizedForPostgres(config.nodeName)}`;
 
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -553,7 +553,7 @@ function installScan(
       current: {
         sequencer: active.namespaceInternalSequencerAddress,
         mediator: active.namespaceInternalMediatorAddress,
-        ...(useCantonBft ? bftSequencerConfigFor(active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(active) : {}),
       },
       ...(synchronizerNodes.upgrade
         ? {
@@ -561,7 +561,7 @@ function installScan(
               sequencer: synchronizerNodes.upgrade.namespaceInternalSequencerAddress,
               mediator: synchronizerNodes.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(synchronizerNodes.upgrade)
+                ? cantonBftConfigFor(synchronizerNodes.upgrade)
                 : {}),
             },
           }
@@ -572,7 +572,7 @@ function installScan(
               sequencer: synchronizerNodes.legacy.namespaceInternalSequencerAddress,
               mediator: synchronizerNodes.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(synchronizerNodes.legacy)
+                ? cantonBftConfigFor(synchronizerNodes.legacy)
                 : {}),
             },
           }

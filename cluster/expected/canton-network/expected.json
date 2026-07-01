@@ -2861,7 +2861,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
@@ -3975,7 +3975,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
