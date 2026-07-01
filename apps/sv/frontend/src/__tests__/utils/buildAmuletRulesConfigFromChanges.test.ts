@@ -220,19 +220,19 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       },
       {
         fieldName: 'rewardConfigMintingVersion',
-        label: 'Reward config: Minting version',
+        label: 'Reward config: Minting scheme',
         currentValue: 'RewardVersion_FeaturedAppMarkers',
         newValue: 'RewardVersion_TrafficBasedAppRewards',
       },
       {
         fieldName: 'rewardConfigDryRunVersion',
-        label: 'Reward config: Dry-run version',
+        label: 'Reward config: Dry-run minting scheme',
         currentValue: '',
         newValue: 'RewardVersion_TrafficBasedAppRewards',
       },
       {
         fieldName: 'rewardConfigBatchSize',
-        label: 'Reward config: Batch size',
+        label: 'Reward config: Merkle tree batch size',
         currentValue: '100',
         newValue: '200',
       },
