@@ -108,6 +108,7 @@ class MultiHostValidatorOperatorIntegrationTest extends IntegrationTest with Wal
         bobParticipant.parties.import_party_acs(
           importFilePath = acsFile.toString,
           synchronizerId = synchronizerId,
+          party = Some(party),
         )
       }
     })

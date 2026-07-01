@@ -40,13 +40,29 @@ IGNORE_PATTERNS="$(cat "${FILES_WITH_IGNORE_PATTERNS[@]}" | remove_comment_and_b
 # Keywords are based on `canton-json.lnav.json`
 MIN_LOG_LEVEL_WARNING="\"level\":\"WARN\"|\"level\":\"ERROR\""
 
+# Wrapper around ripgrep used throughout this script.
+# ripgrep exits 1 when there are simply no matches, which is fine for us.
+# It exits with 2 or higher on a real error (e.g. an invalid regex in the
+# ignore patterns, or an I/O error). In that case we must fail loudly instead
+# of silently passing the log check, so we propagate the non-zero exit code.
+rg_check() {
+  local status=0
+  rg "$@" || status=$?
+  if (( status >= 2 ))
+  then
+    echo "ERROR - ripgrep failed with exit code $status (see message above). Failing the log check." >&2
+    return "$status"
+  fi
+  return 0
+}
+
 ### Output ignored log lines
 
 # Reads ignore patterns from stdin (one pattern per line).
 # Outputs log entries matching an ignore pattern.
 read_ignored_entries() {
-  rg -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
-    rg -e "$MIN_LOG_LEVEL_WARNING" || true
+  rg_check -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
+    rg_check -e "$MIN_LOG_LEVEL_WARNING"
 }
 
 # Read ignored entries
@@ -61,9 +77,8 @@ read_ignored_entries |
 
 # this differs from `read_ignored_entries` by one `-v`
 find_errors() {
-  # rg returns 1 if there were not matches so we add the || true
-  rg -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
-    rg -e "$MIN_LOG_LEVEL_WARNING" || true
+  rg_check -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
+    rg_check -e "$MIN_LOG_LEVEL_WARNING"
 }
 
 # Find the errors
@@ -74,9 +89,8 @@ find_errors |
 ### Output exceptions
 
 find_exceptions() {
-  set +o pipefail # rg returns 1 if there were not matches
-  rg -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
-    rg -e "(?-i:Exception|Error)(?::\s.*)?$" || true
+  rg_check -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
+    rg_check -e "(?-i:Exception|Error)(?::\s.*)?$"
     # not replacing anything here on purpose as these log lines
     # might have different structure; better to avoid removing
     # anything we might need
@@ -93,14 +107,13 @@ find_exceptions |
 sed -i 's/secret=test/secret=hidden/g' "$LOGFILE"
 
 find_secrets() {
-  set +o pipefail # rg returns 1 if there were no matches
   # Common x=y format
-  rg -o -e "(secret|token|private-key|password)=[^,[:space:]]*" "$LOGFILE" |
+  rg_check -o -e "(secret|token|private-key|password)=[^,[:space:]]*" "$LOGFILE" |
     # we mask secrets as "****" in our logs and testcontainers obfuscates secrets as "hidden non-blank value"
     # (https://github.com/testcontainers/testcontainers-java/blob/bf5605a2031d7f29f86a85430e3509a198c6e125/core/src/main/java/org/testcontainers/utility/AuthConfigUtil.java#L33)
-    rg -v -e "=\\\\\"\*\*\*\*\\\\\"" -e "=hidden" || true
+    rg_check -v -e "=\\\\\"\*\*\*\*\\\\\"" -e "=hidden"
   # JWTs; `eyJhbGc` is a base64-endcoded JSON object that starts with `{"alg`
-  rg -o -e "(Bearer\s*$|(Bearer\s*e|eyJhbGc)[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,})" "$LOGFILE" || true
+  rg_check -o -e "(Bearer\s*$|(Bearer\s*e|eyJhbGc)[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,})" "$LOGFILE"
 }
 
 # Find leaked secrets
@@ -109,9 +122,8 @@ find_secrets |
   output_problems "unmasked secrets" "$LOGFILE"
 
 find_deprecated_configs() {
-  set +o pipefail # rg returns 1 if there were not matches
-  rg -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
-    rg -e 'Config field at (\S+) is deprecated' || true
+  rg_check -v -f - <<< "$IGNORE_PATTERNS" "$LOGFILE" |
+    rg_check -e 'Config field at (\S+) is deprecated'
 }
 
 find_deprecated_configs |

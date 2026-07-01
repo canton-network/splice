@@ -602,6 +602,7 @@
   "$defs": {
     "synchronizer": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "sequencerPublicUrl",
         "sequencerAddress",

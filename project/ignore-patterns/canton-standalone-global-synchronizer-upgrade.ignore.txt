@@ -2,6 +2,7 @@
 SEQUENCER_OVERLOADED.*it is behind on processing events.*sv4StandaloneSequencer
 sv4StandaloneSequencer.*Sequencer can't take requests because it is behind on processing events
 request current time.*Sequencer can't take requests because it is behind on processing events
+SEQUENCER_SUBMISSION_REQUEST_REFUSED.*Cannot submit before or at the lower bound for sequencing time
 
 # TODO(DACH-NY/cn-test-failures#7888) revisit this ignore
 GrpcClientGaveUp: DEADLINE_EXCEEDED
