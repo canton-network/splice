@@ -17,7 +17,7 @@ import java.time.Duration
 import java.util.Optional
 
 // Standalone: needs runTokenStandardCliSanityCheck off to allow an unhosted receiver.
-class ExpiredAmuletAllocationTriggerIntegrationTest
+class AmuletAllocationExpiryTimeBasedIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
