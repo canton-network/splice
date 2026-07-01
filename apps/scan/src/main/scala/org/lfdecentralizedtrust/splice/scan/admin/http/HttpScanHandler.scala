@@ -46,6 +46,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   OpenMiningRound,
   SummarizingMiningRound,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.config.{SpliceInstanceNamesConfig, Thresholds}
 import org.lfdecentralizedtrust.splice.environment.{
   PackageVersionSupport,
@@ -132,7 +133,7 @@ import java.time.{Instant, OffsetDateTime, ZoneOffset}
 import java.util.Base64
 import java.util.zip.GZIPOutputStream
 import scala.collection.concurrent
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -524,6 +525,25 @@ class HttpScanHandler(
           )
         }
         .transform(HttpErrorHandler.onGrpcNotFound(s"Round ${round} not found"))
+    }
+  }
+
+  override protected def overrideValidatorLicenseCreatedAt(
+      licenses: Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]
+  )(implicit
+      tc: TraceContext,
+      ex: ExecutionContext,
+  ): Future[Map[ValidatorLicense.ContractId, String]] = {
+    val rounds = licenses
+      .flatMap(_.payload.faucetState.toScala.map(_.firstReceivedFor.number.longValue))
+      .distinct
+    store.getOpenMiningRoundCreatedAt(rounds).map { roundToTime =>
+      licenses.flatMap { l =>
+        for {
+          fs <- l.payload.faucetState.toScala
+          ts <- roundToTime.get(fs.firstReceivedFor.number.longValue)
+        } yield l.contractId -> Timestamp.assertFromInstant(ts.toInstant).toString
+      }.toMap
     }
   }
 

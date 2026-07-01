@@ -98,6 +98,47 @@ abstract class ScanStoreTest
         }
       }
 
+      "return empty map for empty input" in {
+        for {
+          store <- mkStore()
+        } yield {
+          store.getOpenMiningRoundCreatedAt(Seq.empty).futureValue shouldBe Map.empty
+        }
+      }
+
+      "return empty map for unknown round" in {
+        for {
+          store <- mkStore()
+        } yield {
+          store.getOpenMiningRoundCreatedAt(Seq(999L)).futureValue shouldBe Map.empty
+        }
+      }
+
+      "return record_time keyed by round for known rounds" in {
+        val r2 = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
+        val r3 = openMiningRound(dsoParty, round = 3, amuletPrice = 3.0)
+
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(r2)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(r3)(store.multiDomainAcsStore)
+        } yield {
+          val result = store.getOpenMiningRoundCreatedAt(Seq(2L, 3L)).futureValue
+          result.keySet shouldBe Set(2L, 3L)
+        }
+      }
+
+      "return only entries for rounds present, ignore unknown" in {
+        val r2 = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(r2)(store.multiDomainAcsStore)
+        } yield {
+          val result = store.getOpenMiningRoundCreatedAt(Seq(2L, 999L)).futureValue
+          result.keySet shouldBe Set(2L)
+        }
+      }
+
     }
 
     "getTotalPurchasedMemberTraffic" should {

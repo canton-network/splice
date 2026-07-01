@@ -521,6 +521,28 @@ class DbScanStore(
     } yield result
   }
 
+  override def getOpenMiningRoundCreatedAt(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[Map[Long, CantonTimestamp]] = {
+    if (rounds.isEmpty) Future.successful(Map.empty)
+    else
+      waitUntilAcsIngested {
+        storage
+          .query(
+            sql"""
+              select round, min(record_time)
+              from #$txLogTableName
+              where store_id = $txLogStoreId
+                  and entry_type = ${EntryType.OpenMiningRoundTxLogEntry}
+                  and round = ANY(${rounds.toArray[Long]})
+              group by round
+           """.as[(Long, CantonTimestamp)],
+            "getOpenMiningRoundCreatedAt",
+          )
+          .map(_.toMap)
+      }
+  }
+
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
       dsoRules <- getDsoRulesWithState()

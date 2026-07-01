@@ -112,6 +112,10 @@ class CachingScanStore(
       store.getAmuletConfigForRound,
     ).get(round)
 
+  override def getOpenMiningRoundCreatedAt(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[Map[Long, CantonTimestamp]] = store.getOpenMiningRoundCreatedAt(rounds)
+
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]] =
