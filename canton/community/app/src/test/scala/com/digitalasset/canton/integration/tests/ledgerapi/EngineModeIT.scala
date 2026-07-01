@@ -9,7 +9,6 @@ import com.daml.ledger.api.v2.value.{Identifier, Record, RecordField, Value}
 import com.daml.ledger.resources.ResourceContext
 import com.daml.ports.Port
 import com.digitalasset.canton.TestPredicateFiltersFixtureAnyWordSpec
-import com.digitalasset.canton.annotations.{NuckTest, RollbackTest}
 import com.digitalasset.canton.config.AuthServiceConfig.Wildcard
 import com.digitalasset.canton.config.CantonConfig
 import com.digitalasset.canton.integration.ConfigTransforms.{
@@ -128,7 +127,11 @@ abstract class BaseEngineModeIT(supportDevLanguageVersions: Boolean)
 
     def accept(langVersion: LanguageVersion, version: String, mode: String) = {
       val protocolVersion =
-        if (LanguageVersion.stableLfVersions.contains(langVersion))
+        if (
+          LanguageVersion.stableLfVersions.contains(
+            langVersion
+          ) && !ProtocolVersion.alphaOnlyLfVersions.contains(langVersion)
+        )
           ProtocolVersion.latest
         else if (LanguageVersion.earlyAccessLfVersionsRange.contains(langVersion))
           ProtocolVersion.beta.lastOption.getOrElse(ProtocolVersion.dev)
@@ -201,6 +204,4 @@ abstract class BaseEngineModeIT(supportDevLanguageVersions: Boolean)
 
 class StableEngineModeIT extends BaseEngineModeIT(supportDevLanguageVersions = false)
 
-@NuckTest
-@RollbackTest
 class DevEngineModeIT extends BaseEngineModeIT(supportDevLanguageVersions = true)

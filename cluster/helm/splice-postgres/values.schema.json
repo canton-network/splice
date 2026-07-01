@@ -1,9 +1,15 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
-  "required": ["db", "persistence"],
+  "required": ["db", "persistence", "imageName"],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
+      "type": "string"
+    },
+    "imageName": {
       "type": "string"
     },
     "imagePullPolicy": {
@@ -83,6 +89,14 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },

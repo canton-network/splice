@@ -144,6 +144,7 @@ class UpdateHistory(
     new MultiDomainAcsStore.IngestionSink {
       override def ingestionFilter: IngestionFilter = IngestionFilter(
         primaryParty = updateStreamParty,
+        includeTemplates = Seq.empty,
         includeInterfaces = Seq.empty,
         includeCreatedEventBlob = false,
       )
@@ -888,6 +889,12 @@ class UpdateHistory(
         .update(
           deleteAction.transactionally,
           "deleteUpdatesForTable",
+        )(
+          implicitly,
+          implicitly,
+          { case (n1, n2, n3, n4, n5) =>
+            Seq(n1, n2, n3, n4, n5).exists(_ > 0)
+          },
         )
     } yield (
       logger.info(
@@ -2318,7 +2325,7 @@ class UpdateHistory(
         .queryAndUpdate(
           action.transactionally,
           "destinationHistory.insert",
-        )
+        )(implicitly, implicitly, _ => false)
         .map { nonEmpty =>
           nonEmpty
         }
@@ -2339,28 +2346,6 @@ class UpdateHistory(
 }
 
 object UpdateHistory {
-
-  // Separate method so we can use this without a full UpdateHistory instance.
-  // Since we're interested in the highest known migration id, we don't need to filter by anything
-  // (store ID, participant ID, etc. are not even known at the time we want to call this).
-  def getHighestKnownMigrationId(
-      storage: DbStorage
-  )(implicit
-      ec: ExecutionContext,
-      closeContext: CloseContext,
-      tc: TraceContext,
-  ): Future[Option[Long]] = {
-    for {
-      queryResult <- storage.query(
-        sql"""
-               select max(migration_id) from update_history_last_ingested_offsets
-            """.as[Option[Long]],
-        "getHighestKnownMigrationId",
-      )
-    } yield {
-      queryResult.headOption.flatten
-    }
-  }
 
   sealed trait BackfillingRequirement
   object BackfillingRequirement {

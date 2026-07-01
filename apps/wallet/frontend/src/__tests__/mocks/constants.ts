@@ -171,6 +171,7 @@ export const amuletRules = {
                 fee: '0.03',
               },
               maxNumLockHolders: '50',
+              tokenStandardMaxTTL: null,
               transferFee: {
                 initialRate: '0.01',
                 steps: [
@@ -340,6 +341,7 @@ export const miningRounds = {
               ],
             },
             maxNumOutputs: '100',
+            tokenStandardMaxTTL: null,
           },
           targetClosesAt: '2024-08-05T16:50:50.974657Z',
           round: {
@@ -410,6 +412,7 @@ export const miningRounds = {
               ],
             },
             maxNumOutputs: '100',
+            tokenStandardMaxTTL: null,
           },
           targetClosesAt: '2024-08-05T17:01:21.419411Z',
           round: {
@@ -480,6 +483,7 @@ export const miningRounds = {
               ],
             },
             maxNumOutputs: '100',
+            tokenStandardMaxTTL: null,
           },
           targetClosesAt: '2024-08-05T17:11:47.336118Z',
           round: {

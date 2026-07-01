@@ -167,6 +167,7 @@ class UnsupportedPackageVettingIntegrationTest
           currentConfig.optDevelopmentFundManager,
           currentConfig.externalPartyConfigStateTickDuration,
           currentConfig.rewardConfig,
+          currentConfig.transferPreapprovalBaseDuration,
         )
         setAmuletConfig(Seq((None, newAmuletConfig, currentConfig)))
       }

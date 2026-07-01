@@ -48,13 +48,15 @@ import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   BftScanConnection,
+  ScanConnection,
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.store.{AppStoreWithIngestion, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
+import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.ValidatorApp.OAuthRealms
 import org.lfdecentralizedtrust.splice.validator.admin.http.*
@@ -63,7 +65,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
   ValidatorPackageVettingTrigger,
 }
 import org.lfdecentralizedtrust.splice.validator.config.*
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 import org.lfdecentralizedtrust.splice.validator.migration.ParticipantPartyMigrator
 import org.lfdecentralizedtrust.splice.validator.store.{
@@ -81,7 +83,8 @@ import org.lfdecentralizedtrust.splice.wallet.admin.http.{
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 import org.lfdecentralizedtrust.splice.wallet.{ExternalPartyWalletManager, UserWalletManager}
-import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationResource
+import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationV1Resource
+import org.lfdecentralizedtrust.tokenstandard.allocation.v2.Resource as TokenStandardAllocationV2Resource
 import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionResource
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStandardMetadataResource
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
@@ -126,34 +129,24 @@ class ValidatorApp(
       traceContext: TraceContext
   ): Future[Unit] = for {
     _ <- withParticipantAdminConnection { participantAdminConnection =>
-      UpdateHistory.getHighestKnownMigrationId(storage).flatMap {
-        case Some(migrationId) if !config.svValidator && migrationId < config.domainMigrationId =>
-          throw Status.INVALID_ARGUMENT
-            .withDescription(
-              s"Migration ID was incremented (to ${config.domainMigrationId}) but no migration dump for restoring from was specified."
-            )
-            .asRuntimeException()
-        case _ =>
-          val cantonIdentifierConfig =
-            ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
-          val participantInitializer = new ParticipantInitializer(
-            cantonIdentifierConfig.participant,
-            config.participantBootstrappingDump,
-            loggerFactory,
-            retryProvider,
-            participantAdminConnection,
-          )
-          if (config.svValidator) {
-            logger.info("Waiting for the participant to be initialized by the SV app")
-            participantInitializer.waitForNodeInitialized()
-          } else {
-            logger.info(
-              "Ensuring participant is initialized"
-            )
-            participantInitializer.ensureInitializedWithExpectedId()
-          }
+      val cantonIdentifierConfig =
+        ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
+      val participantInitializer = new ParticipantInitializer(
+        cantonIdentifierConfig.participant,
+        config.participantBootstrappingDump,
+        loggerFactory,
+        retryProvider,
+        participantAdminConnection,
+      )
+      if (config.svValidator) {
+        logger.info("Waiting for the participant to be initialized by the SV app")
+        participantInitializer.waitForNodeInitialized()
+      } else {
+        logger.info(
+          "Ensuring participant is initialized"
+        )
+        participantInitializer.ensureInitializedWithExpectedId()
       }
-
     }
   } yield ()
 
@@ -193,17 +186,19 @@ class ValidatorApp(
                 ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
               )
             }
-            domainConnector = new DomainConnector(
+            domainMigrationId <- appInitStep("Resolving domain migration id") {
+              resolveDomainMigrationId(scanConnection)
+            }
+            domainConnector = new SynchronizerConnector(
               config,
               participantAdminConnection,
               scanConnection,
-              config.domainMigrationId,
+              domainMigrationId,
               retryProvider,
               loggerFactory,
             )
             domainAlreadyRegistered <- participantAdminConnection
-              .lookupSynchronizerConnectionConfig(config.domains.global.alias)
-              .map(_.isDefined)
+              .isSynchronizerRegistered(config.domains.global.alias)
             now = clock.now
             // This is used by the ReconcileSequencerConnectionsTrigger to avoid travelling back in time if the domain time is behind this.
             // We want to avoid using this when we already have a synchronizer connection as then synchronizer time should be used so we
@@ -536,6 +531,26 @@ class ValidatorApp(
     f(participantAdminConnection).andThen { _ => participantAdminConnection.close() }
   }
 
+  private def resolveDomainMigrationId(
+      scanConnection: ScanConnection
+  )(implicit traceContext: TraceContext): Future[Long] =
+    DbAppStore.getHighestKnownMigrationId(storage).flatMap {
+      case Some(migrationId) =>
+        logger.info(s"Resolved domain migration id $migrationId from the local store offsets")
+        Future.successful(migrationId)
+      case None =>
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "scan_migration_id",
+          "resolving domain migration id from scan",
+          scanConnection.getMigrationId().map { migrationId =>
+            logger.info(s"Resolved domain migration id $migrationId from scan")
+            migrationId
+          },
+          logger,
+        )
+    }
+
   private def newTrafficBalanceService(
       participantAdminConnection: ParticipantAdminConnection,
       scanConnection: BftScanConnection,
@@ -617,6 +632,10 @@ class ValidatorApp(
         )
       }
 
+      domainMigrationId <- appInitStep("Resolving domain migration id") {
+        resolveDomainMigrationId(scanConnection)
+      }
+
       // Register the traffic balance service
       trafficBalanceService = newTrafficBalanceService(participantAdminConnection, scanConnection)
       _ = ledgerClient.registerTrafficBalanceService(trafficBalanceService)
@@ -638,7 +657,7 @@ class ValidatorApp(
         storage,
         loggerFactory,
         retryProvider,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         config.automation.ingestion,
         config.parameters.defaultLimit,
@@ -690,10 +709,12 @@ class ValidatorApp(
             storage,
             retryProvider,
             loggerFactory,
-            config.domainMigrationId,
+            domainMigrationId,
             participantId,
             config.parameters,
             scanConnection,
+            packageVersionSupport,
+            config.rewardSharingConfigByParty,
           )
           val walletManager = new UserWalletManager(
             ledgerClient,
@@ -709,11 +730,12 @@ class ValidatorApp(
             scanConnection,
             packageVersionSupport,
             loggerFactory,
-            config.domainMigrationId,
+            domainMigrationId,
             participantId,
             validatorTopupConfig,
             config.walletSweep,
             config.autoAcceptTransfers,
+            config.rewardSharingConfigByParty,
             dedupDuration,
             config.parameters,
           )
@@ -739,15 +761,15 @@ class ValidatorApp(
         ledgerClient,
         participantAdminConnection,
         participantIdentitiesStore,
-        new DomainConnector(
+        new SynchronizerConnector(
           config,
           participantAdminConnection,
           scanConnection,
-          config.domainMigrationId,
+          domainMigrationId,
           retryProvider,
           loggerFactory,
         ),
-        config.domainMigrationId,
+        domainMigrationId,
         retryProvider,
         config.svValidator,
         config.sequencerRequestAmplificationPatience.toInternal,
@@ -761,6 +783,7 @@ class ValidatorApp(
         config.additionalPackagesToUnvet,
         config.domains.global.alias,
         loggerFactory,
+        packageVersionSupport,
       )
       _ <- MonadUtil.sequentialTraverse_(config.appInstances.toList)({ case (name, instance) =>
         appInitStep(s"Set up app instance $name") {
@@ -871,7 +894,7 @@ class ValidatorApp(
             loggerFactory,
             retryProvider,
             participantAdminConnection,
-            config.domainMigrationId,
+            domainMigrationId,
           ),
           walletManager,
         )
@@ -962,6 +985,26 @@ class ValidatorApp(
                     },
                 ),
                 pathPrefix("api" / "validator" / "v0" / "scan-proxy") {
+                  TokenStandardAllocationV2Resource.routes(
+                    tokenStandardScanProxyHandler,
+                    operation => {
+                      metrics.httpServerMetrics
+                        .withMetrics("tokenStandardAllocationV2")(operation)
+                        .tflatMap { _ =>
+                          AuthenticationOnlyAuthExtractor(
+                            verifier,
+                            loggerFactory,
+                            OAuthRealms.ScanProxy,
+                          )(
+                            traceContext
+                          )(
+                            operation
+                          )
+                        }
+                    },
+                  )
+                },
+                pathPrefix("api" / "validator" / "v0" / "scan-proxy") {
                   concat(
                     TokenStandardMetadataResource.routes(
                       tokenStandardScanProxyHandler,
@@ -1015,7 +1058,7 @@ class ValidatorApp(
                             )
                           },
                     ),
-                    TokenStandardAllocationResource.routes(
+                    TokenStandardAllocationV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics

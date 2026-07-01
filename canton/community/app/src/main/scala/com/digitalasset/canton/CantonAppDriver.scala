@@ -11,7 +11,7 @@ import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.CantonAppDriver.installGCLogging
 import com.digitalasset.canton.buildinfo.BuildInfo
 import com.digitalasset.canton.cli.Command.Sandbox
-import com.digitalasset.canton.cli.{Cli, Command, LogFileAppender}
+import com.digitalasset.canton.cli.{Cli, Command, LogFileAppender, Mode}
 import com.digitalasset.canton.config.ConfigErrors.CantonConfigError
 import com.digitalasset.canton.config.{
   CantonConfig,
@@ -31,7 +31,8 @@ import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 
 import java.lang.management.ManagementFactory
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 import javax.management.openmbean.CompositeData
 import javax.management.{NotificationEmitter, NotificationListener}
 import scala.jdk.CollectionConverters.*
@@ -141,20 +142,28 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
   logger.debug("Registered shutdown-hook.")
   private object Config {
     val multiSuffix = if (cliOptions.multiSync) "-multi-sync" else ""
-    val devConfig = Option.when(cliOptions.devProtocol)(
-      JarResourceUtils.extractFileFromJar(s"sandbox/dev$multiSuffix.conf")
+    val alphaConfig = Option.when(cliOptions.devProtocol)(
+      JarResourceUtils.extractFileFromJar(s"sandbox/alpha$multiSuffix.conf")
     )
     val sandboxConfig = JarResourceUtils.extractFileFromJar(s"sandbox/sandbox$multiSuffix.conf")
 
-    val sandboxBootstrap = JarResourceUtils.extractFileFromJar(s"sandbox/bootstrap.canton")
+    val sandboxBootstrap = {
+      val bootstrap = JarResourceUtils.extractFileFromJar(s"sandbox/bootstrap.canton")
+      if (cliOptions.devProtocol) {
+        val content = File(bootstrap.toPath).contentAsString
+          .replace("ProtocolVersion.forSynchronizer", "ProtocolVersion.dev")
+        File(bootstrap.toPath).write(content)
+      }
+      bootstrap
+    }
 
     val configFiles = cliOptions.command
-      .collect { case Sandbox => sandboxConfig }
+      .collect { case Sandbox(_) => sandboxConfig }
       .toList
       .concat(cliOptions.configFiles)
-      .concat(devConfig)
+      .concat(alphaConfig)
     val bootstrapFile = cliOptions.command
-      .collect { case Sandbox => sandboxBootstrap }
+      .collect { case Sandbox(_) => sandboxBootstrap }
       .orElse(cliOptions.bootstrapScriptPath)
     val configFromMap = {
       import scala.jdk.CollectionConverters.*
@@ -244,21 +253,32 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
     Config.bootstrapFile.map(CantonScriptFromFile.apply)
 
   val environment = environmentFactory.create(Config.startupConfig, loggerFactory)
-  val runner: Runner[Config] = cliOptions.command match {
-    case Some(Command.Sandbox) =>
+  val runner: Runner = cliOptions.command match {
+    case Some(Command.Sandbox(Mode.Deamon)) =>
+      startupConfigFileMonitoring(environment)
       new ServerRunner(
         bootstrapScript,
         loggerFactory,
         cliOptions.exitAfterBootstrap,
         cliOptions.dars,
       )
+    case Some(Command.Sandbox(Mode.Interactive)) =>
+      startupConfigFileMonitoring(environment)
+      new ConsoleInteractiveRunner(
+        cliOptions.noTty,
+        bootstrapScript,
+        environment.writePortsFile(),
+        loggerFactory,
+      )
     case Some(Command.Daemon) =>
+      startupConfigFileMonitoring(environment)
       new ServerRunner(bootstrapScript, loggerFactory)
     case Some(Command.RunScript(script)) => ConsoleScriptRunner(script, loggerFactory)
     case Some(Command.Generate(target)) =>
       Generate.process(target, Config.startupConfig)
       sys.exit(0)
     case _ =>
+      startupConfigFileMonitoring(environment)
       new ConsoleInteractiveRunner(
         cliOptions.noTty,
         bootstrapScript,
@@ -277,6 +297,47 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
       config: com.typesafe.config.Config,
       defaultPorts: Option[DefaultPorts],
   ): Either[CantonConfigError, Config]
+
+  protected[this] def startupConfigFileMonitoring(environment: E): Unit =
+    TraceContext.withNewTraceContext("config_file_monitoring") { implicit traceContext =>
+      def modificationTimestamp(): Long =
+        Config.configFiles.map(_.lastModified()).foldLeft(0L) { case (acc, item) =>
+          Math.max(acc, item)
+        }
+
+      val lastModified = new AtomicLong(modificationTimestamp())
+      def updateDeclarativeApi(): Unit = {
+        val modified = modificationTimestamp()
+        val previous = lastModified.getAndSet(modified)
+        if (modified != previous) {
+          val loaded =
+            Config.loadConfigFromFiles("Reloaded config after file change").leftMap(_.toString)
+          environment.pokeOrUpdateConfig(newConfig = Some(loaded))
+        } else {
+          environment.pokeOrUpdateConfig(newConfig = None)
+        }
+
+      }
+
+      def refresh(update: Boolean, interval: config.NonNegativeFiniteDuration): Unit = {
+        if (update) updateDeclarativeApi()
+        environment.scheduler
+          .schedule(
+            (() => refresh(update = true, interval)): Runnable,
+            interval.duration.toMillis,
+            TimeUnit.MILLISECONDS,
+          )
+          .discard
+      }
+
+      environment.config.parameters.stateRefreshInterval match {
+        case None => ()
+        case Some(interval) =>
+          logger.debug(s"Starting config file monitoring at interval=$interval")
+          refresh(update = false, interval)
+      }
+    }
+
 }
 
 object CantonAppDriver {

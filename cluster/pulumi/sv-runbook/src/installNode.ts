@@ -43,6 +43,7 @@ import {
   failOnAppVersionMismatch,
   networkWideConfig,
   getAdditionalJvmOptions,
+  persistentHeapDumpsPvc,
   installSvAppSecrets,
   getSvAppApiAudience,
   getValidatorAppApiAudience,
@@ -304,10 +305,6 @@ async function installSvAndValidator(
       ? { secretName: participantBootstrapDumpSecretName }
       : undefined,
     approvedSvIdentities: approvedSvIdentities(),
-    migration: {
-      ...valuesFromYamlFile.migration,
-      ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig().migration,
-    },
     metrics: {
       enable: true,
     },
@@ -325,6 +322,7 @@ async function installSvAndValidator(
     logAsyncFlush: svConfig.logging?.appsAsync,
     additionalJvmOptions: getAdditionalJvmOptions(svConfig.svApp?.additionalJvmOptions),
     resources: svConfig.svApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const svValuesWithSpecifiedAud: ChartValues = {
@@ -371,13 +369,12 @@ async function installSvAndValidator(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/scan-values.yaml`,
     {
       TARGET_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -387,7 +384,7 @@ async function installSvAndValidator(
     synchronizers: {
       current: {
         ...defaultScanValues.synchronizers.current,
-        ...(useCantonBft ? bftSequencerConfigFor(canton.active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(canton.active) : {}),
       },
       ...(canton.upgrade
         ? {
@@ -395,7 +392,7 @@ async function installSvAndValidator(
               sequencer: canton.upgrade.namespaceInternalSequencerAddress,
               mediator: canton.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.upgrade)
+                ? cantonBftConfigFor(canton.upgrade)
                 : {}),
             },
           }
@@ -406,7 +403,7 @@ async function installSvAndValidator(
               sequencer: canton.legacy.namespaceInternalSequencerAddress,
               mediator: canton.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.legacy)
+                ? cantonBftConfigFor(canton.legacy)
                 : {}),
             },
           }
@@ -421,9 +418,9 @@ async function installSvAndValidator(
     metrics: {
       enable: true,
     },
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...synchronizerValues,
     resources: svConfig.scanApp?.resources,
+    pvc: persistentHeapDumpsPvc(),
   };
 
   const scanValuesWithFixedTokens = {
@@ -477,6 +474,7 @@ async function installSvAndValidator(
     ...spliceInstanceNames,
     maxVettingDelay: networkWideConfig?.maxVettingDelay,
     resources: svConfig.validatorApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const validatorValuesWithSpecifiedAud: ChartValues = {

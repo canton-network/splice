@@ -13,7 +13,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $walletWebUiLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
   name: {{ $walletWebUiLabel }}
   namespace: {{ .Release.Namespace }}
 spec:
@@ -29,7 +28,6 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $walletWebUiLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
@@ -57,11 +55,15 @@ spec:
           value: "https://validator.example.com"
         {{- else }}
         - name: SPLICE_APP_UI_AUTH_URL
+          {{- if ((.Values.validatorWebUi).secretOverrides).url }}
+          value: {{ .Values.validatorWebUi.secretOverrides.url | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: url
               name: splice-app-wallet-ui-auth
               optional: false
+          {{- end }}
         - name: SPLICE_APP_UI_AUTH_AUDIENCE
           value: {{ .Values.auth.audience | quote }}
         {{- if .Values.auth.scope }}
@@ -69,13 +71,17 @@ spec:
           value: {{ .Values.auth.scope | quote }}
         {{- end }}
         - name: SPLICE_APP_UI_AUTH_CLIENT_ID
+          {{- if ((.Values.validatorWebUi).secretOverrides).clientId }}
+          value: {{ .Values.validatorWebUi.secretOverrides.clientId | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: client-id
               name: splice-app-wallet-ui-auth
               optional: false
+          {{- end }}
         {{- end }}
-        image: "{{ .Values.imageRepo }}/wallet-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).wallet_web_ui) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.wallet.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).wallet_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -110,7 +116,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $walletWebUiLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $walletWebUiLabel }}

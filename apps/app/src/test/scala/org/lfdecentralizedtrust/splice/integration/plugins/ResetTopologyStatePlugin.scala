@@ -1,24 +1,16 @@
 package org.lfdecentralizedtrust.splice.integration.plugins
 
-import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.{ParticipantClientReference, SvAppBackendReference}
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.console.CommandFailure
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.topology.SynchronizerId
 import io.grpc
 import io.grpc.StatusRuntimeException
 
 import scala.util.control.NonFatal
 
-abstract class ResetTopologyStatePlugin
-    extends EnvironmentSetupPlugin[
-      SpliceConfig,
-      SpliceEnvironment,
-    ]
-    with BaseTest {
+abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin with BaseTest {
 
   private val MAX_RETRIES = 15
 
@@ -31,8 +23,7 @@ abstract class ResetTopologyStatePlugin
   protected def topologyType: String
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      env: SpliceTests.SpliceTestConsoleEnvironment,
+      env: SpliceTests.SpliceTestConsoleEnvironment
   ): Unit = {
 
     // Stop all nodes to stop them from submitting topology TXs.

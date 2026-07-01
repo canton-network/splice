@@ -6,7 +6,12 @@ package com.digitalasset.canton.platform.index
 import com.daml.ledger.api.v2.command_completion_service.CompletionStreamResponse
 import com.daml.ledger.api.v2.event_query_service.GetEventsByContractIdResponse
 import com.daml.ledger.api.v2.state_service.GetActiveContractsResponse
-import com.daml.ledger.api.v2.update_service.{GetUpdateResponse, GetUpdatesResponse}
+import com.daml.ledger.api.v2.update_service.GetUpdateResponse.Update
+import com.daml.ledger.api.v2.update_service.{
+  GetUpdateResponse,
+  GetUpdatesPageResponse,
+  GetUpdatesResponse,
+}
 import com.daml.metrics.InstrumentedGraph.*
 import com.daml.tracing.{Event, SpanAttribute, Spans}
 import com.digitalasset.base.error.DamlErrorWithDefiniteAnswer
@@ -17,9 +22,9 @@ import com.digitalasset.canton.config.CantonRequireTypes.String185
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.health.HealthStatus
-import com.digitalasset.canton.ledger.api.AcsContinuationToken.Checksum
+import com.digitalasset.canton.ledger.api.messages.state.AcsRangeInfo
+import com.digitalasset.canton.ledger.api.messages.update.{GetUpdatesPageRequest, UpdatesPageToken}
 import com.digitalasset.canton.ledger.api.{
-  AcsContinuationToken,
   CumulativeFilter,
   EventFormat,
   TraceIdentifiers,
@@ -35,11 +40,13 @@ import com.digitalasset.canton.logging.{
   LoggingContextWithTrace,
   NamedLoggerFactory,
   NamedLogging,
+  TracedLogger,
 }
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
 import com.digitalasset.canton.pekkostreams.dispatcher.Dispatcher
 import com.digitalasset.canton.pekkostreams.dispatcher.DispatcherImpl.DispatcherIsClosedException
 import com.digitalasset.canton.pekkostreams.dispatcher.SubSource.RangeSource
+import com.digitalasset.canton.platform.config.UpdateServiceConfig
 import com.digitalasset.canton.platform.index.IndexServiceImpl.*
 import com.digitalasset.canton.platform.index.IndexServiceOwner.GetPackagePreferenceForViewsUpgrading
 import com.digitalasset.canton.platform.store.backend.common.UpdatePointwiseQueries.LookupKey
@@ -67,11 +74,12 @@ import com.digitalasset.daml.lf.transaction.GlobalKey
 import com.google.rpc.Status
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.{Flow, Source}
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 private[index] class IndexServiceImpl(
@@ -88,6 +96,9 @@ private[index] class IndexServiceImpl(
     idleStreamOffsetCheckpointTimeout: config.NonNegativeFiniteDuration,
     getPreferredPackages: GetPackagePreferenceForViewsUpgrading,
     override protected val loggerFactory: NamedLoggerFactory,
+    materializer: Materializer,
+    executionContext: ExecutionContext,
+    updateServiceConfig: UpdateServiceConfig,
 ) extends IndexService
     with NamedLogging {
 
@@ -100,7 +111,6 @@ private[index] class IndexServiceImpl(
     contractStore,
     loggerFactory,
   )
-
   override def getParticipantId(): Future[Ref.ParticipantId] =
     Future.successful(participantId)
 
@@ -116,6 +126,7 @@ private[index] class IndexServiceImpl(
       endInclusive: Option[Offset],
       updateFormat: UpdateFormat,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit loggingContext: LoggingContextWithTrace): Source[GetUpdatesResponse, NotUsed] = {
     val interfaceViewPackageUpgrade = createViewUpgradeMemoized
     val contextualizedErrorLogger = ErrorLoggingContext(logger, loggingContext)
@@ -151,6 +162,7 @@ private[index] class IndexServiceImpl(
                         endInclusive = endInclusive,
                         internalUpdateFormat = internalUpdateFormat,
                         descendingOrder = descendingOrder,
+                        skipPruningChecks = skipPruningChecks,
                       )
                   }
                   .via(
@@ -265,8 +277,7 @@ private[index] class IndexServiceImpl(
   override def getActiveContracts(
       eventFormat: EventFormat,
       activeAt: Option[Offset],
-      continuationToken: Option[AcsContinuationToken],
-      checksum: Checksum,
+      rangeInfo: AcsRangeInfo,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[GetActiveContractsResponse, NotUsed] = {
@@ -296,8 +307,7 @@ private[index] class IndexServiceImpl(
                 activeAt = activeAt,
                 filter = templateFilter,
                 eventProjectionProperties = eventProjectionProperties,
-                continuationToken = continuationToken,
-                checksum = checksum,
+                rangeInfo = rangeInfo,
               )
           }
         activeContractsSource
@@ -402,18 +412,21 @@ private[index] class IndexServiceImpl(
       loggingContext: LoggingContextWithTrace
   ): Future[Unit] = {
     pruneBuffers(pruneUpToInclusive)
-    ledgerDao.prune(
-      previousPruneUpToInclusive = previousPruneUpToInclusive,
-      previousIncompleteReassignmentOffsets = previousIncompleteReassignmentOffsets,
-      pruneUpToInclusive = pruneUpToInclusive,
-      incompleteReassignmentOffsets = incompleteReassignmentOffsets,
-    )
+    ledgerDao
+      .prune(
+        previousPruneUpToInclusive = previousPruneUpToInclusive,
+        previousIncompleteReassignmentOffsets = previousIncompleteReassignmentOffsets,
+        pruneUpToInclusive = pruneUpToInclusive,
+        incompleteReassignmentOffsets = incompleteReassignmentOffsets,
+      )
   }
 
   override def indexDbPrunedUpto(implicit
       loggingContext: LoggingContextWithTrace
   ): Future[Option[Offset]] =
     ledgerDao.indexDbPrunedUpTo
+
+  override def isPruningInProgress: Boolean = ledgerDao.isPruningInProgress
 
   override def currentLedgerEnd(): Future[Option[Offset]] =
     Future.successful(ledgerEnd())
@@ -472,7 +485,157 @@ private[index] class IndexServiceImpl(
   override def latestPrunedOffset()(implicit
       loggingContext: LoggingContextWithTrace
   ): Future[Option[Offset]] =
-    ledgerDao.pruningOffset
+    ledgerDao.indexDbPrunedUpTo
+
+  private def updatesPageAscendingOrder(getUpdatesPageRequest: GetUpdatesPageRequest)(implicit
+      loggingContext: LoggingContextWithTrace
+  ): Future[GetUpdatesPageResponse] = {
+    val isFirstPageOfAscendingDynamicLowerBound =
+      getUpdatesPageRequest.startExclusive.isEmpty && getUpdatesPageRequest.continueStreamFromIncl.isEmpty
+    val limit =
+      if (isFirstPageOfAscendingDynamicLowerBound) { // special case for the first page of ascending with dynamic bound
+        ((getUpdatesPageRequest.maxPageSize + 1) * updateServiceConfig.ascendingFirstPageDynamicBoundOverfetch.unwrap).ceil.toInt
+      } else {
+        getUpdatesPageRequest.maxPageSize + 1
+      }
+
+    implicit val ec: ExecutionContext = executionContext
+
+    val ledgerEndBeforeFetch = ledgerEnd()
+    for {
+      calculatedBeginExclusive <- getUpdatesPageRequest.continueStreamFromIncl
+        .map(_.decrement)
+        .orElse(getUpdatesPageRequest.startExclusive) match {
+        case Some(beginExclOffset) => Future.successful(beginExclOffset)
+        case None => ledgerDao.indexDbPrunedUpTo // Dynamic bound and first page
+      }
+      calculatedEndInclusive: Option[Offset] = getUpdatesPageRequest.endInclusive.orElse(
+        ledgerEndBeforeFetch
+      )
+      transactions <-
+        fetchTransactionsWithEmptyRangeSupport(
+          getUpdatesPageRequest = getUpdatesPageRequest,
+          limit = limit,
+          calculatedBeginExclusive = calculatedBeginExclusive,
+          calculatedEndInclusive = calculatedEndInclusive,
+          skipPruningChecks = isFirstPageOfAscendingDynamicLowerBound,
+        )
+      pruningOffsetAfterFetch <- ledgerDao.indexDbPrunedUpTo
+    } yield {
+      processAscendingPageData(
+        getUpdatesPageRequest = getUpdatesPageRequest,
+        loggingContext = loggingContext,
+        isFirstPageOfAscendingDynamicLowerBound = isFirstPageOfAscendingDynamicLowerBound,
+        limit = limit,
+        calculatedBeginExclusive = calculatedBeginExclusive,
+        calculatedEndInclusive = calculatedEndInclusive,
+        transactions = transactions,
+        pruningOffsetAfterFetch = pruningOffsetAfterFetch,
+        logger = logger,
+      )
+    }
+  }
+
+  private def updatesPageDescendingOrder(
+      getUpdatesPageRequest: GetUpdatesPageRequest
+  )(implicit
+      loggingContext: LoggingContextWithTrace
+  ): Future[GetUpdatesPageResponse] = {
+    val limit: Int = getUpdatesPageRequest.maxPageSize + 1
+
+    implicit val ec: ExecutionContext = executionContext
+    for {
+      pruningOffsetBeforeFetch <- ledgerDao.indexDbPrunedUpTo
+      ledgerEndBeforeFetch = ledgerEnd()
+      calculatedBeginExclusive: Option[Offset] = getUpdatesPageRequest.startExclusive.getOrElse(
+        pruningOffsetBeforeFetch
+      )
+      calculatedEndInclusive: Option[Offset] = getUpdatesPageRequest.continueStreamFromIncl.orElse(
+        getUpdatesPageRequest.endInclusive.orElse(ledgerEndBeforeFetch)
+      )
+      transactions <- fetchTransactionsWithEmptyRangeSupport(
+        getUpdatesPageRequest = getUpdatesPageRequest,
+        limit = limit,
+        calculatedBeginExclusive = calculatedBeginExclusive,
+        calculatedEndInclusive = calculatedEndInclusive,
+        skipPruningChecks =
+          getUpdatesPageRequest.startExclusive.isEmpty, // With  strict bound we'll fail inside this function when interfering with pruning
+      )
+      pruningOffsetAfterFetch <- ledgerDao.indexDbPrunedUpTo
+    } yield {
+      val trimmedTransactions =
+        (getUpdatesPageRequest.startExclusive, pruningOffsetAfterFetch) match {
+          case (None, Some(pruningOffet)) =>
+            transactions.takeWhile(u =>
+              updatesToOffset(u) > pruningOffet
+            ) // Only if both: dunamic bound and ledger already pruned we need to check if we fetched something before pruning bound
+          case _ => transactions
+        }
+      if (trimmedTransactions.lengthIs == getUpdatesPageRequest.maxPageSize + 1) { // There is still at least one element in the next page
+        GetUpdatesPageResponse(
+          updates = trimmedTransactions.take(getUpdatesPageRequest.maxPageSize),
+          lowestPageOffsetExclusive =
+            updatesToOffset(trimmedTransactions(getUpdatesPageRequest.maxPageSize)).unwrap,
+          highestPageOffsetInclusive = calculatedEndInclusive.fold(0L)(_.unwrap),
+          nextPageToken = Some(
+            UpdatesPageToken(
+              lowestPageOffsetExclusive =
+                Some(updatesToOffset(trimmedTransactions(getUpdatesPageRequest.maxPageSize))),
+              highestPageOffsetInclusive = calculatedEndInclusive,
+              participantIdChecksum = getUpdatesPageRequest.participantChecksum,
+              requestChecksum = getUpdatesPageRequest.requestChecksum,
+            ).toOpaqueByteString
+          ),
+        )
+      } else {
+        GetUpdatesPageResponse(
+          updates = trimmedTransactions,
+          lowestPageOffsetExclusive = getUpdatesPageRequest.startExclusive
+            .getOrElse(pruningOffsetAfterFetch)
+            .fold(0L)(
+              _.unwrap
+            ), // With strict bound we return the bound. With dynamic bound we return pruning offset. Falback to before ledger start if neither is set.
+          highestPageOffsetInclusive = calculatedEndInclusive.fold(0L)(_.unwrap),
+          nextPageToken = None,
+        )
+      }
+    }
+  }
+
+  private def fetchTransactionsWithEmptyRangeSupport(
+      getUpdatesPageRequest: GetUpdatesPageRequest,
+      limit: Int,
+      calculatedBeginExclusive: Option[Offset],
+      calculatedEndInclusive: Option[Offset],
+      skipPruningChecks: Boolean,
+  )(implicit
+      loggingContext: LoggingContextWithTrace,
+      executionContext: ExecutionContext,
+  ): Future[Seq[GetUpdateResponse]] =
+    if (calculatedEndInclusive <= calculatedBeginExclusive) { // It can be strictly less in case of pruning offset being used
+      Future.successful(Vector.empty)
+    } else {
+      updates(
+        startExclusive = calculatedBeginExclusive,
+        endInclusive = calculatedEndInclusive,
+        updateFormat = getUpdatesPageRequest.updateFormat,
+        descendingOrder = getUpdatesPageRequest.descendingOrder,
+        skipPruningChecks = skipPruningChecks,
+      ).take(limit.toLong)
+        .runWith(Sink.seq)(materializer)
+        .map(_.flatMap(getUpdatesResponseToGetUpdateResponse))
+    }
+
+  def updatesPage(
+      getUpdatesPageRequest: GetUpdatesPageRequest
+  )(implicit
+      loggingContext: LoggingContextWithTrace
+  ): Future[GetUpdatesPageResponse] =
+    if (getUpdatesPageRequest.descendingOrder) {
+      updatesPageDescendingOrder(getUpdatesPageRequest)
+    } else {
+      updatesPageAscendingOrder(getUpdatesPageRequest)
+    }
 
   private def createViewUpgradeMemoized(implicit
       loggingContextWithTrace: LoggingContextWithTrace
@@ -733,7 +896,6 @@ object IndexServiceImpl {
         )
         .asGrpcError,
     )
-
   @SuppressWarnings(Array("org.wartremover.warts.Null", "org.wartremover.warts.Var"))
   private[index] def memoizedInternalUpdateFormat(
       getPackageMetadataSnapshot: ErrorLoggingContext => PackageMetadata,
@@ -1054,4 +1216,119 @@ object IndexServiceImpl {
   ): CompletionStreamResponse =
     CompletionStreamResponse.defaultInstance.withOffsetCheckpoint(offsetCheckpoint.toApi)
 
+  private def updatesToOffset(getUpdateResponse: GetUpdateResponse): Offset =
+    getUpdateResponse.update match {
+      case Update.Empty =>
+        throw new IllegalStateException("Empty update not expected at this point of pipeline")
+      case Update.Transaction(value) => Offset.tryFromLong(value.offset)
+      case Update.Reassignment(value) => Offset.tryFromLong(value.offset)
+      case Update.TopologyTransaction(value) => Offset.tryFromLong(value.offset)
+    }
+
+  private def getUpdatesResponseToGetUpdateResponse(
+      getUpdatesResponse: GetUpdatesResponse
+  ): Option[GetUpdateResponse] =
+    getUpdatesResponse.update match {
+      case GetUpdatesResponse.Update.Empty =>
+        Some(GetUpdateResponse(GetUpdateResponse.Update.Empty))
+      case GetUpdatesResponse.Update.Transaction(value) =>
+        Some(GetUpdateResponse(GetUpdateResponse.Update.Transaction(value)))
+      case GetUpdatesResponse.Update.Reassignment(value) =>
+        Some(GetUpdateResponse(GetUpdateResponse.Update.Reassignment(value)))
+      case GetUpdatesResponse.Update.OffsetCheckpoint(_) => None
+      case GetUpdatesResponse.Update.TopologyTransaction(value) =>
+        Some(GetUpdateResponse(GetUpdateResponse.Update.TopologyTransaction(value)))
+    }
+
+  def processAscendingPageData(
+      getUpdatesPageRequest: GetUpdatesPageRequest,
+      loggingContext: LoggingContextWithTrace,
+      isFirstPageOfAscendingDynamicLowerBound: Boolean,
+      limit: Int,
+      calculatedBeginExclusive: Option[Offset],
+      calculatedEndInclusive: Option[Offset],
+      transactions: Seq[GetUpdateResponse],
+      pruningOffsetAfterFetch: Option[Offset],
+      logger: TracedLogger,
+  ): GetUpdatesPageResponse =
+    pruningOffsetAfterFetch match {
+      case Some(pruningOffset) if isFirstPageOfAscendingDynamicLowerBound =>
+        lazy val trimmedTransactions =
+          transactions.dropWhile(r => pruningOffset >= updatesToOffset(r))
+        val fetchedEnoughForFirstPage =
+          // Trivial exclusion -- no overlap with pruning
+          calculatedEndInclusive.exists(
+            _ < pruningOffset
+            // Fetched up to calculatedEndInclusive -- if page is shorter it's the last page, so OK.
+          ) || transactions.sizeIs < limit || trimmedTransactions.lengthIs >= getUpdatesPageRequest.maxPageSize + 1 // Non-trivial case where we need to look into transactions
+
+        if (fetchedEnoughForFirstPage) {
+          buildAscendingPage(
+            getUpdatesPageRequest = getUpdatesPageRequest,
+            calculatedBeginExclusive = pruningOffsetAfterFetch,
+            calculatedEndInclusive = calculatedEndInclusive,
+            transactions = trimmedTransactions,
+          )
+        } else {
+          throw RequestValidationErrors.ParticipantPrunedDataAccessed
+            .Reject(
+              cause =
+                "Pruning offset moves faster than participant is able to generate page. You may want to tweak page size or ask the node administrator to increase ascending_first_page_dynamic_bound_overfetch config setting.",
+              earliestOffset =
+                pruningOffset.unwrap, // If we are here pruning offset definitely exists
+            )(
+              ErrorLoggingContext(logger, loggingContext)
+            )
+            .asGrpcError
+        }
+      case _ =>
+        buildAscendingPage(
+          getUpdatesPageRequest = getUpdatesPageRequest,
+          calculatedBeginExclusive = calculatedBeginExclusive,
+          calculatedEndInclusive = calculatedEndInclusive,
+          transactions = transactions,
+        )
+    }
+
+  private def buildAscendingPage(
+      getUpdatesPageRequest: GetUpdatesPageRequest,
+      calculatedBeginExclusive: Option[Offset],
+      calculatedEndInclusive: Option[Offset],
+      transactions: Seq[GetUpdateResponse],
+  ): GetUpdatesPageResponse =
+    if (transactions.lengthIs >= getUpdatesPageRequest.maxPageSize + 1) { // Full page (note: it may be larger than maxPageSize+1 due to overfetch for the first page)
+      GetUpdatesPageResponse(
+        updates = transactions.take(getUpdatesPageRequest.maxPageSize),
+        lowestPageOffsetExclusive = calculatedBeginExclusive.fold(0L)(_.unwrap),
+        highestPageOffsetInclusive =
+          updatesToOffset(transactions(getUpdatesPageRequest.maxPageSize)).unwrap - 1,
+        nextPageToken = Some(
+          UpdatesPageToken(
+            lowestPageOffsetExclusive = calculatedBeginExclusive,
+            highestPageOffsetInclusive =
+              updatesToOffset(transactions(getUpdatesPageRequest.maxPageSize)).decrement,
+            participantIdChecksum = getUpdatesPageRequest.participantChecksum,
+            requestChecksum = getUpdatesPageRequest.requestChecksum,
+          ).toOpaqueByteString
+        ),
+      )
+    } else { // Last page or ledger end with dynamic bound
+      GetUpdatesPageResponse(
+        updates = transactions,
+        lowestPageOffsetExclusive = calculatedBeginExclusive.fold(0L)(_.unwrap),
+        highestPageOffsetInclusive = calculatedEndInclusive.fold(0L)(_.unwrap),
+        nextPageToken = getUpdatesPageRequest.endInclusive match {
+          case Some(_) => None
+          case None =>
+            Some(
+              UpdatesPageToken(
+                lowestPageOffsetExclusive = calculatedBeginExclusive,
+                highestPageOffsetInclusive = calculatedEndInclusive,
+                participantIdChecksum = getUpdatesPageRequest.participantChecksum,
+                requestChecksum = getUpdatesPageRequest.requestChecksum,
+              ).toOpaqueByteString
+            )
+        },
+      )
+    }
 }

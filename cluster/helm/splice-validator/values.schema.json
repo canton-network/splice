@@ -2,6 +2,29 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "ansWebUi": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "imagePullPolicy": {
       "type": "string"
     },
@@ -90,6 +113,34 @@
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
+    },
+    "wallet": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
+    "validatorWebUi": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -203,10 +254,14 @@
         "migration",
         "nodeIdentifier",
         "persistence",
-        "spliceInstanceNames"
+        "spliceInstanceNames",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
+          "type": "string"
+        },
+        "imageName": {
           "type": "string"
         },
         "imageDigests": {
@@ -268,7 +323,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -288,6 +344,17 @@
             },
             "secretName": {
               "type": "string"
+            },
+            "initImageName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -296,14 +363,7 @@
         },
         "migration": {
           "type": "object",
-          "required": ["id"],
           "properties": {
-            "id": {
-              "description": "The migration id of the synchronizer"
-            },
-            "migrating": {
-              "type": "boolean"
-            },
             "attachPvc": {
               "type": "boolean"
             }
@@ -353,6 +413,32 @@
               "type": "string",
               "pattern": "^http[s]?://.+$",
               "description": "The URL for the JWKS endpoint for the validator app API"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientSecret": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -415,6 +501,14 @@
                     },
                     "secretName": {
                       "type": "string"
+                    },
+                    "secretOverrides": {
+                      "type": "object",
+                      "properties": {
+                        "jsonCredentials": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 },

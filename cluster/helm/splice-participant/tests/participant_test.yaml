@@ -21,11 +21,6 @@ set:
 tests:
   - it: "sets labels as expected"
     set:
-      # Explicit migration ID for testing
-      metrics:
-        enabled: true
-        migration:
-          id: 1
       # Extra label for testing
       pod:
         labels:
@@ -44,7 +39,6 @@ tests:
           content:
             # Splice-specific
             app: participant-1
-            migration_id: "1"
             # k8s/Helm standard
             app.kubernetes.io/instance: participant-1
             app.kubernetes.io/managed-by: Helm
@@ -59,7 +53,6 @@ tests:
           content:
             # Splice-specific
             app: participant-1
-            migration_id: "1"
             # k8s/Helm standard
             app.kubernetes.io/instance: participant-1
             app.kubernetes.io/managed-by: Helm
@@ -326,3 +319,56 @@ tests:
               mountPath: /config
             - name: participant-volume
               mountPath: /persistent-data
+
+  - it: "allows overriding participant image and initImage"
+    set:
+      imageRepo: "secure-registry.example.com"
+      imageName: "custom-participant"
+      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      persistence.enablePgInitContainer: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].image
+          pattern: "^secure-registry\\.example\\.com/custom-participant:"
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
+          value: "secure-registry.example.com/postgres:14-custom"
+
+  - it: "allows overriding participant database secret env vars with raw strings"
+    set:
+      persistence.secretOverrides.postgresPassword: "vault:kv/data/participant/postgres-password"
+      persistence.enablePgInitContainer: true
+      auth:
+        jwksUrl: "https://mock.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+        secretOverrides:
+          ledgerApiUser: "vault:kv/data/participant/admin-user"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_POSTGRES_PASSWORD')].value
+          pattern: "vault:kv/data/participant/postgres-password"
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
+          pattern: "vault:kv/data/participant/postgres-password"
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.valueFrom.secretKeyRef)]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_ADMIN_USER_NAME')].value
+          pattern: "vault:kv/data/participant/admin-user"
+
+  - it: "injects custom serviceAccountName into Deployment when specified"
+    set:
+      serviceAccountName: "custom-participant-sa"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-participant-sa"

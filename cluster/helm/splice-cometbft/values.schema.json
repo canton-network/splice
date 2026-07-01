@@ -1,7 +1,16 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": [
+    "imageName"
+  ],
   "properties": {
+    "imageName": {
+      "type": "string"
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
     "genesis": {
       "type": "object",
       "required": [

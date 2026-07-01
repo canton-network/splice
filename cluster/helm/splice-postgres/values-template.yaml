@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "postgres:14"
+
 resources:
   limits:
     memory: 12Gi
@@ -30,6 +32,8 @@ db:
 
 persistence:
   secretName: "postgres-secrets"
+#  secretOverrides:
+#    postgresPassword: ""
 # k8s affinity for all deployed pods (optional)
 # affinity:
 

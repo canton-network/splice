@@ -1,0 +1,138 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests for `ensureReceiptAllocation` .
+module Splice.Tests.TestEnsureReceiptAllocation where
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.HoldingV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Utils
+import Splice.Testing.Apps.TradingAppV2 qualified as TradingAppV2
+
+
+test_ensureReceiptAllocation : Script ()
+test_ensureReceiptAllocation = do
+  provider <- allocateParty "provider"
+  alice <- allocateParty "alice"
+  bob <- allocateParty "bob"
+  admin <- allocateParty "admin"
+  let instrId = V2.InstrumentId with
+        id = "X"
+        admin
+
+  aggreementCid <- submit (actAs alice <> actAs provider) $
+    createCmd TradingAppV2.TradeSettlementAgreement with
+      trader = alice
+      venue = provider
+
+  let dummyCid = coerceContractId aggreementCid
+  now <- getTime
+
+  let aliceAccount = TSU.basicAccount alice
+  let bobAccount = TSU.basicAccount bob
+  let settlementV2 = V2.SettlementInfo with
+        executors = [provider]
+        id = "settlement1"
+        cid = None
+        meta = emptyMetadata
+  let aliceBobLegV2 = V2.TransferLeg with
+        transferLegId = "leg1"
+        sender = aliceAccount
+        receiver = bobAccount
+        amount = 10.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+
+  let allocationV2 = V2.AllocationSpecification with
+        admin = instrId.admin
+        authorizer = aliceAccount
+        transferLegSides = []
+        committed = False
+        nextIterationFunding = None
+        settlementDeadline = None
+        meta = emptyMetadata
+  let choiceArgV2 = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2
+        inputHoldingCids = []
+        actors = [alice]
+        requestedAt = now
+        extraArgs = ExtraArgs with
+          meta = emptyMetadata
+          context = emptyChoiceContext
+
+  let test check choiceArg = submitMustFail'' check
+        (actAs provider) $ do
+          exerciseCmd aggreementCid TradingAppV2.TradeSettlementAgreement_CreateReceiptAllocation with
+            factoryCid = dummyCid
+            choiceArg
+  let test' check allocation =
+        test check V2.AllocationFactory_Allocate with
+          settlement = settlementV2
+          allocation
+          inputHoldingCids = []
+          actors = [alice]
+          requestedAt = now
+          extraArgs = ExtraArgs with
+            meta = emptyMetadata
+            context = emptyChoiceContext
+
+  test (expectMessageContains "choiceArg.settlement.executor' is not equal to 'expected value'")
+    choiceArgV2 with
+      settlement = settlementV2 with
+        executors = [provider, alice]
+
+  test
+    ( expectMessageContains "choiceArg.actors' is not equal to 'expected value'" <>
+      expectMessageContains ("expected value: " <> show [alice])
+    )
+    choiceArgV2 with
+      actors = [bob]
+
+  test'
+    ( expectMessageContains "choiceArg.allocation.authorizer' is not equal to 'receiptAccount'" <>
+      expectMessageContains ("receiptAccount: " <> show aliceAccount)
+    )
+    allocationV2 with
+      authorizer = V2.Account with
+        owner = Some alice
+        id = "non-default-id"
+        provider = None
+
+  test' (expectUnmetRequirement "transferLeg[leg1] is a receipt leg")
+    allocationV2 with
+      transferLegSides = [TSU.senderSide aliceBobLegV2]
+
+  test' (expectUnmetRequirement "transferLeg[leg1] is a receipt leg")
+    allocationV2 with
+      transferLegSides = [TSU.receiverSide aliceBobLegV2, TSU.senderSide aliceBobLegV2]
+
+  test' (expectMessageContains "choiceArg.allocation.nextIterationFunding' is not equal to 'None'")
+    allocationV2 with
+      nextIterationFunding = Some mempty
+
+  test' (expectMessageContains "choiceArg.allocation.committed' is not equal to 'False'")
+    allocationV2 with
+      committed = True
+
+  test (expectMessageContains "choiceArg.inputHoldingCids' is not equal to 'emptyList'")
+    choiceArgV2 with
+      inputHoldingCids = [coerceContractId dummyCid]
+
+  test (expectMessageContains "choiceArg.extraArgs.meta' is not equal to 'emptyMetadata'")
+    choiceArgV2 with
+      extraArgs = ExtraArgs with
+        -- Note: not being able to encode the reason might be a bit limiting, but given that these
+        -- allocations are immediately used that should not be a problem. Furthemore, the legs themselves
+        -- will carry the reason in their metadata.
+        meta = TSU.reasonToMeta "non-empty meta" emptyMetadata
+        context = emptyChoiceContext
+
+  pure ()

@@ -112,7 +112,20 @@ object BuildCommon {
         Test / testOptions ++= Seq(
           // Enable logging of begin and end of test cases, test suites, and test runs.
           Tests.Argument("-C", "com.digitalasset.canton.LogReporter")
-        ),
+        ) ++ {
+          val isLegacyPv = sys.env
+            .get("PROTOCOL_VERSION")
+            .flatMap(v => scala.util.Try(v.toInt).toOption)
+            .exists(_ < 35)
+          if (isLegacyPv) {
+            Seq(
+              Tests
+                .Argument("-l", "org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35")
+            )
+          } else {
+            Seq.empty
+          }
+        },
       )
 
   lazy val damlSettings: Seq[Def.Setting[_]] =
@@ -256,19 +269,32 @@ object BuildCommon {
             "splice-api-token-allocation-v1-daml/clean",
             "splice-api-token-allocation-request-v1-daml/clean",
             "splice-api-token-allocation-instruction-v1-daml/clean",
-            "splice-token-standard-test-daml/clean",
+            "splice-api-token-burn-mint-v1-daml/clean",
+            "splice-token-standard-v1-test-daml/clean",
+            "splice-api-token-holding-v2-daml/clean",
+            "splice-api-token-transfer-instruction-v2-daml/clean",
+            "splice-api-token-allocation-v2-daml/clean",
+            "splice-api-token-allocation-request-v2-daml/clean",
+            "splice-api-token-allocation-instruction-v2-daml/clean",
+            "splice-api-token-transfer-events-v2-daml/clean",
+            "splice-token-standard-v2-test-daml/clean",
+            "splice-token-standard-utils-daml/clean",
             "apps-frontends/clean",
             "cleanCnDars",
             "docs/clean",
             "splice-util-featured-app-proxies-daml/clean",
+            "splice-util-featured-app-proxies-test-daml/clean",
             "splice-token-test-dummy-holding-daml/clean",
             "splice-token-test-trading-app-daml/clean",
+            "splice-token-test-trading-app-v2-daml/clean",
             "splice-util-token-standard-wallet-daml/clean",
             "splice-util-token-standard-wallet-test-daml/clean",
             "splice-util-batched-markers-daml/clean",
             "splice-util-batched-markers-test-daml/clean",
             "splice-featured-app-api-v1-daml/clean",
             "splice-featured-app-api-v2-daml/clean",
+            "splice-test-token-v1-daml/clean",
+            "splice-test-token-v2-daml/clean",
           ).map(";" + _).mkString(""),
         ) ++
         addCommandAlias("splice-clean", "; clean-splice") ++
@@ -462,7 +488,6 @@ object BuildCommon {
         libraryDependencies ++= Seq(
           auth0_java,
           auth0_jwks,
-          daml_test_evidence_generator_scalatest % Test,
           scalatest % Test,
           scalaz_core,
           slf4j_api,
@@ -668,7 +693,7 @@ object BuildCommon {
           scalaVersion,
           sbtVersion,
           BuildInfoKey("damlLibrariesVersion" -> CantonDependencies.daml_libraries_version),
-          BuildInfoKey("stableProtocolVersions" -> List("34")),
+          BuildInfoKey("stableProtocolVersions" -> List("34", "35")),
           BuildInfoKey("betaProtocolVersions" -> List()),
         ),
         buildInfoPackage := "com.digitalasset.canton.buildinfo",
@@ -718,6 +743,7 @@ object BuildCommon {
           scalatestScalacheck,
           testcontainers,
           testcontainers_postgresql,
+          daml_testing_utils,
         ),
 
         // This library contains a lot of testing helpers that previously existing in testing scope
@@ -831,10 +857,6 @@ object BuildCommon {
           magnolify_scalacheck % Test,
           magnolify_shared % Test,
           daml_lf_transaction % Test,
-          daml_lf_transaction_test_lib % Test,
-          daml_test_evidence_tag % Test,
-          daml_test_evidence_scalatest % Test,
-          daml_test_evidence_generator_scalatest % Test,
           better_files,
           cats,
           cats_law % Test,

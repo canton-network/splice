@@ -190,7 +190,9 @@ class BootstrapPackageConfigIntegrationTest
       bobValidatorRight.getTemplateId.packageId shouldBe initialAmulet.packageId
     }
 
-    aliceWalletClient.tap(50)
+    eventuallySucceeds(2.minute) {
+      aliceWalletClient.tap(50)
+    }
 
     clue("Splitwell can complete payment request on old DAR versions") {
       splitwellPaymentRequest(aliceSplitwellClient, aliceWalletClient, key, bobUserParty, 42.0)
@@ -230,6 +232,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
+        amuletConfig.transferPreapprovalBaseDuration,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -379,6 +382,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.optDevelopmentFundManager,
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
+        amuletConfig.transferPreapprovalBaseDuration,
       )
 
       val upgradeAction = new ARC_AmuletRules(

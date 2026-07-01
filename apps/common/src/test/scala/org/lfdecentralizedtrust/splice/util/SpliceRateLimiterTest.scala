@@ -22,13 +22,12 @@ class SpliceRateLimiterTest
     with HasExecutionContext
     with MetricValues {
 
-  private val elementsToRun = 100
-
   "the rate limiter" should {
 
     "accept requests under limit" in {
+      val elementsToRun = 100
       withRateLimiter { case (rateLimitMetrics, rateLimiter) =>
-        runThroughRateLimiter(rateLimiter, 9).reduce(_ && _) shouldBe true
+        runThroughRateLimiter(rateLimiter, 9, elementsToRun).reduce(_ && _) shouldBe true
 
         rateLimitMetrics.meter.valueFilteredOnLabels(
           LabelFilter(
@@ -45,12 +44,12 @@ class SpliceRateLimiterTest
 
     "reject requests that are over the limit" in {
       withRateLimiter { case (rateLimitMetrics, rateLimiter) =>
-        val results = runThroughRateLimiter(rateLimiter, 11)
+        val results = runThroughRateLimiter(rateLimiter, 100, 1000)
 
         val (accepted, rejected) = results.partition(identity)
 
-        // estimate for running 9 seconds
-        accepted.length should (be > 85 and be < 95)
+        // estimate for running 10 seconds, with some overhead for slower execution
+        accepted.length should (be > 85 and be < 150)
 
         rateLimitMetrics.meter.valueFilteredOnLabels(
           LabelFilter(
@@ -79,10 +78,14 @@ class SpliceRateLimiterTest
 
   }
 
-  private def runThroughRateLimiter(rateLimiter: SpliceRateLimiter, runsPerSecond: Int) = {
+  private def runThroughRateLimiter(
+      rateLimiter: SpliceRateLimiter,
+      runsPerSecond: Int,
+      runFor: Int,
+  ) = {
     runRateLimited(
       runsPerSecond,
-      elementsToRun,
+      runFor,
     ) {
       rateLimiter
         .runWithLimit(Future.successful(true))

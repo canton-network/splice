@@ -145,18 +145,11 @@ function installSvStacks(
 ): void {
   if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
-      createStackCR(
-        `sv.${sv}`,
-        'sv',
-        namespace,
-        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET'),
-        reference,
-        envRefs,
-        gcpSecret,
-        {
-          SPLICE_SV: sv,
-        }
-      );
+      const isRunbookReset =
+        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
+      createStackCR(`sv.${sv}`, 'sv', namespace, isRunbookReset, reference, envRefs, gcpSecret, {
+        SPLICE_SV: sv,
+      });
     }
   }
 }

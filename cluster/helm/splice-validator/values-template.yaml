@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "validator-app"
+wallet:
+  imageName: "wallet-web-ui"
 
 fixedTokens: false
 
@@ -10,7 +13,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m
 resources:
   limits:
     memory: 8Gi
@@ -31,10 +34,12 @@ persistence:
   user: cnadmin
   secretName: "postgres-secrets"
   enablePgInitContainer: true
+  initImageName: "postgres:14"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+#  secretOverrides:
+#    postgresPassword: ""
 
 migration:
-  id: 0
-  migrating: false
   attachPvc: true
 # pvc used for migrations
 pvc:
@@ -78,13 +83,36 @@ extraInitContainers: []
 # set if ans-web-ui should be deployed
 ansWebUi:
   enabled: true
-
+  imageName: "ans-web-ui"
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  # This is useful for integrating with external secret management tools.
+  # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+#  secretOverrides:
+#    clientId: ""
+#    url: ""
 # set if validator-web-ui should be deployed
 validatorWebUi:
   enabled: true
+  # Optional: Provide raw strings to override the default Kubernetes secret injection.
+  # This is useful for integrating with external secret management tools.
+  # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
+#  secretOverrides:
+#    clientId: ""
+#    url: ""
 
 # set to true to disable auth (this is highly insecure)
 disableAuth: false
+
+#auth:
+#  secretOverrides:
+#    ledgerApiUser: ""
+#    audience: ""
+#    token: ""
+#    url: ""
+#    clientId: ""
+#    clientSecret: ""
+#    scope: ""
+
 logLevel: DEBUG
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)

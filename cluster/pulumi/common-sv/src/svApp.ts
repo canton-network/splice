@@ -4,12 +4,13 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
+  EnvVarConfig,
   MigrationInfo,
   pvcSuffix,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 
-import { EnvVarConfig, SingleSvConfiguration } from './singleSvConfig';
+import { SingleSvConfiguration } from './singleSvConfig';
 import {
   CometbftSynchronizerNode,
   DecentralizedSynchronizerNode,

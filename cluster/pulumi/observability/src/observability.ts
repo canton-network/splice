@@ -736,6 +736,44 @@ function defaultAlertSubstitutions(alert: string): string {
   );
 }
 
+function substituteScanConnectionDisagreementAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.scanConnectionDisagreement;
+  const matchers: string[] = [];
+  if (config.excludedRequests.length > 0) {
+    matchers.push(`request!~"${config.excludedRequests.join('|')}"`);
+  }
+  if (config.excludedConnections.length > 0) {
+    matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const bareFilter = matchers.join(', ');
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  const connectionMatchers: string[] = [];
+  if (config.excludedConnections.length > 0) {
+    connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const connectionBareFilter = connectionMatchers.join(', ');
+  const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
+  return alert
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER_BARE', connectionBareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER', connectionFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+    .replaceAll(
+      '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD_PERCENT',
+      (config.alertThreshold * 100).toString()
+    )
+    .replaceAll('$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD', config.alertThreshold.toString());
+}
+
+function substituteDsoMissedConfirmationsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
+  return alert
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT', (config.threshold * 100).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -926,6 +964,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
               ),
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
+            ),
+            'dso_missed_confirmations_alerts.yaml': substituteDsoMissedConfirmationsAlerts(
+              readGrafanaAlertingFile('dso_missed_confirmations_alerts.yaml')
+            ),
+            'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
+              readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(

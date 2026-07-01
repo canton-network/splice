@@ -15,7 +15,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -29,12 +28,11 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - name: scan-app
-        image: "{{ .Values.imageRepo }}/scan-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_app) }}
         env:
         - name: JAVA_TOOL_OPTIONS
           value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
@@ -54,10 +52,14 @@ spec:
               }
             }
         - name: SPLICE_APP_POSTGRES_PASSWORD
+          {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- end }}
         {{- if .Values.isFirstSv }}
         - name: ADDITIONAL_CONFIG_IS_SV1
@@ -83,31 +85,33 @@ spec:
               tx-log-backfill-batch-size = "{{ .batchSize }}"
             }
         {{- end }}
-        - name: ADDITIONAL_CONFIG_MIGRATION_ID
+        {{- with .Values.sponsorScanUrl }}
+        - name: ADDITIONAL_CONFIG_SPONSOR_SCAN_URL
           value: |
-            canton.scan-apps.scan-app.domain-migration-id = {{ .Values.migration.id }}
+            canton.scan-apps.scan-app.sponsor-scan-url.url = "{{ . }}"
+        {{- end }}
         {{- if .Values.synchronizers }}
-        {{- with .Values.synchronizers.current.bftSequencerConfig }}
+        {{- with .Values.synchronizers.current.cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_CURRENT
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.current.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.current.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}
         {{- with .Values.synchronizers.successor }}
-        {{- with .bftSequencerConfig }}
+        {{- with .cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_SUCCESSOR
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.successor.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.successor.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}
         {{- end }}
         {{- with .Values.synchronizers.legacy }}
-        {{- with .bftSequencerConfig }}
+        {{- with .cantonBft }}
         - name: ADDITIONAL_CONFIG_BFT_SEQUENCER_LEGACY
           value: |
-            canton.scan-apps.scan-app.synchronizer-nodes.legacy.bft-sequencer-config {
+            canton.scan-apps.scan-app.synchronizer-nodes.legacy.canton-bft {
               p2p-url = "{{ .p2pUrl }}"
             }
         {{- end }}
@@ -136,22 +140,30 @@ spec:
               }
             }
         - name: SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID
+          {{- if (($.Values.bulkStorage.s3).secretOverrides).accessKey }}
+          value: {{ $.Values.bulkStorage.s3.secretOverrides.accessKey | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.bulkStorage.s3.secretName }}
               key: accessKey
+          {{ end }}
         - name: SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY
+          {{- if (($.Values.bulkStorage.s3).secretOverrides).secretAccessKey }}
+          value: {{ $.Values.bulkStorage.s3.secretOverrides.secretAccessKey | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.bulkStorage.s3.secretName }}
               key: secretAccessKey
+          {{- end }}
         {{- end }}
         {{- with .Values.publicUrl }}
         - name: ADDITIONAL_CONFIG_PUBLIC_URL
           value: |
             canton.scan-apps.scan-app.public-url = {{ . | quote }}
         {{- end }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "scan" "keyName" "sv" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "scan" "keyName" "sv" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         - name: SPLICE_APP_SCAN_PARTICIPANT_ADDRESS
           value: {{ .Values.participantAddress | quote }}
         {{- if .Values.synchronizers }}
@@ -250,15 +262,23 @@ spec:
             # would not receive configmap updates.
             # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
             mountPath: /app/logback
+        {{- if .Values.pvc }}
+          - name: scan-volume
+            mountPath: /persistent-data
+        {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -288,6 +308,30 @@ spec:
         - name: logback-config
           configMap:
             name: {{ .Release.Name }}-scan-app-logback-config
+        {{- if .Values.pvc }}
+        - name: scan-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-scan-pvc
+        {{- end }}
+{{- if .Values.pvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-scan-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $.Release.Name) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+  storageClassName: {{ .Values.pvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -296,7 +340,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $scanAppLabel }}
@@ -320,7 +363,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -334,8 +376,8 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
+      {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       containers:
       - env:
         - name: JAVA_TOOL_OPTIONS
@@ -354,7 +396,7 @@ spec:
           value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
         - name: SPLICE_APP_UI_POLL_INTERVAL
           value: {{ .Values.uiPollInterval | default 90000 | quote }}
-        image: "{{ .Values.imageRepo }}/scan-web-ui:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_web_ui) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.ui.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).scan_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -389,7 +431,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $scanWebUiAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $scanWebUiAppLabel }}
@@ -409,5 +450,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence  "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence  "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

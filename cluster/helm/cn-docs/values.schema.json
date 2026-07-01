@@ -5,8 +5,33 @@
     "networkName"
   ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "networkName": {
       "type": "string"
+    },
+    "docs": {
+      "type": "object",
+      "required": [
+        "imageName"
+      ],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
+    "gcsProxy": {
+      "type": "object",
+      "required": [
+        "imageName"
+      ],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
     }
   }
 }

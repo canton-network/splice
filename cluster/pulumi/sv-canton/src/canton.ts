@@ -20,8 +20,6 @@ import {
   InStackCometBftDecentralizedSynchronizerNode,
 } from '@canton-network/splice-pulumi-sv-canton/src/decentralizedSynchronizerNode';
 
-import { spliceConfig } from '../../common/src/config/config';
-
 export async function installCantonComponents(
   xns: ExactNamespace,
   migrationId: DomainMigrationIndex,
@@ -73,6 +71,7 @@ export async function installCantonComponents(
   if (!migrationInfo) {
     throw new Error(`Migration ${migrationId} not found in migration config`);
   }
+  const physicalSynchronizerConfig = svConfig.physicalSynchronizers[migrationId];
   const version = isActiveMigration
     ? (svConfig.versionOverride ?? migrationInfo.version)
     : migrationInfo.version;
@@ -83,7 +82,7 @@ export async function installCantonComponents(
       `mediator-${migrationId}-pg`,
       `mediator-pg`,
       version,
-      svConfig.mediator?.cloudSql || spliceConfig.pulumiProjectConfig.cloudSql,
+      physicalSynchronizerConfig.mediator.cloudSql,
       true,
       {
         isActive: migrationStillRunning,
@@ -98,10 +97,22 @@ export async function installCantonComponents(
       `sequencer-${migrationId}-pg`,
       `sequencer-pg`,
       version,
-      svConfig.sequencer?.cloudSql || spliceConfig.pulumiProjectConfig.cloudSql,
+      physicalSynchronizerConfig.sequencer.cloudSql,
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
+  const bftSequencerPostgres =
+    migrationInfo.sequencer.enableBftSequencer && migrationInfo.sequencer.dedicatedBftSequencerDb
+      ? await installPostgres(
+          xns,
+          `sequencer-bft-${migrationId}-pg`,
+          `sequencer-bft-pg`,
+          version,
+          physicalSynchronizerConfig.sequencer.cloudSql,
+          true,
+          { isActive: migrationStillRunning, migrationId, disableProtection }
+        )
+      : undefined;
   if (migrationStillRunning) {
     const decentralizedSynchronizerNode = migrationInfo.sequencer.enableBftSequencer
       ? new InStackCantonBftDecentralizedSynchronizerNode(
@@ -112,6 +123,7 @@ export async function installCantonComponents(
           {
             sequencerPostgres: sequencerPostgres,
             mediatorPostgres: mediatorPostgres,
+            bftSequencerPostgres: bftSequencerPostgres,
             setCoreDbNames: svConfig.isCoreSv,
           },
           version,
@@ -129,7 +141,6 @@ export async function installCantonComponents(
             setCoreDbNames: svConfig.isCoreSv,
           },
           isActiveMigration,
-          migrationConfig.isRunningMigration(),
           svConfig.onboardingName,
           version,
           imagePullServiceAccountName,

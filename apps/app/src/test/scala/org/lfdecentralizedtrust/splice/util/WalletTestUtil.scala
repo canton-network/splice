@@ -38,7 +38,7 @@ import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWall
 import org.scalatest.Assertion
 
 import java.time.Duration
-import java.util.UUID
+import java.util.{Optional, UUID}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -856,6 +856,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
         receiver.toLf,
         amount.bigDecimal,
         tc.latestOpenMiningRound.contract.contractId,
+        Optional.empty(),
       ),
       synchronizerId = synchronizerId orElse (tc.amuletRules.state match {
         case ContractState.InFlight => None
@@ -1277,7 +1278,8 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       receiver.toProtoPrimitive,
       receiverFeeRatio.bigDecimal,
       amount.bigDecimal,
-      None.toJava,
+      None.toJava, // lock
+      None.toJava, // meta
     )
   }
 
@@ -1302,6 +1304,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
           None.toJava,
         )
       ).toJava,
+      None.toJava, // meta
     )
   }
 
@@ -1438,6 +1441,29 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
     )
   }
 
+  def createRewardCouponsV2(
+      coupons: Seq[(PartyId, BigDecimal, Option[PartyId])],
+      round: Option[splice.types.Round] = None,
+      ttl: java.time.Duration = java.time.Duration.ofDays(1),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val now = env.environment.clock.now
+    val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
+    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
+      actAs = Seq(dsoParty),
+      commands = coupons.flatMap { case (provider, amount, beneficiaryO) =>
+        new splice.amulet.RewardCouponV2(
+          dsoParty.toProtoPrimitive,
+          provider.toProtoPrimitive,
+          couponRound,
+          amount.bigDecimal,
+          now.plus(ttl).toInstant,
+          true,
+          beneficiaryO.map(_.toProtoPrimitive).toJava,
+        ).create.commands.asScala
+      },
+    )
+  }
+
   /** Directly exercises the AmuletRules_Transfer choice.
     * Note that all parties participating in the transfer need to be hosted on the same participant
     */
@@ -1520,13 +1546,15 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
   def alicesTapsWithPackageId(
       packageId: String
   )(implicit env: SpliceTestConsoleEnvironment): Assertion = {
-    val tapContractId = aliceValidatorWalletClient.tap(10)
-    aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-      .of_party(Amulet.COMPANION)(dsoParty)
-      .filter(_.contractId == tapContractId.contractId)
-      .loneElement
-      .getTemplateId
-      .packageId shouldBe packageId
+    eventuallySucceeds(2.minutes) {
+      val tapContractId = aliceValidatorWalletClient.tap(10)
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .of_party(Amulet.COMPANION)(dsoParty)
+        .filter(_.contractId == tapContractId.contractId)
+        .loneElement
+        .getTemplateId
+        .packageId shouldBe packageId
+    }
   }
 
 }

@@ -122,6 +122,9 @@ monitoring:
         total:
           rate: 25
           overMinutes: 5
+      dsoMissedConfirmations:
+        threshold: 0.01
+        windowMinutes: 10
       cloudSql:
         maintenance: false
       cometbft:
@@ -147,12 +150,18 @@ monitoring:
           seconds: 1200
       acsSnapshots:
         # This task repeats every ~3h
-        saveLatencyThresholdSeconds: 2700
+        saveLatencyThresholdSeconds: 5400
         # This task repeats every ~30sec
         updateLatencyThresholdSeconds: 3
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
+      scanConnectionDisagreement:
+        alertThreshold: 0.1
+        excludedRequests:
+          - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
+          - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
+        excludedConnections: []
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.

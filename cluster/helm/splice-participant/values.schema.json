@@ -5,10 +5,17 @@
     "defaultJvmOptions",
     "imageRepo",
     "participantAdminUserNameFrom",
-    "persistence"
+    "persistence",
+    "imageName"
   ],
   "properties": {
+    "serviceAccountName": {
+      "type": "string"
+    },
     "imageRepo": {
+      "type": "string"
+    },
+    "imageName": {
       "type": "string"
     },
     "imageDigests": {
@@ -45,7 +52,7 @@
     },
     "persistence": {
       "type": "object",
-      "required": ["host", "schema", "secretName"],
+      "required": ["host", "schema", "secretName", "initImageName"],
       "properties": {
         "databaseName": {
           "type": "string"
@@ -63,6 +70,23 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 65535
+        },
+        "initImageName": {
+          "type": "string"
+        },
+        "enablePgInitContainer": {
+          "type": "boolean"
+        },
+        "enableParticipantDbConflictCheck": {
+          "type": "boolean"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "postgresPassword": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -96,6 +120,14 @@
         },
         "targetAudience": {
           "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "ledgerApiUser": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -126,15 +158,6 @@
         "interval": {
           "type": "string",
           "pattern": "^[0-9]+[smh]$"
-        },
-        "migration": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
         }
       }
     },

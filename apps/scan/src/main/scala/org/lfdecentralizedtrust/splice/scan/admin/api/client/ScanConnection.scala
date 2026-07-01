@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetDsoInfoResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryResponse,
@@ -164,6 +165,10 @@ trait ScanConnection
       tc: TraceContext
   ): Future[Option[HttpScanAppClient.RollForwardLsu]]
 
+  def getLsu()(implicit
+      tc: TraceContext
+  ): Future[Option[HttpScanAppClient.Lsu]]
+
   def getPartyToParticipant(
       synchronizerId: SynchronizerId,
       partyId: PartyId,
@@ -284,6 +289,11 @@ trait ScanConnection
       tc: TraceContext,
   ): OptionT[Future, MigrationSchedule]
 
+  def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long]
+
   def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -312,6 +322,11 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
 
+  def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]]
+
   def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -325,6 +340,11 @@ trait ScanConnection
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[NonNegativeInt]
+
+  def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse]
 
   def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,

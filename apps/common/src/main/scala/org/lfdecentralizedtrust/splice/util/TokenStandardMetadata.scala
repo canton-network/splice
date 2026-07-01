@@ -8,4 +8,6 @@ object TokenStandardMetadata {
 
   val reasonMetaKey = s"$splicePrefix/reason"
   val senderMetaKey = s"$splicePrefix/sender"
+
+  val expireLockKey = "expire-lock"
 }

@@ -162,6 +162,26 @@ class HttpSvOperatorHandler(
     }
   }
 
+  override def getPreviousSvRewardWeight(
+      respond: r0.GetPreviousSvRewardWeightResponse.type
+  )(
+      body: definitions.PreviousSvRewardWeightRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.GetPreviousSvRewardWeightResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getPreviousSvRewardWeight") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        rewardWeight <- scanConnection.getPreviousSvRewardWeight(body.svParty, body.effectiveBefore)
+      } yield {
+        r0.GetPreviousSvRewardWeightResponse.OK(
+          definitions.PreviousSvRewardWeightResponse(rewardWeight = rewardWeight.map(_.toString))
+        )
+      }
+    }
+  }
+
   override def listValidatorLicenses(
       respond: r0.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(

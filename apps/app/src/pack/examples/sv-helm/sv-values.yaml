@@ -19,13 +19,6 @@ auth:
   #   connectionTimeout: "10 seconds"
   #   readTimeout: "10 seconds"
 
-# MIGRATION_START
-# Replace MIGRATION_ID with the migration ID of the global synchronizer.
-migration:
-  # This should stay constant after the introduction of logical synchronizer upgrades.
-  id: "MIGRATION_ID"
-#MIGRATION_END
-
 participantAddress: "participant"
 
 # Please make the ``global-domain-sequencer`` service accessible for other validators to subscribe to, and set the URL below to your sequencer service.
@@ -41,12 +34,13 @@ synchronizers:
       pruningInterval: "1 hour"
       # The retention period is the time for which the sequencer will retain the data.
       retentionPeriod: "30 days"
+    # Set to true when using CantonBFT
+    enableBftSequencer: false
   #DOCS_PRUNING_END
     sequencerAddress: "global-domain-SERIAL_ID-sequencer"
     mediatorAddress: "global-domain-SERIAL_ID-mediator"
     sequencerPublicUrl: "https://sequencer-SERIAL_ID.sv.YOUR_HOSTNAME"
     sequencerAvailabilityDelay: "60 seconds"
-    enableBftSequencer: false
     cometBFT:
       enabled: true
       connectionUri: "http://global-domain-SERIAL_ID-cometbft-cometbft-rpc:26657"

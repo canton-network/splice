@@ -100,7 +100,6 @@ export async function installValidator1(
     validatorWalletUsers: pulumi.output([validatorWalletUser]),
     xns,
     dependencies: [],
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     appDars: splitwellDarPaths,
     validatorPartyHint: `digitalasset-${name}-1`,
     svSponsorAddress: `http://sv-app.sv-1:5014`,

@@ -7,6 +7,7 @@ import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommand
   SynchronizerTimeRange,
   TimeRange,
 }
+import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeProportion, PositiveInt}
@@ -20,6 +21,7 @@ import com.digitalasset.canton.integration.tests.acs.commitment.util.{
   CommitmentTestUtil,
   IntervalDuration,
 }
+import com.digitalasset.canton.integration.util.TestUtils
 import com.digitalasset.canton.integration.{
   CommunityIntegrationTest,
   ConfigTransforms,
@@ -41,7 +43,6 @@ import monocle.Monocle.toAppliedFocusOps
 import org.slf4j.event.Level
 
 import java.time.Duration as JDuration
-import java.util.concurrent.atomic.AtomicReference
 import scala.collection.immutable.SortedSet
 import scala.concurrent.Future
 
@@ -51,7 +52,6 @@ trait AcsCommitmentRepairIntegrationTest
     with SortedReconciliationIntervalsHelpers
     with CommitmentTestUtil {
 
-  private val iouContract = new AtomicReference[Iou.Contract]
   private val interval: JDuration = JDuration.ofSeconds(5)
   private implicit val intervalDuration: IntervalDuration = IntervalDuration(interval)
 
@@ -121,7 +121,6 @@ trait AcsCommitmentRepairIntegrationTest
       (1 to nContracts.value).map(_ =>
         deployOnTwoParticipantsAndCheckContract(
           synchronizerId,
-          iouContract,
           participant1,
           participant2,
         )
@@ -190,11 +189,13 @@ trait AcsCommitmentRepairIntegrationTest
       val ts = simClock.now
       // da might not have progressed time as acme when using BFTOrderer (since with BFT Time, the time of a block is
       // decided by the previous block). So we make sure the sequencers have observed this time.
-      sequencers.local.foreach(
-        _.underlying.value.sequencer.timeTracker.awaitTick(ts).foreach(_.futureValue)
-      )
-      // make sure participant1 have observed the latest time before we reinitialize
-      participant1.testing.fetch_synchronizer_times()
+      sequencers.local.foreach { s =>
+        TestUtils.waitForTargetTimeOnSequencer(s, ts, logger)
+      }
+
+      // Wait a bit until everything quiets down. This ensures that there's a high chance that the reinitialization happens
+      // when no further changes are queued that could move ledger end afterwards (in particular incoming ACS commitments).
+      Threading.sleep(2000)
 
       val reinitCmtsResult =
         participant1.commitments.reinitialize_commitments(
@@ -211,6 +212,11 @@ trait AcsCommitmentRepairIntegrationTest
       )
       forAll(reinitCmtsResult)(_.acsTimestamp.isDefined shouldBe true)
       forAll(reinitCmtsResult)(_.acsTimestamp.value shouldBe >=(ts))
+
+      logger.info("Reconnect participant1 to verify crash fault tolerance")
+      participant1.synchronizers.disconnect(daName)
+      participant1.synchronizers.reconnect(daName)
+
       // exchange commitments again, all should be fine
       createContractsAndCheck(sequencer1, daId)
       val (_, period2a, _) = createContractsAndCheck(sequencer2, acmeId)

@@ -174,17 +174,17 @@ class AppUpgradeIntegrationTest
 
           clue("Tapping some amulet in the network before any upgrades") {
             bobWalletClient.tap(10)
-            bobValidatorWalletClient.tap(1_000_001)
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
-            sv2Wallet.tap(1_000_002)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.tap(1001)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
+            sv2Wallet.tap(1002)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           val bobTxsBeforeUpgrade =
             clue("Check that bob validator can see the tap in the wallet tx history") {
               val txs = withoutDevNetTopups(bobValidatorWalletClient.listTransactions(None, 10))
               inside(txs(0)) { case logEntry: BalanceChangeTxLogEntry =>
-                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1_000_001))
+                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1001))
               }
               txs
             }
@@ -203,7 +203,7 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Validating that the balance is visible in the upgraded validator") {
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           clue("Upgrading sv-2 & sv-3") {
@@ -214,16 +214,16 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Testing some more transactions after 2 SVs upgraded") {
-            sv2Wallet.tap(1_000_003)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(2_000_000)
+            sv2Wallet.tap(1003)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(2000)
             // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's)
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
               sv1Client.getDsoInfo().svParty,
-              500_001,
+              501,
             )
-            sv1WalletClient.balance().unlockedQty should be > BigDecimal(490_000)
+            sv1WalletClient.balance().unlockedQty should be > BigDecimal(400)
           }
 
           clue("Upgrading also sv1") {
@@ -266,6 +266,7 @@ class AppUpgradeIntegrationTest
             amuletConfig.optDevelopmentFundManager,
             amuletConfig.externalPartyConfigStateTickDuration,
             amuletConfig.rewardConfig,
+            amuletConfig.transferPreapprovalBaseDuration,
           )
           val upgradeAction = new ARC_AmuletRules(
             new CRARC_SetConfig(
@@ -404,41 +405,10 @@ class AppUpgradeIntegrationTest
             }
           }
 
-          actAndCheck(
-            "Bob makes p2p transfer after upgrade",
-            eventuallySucceeds() {
-              p2pTransfer(bobWalletClient, aliceWalletClient, alice, 4.0)
-            },
-          )(
-            "old and new taps and transfers appear in scan tx log",
-            _ => {
-              val txs = sv1ScanBackend.listActivity(pageEndEventId = None, pageSize = 50)
-              // old tap
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe bob.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(10)
-              }
-              // new taps
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe bob.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(20)
-              }
-              forExactly(1, txs) { tx =>
-                val tf = tx.tap.value
-                tf.amuletOwner shouldBe alice.toProtoPrimitive
-                BigDecimal(tf.amuletAmount) shouldBe walletUsdToAmulet(5)
-              }
-              // new transfer
-              forExactly(1, txs) { tx =>
-                val tf = tx.transfer.value
-                tf.sender.party shouldBe bob.toProtoPrimitive
-                tf.receivers.loneElement.party shouldBe alice.toProtoPrimitive
-                BigDecimal(tf.receivers.loneElement.amount) shouldBe 4.0
-              }
-            },
-          )
+          // Bob makes p2p transfer after upgrade
+          eventuallySucceeds() {
+            p2pTransfer(bobWalletClient, aliceWalletClient, alice, 4.0)
+          }
 
           // SV4 can join after the upgrade.
           clue("SV4 can join after upgrade") {

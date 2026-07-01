@@ -38,6 +38,7 @@ import {
   networkWideConfig,
   getValidatorAppApiAudience,
   getNamespaceConfig,
+  persistentHeapDumpsPvc,
   standardStorageClassName,
   pvcSuffix,
   CnChartVersion,
@@ -225,12 +226,6 @@ async function installValidator(
 
   const validatorValues: ChartValues = {
     ...validatorValuesFromYamlFiles,
-    migration: {
-      ...validatorValuesFromYamlFiles.migration,
-      migrating: DecentralizedSynchronizerUpgradeConfig.isRunningMigration()
-        ? true
-        : validatorValuesFromYamlFiles.migration.migrating,
-    },
     scanClient: validatorConfig.validatorApp?.scanClient ?? validatorValuesFromYamlFiles.scanClient,
     synchronizer:
       validatorConfig.validatorApp?.synchronizer ?? validatorValuesFromYamlFiles.synchronizer,
@@ -258,6 +253,7 @@ async function installValidator(
       volumeStorageClass: standardStorageClassName,
       volumeName: `domain-migration-validator-${pvcSuffix}`,
     },
+    persistentDataPvc: persistentHeapDumpsPvc(),
     db: { volumeSize: clusterSmallDisk ? '240Gi' : undefined },
     enablePostgresMetrics: true,
     ...spliceInstanceNames,

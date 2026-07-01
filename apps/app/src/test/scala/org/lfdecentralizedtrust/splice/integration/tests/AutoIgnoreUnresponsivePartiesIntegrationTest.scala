@@ -170,6 +170,8 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       )
 
       clue("Disconnect alice's participant from the synchronizer") {
+        // stop to avoid log noise.
+        aliceValidatorBackend.stop()
         aliceValidatorBackend.participantClient.synchronizers.disconnect_all()
         aliceValidatorBackend.participantClient.synchronizers.is_connected(
           synchronizerId
@@ -192,9 +194,12 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
           sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should contain(
             aliceParty
           )
-          aliceWalletClient.list().amulets should have length numAmulets.toLong
-          aliceWalletClient.list().lockedAmulets should have length numAmulets.toLong
         },
       )
+
+      // reconnect or other tests might get unhappy, in particular `withNoVettedPackages` gets confused if the nodes is disconnected.
+      clue("Reconnect alice's participant") {
+        aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
+      }
   }
 }

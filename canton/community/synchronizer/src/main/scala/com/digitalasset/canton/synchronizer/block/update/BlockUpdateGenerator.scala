@@ -7,7 +7,7 @@ import cats.syntax.either.*
 import cats.syntax.functorFilter.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.BatchingConfig
-import com.digitalasset.canton.crypto.SynchronizerCryptoClient
+import com.digitalasset.canton.crypto.{SyncCryptoApi, SynchronizerCryptoClient}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.CantonBaseError
@@ -23,7 +23,6 @@ import com.digitalasset.canton.sequencing.protocol.{
   MemberRecipientOrBroadcast,
   SequencersOfSynchronizer,
 }
-import com.digitalasset.canton.synchronizer.block.BlockEvents.TickTopology
 import com.digitalasset.canton.synchronizer.block.LedgerBlockEvent.*
 import com.digitalasset.canton.synchronizer.block.data.{BlockEphemeralState, BlockInfo}
 import com.digitalasset.canton.synchronizer.block.{BlockEvents, LedgerBlockEvent, RawLedgerBlock}
@@ -40,13 +39,8 @@ import com.digitalasset.canton.synchronizer.sequencer.time.{
   LsuSequencingBounds,
 }
 import com.digitalasset.canton.synchronizer.sequencer.traffic.SequencerRateLimitManager
-import com.digitalasset.canton.synchronizer.sequencer.{
-  AnnouncedLsu,
-  InFlightAggregations,
-  SubmissionOutcome,
-}
+import com.digitalasset.canton.synchronizer.sequencer.{AnnouncedLsu, SubmissionOutcome}
 import com.digitalasset.canton.topology.*
-import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.tracing.{Spanning, TraceContext, Traced}
 import com.digitalasset.canton.util.MaxBytesToDecompress
 import com.digitalasset.canton.util.collection.IterableUtil
@@ -109,10 +103,16 @@ object BlockUpdateGenerator {
       chunkIndex: Int,
       events: NonEmpty[Seq[Traced[LedgerBlockEvent]]],
   ) extends BlockChunk
+
+  /** @param baseBlockSequencingTime
+    *   See [[RawLedgerBlock.baseSequencingTimeMicrosFromEpoch]]
+    * @param tickTopologyAtLeastAt
+    *   See [[RawLedgerBlock.tickTopologyAtMicrosFromEpoch]]
+    */
   final case class MaybeTopologyTickChunk(
       blockHeight: Long,
       baseBlockSequencingTime: CantonTimestamp,
-      tickTopology: Option[TickTopology],
+      tickTopologyAtLeastAt: Option[CantonTimestamp],
   ) extends BlockChunk
   final case class EndOfBlock(blockHeight: Long) extends BlockChunk
 }
@@ -128,8 +128,9 @@ class BlockUpdateGeneratorImpl(
     producePostOrderingTopologyTicks: Boolean,
     metrics: SequencerMetrics,
     batchingConfig: BatchingConfig,
-    protected val loggerFactory: NamedLoggerFactory,
+    consistencyChecks: Boolean,
     memberValidator: SequencerMemberValidator,
+    protected val loggerFactory: NamedLoggerFactory,
 )(implicit val closeContext: CloseContext, tracer: Tracer)
     extends BlockUpdateGenerator
     with NamedLogging
@@ -139,6 +140,9 @@ class BlockUpdateGeneratorImpl(
 
   private val epsilon = synchronizerSyncCryptoApi.staticSynchronizerParameters.topologyChangeDelay
   private val protocolVersion = synchronizerSyncCryptoApi.psid.protocolVersion
+  private val reorderer =
+    if (protocolVersion <= ProtocolVersion.v34) BlockReorderer.NoOp
+    else new BlockReorderer.Impl(consistencyChecks, loggerFactory)
 
   private val blockChunkProcessor =
     new BlockChunkProcessor(
@@ -203,7 +207,6 @@ class BlockUpdateGeneratorImpl(
 
       val ledgerBlockEvents = block.events.mapFilter { tracedEvent =>
         withSpan("BlockUpdateGenerator.extractBlockEvents") { implicit traceContext => _ =>
-          logger.trace("Extracting event from raw block")
           // TODO(i29003): Defer decompression to addSnapshotsAndValidateSubmissions
           val maxBytesToDecompress = MaxBytesToDecompress.HardcodedDefault
           LedgerBlockEvent.fromRawBlockEvent(protocolVersion, maxBytesToDecompress)(
@@ -218,7 +221,6 @@ class BlockUpdateGeneratorImpl(
                 _ <- checkLsuSequencingBounds(event, lsuSequencingBounds)
                 _ <- checkDrSequencingTimeUpperBound(event, drSequencingTimeUpperBound)
               } yield ()
-
               checksResult.fold(
                 err => {
                   err.log()
@@ -234,14 +236,11 @@ class BlockUpdateGeneratorImpl(
         BlockEvents(
           block.blockHeight,
           CantonTimestamp.assertFromLong(block.baseSequencingTimeMicrosFromEpoch),
-          ledgerBlockEvents,
-          tickTopology = block.tickTopologyAtMicrosFromEpoch.map { case (micros, broadcast) =>
-            TickTopology(
-              CantonTimestamp.assertFromLong(micros),
-              (if (broadcast) Left(AllMembersOfSynchronizer)
-               else Right(SequencersOfSynchronizer)),
-            )
-          },
+          // Reorder block events according to BlockReorderer priority before constructing BlockEvents.
+          // (starting with pv35)
+          reorderer.reordered(ledgerBlockEvents)(blockTraceContext),
+          tickTopologyAtLeastAt =
+            block.tickTopologyAtMicrosFromEpoch.map(CantonTimestamp.assertFromLong),
         )
       )(blockTraceContext)
     }(tracedBlock.traceContext, tracer)
@@ -308,7 +307,7 @@ class BlockUpdateGeneratorImpl(
     val tick = MaybeTopologyTickChunk(
       blockHeight,
       blockEvents.baseBlockSequencingTime,
-      blockEvents.tickTopology,
+      blockEvents.tickTopologyAtLeastAt,
     )
 
     // We must start a new chunk whenever the chunk processing advances lastSequencerEventTimestamp,
@@ -357,8 +356,8 @@ class BlockUpdateGeneratorImpl(
         logger.debug(s"Block $height completed with update $update")
         FutureUnlessShutdown.pure(newState -> update)
       case NextChunk(height, index, chunksEvents) =>
-        blockChunkProcessor.processDataChunk(state, height, index, chunksEvents)
-      case MaybeTopologyTickChunk(blockHeight, baseBlockSequencingTime, tickTopology) =>
+        blockChunkProcessor.processDataChunk(state, height, index, chunksEvents, getAnnouncedLsu)
+      case MaybeTopologyTickChunk(blockHeight, baseBlockSequencingTime, tickTopologyAtLeastAt) =>
         lazy val createTick = state.latestPendingTopologyTransactionTimestamp.exists { ts =>
           // If the latest topology transaction becomes effective between the end of the previous block and the end of
           // the current block, we will broadcast a tick at the end of the current block so all sequencer clients can
@@ -378,21 +377,34 @@ class BlockUpdateGeneratorImpl(
           state.lastBlockTs < latestTopologyTransactionEffectiveTime && latestTopologyTransactionEffectiveTime < blockEnd
         }
 
-        getAnnouncedLsu.map(_.successor) match {
-          case Some(upgrade)
-              if upgrade.upgradeTime <= baseBlockSequencingTime && upgrade.upgradeTime > state.lastBlockTs =>
-            logger.info(
-              s"Emitting an LSU tick for the upgrade $upgrade at block $blockHeight with base sequencing time $baseBlockSequencingTime"
-            )
-            blockChunkProcessor.emitTick(
-              state.copy(
-                // There shouldn't be topology changes activated after the LSU upgrade time
-                latestPendingTopologyTransactionTimestamp = None
-              ),
-              blockHeight,
-              upgrade.upgradeTime,
-              Left(AllMembersOfSynchronizer),
-            )
+        getAnnouncedLsu match {
+          case Some(announcedLsu @ AnnouncedLsu(upgrade, _, _))
+              if state.lastBlockTs < upgrade.upgradeTime && upgrade.upgradeTime <= baseBlockSequencingTime =>
+            for {
+              _ <- announcedLsu.computeAndCacheTimeOffset(
+                synchronizerSyncCryptoApi,
+                upgrade.upgradeTime,
+              )
+              upgradeTimeWithDecisionTimeOffset = announcedLsu.addOffsetAfterUpgradeTime(
+                upgrade.upgradeTime
+              )
+              _ = logger.info(
+                s"Emitting an LSU tick with ts=$upgradeTimeWithDecisionTimeOffset for the upgrade $upgrade at block $blockHeight with base sequencing time $baseBlockSequencingTime"
+              )
+              tickResult <- blockChunkProcessor.emitTick(
+                state.copy(
+                  // There shouldn't be topology changes activated after the LSU upgrade time
+                  latestPendingTopologyTransactionTimestamp = None
+                ),
+                blockHeight,
+                upgradeTimeWithDecisionTimeOffset,
+                Left(AllMembersOfSynchronizer),
+              )
+            } yield tickResult
+
+          case Some(AnnouncedLsu(upgrade, _, _))
+              if upgrade.upgradeTime <= baseBlockSequencingTime =>
+            FutureUnlessShutdown.pure((state, ChunkUpdate.noop))
           case _ =>
             // Starting with protocol version 35, topology ticks can be deterministically injected post-ordering
             // by sequencers, making time proofs unnecessary for observing topology transactions becoming effective.
@@ -410,20 +422,25 @@ class BlockUpdateGeneratorImpl(
                 // DABFT assigns monotonically increasing timestamps to all ordered requests, including acks,
                 //  but the sequencer does not (because acks are not events), so if an epoch ends with an ack and
                 //  DABFT expects a tick at a certain timestamp to be able to query a topology snapshot and
-                //  establish the ordering topology fot the next epoch, we must make sure that sequencing time advances
+                //  establish the ordering topology for the next epoch, we must make sure that sequencing time advances
                 //  at least until that timestamp, else the topology snapshot query could get stuck and the system
                 //  could deadlock.
                 tickAtLeastAt = state.lastChunkTs
                   .max(baseBlockSequencingTime)
-                  .max(tickTopology.map(_.atLeastAt).getOrElse(CantonTimestamp.MinValue)),
+                  .max(tickTopologyAtLeastAt.getOrElse(CantonTimestamp.MinValue)),
                 groupRecipient = Left(AllMembersOfSynchronizer),
               )
             } else {
-              tickTopology match {
+              tickTopologyAtLeastAt match {
                 // The pre-protocol version 35 topology ticks is also still supported and
                 // only the BFT sequencer can request to inject these topology ticks
-                case Some(TickTopology(tickAtLeastAt, groupRecipient)) =>
-                  blockChunkProcessor.emitTick(state, blockHeight, tickAtLeastAt, groupRecipient)
+                case Some(tickTopologyAtLeastAt) =>
+                  blockChunkProcessor.emitTick(
+                    state,
+                    blockHeight,
+                    tickTopologyAtLeastAt,
+                    Right(SequencersOfSynchronizer),
+                  )
                 case None =>
                   FutureUnlessShutdown.pure((state, ChunkUpdate.noop))
               }
@@ -477,7 +494,7 @@ object BlockUpdateGeneratorImpl {
       orderingSequencerId: SequencerId,
       consumeTraffic: SubmissionRequestValidator.TrafficConsumption,
       errorOrPrevalidationOutcome: Either[SubmissionOutcome, PrevalidationOutcome],
-      sequencingSnapshot: TopologySnapshot,
+      sequencingSnapshot: SyncCryptoApi,
   )(val traceContext: TraceContext)
 
 }

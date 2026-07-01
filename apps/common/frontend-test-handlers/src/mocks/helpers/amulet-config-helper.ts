@@ -130,6 +130,7 @@ export function getAmuletRulesConfig(
         fee: createFee,
       },
       maxNumLockHolders: '50',
+      tokenStandardMaxTTL: null,
       transferFee: {
         initialRate: '0.01',
         steps: [
@@ -228,6 +229,7 @@ export function getAmuletRulesConfig(
     optDevelopmentFundManager: null,
     externalPartyConfigStateTickDuration: null,
     rewardConfig: null,
+    transferPreapprovalBaseDuration: null,
   };
 }
 
@@ -309,7 +311,10 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
             class="jsondiffpatch-value"><pre>"100"</pre></div></li><li
           class="jsondiffpatch-unchanged" data-key="maxNumLockHolders"><div
             class="jsondiffpatch-property-name">maxNumLockHolders</div><div
-            class="jsondiffpatch-value"><pre>"50"</pre></div></li></ul></li><li
+            class="jsondiffpatch-value"><pre>"50"</pre></div></li><li
+          class="jsondiffpatch-unchanged" data-key="tokenStandardMaxTTL"><div
+            class="jsondiffpatch-property-name">tokenStandardMaxTTL</div><div
+            class="jsondiffpatch-value"><pre>null</pre></div></li></ul></li><li
       class="jsondiffpatch-unchanged" data-key="issuanceCurve"><div
         class="jsondiffpatch-property-name">issuanceCurve</div><div
         class="jsondiffpatch-value"><pre>{
@@ -385,52 +390,31 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       }
     }
   ]
-}</pre></div></li><li
-      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+}</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="decentralizedSynchronizer"><div
-        class="jsondiffpatch-property-name">decentralizedSynchronizer</div><ul
-        class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-          class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
-          data-key="requiredSynchronizers"><div
-            class="jsondiffpatch-property-name">requiredSynchronizers</div><ul
-            class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-              class="jsondiffpatch-modified" data-key="map"><div
-                class="jsondiffpatch-property-name">map</div><div
-                class="jsondiffpatch-value jsondiffpatch-left-value"><pre>[
-  [
-    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
-    {}
-  ]
-]</pre></div><div class="jsondiffpatch-value jsondiffpatch-right-value"><pre>{
-  "_kvs": [
-    [
-      "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
-      {}
+        class="jsondiffpatch-property-name">decentralizedSynchronizer</div><div
+        class="jsondiffpatch-value"><pre>{
+  "requiredSynchronizers": {
+    "map": [
+      [
+        "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
+        {}
+      ]
     ]
-  ],
-  "_keys": [
-    "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"
-  ],
-  "_values": [
-    {}
-  ]
-}</pre></div></li></ul></li><li class="jsondiffpatch-unchanged"
-          data-key="activeSynchronizer"><div
-            class="jsondiffpatch-property-name">activeSynchronizer</div><div
-            class="jsondiffpatch-value"><pre>"global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81"</pre></div></li><li
-          class="jsondiffpatch-unchanged" data-key="fees"><div
-            class="jsondiffpatch-property-name">fees</div><div
-            class="jsondiffpatch-value"><pre>{
-  "baseRateTrafficLimits": {
-    "burstAmount": "400000",
-    "burstWindow": {
-      "microseconds": "1200000000"
-    }
   },
-  "extraTrafficPrice": "16.67",
-  "readVsWriteScalingFactor": "4",
-  "minTopupAmount": "200000"
-}</pre></div></li></ul></li><li class="jsondiffpatch-unchanged"
+  "activeSynchronizer": "global-domain::12200c1f141acd0b2e48defae40aa2eb3daae48e4c16b7e1fa5d9211d352cc150c81",
+  "fees": {
+    "baseRateTrafficLimits": {
+      "burstAmount": "400000",
+      "burstWindow": {
+        "microseconds": "1200000000"
+      }
+    },
+    "extraTrafficPrice": "16.67",
+    "readVsWriteScalingFactor": "4",
+    "minTopupAmount": "200000"
+  }
+}</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="tickDuration"><div
         class="jsondiffpatch-property-name">tickDuration</div><div
         class="jsondiffpatch-value"><pre>{
@@ -462,7 +446,11 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
         class="jsondiffpatch-value"><pre>null</pre></div></li><li
       class="jsondiffpatch-unchanged" data-key="rewardConfig"><div
         class="jsondiffpatch-property-name">rewardConfig</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="transferPreapprovalBaseDuration"><div
+        class="jsondiffpatch-property-name">transferPreapprovalBaseDuration</div><div
+      class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;
 }

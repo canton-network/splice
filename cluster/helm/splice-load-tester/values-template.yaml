@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "load-tester"
 config: "{}"
 prometheusRw: ""
 
@@ -22,4 +23,5 @@ resources:
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
+
 

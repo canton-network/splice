@@ -15,7 +15,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $validatorAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   replicas: 1
   selector:
@@ -29,7 +28,6 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" $validatorAppLabel) | nindent 8 }}
-        migration: {{ .Values.migration.id | quote }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
       securityContext:
@@ -38,7 +36,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: validator-app
-        image: "{{ .Values.imageRepo }}/validator-app:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).validator_app) }}"
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).validator_app) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
@@ -100,7 +98,7 @@ spec:
         {{ if .Values.svValidator }}
         - name: SPLICE_APP_VALIDATOR_SV_VALIDATOR
           value: "true"
-        {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "sv" "keyName" "sv") | indent 8}}
+        {{- include "splice-util-lib.auth0-user-env-var" (dict "appName" "sv" "keyName" "sv" "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         - name: ADDITIONAL_CONFIG_TRUST_SINGLE_SCAN
           value: |
             canton.validator-apps.validator_backend.scan-client.type = "trust-single"
@@ -187,10 +185,14 @@ spec:
               }
             }
         - name: SPLICE_APP_POSTGRES_PASSWORD
+          {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ $.Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- end }}
         {{- with .Values.participantIdentitiesDumpPeriodicBackup }}
         - name: ADDITIONAL_CONFIG_SPLICE_APP_VALIDATOR_PARTICIPANT_IDENTITIES_DUMP_PERIODIC_BACKUP
@@ -211,10 +213,14 @@ spec:
               backup-interval = {{ .backupInterval }}
             }
         - name: SPLICE_APP_VALIDATOR_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS
+          {{- if ((.location.bucket).secretOverrides).jsonCredentials }}
+          value: {{ .location.bucket.secretOverrides.jsonCredentials | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               key: "json-credentials"
               name: {{ .location.bucket.secretName }}
+          {{- end }}
         {{- end }}
         {{- with .Values.participantIdentitiesDumpImport }}
         - name: ADDITIONAL_CONFIG_SPLICE_APP_SV_PARTICIPANT_IDENTITIES_DUMP_IMPORT
@@ -237,16 +243,6 @@ spec:
             {{- else }}
             canton.validator-apps.validator_backend.migrate-validator-party.scan.admin-api.url = ${_scan.admin-api.address}
             {{- end }}
-        {{- end }}
-        - name: ADDITIONAL_CONFIG_MIGRATION_ID
-          value: |
-            canton.validator-apps.validator_backend {
-              domain-migration-id = {{ .Values.migration.id }}
-            }
-        {{- if and .Values.migration.migrating (not .Values.svValidator) }}
-        - name: ADDITIONAL_CONFIG_VALIDATOR_MIGRATION_RESTORE
-          value: |
-            canton.validator-apps.validator_backend.restore-from-migration-dump = "/domain-upgrade-dump/domain_migration_dump.json"
         {{- end }}
         - name: ADDITIONAL_CONFIG_ENABLE_WALLET
           value: |
@@ -347,7 +343,7 @@ spec:
         - name: SPLICE_APP_VALIDATOR_AUTH_JWKS_READ_TIMEOUT
           value: {{ .Values.auth.jwks.readTimeout | quote }}
         {{ end }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
         {{- end }}
         ports:
         - containerPort: 5003
@@ -386,6 +382,10 @@ spec:
             mountPath: /domain-upgrade-dump
         {{- end }}
         {{- end }}
+        {{- if .Values.persistentDataPvc }}
+          - name: validator-app-volume
+            mountPath: /persistent-data
+        {{- end }}
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -405,17 +405,26 @@ spec:
             claimName: {{ .Values.pvc.volumeName }}
       {{- end }}
       {{- end }}
+      {{- if .Values.persistentDataPvc }}
+        - name: validator-app-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-validator-app-pvc
+      {{- end }}
       {{- if or (.Values.persistence.enablePgInitContainer) (.Values.extraInitContainers) (.Values.participantIdentitiesDumpImport) ($requiresMigrationPvc) }}
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: {{ .Release.Name }}-init
-          image: postgres:14
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if (($.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ $.Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
@@ -454,7 +463,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" $validatorAppLabel) | nindent 4 }}
-    migration: {{ .Values.migration.id | quote }}
 spec:
   selector:
     app: {{ $validatorAppLabel }}
@@ -483,6 +491,25 @@ spec:
       storage: 10G
   storageClassName: {{ .Values.pvc.volumeStorageClass }}
 {{- end }}
+{{- if .Values.persistentDataPvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-validator-app-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $validatorAppLabel) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistentDataPvc.size }}
+  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -494,5 +521,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

@@ -6,13 +6,18 @@ package com.digitalasset.canton.platform.apiserver
 import com.daml.ledger.api.v2.command_completion_service.CompletionStreamResponse
 import com.daml.ledger.api.v2.event_query_service.GetEventsByContractIdResponse
 import com.daml.ledger.api.v2.state_service.GetActiveContractsResponse
-import com.daml.ledger.api.v2.update_service.{GetUpdateResponse, GetUpdatesResponse}
+import com.daml.ledger.api.v2.update_service.{
+  GetUpdateResponse,
+  GetUpdatesPageResponse,
+  GetUpdatesResponse,
+}
 import com.daml.metrics.Timed
 import com.digitalasset.canton.config.CantonRequireTypes.String185
 import com.digitalasset.canton.data.Offset
 import com.digitalasset.canton.health.HealthStatus
-import com.digitalasset.canton.ledger.api.AcsContinuationToken.Checksum
-import com.digitalasset.canton.ledger.api.{AcsContinuationToken, EventFormat, UpdateFormat}
+import com.digitalasset.canton.ledger.api.messages.state.AcsRangeInfo
+import com.digitalasset.canton.ledger.api.messages.update.GetUpdatesPageRequest
+import com.digitalasset.canton.ledger.api.{EventFormat, UpdateFormat}
 import com.digitalasset.canton.ledger.participant.state.index.*
 import com.digitalasset.canton.logging.LoggingContextWithTrace
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
@@ -49,10 +54,11 @@ final class TimedIndexService(delegate: IndexService, metrics: LedgerApiServerMe
       endAt: Option[Offset],
       updateFormat: UpdateFormat,
       descendingOrder: Boolean,
+      skipPruningChecks: Boolean,
   )(implicit loggingContext: LoggingContextWithTrace): Source[GetUpdatesResponse, NotUsed] =
     Timed.source(
       metrics.services.index.transactions,
-      delegate.updates(begin, endAt, updateFormat, descendingOrder),
+      delegate.updates(begin, endAt, updateFormat, descendingOrder, skipPruningChecks),
     )
 
   def getUpdateBy(
@@ -67,14 +73,13 @@ final class TimedIndexService(delegate: IndexService, metrics: LedgerApiServerMe
   override def getActiveContracts(
       eventFormat: EventFormat,
       activeAt: Option[Offset],
-      continuationToken: Option[AcsContinuationToken],
-      checksum: Checksum,
+      rangeInfo: AcsRangeInfo,
   )(implicit
       loggingContext: LoggingContextWithTrace
   ): Source[GetActiveContractsResponse, NotUsed] =
     Timed.source(
       metrics.services.index.getActiveContracts,
-      delegate.getActiveContracts(eventFormat, activeAt, continuationToken, checksum),
+      delegate.getActiveContracts(eventFormat, activeAt, rangeInfo),
     )
 
   override def lookupActiveContract(
@@ -146,6 +151,8 @@ final class TimedIndexService(delegate: IndexService, metrics: LedgerApiServerMe
   ): Future[Option[Offset]] =
     delegate.indexDbPrunedUpto
 
+  override def isPruningInProgress: Boolean = delegate.isPruningInProgress
+
   override def currentHealth(): HealthStatus =
     delegate.currentHealth()
 
@@ -198,4 +205,11 @@ final class TimedIndexService(delegate: IndexService, metrics: LedgerApiServerMe
 //        endExclusiveSeqId,
 //      ),
 //    )
+
+  override def updatesPage(getUpdatesPageRequest: GetUpdatesPageRequest)(implicit
+      loggingContext: LoggingContextWithTrace
+  ): Future[GetUpdatesPageResponse] = Timed.future(
+    metrics.services.index.getUpdatesPage,
+    delegate.updatesPage(getUpdatesPageRequest),
+  )
 }

@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.rewards
 
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
@@ -18,7 +19,12 @@ import scala.concurrent.{ExecutionContext, Future}
 object AppActivityComputation {
   val MaxTrafficCostBytes: Long = 100L * 1024 * 1024 // 100 MB
 
-  /** Bump this when the functional behavior of the app activity computation changes. */
+  /** Bump this when the functional behavior of the app activity computation changes.
+    * WARNING: this MUST be bumped with utmost care to avoid the loss of
+    * actual activity records due to all SV nodes upgrading and resetting
+    * their stores at the same time, which in turn also breaks the BFT-read
+    * fallback as there is no node to fallback to.
+    */
   val ActivityIngestionCodeVersion: Int = 1
 }
 
@@ -29,6 +35,14 @@ class AppActivityComputation(
     extends NamedLogging {
 
   def waitUntilInitialized: Future[Unit] = rewardsReferenceStore.waitUntilInitialized
+
+  /** The highest OpenMiningRound round number archived at or before asOf.
+    * See [[org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore.lookupLatestArchivedOpenMiningRound]].
+    */
+  def lookupLatestArchivedOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    rewardsReferenceStore.lookupLatestArchivedOpenMiningRound(asOf)
 
   /** Compute app activity records for a batch of verdicts.
     *

@@ -14,10 +14,15 @@ import com.digitalasset.canton.util.ShowUtil.*
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  RetryProvider,
+  SpliceLedgerClient,
+}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, LimitHelpers}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.{ExternalPartyWalletStore, WalletStore}
 
 import scala.collection.concurrent.TrieMap
@@ -38,6 +43,8 @@ class ExternalPartyWalletManager(
     participantId: ParticipantId,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
+    packageVersionSupport: PackageVersionSupport,
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -166,6 +173,8 @@ class ExternalPartyWalletManager(
       participantId,
       params,
       scanConnection,
+      packageVersionSupport,
+      rewardSharingConfigByParty.getOrElse(externalParty.toProtoPrimitive, RewardSharingConfig()),
     )
     (externalPartyRetryProvider, walletService)
   }

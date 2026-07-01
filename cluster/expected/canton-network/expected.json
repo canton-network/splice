@@ -302,6 +302,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": false
           },
           "version": {
@@ -323,6 +324,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -343,6 +345,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -361,6 +364,7 @@
               "spliceRoot": "splice"
             },
             "sequencer": {
+              "dedicatedBftSequencerDb": true,
               "enableBftSequencer": false
             },
             "version": {
@@ -383,6 +387,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": false
           },
           "version": {
@@ -403,6 +408,7 @@
             "spliceRoot": "splice"
           },
           "sequencer": {
+            "dedicatedBftSequencerDb": true,
             "enableBftSequencer": true
           },
           "version": {
@@ -1607,8 +1613,8 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -1697,6 +1703,10 @@
         },
         "/api/scan/v0/internal/reward-accounting-process": {
           "name": "reward-accounting-process",
+          "type": "unlimited"
+        },
+        "/api/scan/v0/lsu": {
+          "name": "lsu",
           "type": "unlimited"
         },
         "/api/scan/v0/migrations": {
@@ -1838,8 +1848,8 @@
           "name": "activeSynchronizerSerial",
           "type": "unlimited"
         },
-        "/api/scan/v0/activities": {
-          "name": "activities",
+        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
+          "name": "sv-previous-sv-reward-weight",
           "type": "unlimited"
         },
         "/api/scan/v0/admin/sv/voterequests": {
@@ -1928,6 +1938,10 @@
         },
         "/api/scan/v0/internal/reward-accounting-process": {
           "name": "reward-accounting-process",
+          "type": "unlimited"
+        },
+        "/api/scan/v0/lsu": {
+          "name": "lsu",
           "type": "unlimited"
         },
         "/api/scan/v0/migrations": {
@@ -2810,9 +2824,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_1",
@@ -2850,7 +2861,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
@@ -3025,9 +3036,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
           "onboardingFoundingSvRewardWeightBps": 100000,
@@ -3239,9 +3247,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-2",
           "participantAddress": "participant",
@@ -3932,9 +3937,6 @@
         "metrics": {
           "enable": true
         },
-        "migration": {
-          "id": 2
-        },
         "participantAddress": "participant",
         "persistence": {
           "databaseName": "scan_sv_da_1",
@@ -3962,6 +3964,7 @@
           "networkFaviconUrl": "https://www.hyperledger.org/hubfs/hyperledgerfavicon.png",
           "networkName": "Splice"
         },
+        "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
             "mediator": "global-domain-9-mediator",
@@ -3972,7 +3975,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
@@ -4125,9 +4128,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "onboardingName": "Digital-Asset-1",
@@ -4318,9 +4318,6 @@
           "maxVettingDelay": "1m",
           "metrics": {
             "enable": true
-          },
-          "migration": {
-            "id": 2
           },
           "nodeIdentifier": "Digital-Asset-1",
           "participantAddress": "participant",

@@ -30,7 +30,12 @@ import org.lfdecentralizedtrust.splice.store.{
   ResultsPage,
   TxLogStore,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, QualifiedName, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  ContractWithState,
+  QualifiedName,
+  TemplateJsonDecoder,
+}
 import org.lfdecentralizedtrust.splice.wallet.store
 import org.lfdecentralizedtrust.splice.wallet.store.{
   BuyTrafficRequestTxLogEntry,
@@ -60,7 +65,10 @@ import scala.jdk.OptionConverters.*
 class DbUserWalletTxLogStoreConfig(loggerFactory: NamedLoggerFactory, key: UserWalletStore.Key)
     extends TxLogStore.Config[TxLogEntry] {
   override val parser: org.lfdecentralizedtrust.splice.wallet.store.UserWalletTxLogParser =
-    new UserWalletTxLogParser(loggerFactory, key.endUserParty)
+    new UserWalletTxLogParser(
+      loggerFactory,
+      endUserParty = key.endUserParty,
+    )
   override def entryToRow: org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry => Option[
     org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.UserWalletTxLogStoreRowData
   ] =
@@ -202,6 +210,17 @@ class DbUserWalletStore(
       limit,
       ccValue = sql"rti.issuance * acs.reward_coupon_weight",
     )
+
+  override def listRewardCouponsV2(
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
+  ]] =
+    waitUntilAcsIngested {
+      queryRewardCouponsV2(includeUnassigned, includeAssigned, limit)
+    }
 
   override def listTransactions(
       beginAfterEventIdO: Option[String],

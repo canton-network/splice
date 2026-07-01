@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "party-allocator"
 
 pvc:
   name: party-allocator-keys
@@ -23,4 +24,14 @@ metrics:
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
+
+#auth:
+#  secretOverrides:
+#    ledgerApiUser: ""
+#    audience: ""
+#    token: ""
+#    url: ""
+#    clientId: ""
+#    clientSecret: ""
+#    scope: ""
 

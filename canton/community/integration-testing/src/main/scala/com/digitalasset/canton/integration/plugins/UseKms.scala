@@ -18,7 +18,6 @@ import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.DefaultProcessingTimeouts.shutdownProcessing
 import com.digitalasset.canton.crypto.kms.{Kms, KmsError, KmsFactory, KmsKeyId}
 import com.digitalasset.canton.crypto.store.{CryptoPrivateStore, EncryptedCryptoPrivateStore}
-import com.digitalasset.canton.environment.CantonEnvironment
 import com.digitalasset.canton.integration.{
   ConfigTransforms,
   EnvironmentSetupPlugin,
@@ -34,10 +33,7 @@ import monocle.macros.syntax.lens.*
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class UseKms
-    extends EnvironmentSetupPlugin[CantonConfig, CantonEnvironment]
-    with AutoCloseable
-    with NoTracing {
+abstract class UseKms extends EnvironmentSetupPlugin with AutoCloseable with NoTracing {
 
   protected def keyId: Option[KmsKeyId]
   protected def nodes: Set[String]
@@ -164,8 +160,7 @@ abstract class UseKms
   }
 
   override def beforeEnvironmentDestroyed(
-      config: CantonConfig,
-      environment: TestConsoleEnvironment[CantonConfig, CantonEnvironment],
+      environment: TestConsoleEnvironment
   ): Unit = {
     implicit val ec: ExecutionContext = kmsKeyDeletionExecutionContext
 
@@ -176,6 +171,10 @@ abstract class UseKms
         shutdownProcessing.await_("delete all canton-created wrapper keys") {
           val deleteResult = withKmsClient { kmsClient =>
             environment.nodes.local.parTraverse_ { node =>
+              // we cannot delete keys if the node is not running
+              if (!node.is_running)
+                node.start()
+
               deleteKey(node.crypto.cryptoPrivateStore, kmsClient)
                 .onShutdown(throw new RuntimeException("Aborted due to shutdown."))
             }

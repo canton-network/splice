@@ -47,7 +47,7 @@ class SplitwellIntegrationTest
         createSplitwellInstalls(aliceSplitwellClient, aliceUserParty)
 
         def createGroup() = {
-          val groupRequest = eventually() {
+          val groupRequest = eventually(retryOnTestFailuresOnly = false) {
             aliceSplitwellClient.requestGroup("group1")
           }
 

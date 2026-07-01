@@ -158,10 +158,11 @@ class SV1Initializer(
           )
           Future.unit
         }
-      (namespace, synchronizerId) <-
+      (namespace, psid) <-
         if (config.shouldSkipSynchronizerInitialization) {
-          participantAdminConnection.getSynchronizerId(config.domains.global.alias).map { s =>
-            (s.namespace, s)
+          participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias).map {
+            s =>
+              (s.namespace, s)
           }
         } else {
           bootstrapDomain(synchronizerNodeService.nodes.current)
@@ -179,7 +180,7 @@ class SV1Initializer(
             sequencerConnectionPoolDelays =
               config.participantClient.sequencerConnectionPoolDelays.toInternal,
           ),
-          synchronizerId = None,
+          synchronizerId = Some(psid),
           timeTracker = SynchronizerTimeTrackerConfig(
             minObservationDuration = config.timeTrackerMinObservationDuration,
             observationLatency = config.timeTrackerObservationLatency,
@@ -199,11 +200,11 @@ class SV1Initializer(
         clock,
         loggerFactory,
         retryProvider,
-        synchronizerId,
+        psid.logical,
       )
       _ = logger.info("Synchronizer rotated OTK keys that were not signed")
       (dsoParty, svParty, _) <- (
-        setupDsoParty(synchronizerId, initConnection, namespace),
+        setupDsoParty(psid.logical, initConnection, namespace),
         SetupUtil.setupSvParty(
           initConnection,
           config,
@@ -229,7 +230,7 @@ class SV1Initializer(
             )
             vetting
               .vetCurrentPackages(
-                synchronizerId,
+                psid.logical,
                 sv1Config.initialPackageConfig.toPackageConfig,
                 config.additionalPackagesToUnvet,
               )
@@ -246,17 +247,24 @@ class SV1Initializer(
         ),
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
+      domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
       svStore = newSvStore(
         storeKey,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore = newDsoStore(
         svStore.key,
-        config.domainMigrationId,
+        domainMigrationId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
+      )
+      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
+      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
+        synchronizerId,
+        initConnection,
+        loggerFactory,
       )
       svAutomation = newSvSvAutomationService(
         svStore,
@@ -264,6 +272,7 @@ class SV1Initializer(
         ledgerClient,
         participantAdminConnection,
         synchronizerNodeService,
+        packageVersionSupport,
       )
       connection = svAutomation.connection(SpliceLedgerConnectionPriority.Low)
       (_, decentralizedSynchronizer) <- (
@@ -276,11 +285,6 @@ class SV1Initializer(
         sv1Config.name,
       )
       dsoPartyHosting = newDsoPartyHosting(storeKey.dsoParty)
-      packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
-        decentralizedSynchronizer,
-        connection,
-        loggerFactory,
-      )
       initialRound <- establishInitialRound(
         connection,
         upgradesConfig,
@@ -323,7 +327,7 @@ class SV1Initializer(
           clock,
           retryProvider,
           loggerFactory,
-          config.domainMigrationId,
+          domainMigrationId,
           config.scan,
         ),
       )
@@ -333,6 +337,7 @@ class SV1Initializer(
         dsoAutomation,
         decentralizedSynchronizer,
         packageVersionSupport,
+        domainMigrationId,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -433,7 +438,7 @@ class SV1Initializer(
 
   private def bootstrapDomain(synchronizerNode: LocalSynchronizerNode)(implicit
       tc: TraceContext
-  ): Future[(Namespace, SynchronizerId)] = {
+  ): Future[(Namespace, PhysicalSynchronizerId)] = {
     withSpan("bootstrapDomain") { implicit tc => _ =>
       logger.info("Bootstrapping the domain as sv1")
 
@@ -575,7 +580,7 @@ class SV1Initializer(
             ),
             logger,
           )
-        } yield (namespace, synchronizerId)
+        } yield (namespace, physicalSynchronizerId)
       }
     }
   }
@@ -587,6 +592,7 @@ class SV1Initializer(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
       synchronizerId: SynchronizerId,
       packageVersionSupport: PackageVersionSupport,
+      domainMigrationId: Long,
   ) {
 
     private val dsoStore = dsoStoreWithIngestion.store
@@ -598,7 +604,7 @@ class SV1Initializer(
       clock = clock,
       retryProvider = retryProvider,
       versionSupport = packageVersionSupport,
-      migrationId = config.domainMigrationId,
+      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -682,7 +688,7 @@ class SV1Initializer(
                     config.scan,
                     synchronizerId,
                     clock,
-                    config.domainMigrationId,
+                    domainMigrationId,
                   )
                   _ = logger
                     .info(

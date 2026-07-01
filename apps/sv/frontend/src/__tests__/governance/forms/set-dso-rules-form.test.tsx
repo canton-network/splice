@@ -47,11 +47,11 @@ describe('Set DSO Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-dso-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-dso-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe(
+    expect(actionInput.textContent).toBe(
       'Set Decentralized Synchronizer Operations (DSO) Rules Configuration'
     );
 
@@ -387,7 +387,7 @@ describe('Set DSO Config Rules Form', () => {
 
     expect(jsonDiffs).toBeInTheDocument();
     await user.click(jsonDiffs);
-    expect(screen.queryByTestId('config-diffs-display')).toBeInTheDocument();
+    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 
   test('should have decentralized synchronizer fields disabled', async () => {

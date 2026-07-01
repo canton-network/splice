@@ -30,7 +30,7 @@ import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.lsu.RollForwardLsuTrigger
 import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -62,7 +62,7 @@ class ValidatorAutomationService(
     ledgerClient: SpliceLedgerClient,
     participantAdminConnection: ParticipantAdminConnection,
     participantIdentitiesStore: NodeIdentitiesStore,
-    domainConnector: DomainConnector,
+    synchronizerConnector: SynchronizerConnector,
     domainMigrationId: Long,
     retryProvider: RetryProvider,
     svValidator: Boolean,
@@ -77,6 +77,7 @@ class ValidatorAutomationService(
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
     globalSynchronizerAlias: SynchronizerAlias,
     override protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -89,6 +90,7 @@ class ValidatorAutomationService(
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =
@@ -221,7 +223,7 @@ class ValidatorAutomationService(
         triggerContext,
         participantAdminConnection,
         scanConnection,
-        domainConnector,
+        synchronizerConnector,
         sequencerSubmissionAmplificationPatience,
         sequencerConnectionPoolDelays,
         initialSynchronizerTime,

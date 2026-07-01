@@ -4,7 +4,6 @@
 package com.digitalasset.canton
 
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
-import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.console.{HeadlessConsole, InteractiveConsole}
 import com.digitalasset.canton.crypto.{Hash, HashAlgorithm, HashPurpose}
 import com.digitalasset.canton.environment.Environment
@@ -18,39 +17,39 @@ import scala.util.control.NonFatal
 /** Result for exposing the process exit code. All logging is expected to take place inside the
   * runner.
   */
-trait Runner[C <: SharedCantonConfig[C]] extends NamedLogging {
+trait Runner extends NamedLogging {
 
-  def run(environment: Environment[C]): Unit
+  def run(environment: Environment[?]): Unit
+
+  // TODO(#24954): Convert to using declarative api, when it becomes available
+  def uploadDar(environment: Environment[?])(darPath: String): Unit = {
+    val consoleEnvironment = environment.createConsole()
+    consoleEnvironment.participants.local
+      .flatMap(_.underlying)
+      .foreach(p =>
+        consoleEnvironment.run {
+          consoleEnvironment.grpcLedgerCommandRunner
+            .runCommand(
+              "upload-dar",
+              LedgerApiCommands.PackageManagementService.UploadDarFile(darPath, None),
+              p.config.clientLedgerApi,
+              Some(p.adminTokenDispenser.getCurrentToken.secret),
+            )
+        }
+      )
+  }
 }
 
-class ServerRunner[C <: SharedCantonConfig[C]](
+class ServerRunner(
     bootstrapScript: Option[CantonScript] = None,
     override val loggerFactory: NamedLoggerFactory,
     exitAfterBootstrap: Boolean = false,
     dars: Seq[String] = Seq.empty,
-) extends Runner[C]
+) extends Runner
     with NoTracing {
 
-  def run(environment: Environment[C]): Unit =
+  def run(environment: Environment[?]): Unit =
     try {
-      // TODO(#24954): Convert to using declarative api, when it becomes available
-      def uploadDar(darPath: String): Unit = {
-        val consoleEnvironment = environment.createConsole()
-        consoleEnvironment.participants.local
-          .flatMap(_.underlying)
-          .foreach(p =>
-            consoleEnvironment.run {
-              consoleEnvironment.grpcLedgerCommandRunner
-                .runCommand(
-                  "upload-dar",
-                  LedgerApiCommands.PackageManagementService.UploadDarFile(darPath, None),
-                  p.config.clientLedgerApi,
-                  Some(p.adminTokenDispenser.getCurrentToken.secret),
-                )
-            }
-          )
-      }
-
       def start(): Unit =
         environment
           .startAll() match {
@@ -70,7 +69,7 @@ class ServerRunner[C <: SharedCantonConfig[C]](
         }
 
       bootstrapScript.fold(start())(startWithBootstrap)
-      dars.foreach(uploadDar)
+      dars.foreach(uploadDar(environment))
       if (exitAfterBootstrap) sys.exit(0)
     } catch {
       case ex: Throwable =>
@@ -80,17 +79,26 @@ class ServerRunner[C <: SharedCantonConfig[C]](
     }
 }
 
-class ConsoleInteractiveRunner[C <: SharedCantonConfig[C]](
+class ConsoleInteractiveRunner(
     noTty: Boolean = false,
     bootstrapScript: Option[CantonScript],
     postScriptCallback: => Unit,
     override val loggerFactory: NamedLoggerFactory,
-) extends Runner[C] {
-  def run(environment: Environment[C]): Unit = {
+    dars: Seq[String] = Seq.empty,
+) extends Runner {
+  def run(environment: Environment[?]): Unit = {
     val success =
       try {
         val consoleEnvironment = environment.createConsole()
-        InteractiveConsole(consoleEnvironment, noTty, bootstrapScript, logger, postScriptCallback)
+        InteractiveConsole(
+          consoleEnvironment,
+          noTty,
+          bootstrapScript,
+          logger, {
+            dars.foreach(uploadDar(environment))
+            postScriptCallback
+          },
+        )
       } catch {
         case NonFatal(e) =>
           logger.error(e.getMessage)(TraceContext.empty)
@@ -100,14 +108,14 @@ class ConsoleInteractiveRunner[C <: SharedCantonConfig[C]](
   }
 }
 
-class ConsoleScriptRunner[C <: SharedCantonConfig[C]](
+class ConsoleScriptRunner(
     scriptPath: CantonScript,
     override val loggerFactory: NamedLoggerFactory,
-) extends Runner[C] {
+) extends Runner {
   private val Ok = 0
   private val Error = 1
 
-  override def run(environment: Environment[C]): Unit = {
+  override def run(environment: Environment[?]): Unit = {
     val exitCode =
       ConsoleScriptRunner.run(environment, scriptPath, logger) match {
         case Right(_unit) =>
@@ -174,21 +182,21 @@ final case class CantonScriptFromFile(scriptPath: File) extends CantonScript {
 }
 
 object ConsoleScriptRunner extends NoTracing {
-  def apply[C <: SharedCantonConfig[C]](
+  def apply(
       scriptPath: File,
       loggerFactory: NamedLoggerFactory,
-  ): ConsoleScriptRunner[C] =
+  ): ConsoleScriptRunner =
     new ConsoleScriptRunner(CantonScriptFromFile(scriptPath), loggerFactory)
 
-  def run[C <: SharedCantonConfig[C]](
-      environment: Environment[C],
+  def run(
+      environment: Environment[?],
       scriptPath: File,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] =
     run(environment, CantonScriptFromFile(scriptPath), logger)
 
-  def run[C <: SharedCantonConfig[C]](
-      environment: Environment[C],
+  def run(
+      environment: Environment[?],
       cantonScript: CantonScript,
       logger: TracedLogger,
   ): Either[HeadlessConsole.HeadlessConsoleError, Unit] = {

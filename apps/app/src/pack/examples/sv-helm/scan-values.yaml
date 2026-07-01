@@ -1,10 +1,13 @@
-# Replace MIGRATION_ID with the current migration ID of the global synchronizer.
-migration:
-  id: "MIGRATION_ID"
+# A joining SV's scan bootstraps its migration id from the scan of the SV sponsoring the onboarding.
+# Set this to the URL of that sponsor scan (matching the SV's sponsorApiUrl in sv-values.yaml).
+sponsorScanUrl: "https://scan.sv-2.TARGET_HOSTNAME"
 
 participantAddress: "participant"
 synchronizers:
   current:
+    # Enable when using CantonBFT
+    # cantonBft:
+    #   p2pUrl: https://sequencer-p2p-SERIAL_ID.sv.YOUR_HOSTNAME
     sequencer: "global-domain-SERIAL_ID-sequencer"
     mediator: "global-domain-SERIAL_ID-mediator"
 

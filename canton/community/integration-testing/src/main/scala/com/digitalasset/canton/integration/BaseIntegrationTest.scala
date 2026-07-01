@@ -8,10 +8,10 @@ import com.digitalasset.canton.console.{BufferedProcessLogger, CommandFailure, P
 import com.digitalasset.canton.logging.LogEntry
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.{
-  config,
   BaseTest,
   RepeatableTestSuiteTest,
   TestPredicateFiltersFixtureAnyWordSpec,
+  config,
 }
 import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.environment.Environment
@@ -26,9 +26,9 @@ import scala.jdk.CollectionConverters.*
 /** A highly opinionated base trait for writing integration tests interacting with a canton
   * environment using console commands. Tests must mixin a further [[EnvironmentSetup]]
   * implementation to define when the canton environment is setup around the individual tests:
-  *   - [[IsolatedEnvironments]] will construct a fresh environment for each test.
-  *   - [[SharedEnvironment]] will construct only a single environment and reuse this for each test
-  *     executed in the test class.
+  *   - [[BaseIsolatedEnvironments]] will construct a fresh environment for each test.
+  *   - [[BaseSharedEnvironment]] will construct only a single environment and reuse this for each
+  *     test executed in the test class.
   *
   * Test classes must override [[HasEnvironmentDefinition.environmentDefinition]] to describe how
   * they would like their environment configured.
@@ -63,7 +63,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     with TestPredicateFiltersFixtureAnyWordSpec {
   this: EnvironmentSetup[C, E] =>
 
-  type FixtureParam = TestConsoleEnvironment[C, E]
+  type FixtureParam = BaseTestConsoleEnvironment[C, E]
 
   override protected def withFixture(test: OneArgTest): Outcome = {
     super[RepeatableTestSuiteTest].withFixture(new TestWithSetup(test))
@@ -92,7 +92,11 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
       within,
       assertions.map { assertion => (entry: LogEntry) =>
         assertion(entry)
-        entry.commandFailureMessage
+        // `commandFailureMessage` forces the loggerName to be one of Canton's,
+        // but we use our custom one from splice... so we have to hack around that
+        entry
+          .copy(loggerName = "com.digitalasset.canton.integration.EnvironmentDefinition")
+          .commandFailureMessage
         succeed
       }*
     )
@@ -187,6 +191,9 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
 
     def asScalaProtoCreated: Option[com.daml.ledger.api.v2.event.CreatedEvent] =
       com.daml.ledger.api.v2.event.Event.fromJavaProto(events.toProtoEvent).event.created
+
+    def asScalaProtoExercised: Option[com.daml.ledger.api.v2.event.ExercisedEvent] =
+      com.daml.ledger.api.v2.event.Event.fromJavaProto(events.toProtoEvent).event.exercised
   }
 
   implicit class EnrichedEvents(events: java.util.List[Event]) {

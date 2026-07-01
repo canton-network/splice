@@ -34,6 +34,10 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 abstract class GrpcClientConfig extends NodeConfig {}
 abstract class HttpClientConfig extends NetworkAppNodeConfig {}
 
+final case class SplicePostgresConfig(
+    clientConnectionCheckInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration ofSeconds 5
+)
+
 final case class CircuitBreakerConfig(
     maxFailures: Int = 20,
     callTimeout: NonNegativeFiniteDuration =
@@ -141,6 +145,10 @@ case class SharedSpliceAppParameters(
   override def startupMemoryCheckConfig: StartupMemoryCheckConfig = StartupMemoryCheckConfig(Warn)
 
   def dispatchQueueBackpressureLimit: NonNegativeInt = ???
+
+  override def topologyConfig: TopologyConfig = ???
+
+  override def sanitizePublicErrorMessages: Boolean = true
 
   override def enableTestingFeatures = false
 }

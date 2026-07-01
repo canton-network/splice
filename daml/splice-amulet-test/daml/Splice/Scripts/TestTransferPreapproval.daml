@@ -4,10 +4,15 @@
 module Splice.Scripts.TestTransferPreapproval where
 
 import Daml.Script
+import DA.Action
 import DA.Assert
-import DA.Optional
+import DA.Foldable (forA_)
+import DA.Optional (fromSome)
 import DA.Time
 import qualified DA.TextMap as TextMap
+
+import Splice.Api.Token.MetadataV1
+
 import Splice.Scripts.Util
 import Splice.Amulet
 import Splice.AmuletRules
@@ -16,6 +21,7 @@ import Splice.ExternalPartyAmuletRules
 import Splice.Fees
 import Splice.Types
 import Splice.Testing.Registries.AmuletRegistry (convertAllFeaturedAppActivityMarkers)
+import Splice.Testing.TokenStandard.WalletClientV2 as WalletClientV2
 import Splice.Testing.Utils
 
 
@@ -51,6 +57,28 @@ testTransferPreapprovalSend = script do
 
   TextMap.lookup reasonMetaKey (fromSome result.meta).values === Some "test-description"
 
+  -- Test the support for generic metadata support in TransferPreapproval_SendV2
+  externalContext <- getExternalPartyTransferContext app
+  amuletCid <- tap app bob 50.0
+  (result, changes) <-
+    WalletClientV2.extractAndCheckTxHistory [app.dso] $
+      submitResultAndTree (actAs bob.primaryParty <> readAs app.dso) $ exerciseCmd transferPreapprovalCid TransferPreapproval_SendV2
+        with
+          sender = bob.primaryParty
+          context = externalContext
+          inputs = [InputAmulet amuletCid]
+          amount = 15.0
+          description = Some "test-description V2 choice"
+          meta = Some (Metadata with values = TextMap.fromList [("acme.com/correlation-id", "<uuid>")])
+
+  unless (length changes == 2) $
+    error ("Expected exactly 2 holdings changes emitted, got: " <> show changes)
+  let expectedMeta = Metadata $ TextMap.fromList
+        [("acme.com/correlation-id", "<uuid>"), ("splice.lfdecentralizedtrust.org/reason","test-description V2 choice")]
+  forA_ changes $ \change -> map (.meta) change.transferLegSides === [expectedMeta]
+
+  TextMap.lookup reasonMetaKey result.meta.values === Some "test-description V2 choice"
+
   -- Move forward in time to expire pre-approval
   passTime (days 1)
 
@@ -85,28 +113,43 @@ testTransferPreapprovalRenewal = script do
       inputs = [InputAmulet providerAmuletCid]
       newExpiresAt = now
 
-  -- Provider can renew the pre-approval (before expiry)
+  -- Provider can renew the pre-approval without inputs for a short duration so no inputs required (before expiry)
   let newExpiresAt = now `addRelTime` (days 2)
   result <- submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
     exerciseCmd transferPreapprovalCid TransferPreapproval_Renew with
       context = providerTransferContext
-      inputs = [InputAmulet providerAmuletCid]
+      inputs = []
       newExpiresAt
   Some renewedPreapproval <- queryContractId app.dso result.transferPreapprovalCid
   renewedPreapproval === transferPreapproval with
-    lastRenewedAt = now
+    lastRenewedAt = expiresAt
     expiresAt = newExpiresAt
 
+  -- Provider can renew the pre-approval for a long duration with inputs (before expiry)
+  now <- getTime
+  let newExpiresAt2 = now `addRelTime` (days 1000)
+  result <- submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
+    exerciseCmd result.transferPreapprovalCid TransferPreapproval_Renew with
+      context = providerTransferContext
+      inputs = [InputAmulet providerAmuletCid]
+      newExpiresAt = newExpiresAt2
+  Some renewedPreapproval <- queryContractId app.dso result.transferPreapprovalCid
+  renewedPreapproval === transferPreapproval with
+    lastRenewedAt = newExpiresAt
+    expiresAt = newExpiresAt2
+
   -- Move forward in time to expire pre-approval
-  passTime (days 2)
+  passTime (days 1002)
 
   -- Renewal fails if the pre-approval has expired
+  now <- getTime
   providerAmuletCid2 <- tap app aliceValidator 10.0
+  let newExpiresAt3 = now `addRelTime` (days 1000)
   submitMustFail (actAs aliceValidator.primaryParty <> readAs app.dso) $
-    exerciseCmd transferPreapprovalCid TransferPreapproval_Renew with
+    exerciseCmd result.transferPreapprovalCid TransferPreapproval_Renew with
       context = providerTransferContext
       inputs = [InputAmulet providerAmuletCid2]
-      newExpiresAt = now
+      newExpiresAt = newExpiresAt3
 
 
 testTransferPreapprovalCancelExpire : Script ()
@@ -271,8 +314,9 @@ testTransferCommand = script do
   -- fails with out of funds
   let expect = expectFailureStatus \fs ->
         fs.errorId == "splice.lfdecentralizedtrust.org/insufficient-funds" && fs.meta == TextMap.fromList [("requiredAmount", "33.0")]
-  submitMultiMustFail'' expect [aliceValidator.primaryParty] [alice.primaryParty, app.dso]  $ exerciseCmd transferCmd TransferCommand_Send
-    with
+  submitMustFail'' expect
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty <> readAs app.dso) $
+    exerciseCmd transferCmd TransferCommand_Send with
       context = context
       inputs = map (InputAmulet . fst) allAmulets
       transferPreapprovalCidO = Some transferPreapprovalCid
@@ -333,7 +377,9 @@ testTransferCommand = script do
 
   amulets <- fmap fst <$> query @Amulet alice.primaryParty
 
-  submitMultiMustFail'' (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds") [aliceValidator.primaryParty] [alice.primaryParty, app.dso] $
+  submitMustFail''
+    (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-funds")
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty <> readAs app.dso) $
     exerciseCmd transferCmd TransferCommand_Send
       with
         context = context

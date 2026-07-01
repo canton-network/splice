@@ -53,6 +53,8 @@ trait ScanStore
     with VotesStore
     with ExternalPartyConfigStateStore {
 
+  override def dsoPartyId = key.dsoParty
+
   def key: ScanStore.Key
 
   protected[store] def domainMigrationId: Long
@@ -173,6 +175,10 @@ trait ScanStore
   def listFeaturedAppRightsByProvider(providerPartyId: PartyId)(implicit
       tc: TraceContext
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
+
+  def lookupLatestSvRewardWeightChange(svParty: PartyId, effectiveBefore: Option[String])(implicit
+      tc: TraceContext
+  ): Future[Option[Long]]
 
   def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit = defaultLimit)(implicit
       tc: TraceContext
@@ -458,6 +464,21 @@ object ScanStore {
               Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
           )
         },
+        mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(
+          co => co.payload.allocation.admin == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport
+                .supportsAmuletAllocationV2(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = contract.payload.allocation.settlementDeadline
+              .map(Timestamp.assertFromInstant(_))
+              .toScala,
+          )
+        },
         mkFilter(splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION)(co =>
           co.payload.transfer.instrumentId.admin == dso
         ) { contract =>
@@ -467,8 +488,13 @@ object ScanStore {
               Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
           )
         },
-        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
-          co.payload.dso == dso
+        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport
+                .supports24hSubmissionDelay(Seq(key.dsoParty), Seq(key.dsoParty), now)(tc)
+          },
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract

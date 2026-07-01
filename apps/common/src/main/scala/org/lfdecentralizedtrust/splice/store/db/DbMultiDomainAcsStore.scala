@@ -211,6 +211,31 @@ final class DbMultiDomainAcsStore[TXE](
       .value
   }
 
+  override def lookupContractsById[C, TCid <: ContractId[?], T](
+      companion: C
+  )(ids: Seq[ContractId[?]])(implicit
+      companionClass: ContractCompanion[C, TCid, T],
+      traceContext: TraceContext,
+  ): Future[Seq[ContractWithState[TCid, T]]] = {
+    if (ids.isEmpty) Future.successful(Seq.empty)
+    else {
+      waitUntilAcsIngested {
+        storage
+          .query( // index: acs_store_template_sid_mid_cid
+            selectFromAcsTableWithState(
+              acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              companion,
+              additionalWhere = (sql"and " ++ inClause("acs.contract_id", ids)).toActionBuilder,
+            ),
+            "lookupContractsById",
+          )
+          .map(result => result.map(contractWithStateFromRow(companion)(_)))
+      }
+    }
+  }
+
   /** Returns any contract of the same template as the passed companion.
     */
   override def findAnyContractWithOffset[C, TCid <: ContractId[?], T](companion: C)(implicit
@@ -1145,27 +1170,36 @@ final class DbMultiDomainAcsStore[TXE](
             Sink.foldAsync[Int, Seq[BaseLedgerConnection.ActiveContractsItem]](0) {
               case (acsSizeSoFar, batch) =>
                 val summaryState = MutableIngestionSummary.empty
-                ingestAcsBatch(
-                  offset,
-                  batch.collect { case ActiveContractsItem.ActiveContract(contract) => contract },
-                  batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
-                    unassign
-                  },
-                  batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
-                  summaryState,
-                ).map { _ =>
-                  val newAcsSize = summaryState.acsSizeDiff + acsSizeSoFar
-                  val summary = summaryState
-                    .toIngestionSummary(
-                      synchronizerIdToRecordTime = Map.empty,
-                      offset = offset,
-                      newAcsSize = newAcsSize,
-                      metrics = metrics,
+                logger.debug(
+                  s"Ingesting ACS batch with size: ${batch.size}, total ingested size so far: $acsSizeSoFar"
+                )
+                metrics.ingestionTimePerACSBatch
+                  .timeFuture {
+                    ingestAcsBatch(
+                      offset,
+                      batch.collect { case ActiveContractsItem.ActiveContract(contract) =>
+                        contract
+                      },
+                      batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
+                        unassign
+                      },
+                      batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
+                      summaryState,
                     )
-                  handleIngestionSummary(summary)
-                  logger.debug(show"Ingested ACS batch $summary")
-                  newAcsSize
-                }
+                  }
+                  .map { _ =>
+                    val newAcsSize = summaryState.acsSizeDiff + acsSizeSoFar
+                    val summary = summaryState
+                      .toIngestionSummary(
+                        synchronizerIdToRecordTime = Map.empty,
+                        offset = offset,
+                        newAcsSize = newAcsSize,
+                        metrics = metrics,
+                      )
+                    handleIngestionSummary(summary)
+                    logger.debug(show"Ingested ACS batch $summary")
+                    newAcsSize
+                  }
             }
           )
           // A store is considered initialized if the last ingested offset is set
@@ -1328,7 +1362,7 @@ final class DbMultiDomainAcsStore[TXE](
                   acsInserts.toList ++ incompleteOutInserts ++ incompleteInInserts
                 ),
               "ingestAcsBatch",
-            )
+            )(implicitly, implicitly, _ => false)
         } yield ()
       }
     }
@@ -1363,7 +1397,11 @@ final class DbMultiDomainAcsStore[TXE](
           .sequentialTraverse(steps) {
             case batch: IngestTransactionTreesBatch =>
               storage
-                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
+                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")(
+                  implicitly,
+                  implicitly,
+                  _ => false,
+                )
                 .map { summaryState =>
                   val lastTree = batch.batch.last.tree
                   val synchronizerIdToRecordTime = batch.batch
@@ -1398,7 +1436,7 @@ final class DbMultiDomainAcsStore[TXE](
                 .queryAndUpdate(
                   ingestReassignment(reassignment.offset, reassignment.transfer),
                   "ingestReassignment",
-                )
+                )(implicitly, implicitly, _ => false)
                 .map { summaryState =>
                   val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
                   state

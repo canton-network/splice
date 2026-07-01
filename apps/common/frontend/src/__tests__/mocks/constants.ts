@@ -80,6 +80,7 @@ export const plannedVoteResult: DsoRules_CloseVoteRequestResult = {
                   maxNumInputs: '100',
                   maxNumOutputs: '100',
                   maxNumLockHolders: '50',
+                  tokenStandardMaxTTL: null,
                 },
                 issuanceCurve: {
                   initialValue: {
@@ -194,6 +195,7 @@ export const plannedVoteResult: DsoRules_CloseVoteRequestResult = {
                 optDevelopmentFundManager: null,
                 externalPartyConfigStateTickDuration: null,
                 rewardConfig: null,
+                transferPreapprovalBaseDuration: null,
               },
             },
           },

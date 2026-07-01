@@ -79,13 +79,13 @@ lazy val licenseFileMappings =
 inThisBuild(
   List(
     licenseFileMappings := {
-      (`community-app` / dumpLicenseReport).value
-      val thirdPartyReport = s"${(`community-app` / licenseReportTitle).value}.html"
+      // license report disabled temporarily to unblock bundle
+      // (`community-app` / dumpLicenseReport).value
       Seq(
         // primary license for canton
-        (file("LICENSE.txt"), "LICENSE.txt"),
-        // aggregated license details for our dependencies
-        ((`community-app` / target).value / "license-reports" / thirdPartyReport, thirdPartyReport),
+        (file("LICENSE.txt"), "LICENSE.txt")
+        // re-enable once license report is fixed
+        // ((`community-app` / target).value / "license-reports" / thirdPartyReport, thirdPartyReport),
       )
     },
     semanticdbEnabled := true,
@@ -190,15 +190,6 @@ lazy val testLibraries = Seq(
   `community-integration-testing`,
 )
 
-lazy val ledgerTestToolLibaries = Seq(
-  `ledger-common-dars-lf-v2-dev`,
-  `ledger-test-tool-suites-2-dev`,
-  `ledger-test-tool-2-dev`,
-  `ledger-common-dars-lf-v2-3`,
-  `ledger-test-tool-suites-2-3`,
-  `ledger-test-tool-2-3`,
-)
-
 lazy val transcodeLibraries = Seq(
   `transcode-schema`,
   `transcode-daml-lf`,
@@ -231,7 +222,6 @@ lazy val root = (project in file("."))
         Seq(CommunityProjects.`performance-driver`)
           ++ testLibraries
           ++ Seq(DamlProjects.`bindings-java`)
-          ++ ledgerTestToolLibaries
           ++ transcodeLibraries // Cannot run scaladoc 2.13 on transcode because written in Scala 3
       ).map(_.project): _*
     ),
@@ -439,9 +429,6 @@ lazy val `ledger-api-proto` = DamlProjects.`ledger-api-proto`
 lazy val `ledger-api-scala` = DamlProjects.`ledger-api-scala`
 lazy val `bindings-java` = DamlProjects.`bindings-java`
 lazy val `ledger-common-dars` = CommunityProjects.`ledger-common-dars`
-lazy val `ledger-common-dars-lf-v2-dev` = CommunityProjects.`ledger-common-dars-lf-v2-dev`
-lazy val `ledger-common-dars-lf-v2-3` = CommunityProjects.`ledger-common-dars-lf-v2-3`
-lazy val `ledger-common-dars-lf-v2-1` = CommunityProjects.`ledger-common-dars-lf-v2-1`
 lazy val `base-errors` = CommunityProjects.`base-errors`
 lazy val `daml-jwt` = DamlProjects.`daml-jwt`
 lazy val `daml-tls` = CommunityProjects.`daml-tls`
@@ -467,12 +454,7 @@ lazy val `ledger-api-tools` = CommunityProjects.`ledger-api-tools`
 lazy val `ledger-api-string-interning-benchmark` =
   CommunityProjects.`ledger-api-string-interning-benchmark`
 lazy val `ledger-api-bench-tool` = CommunityProjects.`ledger-api-bench-tool`
-lazy val `ledger-test-tool-suites-2-1` = CommunityProjects.`ledger-test-tool-suites-2-1`
-lazy val `ledger-test-tool-suites-2-3` = CommunityProjects.`ledger-test-tool-suites-2-3`
-lazy val `ledger-test-tool-suites-2-dev` = CommunityProjects.`ledger-test-tool-suites-2-dev`
-lazy val `ledger-test-tool-2-1` = CommunityProjects.`ledger-test-tool-2-1`
-lazy val `ledger-test-tool-2-3` = CommunityProjects.`ledger-test-tool-2-3`
-lazy val `ledger-test-tool-2-dev` = CommunityProjects.`ledger-test-tool-2-dev`
+lazy val `ledger-test-tool` = CommunityProjects.`ledger-test-tool`
 lazy val `conformance-testing` = CommunityProjects.`conformance-testing`
 lazy val `upgrading-integration-tests` =
   CommunityProjects.`upgrading-integration-tests`
@@ -489,7 +471,6 @@ lazy val `nonempty` = DamlProjects.`nonempty`
 lazy val `nonempty-cats` = DamlProjects.`nonempty-cats`
 lazy val `rs-grpc-bridge` = DamlProjects.`rs-grpc-bridge`
 lazy val `rs-grpc-pekko` = DamlProjects.`rs-grpc-pekko`
-lazy val `rs-grpc-pekko-test` = DamlProjects.`rs-grpc-pekko-test`
 lazy val `logging-entries` = DamlProjects.`logging-entries`
 lazy val `contextualized-logging` = DamlProjects.`contextualized-logging`
 lazy val `daml-resources` = DamlProjects.`daml-resources`

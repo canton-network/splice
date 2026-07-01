@@ -278,10 +278,10 @@ The ``beginExclusive`` field is the offset from which to start reading transacti
 To paginate, you can start with the ``participantPrunedUpToInclusive`` from ``GET ${PARTICIPANT_URL}/v2/state/latest-pruned-offsets``
 and continue by passing the offset of the last transaction from the previous response.
 
-Parsing the history
-^^^^^^^^^^^^^^^^^^^
+Parsing the history (V1)
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parser.ts>`_.
+Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv1.ts>`_.
 It extracts a user-readable wallet history by parsing transactions involving the ``Holding`` and ``TransferInstruction`` interfaces.
 
 The endpoint returns transaction trees as an array.
@@ -322,6 +322,91 @@ In each Token Standard exercise node, one can find:
     * event.choiceArgument.extraArgs.meta,
     * event.choiceArgument.meta,
     * event.exerciseResult.meta,
+
+Parsing the history (V2)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Example code: `the parser here <https://github.com/canton-network/splice/blob/main/token-standard/cli/src/txparse/parserv2.ts>`_.
+
+As of Token Standard V2, the new ``EventLog`` interface significantly simplifies the implementation of a tx parser.
+It has the choice ``EventLog_HoldingsChange`` whose arguments contain all input and output holdings,
+all transfers that happened, together with metadata about the change.
+For example, one exercise of this choice could look like:
+
+.. code-block:: json
+
+    {
+      "ExercisedEvent": {
+        "acsDelta": false,
+        "actingParties": [
+          "dso::normalized"
+        ],
+        "choice": "EventLog_HoldingsChange",
+        "choiceArgument": {
+          "account": {
+            "id": "",
+            "owner": "aliceValidator::normalized",
+            "provider": null
+          },
+          "admin": "dso::normalized",
+          "extraArgs": {
+            "context": {
+              "values": {
+              }
+            },
+            "meta": {
+              "values": {
+              }
+            }
+          },
+          "inputHoldingCids": [
+            "17"
+          ],
+          "observers": [
+            "aliceValidator::normalized"
+          ],
+          "outputHoldingCids": [
+            "19"
+          ],
+          "transferLegSides": [
+            {
+              "amount": "200.0000000000",
+              "instrumentId": "Amulet",
+              "meta": {
+                "values": {
+                  "splice.lfdecentralizedtrust.org/reason": "token-standard-transfer-description"
+                }
+              },
+              "otherside": {
+                "id": "",
+                "owner": "alice::normalized",
+                "provider": null
+              },
+              "side": "SenderSide",
+              "transferLegId": "leg0"
+            }
+          ]
+        },
+        "consuming": false,
+        "contractId": "16",
+        "exerciseResult": {
+        },
+        "implementedInterfaces": [
+        ],
+        "interfaceId": "#package-name:Splice.Api.Token.TransferEventsV2:EventLog",
+        "lastDescendantNodeId": 10,
+        "nodeId": 10,
+        "offset": 4,
+        "packageName": "splice-amulet",
+        "templateId": "#package-name:Splice.ExternalPartyConfigState:ExternalPartyConfigState",
+        "witnessParties": [
+          "alice::normalized"
+        ]
+      }
+    }
+
+A parser only needs to resolve the holdings in ``inputHoldingCids`` and ``outputHoldingCids``,
+everything else is present in the exercise's ``choiceArgument``.
 
 
 .. _token_standard_usage_executing_factory_choice:
@@ -427,14 +512,21 @@ API References
 
 Refer to `CIP-0056 <https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md#details>`_ for more context on the APIs.
 
+.. note::
+
+  TODO(#4582): adjust the text here and below to reflect that there is a V2 version of the token standard APIs.
+
+
 Token Metadata
 --------------
 
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-metadata-v1/index>
-    OpenAPI reference <./openapi/token_metadata>
+    Daml reference for V1<../api/splice-api-token-metadata-v1/index>
+    OpenAPI reference for V1 <./openapi/token_metadata>
+
+Note that there is no V2 of the Token Metadata API, as the V1 API is reused across both V1 and V2 of the token standard.
 
 Holding
 -------
@@ -444,7 +536,21 @@ This allows implementation of a `Portfolio View <https://github.com/global-synch
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-holding-v1/index>
+    Daml reference for V1 <../api/splice-api-token-holding-v1/index>
+    Daml reference for V2 <../api/splice-api-token-holding-v2/index>
+
+Transfer Events
+---------------
+
+These are used by wallets to parse transfers from the Ledger API's transaction history and display them in the wallet's transaction history UI.
+They were newly added as part of the V2 token standard.
+
+  .. toctree::
+    :maxdepth: 1
+
+    Daml reference for V2 <../api/splice-api-token-transfer-events-v2/index>
+
+.. TODO(#4581): add open api docs for V2
 
 Transfer Instruction
 --------------------
@@ -454,8 +560,11 @@ This allows implementation of `Direct Peer-to-Peer / Free of Payment (FOP) Trans
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-transfer-instruction-v1/index>
-    OpenAPI reference <./openapi/transfer_instruction>
+    Daml reference for V1 <../api/splice-api-token-transfer-instruction-v1/index>
+    Daml reference for V2 <../api/splice-api-token-transfer-instruction-v2/index>
+    OpenAPI reference for V1 <./openapi/transfer_instruction>
+
+.. TODO(#4581): add open api docs for V2
 
 Allocation
 ----------
@@ -466,8 +575,11 @@ jointly with the Allocation Instruction and Allocation Request APIs below.
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-allocation-v1/index>
-    OpenAPI reference <./openapi/allocation>
+    Daml reference for V1 <../api/splice-api-token-allocation-v1/index>
+    Daml reference for V2 <../api/splice-api-token-allocation-v2/index>
+    OpenAPI reference for V1 <./openapi/allocation>
+
+.. TODO(#4581): add open api docs for V2
 
 Allocation Instruction
 ----------------------
@@ -475,8 +587,11 @@ Allocation Instruction
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-allocation-instruction-v1/index>
-    OpenAPI reference <./openapi/allocation_instruction>
+    Daml reference for V1 <../api/splice-api-token-allocation-instruction-v1/index>
+    Daml reference for V2 <../api/splice-api-token-allocation-instruction-v2/index>
+    OpenAPI reference for V1 <./openapi/allocation_instruction>
+
+.. TODO(#4581): add open api docs for V2
 
 Allocation Request
 ------------------
@@ -484,4 +599,17 @@ Allocation Request
   .. toctree::
     :maxdepth: 1
 
-    Daml reference <../api/splice-api-token-allocation-request-v1/index>
+    Daml reference for V1 <../api/splice-api-token-allocation-request-v1/index>
+    Daml reference for V2 <../api/splice-api-token-allocation-request-v2/index>
+
+
+Implementation Utilities
+------------------------
+
+See the following package for converting between V1 and V2 API versions, and for
+default implementations of token standard choices.
+
+  .. toctree::
+    :maxdepth: 1
+
+    Daml reference for both V1 and V2 <../api/splice-token-standard-utils/index>
