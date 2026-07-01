@@ -49,3 +49,27 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+securityContexts:
+  pod:
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  nginx:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  updater:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+
