@@ -19,6 +19,7 @@ import {
   ExactNamespace,
   fixedTokens,
   HELM_CHART_TIMEOUT_SEC,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   HELM_REPO,
   loadJsonFromFile,
@@ -93,6 +94,7 @@ function installSpliceHelmChartByNamespaceName(
         },
         timeout,
         maxHistory: HELM_MAX_HISTORY_SIZE,
+        forceUpdate: HELM_FORCE_UPDATE,
       },
       opts
     );
@@ -178,6 +180,7 @@ export function installSpliceRunbookHelmChartByNamespaceName(
         },
         timeout,
         maxHistory: HELM_MAX_HISTORY_SIZE,
+        forceUpdate: HELM_FORCE_UPDATE,
       },
       opts
     );

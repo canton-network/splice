@@ -6,6 +6,7 @@ import {
   CLUSTER_NAME,
   exactNamespace,
   GCP_REGION,
+  HELM_FORCE_UPDATE,
   infraAffinityAndTolerations,
 } from '@canton-network/splice-pulumi-common';
 
@@ -153,6 +154,7 @@ export function installFluentBit(): void {
     name: 'fluent-bit',
     chart: 'fluent-bit',
     version: '0.51.0',
+    forceUpdate: HELM_FORCE_UPDATE,
     repositoryOpts: {
       repo: 'https://fluent.github.io/helm-charts',
     },

@@ -6,6 +6,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   appsAffinityAndTolerations,
   ChartValues,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
 } from '@canton-network/splice-pulumi-common';
@@ -176,6 +177,7 @@ new k8s.helm.v3.Release('container-agent', {
   chart: 'container-agent',
   version: '101.1.3',
   namespace: circleCiNamespace.metadata.name,
+  forceUpdate: HELM_FORCE_UPDATE,
   repositoryOpts: {
     repo: 'https://packagecloud.io/circleci/container-agent/helm',
   },

@@ -6,6 +6,7 @@ import {
   appsAffinityAndTolerations,
   DOCKER_REPO,
   ExactNamespace,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecretByNamespaceNameForServiceAccount,
   infraAffinityAndTolerations,
@@ -79,6 +80,7 @@ function installDockerRunnerScaleSet(
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       values: {
         githubConfigUrl: `https://github.com/${ghaConfig.githubOrg}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,
@@ -432,6 +434,7 @@ function installK8sRunnerScaleSet(
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
       namespace: runnersNamespace.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       values: {
         githubConfigUrl: `${ghaConfig.githubOrg.startsWith('https://github.com/') ? ghaConfig.githubOrg : `https://github.com/${ghaConfig.githubOrg}`}/${repo}`,
         githubConfigSecret: tokenSecret.metadata.name,

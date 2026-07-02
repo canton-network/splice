@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
 } from '@canton-network/splice-pulumi-common';
@@ -21,6 +22,7 @@ export function installController(repo: string, runnersNamespaceName: string): k
     chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller',
     version: ghaConfig.runnerScaleSetVersion,
     namespace: controllerNamespace.metadata.name,
+    forceUpdate: HELM_FORCE_UPDATE,
     values: {
       ...infraAffinityAndTolerations,
       maxHistory: HELM_MAX_HISTORY_SIZE,

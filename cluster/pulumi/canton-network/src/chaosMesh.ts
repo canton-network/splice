@@ -6,6 +6,7 @@ import {
   clusterYamlConfig,
   DecentralizedSynchronizerUpgradeConfig,
   GCP_PROJECT,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
 } from '@canton-network/splice-pulumi-common';
@@ -205,6 +206,7 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
       chart: 'chaos-mesh',
       version: '2.7.2',
       namespace: ns.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://charts.chaos-mesh.org',
       },

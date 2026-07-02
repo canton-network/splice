@@ -5,6 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   commandScriptPath,
   config,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecret,
   infraAffinityAndTolerations,
@@ -33,6 +34,7 @@ export const operator = new k8s.helm.v3.Release(
     chart: 'oci://ghcr.io/pulumi/helm-charts/pulumi-kubernetes-operator',
     version: operatorVersion,
     namespace: namespace.ns.metadata.name,
+    forceUpdate: HELM_FORCE_UPDATE,
     values: {
       resources: {
         limits: {

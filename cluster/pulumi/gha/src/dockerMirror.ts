@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
+  HELM_FORCE_UPDATE,
   infraAffinityAndTolerations,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
@@ -21,6 +22,7 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
       chart: 'docker-registry',
       version: '3.0.0',
       namespace: namespace.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://twuni.github.io/docker-registry.helm',
       },
