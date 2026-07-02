@@ -981,7 +981,11 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     val emptyMeta = new metadatav1.Metadata(java.util.Collections.emptyMap())
     val instrumentId = new holdingv1.InstrumentId(dsoParty.toProtoPrimitive, "Amulet")
 
-    def createAllocationSpecV1(legId: String) = {
+    val unhostedReceiver =
+      "nonexistent-receiver::1220b3eeb21b02e14945e419c5d9e986ce8102171c50e1444010ab054e11eba262c9"
+    val malformedReceiver = "borkedreceiver"
+
+    def createAllocationSpecV1(legId: String, receiver: String) = {
       new org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.AllocationSpecification(
         new org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.SettlementInfo(
           bobParty.toProtoPrimitive,
@@ -997,7 +1001,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         legId,
         new org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.TransferLeg(
           aliceParty.toProtoPrimitive,
-          bobParty.toProtoPrimitive,
+          receiver,
           new java.math.BigDecimal("10.0"),
           instrumentId,
           emptyMeta,
@@ -1006,10 +1010,11 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
     }
 
     actAndCheck(
-      "Alice creates two AmuletAllocationsV1, two AmuletAllocationsV2", {
+      "Alice creates three AmuletAllocationsV1, two AmuletAllocationsV2", {
         // V1
-        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-1"))
-        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-2"))
+        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-1", bobParty.toProtoPrimitive))
+        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-2", unhostedReceiver))
+        aliceWalletClient.allocateAmulet(createAllocationSpecV1("leg-3", malformedReceiver))
 
         aliceWalletClient.allocateAmulet(
           mkSettlementV2(aliceValidatorBackend.getValidatorPartyId(), "v2-1"),
@@ -1021,14 +1026,14 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         )
       },
     )(
-      "Alice's wallet shows 4 locked amulets",
-      _ => aliceWalletClient.list().lockedAmulets should have length 4,
+      "Alice's wallet shows 5 locked amulets",
+      _ => aliceWalletClient.list().lockedAmulets should have length 5,
     )
 
     val allocationsV1 =
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(AmuletAllocation.COMPANION)(aliceParty)
-    allocationsV1 should have length 2
+    allocationsV1 should have length 3
 
     val allocationsV2 =
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
@@ -1052,7 +1057,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         ),
     )(
       "One lock is gone",
-      _ => aliceWalletClient.list().lockedAmulets should have length 3,
+      _ => aliceWalletClient.list().lockedAmulets should have length 4,
     )
 
     actAndCheck(
@@ -1069,7 +1074,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         ),
     )(
       "Another lock is gone",
-      _ => aliceWalletClient.list().lockedAmulets should have length 2,
+      _ => aliceWalletClient.list().lockedAmulets should have length 3,
     )
 
     sv1Backend.dsoDelegateBasedAutomation
@@ -1091,7 +1096,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
 
       aliceWalletClient.list().lockedAmulets shouldBe empty
 
-      aliceWalletClient.list().amulets should have length (amuletsBeforeExpiry + 4).toLong
+      aliceWalletClient.list().amulets should have length (amuletsBeforeExpiry + 5).toLong
     }
   }
 

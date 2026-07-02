@@ -1140,11 +1140,13 @@ class DbSvDsoStore(
   override def listExpiredAmulets(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet] = {
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val filterClause: SQLActionBuilder = if (ignoredParties.nonEmpty) {
-      (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
-    } else {
-      sql""
+    val filterClause: () => SQLActionBuilder = () => {
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
+      } else {
+        sql""
+      }
     }
     listExpiredRoundBased(splice.amulet.Amulet.COMPANION, filterClause)
   }
@@ -1152,14 +1154,16 @@ class DbSvDsoStore(
   override def listLockedExpiredAmulets(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet] = {
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val filterClause = if (ignoredParties.nonEmpty) {
-      (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
-        sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
-            .map(p => lengthLimited(p.toProtoPrimitive))
-            .toArray: Array[String2066]})").toActionBuilder
-    } else {
-      sql""
+    val filterClause: () => SQLActionBuilder = () => {
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
+          sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
+              .map(p => lengthLimited(p.toProtoPrimitive))
+              .toArray: Array[String2066]})").toActionBuilder
+      } else {
+        sql""
+      }
     }
     listExpiredRoundBased(splice.amulet.LockedAmulet.COMPANION, filterClause)
   }
@@ -1304,7 +1308,7 @@ class DbSvDsoStore(
 
   private def listExpiredRoundBased[Id <: ContractId[T], T <: javab.Template](
       companion: Template[Id, T],
-      extraFilter: SQLActionBuilder,
+      extraFilter: () => SQLActionBuilder,
   ): ListExpiredContracts[Id, T] = (_, limit) =>
     implicit tc => {
       waitUntilAcsIngested {
@@ -1339,7 +1343,7 @@ class DbSvDsoStore(
                   splice.externalpartyconfigstate.ExternalPartyConfigState.TEMPLATE_ID_WITH_PACKAGE_ID
                 )}
                     and mining_round is not null
-                  order by mining_round asc limit 1), true)""" ++ extraFilter).toActionBuilder,
+                  order by mining_round asc limit 1), true)""" ++ extraFilter()).toActionBuilder,
               orderLimit = sql"""order by mining_round desc limit ${sqlLimit(limit)}""",
             ),
             "listExpiredRoundBased",
