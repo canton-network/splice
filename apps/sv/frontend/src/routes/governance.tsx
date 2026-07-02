@@ -182,6 +182,7 @@ export const Governance: React.FC = () => {
 
           <ProposalListingSection
             sectionTitle="Inflight Votes"
+            badgeCount={inflightRequests.length}
             data={inflightRequests}
             noDataMessage="No proposals are currently in flight. Proposals you have voted on will appear here while awaiting the voting threshold or deadline."
             uniqueId="inflight-proposals"

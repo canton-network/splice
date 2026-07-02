@@ -95,6 +95,17 @@ describe('Governance Page', () => {
     expect(true).toBe(true);
   });
 
+  test('should display inflight votes count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const badge = screen.getByTestId('inflight-proposals-section-badge-count');
+    expect(badge).toHaveTextContent('');
+  });
+
   test('click on Details link to see Proposal Details (Action Required)', async () => {
     const user = userEvent.setup();
 
