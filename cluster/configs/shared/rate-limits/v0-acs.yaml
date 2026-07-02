@@ -6,3 +6,4 @@ rateLimits:
     maxTokens: 10
     tokensPerFill: 5
     fillInterval: 60s
+

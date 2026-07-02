@@ -3,7 +3,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 
-import { parseScanYamlEndpoints } from '../config/scanEndpoints';
+import { parseScanYamlEndpoints, parseTokenRegistrySpecEndpoints } from '../config/scanEndpoints';
 
 interface Limits {
   maxTokens: number;
@@ -74,7 +74,9 @@ export function extractPathPrefixes(
       const isBanned = rl.type === 'banned';
       return { pathPrefix, isBanned };
     })
-    .filter(info => info.pathPrefix.startsWith('/api/scan'));
+    .filter(
+      info => info.pathPrefix.startsWith('/api/scan') || info.pathPrefix.startsWith('/registry')
+    );
 }
 
 function validateEndpointCoverage(
@@ -115,16 +117,28 @@ function validateEffectiveRateLimits(
 
   const { missing, orphaned } = validateEndpointCoverage(scanEndpoints, configuredScanPrefixes);
 
-  if (missing.length > 0 || orphaned.length > 0) {
+  const tokenRegistryEndpoints = parseTokenRegistrySpecEndpoints();
+
+  const configuredRegistryPrefixes = Object.keys(args.rateLimits || {}).filter(pathPrefix =>
+    pathPrefix.startsWith('/registry')
+  );
+
+  const registryValidation = validateEndpointCoverage(
+    tokenRegistryEndpoints,
+    configuredRegistryPrefixes
+  );
+
+  const totalMissing = missing.concat(registryValidation.missing);
+  const totalOrphaned = orphaned.concat(registryValidation.orphaned);
+
+  if (totalMissing.length > 0 || totalOrphaned.length > 0) {
     const errorParts: string[] = ['Rate limit configuration errors:'];
-    if (missing.length > 0) {
-      errorParts.push(
-        `- Missing rate limit prefixes for scan.yaml endpoints: ${missing.join(', ')}`
-      );
+    if (totalMissing.length > 0) {
+      errorParts.push(`- Missing rate limit prefixes for endpoints: ${totalMissing.join(', ')}`);
     }
-    if (orphaned.length > 0) {
+    if (totalOrphaned.length > 0) {
       errorParts.push(
-        `- Orphaned rate limit prefixes not matching any scan.yaml endpoint: ${orphaned.join(', ')}`
+        `- Orphaned rate limit prefixes not matching any schema route: ${totalOrphaned.join(', ')}`
       );
     }
     throw new Error(errorParts.join('\n'));

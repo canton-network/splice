@@ -9,6 +9,11 @@ cloudArmor:
       throttleAcrossAllEndpointsAllIps:
         maxRequestsBeforeHttp429: 0
         withinIntervalSeconds: 60
+    tokenRegistry:
+      pathPrefix: '/registry'
+      throttleAcrossAllEndpointsAllIps:
+        maxRequestsBeforeHttp429: 200
+        withinIntervalSeconds: 60
 cluster:
   hyperdiskSupport:
     enabled: true
@@ -353,6 +358,48 @@ sv:
         /api/scan/version:
           name: 'version'
           type: 'unlimited'
+        /registry/allocation-instruction/v1/allocation-factory:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-allocation-factory'
+          tokensPerFill: 5
+          type: 'limited'
+        /registry/allocations/v1:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-allocations'
+          tokensPerFill: 5
+          type: 'limited'
+        /registry/metadata/v1/info:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-metadata-info'
+          tokensPerFill: 5
+          type: 'limited'
+        /registry/metadata/v1/instruments:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-metadata-instruments'
+          tokensPerFill: 5
+          type: 'limited'
+        /registry/transfer-instruction/v1:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-transfer-instruction'
+          tokensPerFill: 5
+          type: 'limited'
+        /registry/transfer-instruction/v1/transfer-factory:
+          clientIp: true
+          fillInterval: '60s'
+          maxTokens: 10
+          name: 'registry-transfer-factory'
+          tokensPerFill: 5
+          type: 'limited'
 svs:
   sv:
     cometbft:
