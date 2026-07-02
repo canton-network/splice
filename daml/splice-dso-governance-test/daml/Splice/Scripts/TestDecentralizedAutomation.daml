@@ -10,6 +10,7 @@ import DA.List (dedupSort)
 import qualified DA.Map as Map
 import DA.Optional (fromSomeNote)
 import Daml.Script
+import qualified DA.TextMap as TextMap
 import DA.Time
 
 import Splice.Api.Token.HoldingV1 (InstrumentId(..))
@@ -176,7 +177,7 @@ testRequiredNumOfConfirmation = do
   [(amuletRulesCid, _)] <- query @AmuletRules dso
   [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
 
-  Map.size dsoRules.svs === 4
+  length (TextMap.toList dsoRules.svRightOwners) === 4
 
   svX <- allocateParty "svX"
 
@@ -218,7 +219,7 @@ testRequiredNumOfConfirmation = do
 
   -- check that the `action` was executed
   [(_, dsoRules)] <- query @DsoRules dso
-  require "svX is a sv" (svX `Map.member` dsoRules.svs)
+  require "svX is a sv" (svX `elem` operatorParties dsoRules)
 
   pure ()
 

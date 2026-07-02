@@ -10,7 +10,7 @@ import DA.Assert
 import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
 import DA.List as List hiding (all)
-import DA.Optional (isNone, fromSome, fromOptional, isSome)
+import DA.Optional (isNone, fromSome, fromOptional, isSome, mapOptional)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
@@ -431,7 +431,7 @@ template VoteRequest
 
 -- FIXME: placeholder
 isGovernanceVote : ActionRequiringConfirmation -> Bool
-isGovernanceVote = \_ -> True
+isGovernanceVote _ = True
 
 data DsoRules_CloseVoteRequestResult = DsoRules_CloseVoteRequestResult with
     request : VoteRequest -- ^ The original vote request.
@@ -569,35 +569,31 @@ template DsoRules with
         sv : Party
       controller dso
       do
-        -- FIXME: Remove the nodeParty fom SvNodeInfo but keep as SV
-        -- require "There is more than one sv" (Map.size svs > 1)
-        -- case Map.lookup sv svs of
-        --   None -> fail "Not a sv"
-        --   Some info -> do
-        --     -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
-        --     -- revoking that sv's rights in the CometBFT network and the topology state.
-        --     let newSvs = Map.delete sv svs
-        --     -- We optimize for prompt removal of a sv if the vote said so.
-        --     -- and instead just choose the sv with the lexicographically smallest name.
-        --     let (newDsoDelegate, newEpoch)
-        --           | sv == dsoDelegate = (head (Map.keys newSvs), epoch + 1)
-        --           | otherwise        = (dsoDelegate, epoch)
-        --     let offboardedSvInfo = OffboardedSvInfo with
-        --             name = info.name
-        --             participantId = info.participantId
-        --     -- create the new rules contract
-        --     newDsoRules <- create DsoRules with
-        --       dso
-        --       epoch = newEpoch
-        --       dsoDelegate = newDsoDelegate
-        --       svs = newSvs
-        --       offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
-        --       config
-        --       initialTrafficState
-        --       isDevNet
-
-        --     return DsoRules_OffboardSvResult with ..
-        abort "FIXME"
+        -- FIXME: this whole choice probably should be removed in favor of one to offboard an SV fully by name
+        -- and one to make a node a non-operator but keep it an SV
+        require "There is more than one sv" (Map.size svs > 1)
+        case find (\(_, v) -> (party <$> v.nodeOperatorInfo) == Some sv) (TextMap.toList svRightOwners) of
+          None -> fail ("Not a sv: " <> show sv)
+          Some (name, _) -> do
+            -- NOTE: this immediate deletion will lead to the SV apps of the remaining svs
+            -- revoking that sv's rights in the CometBFT network and the topology state.
+            let newSvs = TextMap.fromList (filter (\(_, v) -> (party <$> v.nodeOperatorInfo) /= Some sv) (TextMap.toList svRightOwners))
+            let offboardedSvInfo = OffboardedSvInfo with
+                    name = name
+                    participantId = "PAR::FIXME" -- info.participantId
+            -- create the new rules contract
+            newDsoRules <- create DsoRules with
+              dso
+              epoch
+              dsoDelegate
+              svs = this.svs
+              svRightOwners = newSvs
+              offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
+              config
+              initialTrafficState
+              isDevNet
+            return DsoRules_OffboardSvResult with ..
+  
 
     -- Update an SV's Status report
     nonconsuming choice DsoRules_SubmitStatusReport : DsoRules_SubmitStatusReportResult
@@ -631,29 +627,27 @@ template DsoRules with
         -- No longer used, but must be kept for smart-contract upgrading compatibility.
         -- (This was used when the current round number was tracked in the AmuletRules contract.)
       controller sv
-      do -- FIXME: Probably want to change onboarding flow in two steps:
-         -- first: add sv as non node operator, then this choice will promote it to a node operator
-         abort "FIXME"
+      do 
+        -- FIXME: Revisit
+        svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
+        assertWithinDeadline "svOnboardingConfirmed.expiresAt" svOnboardingConfirmed.expiresAt
 
-        -- svOnboardingConfirmed <- fetchAndArchive (ForOwner with dso; owner = sv) svOnboardingConfirmedCid
-        -- assertWithinDeadline "svOnboardingConfirmed.expiresAt" svOnboardingConfirmed.expiresAt
+        let forDso = ForDso with dso
+        earliestRound <- fetchReferenceData forDso earliestRoundCid
+        middleRound <- fetchReferenceData forDso middleRoundCid
+        latestRound <- fetchReferenceData forDso latestRoundCid
+        require "middleRound is one after earliestRound" (middleRound.round.number == earliestRound.round.number + 1)
+        require "latestRound is one after middleRound" (latestRound.round.number == middleRound.round.number + 1)
 
-        -- let forDso = ForDso with dso
-        -- earliestRound <- fetchReferenceData forDso earliestRoundCid
-        -- middleRound <- fetchReferenceData forDso middleRoundCid
-        -- latestRound <- fetchReferenceData forDso latestRoundCid
-        -- require "middleRound is one after earliestRound" (middleRound.round.number == earliestRound.round.number + 1)
-        -- require "latestRound is one after middleRound" (latestRound.round.number == middleRound.round.number + 1)
+        addSvResult <- exercise self DsoRules_AddSv with
+          newSvParty = sv
+          newSvName = svOnboardingConfirmed.svName
+          newSvRewardWeight = svOnboardingConfirmed.svRewardWeight
+          newSvParticipantId = svOnboardingConfirmed.svParticipantId
+          joinedAsOfRound = earliestRound.round
 
-        -- addSvResult <- exercise self DsoRules_AddSv with
-        --   newSvParty = sv
-        --   newSvName = svOnboardingConfirmed.svName
-        --   newSvRewardWeight = svOnboardingConfirmed.svRewardWeight
-        --   newSvParticipantId = svOnboardingConfirmed.svParticipantId
-        --   joinedAsOfRound = earliestRound.round
-
-        -- return DsoRules_AddConfirmedSvResult with
-        --   newDsoRules = addSvResult.newDsoRules
+        return DsoRules_AddConfirmedSvResult with
+          newDsoRules = addSvResult.newDsoRules
 
 
     -- Decentralized synchronizer config management
@@ -773,12 +767,11 @@ template DsoRules with
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
-          -- FIXME: don't make this a parameter but derive it based on the type of vote
       controller requester
       do
-        requesterName <- case requester `Map.lookup` svs of
-          None -> fail "Requester is not an SV"
-          Some info -> pure (info.name)
+        requesterName <- if isGovernanceVote action
+          then getAndValidateSvGovernanceParty this (Some requester)
+          else getAndValidateSvNodeOperatorParty this (Some requester)
         requireWellformedReason config reason
         now <- getTime
         let voteBefore = case voteRequestTimeout of
@@ -813,11 +806,11 @@ template DsoRules with
       do
         -- validate vote parameters
         requireWellformedVote config vote
-        voterName <- case Map.lookup vote.sv svs of
-          None -> fail "Voter is not an SV"
-          Some info -> pure info.name
         -- validate and archive request
         request <- fetchAndArchive (ForDso with dso) requestCid
+        voterName <- if isGovernanceVote request.action
+          then getAndValidateSvGovernanceParty this (Some vote.sv)
+          else getAndValidateSvNodeOperatorParty this (Some vote.sv)
         -- rate limit casting of votes by the same SV to avoid them blocking others from making progress
         -- Note: we currently ignore the optional self-declared vote casting time
         -- `vote.optCastAt`. We'll use that in the future when adding support for larger
@@ -867,7 +860,9 @@ template DsoRules with
         let s = summarizeDso this
         request <- fetchAndArchive (ForDso with dso) requestCid
 
+        -- FIXME: use the right threshold incorporating governance vs operator vote and vote weights
         let activeSvs = map (.name) $ Map.values svs
+        
 
         let activeSvSet = Set.fromList activeSvs
         let (validVotes, offboardedVoters) = partitionEithers
@@ -986,7 +981,7 @@ template DsoRules with
               require "matching DSO party" (vote.dso == dso)
               -- FIXME: probably we want non node operators to be able to
               -- do amulet price votes.
-              require "SV is a sv" (vote.sv `Map.member` svs)
+              getAndValidateSvNodeOperatorParty this (Some vote.sv)
               forA_ duplicates $ \(duplicateCid, duplicate) -> do
                 -- safe, as we fetched it before and check the constraints below
                 potentiallyUnsafeArchive duplicateCid
@@ -1063,8 +1058,9 @@ template DsoRules with
         contactPoint : Optional Text
       controller sponsor
       do
-        -- FIXME: who should be able to onboard nodes
-        require "Sponsor is an SV" (sponsor `Map.member` svs)
+        -- FIXME: should this work for governance parties? maybe not that relevant given that long-term
+        -- this should be replaced by staking based onboarding.
+        getAndValidateSvNodeOperatorParty this (Some sponsor)
         now <- getTime
         validatorLicense <- create ValidatorLicense with
           dso
@@ -1284,7 +1280,8 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvNodeOperatorParty this sv
-        amuletPrice <- fetchMedianAmuletPrice dso (Map.keys svs) amuletPriceVoteCids
+        -- fixme: who should vote on amulet prices, how should it be weighted?
+        amuletPrice <- fetchMedianAmuletPrice dso (operatorParties this) amuletPriceVoteCids
         result <- exercise amuletRulesCid AmuletRules_AdvanceOpenMiningRounds with ..
         return DsoRules_AdvanceOpenMiningRoundsResult with
           summarizingRound = result.summarizingRoundCid
@@ -1938,13 +1935,18 @@ dsoRules_addSv this0 arg@DsoRules_AddSv{..} = do
   let initialAmuletPriceVote = None
   createPerSvPartyContracts dso newSvParty newSvName noSynchronizerNodes initialAmuletPriceVote (getVoteCooldownTime config)
   -- register the new operator in the DsoRules
-  let svInfo = SvInfo with
-        name = newSvName
-        joinedAsOfRound
-        svRewardWeight = newSvRewardWeight
-        participantId = newSvParticipantId
+  let svInfo = SvRightOwnerInfo with
+        governanceParty = newSvParty
+        nodeOperatorInfo = Some SvNodeOperatorInfo with
+          party = newSvParty
+          participantId = newSvParticipantId
+        rewardWeight = newSvRewardWeight
+        -- FIXME: placeholder
+        voteWeight = 1
+        rewardNodeOperator = newSvName
+        joinedAsOfRound 
   create this with
-    svs = Map.insert newSvParty svInfo svs
+    svRightOwners = TextMap.insert newSvName svInfo svRightOwners
 
 createPerSvContracts : DsoRules -> DsoRules_AddSv -> Update ()
 createPerSvContracts DsoRules{..} DsoRules_AddSv{..} = do
@@ -1985,8 +1987,15 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
 getAndValidateSvNodeOperatorParty : DsoRules -> Optional Party -> Update Text
 getAndValidateSvNodeOperatorParty _ None = fail "no SV party provided"
 getAndValidateSvNodeOperatorParty rules (Some sv) = do
-  case find (\(_, info) -> info.nodeOperatorParty == Some sv) (TextMap.toList rules.svRightOwners) of
+  case find (\(_, info) -> (party <$> info.nodeOperatorInfo) == Some sv) (TextMap.toList rules.svRightOwners) of
     None -> fail ("SV party " <> show sv <> " is not an SV node operator")
+    Some (name, _) -> pure name
+
+getAndValidateSvGovernanceParty : DsoRules -> Optional Party -> Update Text
+getAndValidateSvGovernanceParty _ None = fail "no SV party provided"
+getAndValidateSvGovernanceParty rules (Some sv) = do
+  case find (\(_, info) -> info.governanceParty == sv) (TextMap.toList rules.svRightOwners) of
+    None -> fail ("SV party " <> show sv <> " is not a governance party")
     Some (name, _) -> pure name
 
 
@@ -2081,3 +2090,11 @@ instance Patchable LogicalSynchronizerUpgradeSchedule where
         upgradeTime = patch new.upgradeTime base.upgradeTime current.upgradeTime
         newPhysicalSynchronizerSerial = patch new.newPhysicalSynchronizerSerial base.newPhysicalSynchronizerSerial current.newPhysicalSynchronizerSerial
         newPhysicalSynchronizerProtocolVersion = patch new.newPhysicalSynchronizerProtocolVersion base.newPhysicalSynchronizerProtocolVersion current.newPhysicalSynchronizerProtocolVersion
+
+operatorParties : DsoRules -> [Party]
+operatorParties DsoRules{svRightOwners} =
+  mapOptional (\(_, v) -> party <$> v.nodeOperatorInfo) (TextMap.toList svRightOwners)
+
+governanceParties : DsoRules -> [Party]
+governanceParties DsoRules{svRightOwners} =
+  map (\(_, v) -> v.governanceParty) (TextMap.toList svRightOwners)

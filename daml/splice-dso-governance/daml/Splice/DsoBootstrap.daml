@@ -16,6 +16,7 @@ import Splice.Types
 
 import Splice.Ans
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.SvRightOwner
 import Splice.DsoRules
 
 data DsoBootstrap_BootstrapResult = DsoBootstrap_BootstrapResult
@@ -61,21 +62,28 @@ template DsoBootstrap with
           amuletPrice
           initialRound
         -- create the DSO rules with the SV1 as the sole sv
-        let sv1SvInfo = SvInfo with
-              name = sv1Name
-              joinedAsOfRound = fromOptional (Round 0) result.initialRound
-              svRewardWeight = sv1RewardWeight
-              participantId = sv1ParticipantId
         let dsoRules = DsoRules with
               dso
               epoch = 0
-              svs = Map.fromList [(sv1Party, sv1SvInfo)]
+              svs = Map.empty
               offboardedSvs = Map.empty
               dsoDelegate = sv1Party
               config
               initialTrafficState
               isDevNet
-              svRightOwners = TextMap.empty
+              svRightOwners = TextMap.fromList [
+                ( sv1Name
+                , SvRightOwnerInfo with
+                    governanceParty = sv1Party
+                    nodeOperatorInfo = Some SvNodeOperatorInfo with
+                      party = sv1Party
+                      participantId = sv1ParticipantId
+                    voteWeight = 1
+                    rewardWeight = sv1RewardWeight
+                    rewardNodeOperator = sv1Name
+                    joinedAsOfRound = fromOptional (Round 0) result.initialRound
+                )
+                ]
         create dsoRules
         -- create initial per-sv and per-operator contracts for sv1
         let addSvChoiceArgs = DsoRules_AddSv with

@@ -1,13 +1,15 @@
 module Splice.DSO.SvRightOwner where
 
+import Splice.Types
+
 -- | Information about a super validator right owner.
 data SvRightOwnerInfo = SvRightOwnerInfo
   with
     governanceParty : Party -- ^ The governance party of an SV that can vote
-    nodeOperatorParty : Optional Party
-      -- ^ The party of the SV node operator.
+    nodeOperatorInfo : Optional SvNodeOperatorInfo
+      -- ^ Info about the node as an operator if it is one.
       -- FIXME: should we allow multiple to handle cases like DA1/DA2. Or is it ok that these are
-      -- two separate SVs?
+      -- two separate right owners?
     voteWeight : Int
       -- ^ the weight of an SV for voting, can be zero
       -- FIXME: do we need separate governance and node operator vote weights
@@ -16,9 +18,17 @@ data SvRightOwnerInfo = SvRightOwnerInfo
     rewardNodeOperator : Text
       -- ^ Name of the SV node operator through which rewards are minted.
       -- For rewards to be minted both the node operator.
+    joinedAsOfRound : Round
   deriving (Eq, Show)
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
 validSvRightOwnerInfo SvRightOwnerInfo{..} =
   voteWeight >= 0 &&
   rewardWeight >= 0
+
+
+data SvNodeOperatorInfo = SvNodeOperatorInfo 
+  with
+    party : Party
+    participantId : Text
+  deriving (Eq, Show)

@@ -12,6 +12,7 @@ import qualified DA.Map as Map
 import DA.Optional (fromOptional)
 import qualified DA.Set as Set
 import qualified DA.Text as T
+import qualified DA.TextMap as TextMap
 import Daml.Script
 import DA.Time
 
@@ -181,13 +182,13 @@ generateUnclaimedReward app provider1 = do
 dsoDelegateSubmits : AmuletApp -> (ContractId DsoRules -> Commands a) -> Script a
 dsoDelegateSubmits app mkCommands = do
   [(dsoRulesCid, dsoRules)] <- query @DsoRules app.dso
-  let sv = head (Map.keys dsoRules.svs)
+  let sv = head (operatorParties dsoRules)
   submit (actAs sv <> readAs app.dso) $ mkCommands dsoRulesCid
 
 dsoDelegateSubmitsMustFail : AmuletApp -> (ContractId DsoRules -> Commands a) -> Script ()
 dsoDelegateSubmitsMustFail app mkCommands = do
   [(dsoRulesCid, dsoRules)] <- query @DsoRules app.dso
-  let sv = head (Map.keys dsoRules.svs)
+  let sv = head (operatorParties dsoRules)
   submitMustFail (actAs sv <> readAs app.dso) $ mkCommands dsoRulesCid
 
 svSubmits : AmuletApp -> Party -> (ContractId DsoRules -> Commands a) -> Script a
@@ -228,7 +229,7 @@ runNextIssuanceD app amuletPrice appActivityRoundTotal = do
             svRewardCouponCids = map fst svRewards
             optValidatorFaucetCouponCids = Some (map fst validatorFaucetCoupons)
             optValidatorLivenessActivityRecordCids = Some (map fst validatorLivenessActivityRecords)
-          sv = Some (head (Map.keys dsoRules.svs))
+          sv = Some (head (operatorParties dsoRules))
 
       -- the closed round
       confirmAWC_MiningRound_Archive app
@@ -255,7 +256,7 @@ runNextIssuanceD app amuletPrice appActivityRoundTotal = do
           middleRoundCid = r2Cid
           latestRoundCid = r3Cid
           amuletPriceVoteCids
-          sv = Some (head (Map.keys dsoRules.svs))
+          sv = Some (head (operatorParties dsoRules))
     let summarizingRoundCid = advanceResult.summarizingRound
 
     Some summarizingRound <- queryContractId app.dso summarizingRoundCid
@@ -447,13 +448,13 @@ checkSvRewardStates : AmuletApp -> Script ()
 checkSvRewardStates app = do
   rewardStates <- query @SvRewardState app.dso
   [(_, dsoRules)] <- query @DsoRules app.dso
-  forA_ (Map.values dsoRules.svs) $ \info ->
+  forA_ (TextMap.toList dsoRules.svRightOwners) $ \(name, _) ->
     require "Each onboarded andSV name has one SvRewardState contract" $
-      any (\(_, rewardState) -> rewardState.svName == info.name) rewardStates
+      any (\(_, rewardState) -> rewardState.svName == name) rewardStates
   forA_ (Map.values dsoRules.offboardedSvs) $ \info ->
     require "Each offboarded and SV name has one SvRewardState contract" $
       any (\(_, rewardState) -> rewardState.svName == info.name) rewardStates
-  let offAndOnboardedSvs = Set.fromList (map (\info -> info.name) (Map.values dsoRules.svs) <> map (\info -> info.name) (Map.values dsoRules.offboardedSvs))
+  let offAndOnboardedSvs = Set.fromList (map fst (TextMap.toList dsoRules.svRightOwners) <> map (\info -> info.name) (Map.values dsoRules.offboardedSvs))
   Set.fromList [state.svName | (_, state) <- rewardStates] === offAndOnboardedSvs
   require "No duplicate SvRewardstate contracts" $
     length rewardStates == Set.size offAndOnboardedSvs
@@ -462,12 +463,13 @@ checkSvRewardStates app = do
 checkSvStatusReports : AmuletApp -> Script ()
 checkSvStatusReports app = do
   [(_, dsoRules)] <- query @DsoRules app.dso
-  let svParties = Map.keys dsoRules.svs
+  let svParties = operatorParties dsoRules
   let offboardedParties = Map.keys dsoRules.offboardedSvs
   let expectedSvParties = Set.fromList $ svParties ++ offboardedParties
   reports <- query @SvStatusReport app.dso
   let reportingParties = Set.fromList $ [ report.sv | (_, report) <- reports ]
   reportingParties === expectedSvParties
+  pure ()
 
 getSvNodeState : AmuletApp -> Party -> Script (ContractId SvNodeState, SvNodeState)
 getSvNodeState app sv = do

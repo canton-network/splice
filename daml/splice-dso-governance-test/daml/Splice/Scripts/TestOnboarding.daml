@@ -8,6 +8,7 @@ import DA.Foldable (forA_)
 import DA.Optional (fromSome)
 import qualified DA.Map as Map
 import Daml.Script
+import qualified DA.TextMap as TextMap
 import DA.Time
 import DA.List
 
@@ -209,9 +210,9 @@ testSvOnboarding = do
   checkSvContractInvariants app
 
   [(_, dsoRules)] <- query @DsoRules dso
-  case Map.lookup svX dsoRules.svs of
+  case find (\(_, v) -> ((.party) <$> v.nodeOperatorInfo) == Some svX) (TextMap.toList dsoRules.svRightOwners) of
     None -> fail "svX is not an SV"
-    Some info ->
+    Some (_, info) ->
       -- the new sv joined in the earliest open round
       info.joinedAsOfRound === earliestRound.round
   now <- getTime
