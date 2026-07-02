@@ -47,7 +47,7 @@ import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
-import io.grpc.Status
+import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
@@ -619,7 +619,24 @@ class SV1Initializer(
       RetryFor.WaitingOnInitDependency,
       "bootstrap_dso",
       "bootstrapping DSO",
-      bootstrapDso(initialRound),
+      bootstrapDso(initialRound).recoverWith {
+        // COMMAND_PREPROCESSING_FAILED is classified as non-retryable
+        // (InvalidIndependentOfSystemState), but during bootstrap it can
+        // be transient: the correct package version will become effective
+        // once the vetting topology transaction propagates to the
+        // participant's command preprocessor. Convert to FAILED_PRECONDITION
+        // so the retry framework treats it as retryable.
+        case ex: StatusRuntimeException
+            if ex.getStatus.getCode == Status.Code.INVALID_ARGUMENT &&
+              ex.getMessage.contains("COMMAND_PREPROCESSING_FAILED") =>
+          Future.failed(
+            Status.FAILED_PRECONDITION
+              .withDescription(
+                s"Package vetting not yet effective for bootstrap, retrying: ${ex.getMessage}"
+              )
+              .asRuntimeException()
+          )
+      },
       logger,
     )
 
