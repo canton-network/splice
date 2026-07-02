@@ -103,17 +103,19 @@ find_exceptions |
 
 ### Look for leaked secrets
 
-# TODO(DACH-NY/canton-network-internal#481) Patch secrets in the log file
-sed -i 's/secret=test/secret=hidden/g' "$LOGFILE"
+# TODO(DACH-NY/canton-network-internal#481) Patch secrets in the log file.
+MASK_TEST_SECRET='s/secret=test/secret=hidden/g'
 
 find_secrets() {
   # Common x=y format
-  rg_check -o -e "(secret|token|private-key|password)=[^,[:space:]]*" "$LOGFILE" |
+  sed "$MASK_TEST_SECRET" "$LOGFILE" |
+    rg_check -o -e "(secret|token|private-key|password)=[^,[:space:]]*" |
     # we mask secrets as "****" in our logs and testcontainers obfuscates secrets as "hidden non-blank value"
     # (https://github.com/testcontainers/testcontainers-java/blob/bf5605a2031d7f29f86a85430e3509a198c6e125/core/src/main/java/org/testcontainers/utility/AuthConfigUtil.java#L33)
     rg_check -v -e "=\\\\\"\*\*\*\*\\\\\"" -e "=hidden"
   # JWTs; `eyJhbGc` is a base64-endcoded JSON object that starts with `{"alg`
-  rg_check -o -e "(Bearer\s*$|(Bearer\s*e|eyJhbGc)[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,})" "$LOGFILE"
+  sed "$MASK_TEST_SECRET" "$LOGFILE" |
+    rg_check -o -e "(Bearer\s*$|(Bearer\s*e|eyJhbGc)[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,}\.[A-Za-z0-9\-\_]{2,})"
 }
 
 # Find leaked secrets

@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
+import cats.implicits.catsSyntaxTuple2Semigroupal
 import cats.syntax.either.*
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.SequencingParameters as ConsoleSequencingParameters
@@ -77,7 +78,10 @@ class ReconcileSequencingParametersTrigger(
   override def isStaleTask(
       task: Task
   )(implicit tc: TraceContext): Future[Boolean] = {
-    isNotConnectedToSync()
+    (
+      participantAdminConnection.getPhysicalSynchronizerId(alias).map(_ != task.synchronizerId),
+      isNotConnectedToSync(),
+    ).mapN(_ || _)
   }
 }
 
