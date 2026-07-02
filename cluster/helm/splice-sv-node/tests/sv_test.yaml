@@ -169,7 +169,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.current {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer-test-address"
                   port = 5009

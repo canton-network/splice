@@ -28,7 +28,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.scan.config.BftSequencerConfig
+import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
@@ -64,11 +64,11 @@ class ScanIntegrationTest
           config.copy(
             synchronizerNodes = config.synchronizerNodes.copy(
               current = config.synchronizerNodes.current.copy(
-                cantonBft = Some(BftSequencerConfig("http://testUrl:8081"))
+                cantonBft = Some(CantonBftPeerConfig("http://testUrl:8081"))
               ),
               legacy = Some(
                 config.synchronizerNodes.current.copy(
-                  cantonBft = Some(BftSequencerConfig("http://legacyUrl:8082"))
+                  cantonBft = Some(CantonBftPeerConfig("http://legacyUrl:8082"))
                 )
               ),
             ),

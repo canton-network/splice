@@ -144,7 +144,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.current {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer-alpha-address"
                   port = 5009
@@ -215,7 +215,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.current {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer1-address"
                   port = 5009
@@ -271,7 +271,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.current {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer2-address"
                   port = 5009
@@ -294,7 +294,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.0 {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer0-address"
                   port = 5009
@@ -317,7 +317,7 @@ tests:
           value: |
             canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.1 {
               sequencer {
-                is-bft-sequencer = true
+                is-canton-bft-sequencer = true
                 admin-api {
                   address = "sequencer1-address"
                   port = 5009

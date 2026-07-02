@@ -12,8 +12,8 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVetting
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
-  BftSequencerConfig,
   BulkStorageConfig,
+  CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
   ScanAppBackendConfig,
   ScanAppClientConfig,
@@ -31,7 +31,7 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
   SplitwellSynchronizerConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
-import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
+import org.lfdecentralizedtrust.splice.sv.{SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
@@ -466,9 +466,9 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigReader[ScanSynchronizerConfig] =
       deriveReader[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigReader: ConfigReader[BftSequencerConfig] =
+    implicit val bftSequencerConfigReader: ConfigReader[CantonBftPeerConfig] =
       ConfigReader.forProduct1("p2p-url")(
-        BftSequencerConfig(_)
+        CantonBftPeerConfig(_)
       )
     implicit val scanCacheConfigReader: ConfigReader[ScanCacheConfig] =
       deriveReader[ScanCacheConfig]
@@ -974,7 +974,7 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigWriter[ScanSynchronizerConfig] =
       deriveWriter[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigWriter: ConfigWriter[BftSequencerConfig] =
+    implicit val bftSequencerConfigWriter: ConfigWriter[CantonBftPeerConfig] =
       ConfigWriter.forProduct1("p2p-url")(c => c.p2pUrl)
     implicit val scanSynchronizerNodes: ConfigWriter[ScanSynchronizerNodesConfig] =
       deriveWriter[ScanSynchronizerNodesConfig]

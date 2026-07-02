@@ -114,10 +114,7 @@
         walletPayments     0.1.21
         ================== =======
 
-  - Deployment
+  - Scan app
 
-    - Helm
-
-      - Added security contexts for Helm based deployments.
-        This improves the security of Kubernetes based deployments by enforcing the principle of least privilege across all pods and containers.
-
+    - Add a new endpoint ``/v0/lsu`` to the internal API which exposes information like topology freeze time,
+      upgrade time and successor synchronizer ID for the most recent LSU
