@@ -3,15 +3,22 @@
   "type": "object",
   "properties": {
     "securityContexts": {
-      "type": "object",
+      "type": ["object", "null"],
       "properties": {
         "pod": {
-          "type": "object"
+          "type": ["object", "null"]
         },
-        "loadTester": {
-          "type": "object"
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "loadTester": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["loadTester"]
         }
-      },"required": ["pod", "loadTester"]
+      },
+      "required": ["pod", "containers"]
     }
   }
 }

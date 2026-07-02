@@ -35,7 +35,7 @@ spec:
       containers:
         - name: load-tester
           {{- if .Values.securityContexts }}
-          {{- with .Values.securityContexts.loadTester }}  # by default no value is set
+          {{- with .Values.securityContexts.containers.loadTester }}  # by default no value is set
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
