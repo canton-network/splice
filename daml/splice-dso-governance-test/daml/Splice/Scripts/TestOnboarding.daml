@@ -5,7 +5,6 @@ module Splice.Scripts.TestOnboarding where
 
 import DA.Assert
 import DA.Foldable (forA_)
-import DA.Optional (fromSome)
 import qualified DA.Map as Map
 import Daml.Script
 import qualified DA.TextMap as TextMap
@@ -376,6 +375,10 @@ testSvOnboardingConfirmedExpiry = do
   [(_, dsoRules)] <- query @DsoRules dso
   Map.keys (dsoRules.offboardedSvs) === [svX]
 
+lookupSvOperatorParty : Text -> DsoRules -> Optional Party
+lookupSvOperatorParty name dsoRules =
+  fmap (.party) ((.nodeOperatorInfo) =<< TextMap.lookup name dsoRules.svRightOwners)
+
 
 testSvNameUniquenessNotInDevNet : Script ()
 testSvNameUniquenessNotInDevNet = do
@@ -384,7 +387,7 @@ testSvNameUniquenessNotInDevNet = do
 
   [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
 
-  (fromSome (Map.lookup sv2 dsoRules.svs)).name === "sv2"
+  lookupSvOperatorParty "sv2" dsoRules === Some sv2
 
   svX <- allocateParty "svX"
   submitMustFail dso $ exerciseCmd dsoRulesCid $ DsoRules_AddSv svX "sv2" 19 "sv2-participant-id" (Round 3)
@@ -396,8 +399,8 @@ testSvOverwriteInDevNet = do
 
   [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
 
-  (fromSome (Map.lookup sv1 dsoRules.svs)).name === "sv1"
-  (fromSome (Map.lookup sv2 dsoRules.svs)).name === "sv2"
+  lookupSvOperatorParty "sv1" dsoRules === Some sv1
+  lookupSvOperatorParty "sv2" dsoRules === Some sv2
   svX <- allocateParty "svX"
 
   -- overwriting existing sv successfully (using a new participant node)
@@ -430,7 +433,7 @@ testSvReonboarding = do
 
   [(_, dsoRules)] <- query @DsoRules dso
 
-  Map.keys dsoRules.svs === [sv1, sv2, sv3, sv4]
+  operatorParties dsoRules === [sv1, sv2, sv3, sv4]
 
   initiateAndAcceptVote app [sv1, sv2, sv3] $
     ARC_DsoRules with
@@ -440,7 +443,7 @@ testSvReonboarding = do
   executeAllDefinitiveVotes app
 
   [(_, dsoRules)] <- query @DsoRules dso
-  Map.keys dsoRules.svs === [sv1, sv2, sv3]
+  operatorParties dsoRules === [sv1, sv2, sv3]
   Map.keys dsoRules.offboardedSvs === [sv4]
   checkSvContractInvariants app
 
@@ -478,7 +481,7 @@ testSvReonboarding = do
 
   [(_, dsoRules)] <- query @DsoRules dso
 
-  Map.keys dsoRules.svs === [sv1, sv2, sv3, sv4New]
+  operatorParties dsoRules === [sv1, sv2, sv3, sv4New]
   -- sv4 remaines offboarded
   Map.keys dsoRules.offboardedSvs === [sv4]
 

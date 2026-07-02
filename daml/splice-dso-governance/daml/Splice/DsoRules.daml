@@ -10,7 +10,7 @@ import DA.Assert
 import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
 import DA.List as List hiding (all)
-import DA.Optional (isNone, fromSome, fromOptional, isSome, mapOptional)
+import DA.Optional (isNone, fromOptional, isSome, mapOptional)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
@@ -571,7 +571,7 @@ template DsoRules with
       do
         -- FIXME: this whole choice probably should be removed in favor of one to offboard an SV fully by name
         -- and one to make a node a non-operator but keep it an SV
-        require "There is more than one sv" (Map.size svs > 1)
+        require "There is more than one sv" (TextMap.size svRightOwners > 1)
         case find (\(_, v) -> (party <$> v.nodeOperatorInfo) == Some sv) (TextMap.toList svRightOwners) of
           None -> fail ("Not a sv: " <> show sv)
           Some (name, _) -> do
@@ -586,7 +586,7 @@ template DsoRules with
               dso
               epoch
               dsoDelegate
-              svs = this.svs
+              svs
               svRightOwners = newSvs
               offboardedSvs = Map.insert sv offboardedSvInfo offboardedSvs
               config
@@ -670,8 +670,7 @@ template DsoRules with
         unless isDevNet $
           require "CometBft voting power <= 1" (CometBft.totalVotingPower newNodeConfig.cometBft <= 1)
         -- update the SV operator node's state
-        info <- getSvInfo sv this
-        let svName = info.name
+        (svName, _) <- getSvInfoByOperatorParty sv this
         nodeState <- fetchAndArchive (ForSvNode with dso; sv; svName) nodeStateCid
         let state = nodeState.state
         svNodeState <- create nodeState with
@@ -861,7 +860,7 @@ template DsoRules with
         request <- fetchAndArchive (ForDso with dso) requestCid
 
         -- FIXME: use the right threshold incorporating governance vs operator vote and vote weights
-        let activeSvs = map (.name) $ Map.values svs
+        let activeSvs = map fst (TextMap.toList svRightOwners)
         
 
         let activeSvSet = Set.fromList activeSvs
@@ -1131,9 +1130,8 @@ template DsoRules with
         _ <- getAndValidateSvNodeOperatorParty this sv
         -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
         svOnboardingRequest <- fetchAndArchive (ForDso with dso) svOnboardingRequestCid
-        let maybeSv = Map.lookup svOnboardingRequest.candidateParty svs
-        require "SV party is an SV" (isSome maybeSv)
-        require "SV name matches" ((fromSome maybeSv).name == svOnboardingRequest.candidateName)
+        name <- getAndValidateSvNodeOperatorParty this (Some svOnboardingRequest.candidateParty)
+        require "SV name matches" (name == svOnboardingRequest.candidateName)
         return DsoRules_ArchiveSvOnboardingRequestResult
 
     nonconsuming choice DsoRules_ConfirmSvOnboarding : DsoRules_ConfirmSvOnboardingResult
@@ -1788,7 +1786,7 @@ summarizeDso dsoRules = DsoSummary with
       --   We favor the following threshold that agrees with our preference of having both integrity and availability.
       ceiling ((intToDecimal (numSvs + f + 1)) / 2.0)
   where
-    numSvs = Map.size dsoRules.svs
+    numSvs = TextMap.size dsoRules.svRightOwners
     f = floor ((intToDecimal (numSvs - 1)) / 3.0)
 
 -- | Execute an action which requires certain number of confirmations from SVs.
@@ -1886,14 +1884,14 @@ actionRequiringConfirmationEffectiveAt action =
 -- On- and offboarding
 ----------------------
 
-getSvInfo : Party -> DsoRules -> Update SvInfo
-getSvInfo operator this =
-  optional (fail "Not a sv") pure $ Map.lookup operator this.svs
+getSvInfoByOperatorParty : Party -> DsoRules -> Update (Text, SvRightOwnerInfo)
+getSvInfoByOperatorParty operator this =
+  optional (fail ("Not a sv operator: " <> show operator)) pure $ find (\(_, v) -> (party <$> v.nodeOperatorInfo) == Some operator) (TextMap.toList this.svRightOwners)
 
-lookupSvInfoByName : Text -> DsoRules -> Optional (Party, SvInfo)
+lookupSvInfoByName : Text -> DsoRules -> Optional SvRightOwnerInfo
 lookupSvInfoByName svName DsoRules{..} =
-  find (\info -> info._2.name == svName) $ Map.toList svs
-
+  TextMap.lookup svName svRightOwners
+  
 -- | Returns True if an SV with that name is either currently onboarded
 -- or an SV with that name has been onboarded before and is now in offboardedSvs.
 svHasBeenOnboardedBefore : Text -> DsoRules -> Bool
@@ -1916,14 +1914,14 @@ dsoRules_addSv this0 arg@DsoRules_AddSv{..} = do
       then
         let DsoRules{..} = this0 in -- bring all DsoRules fields into scope
         case lookupSvInfoByName newSvName this0 of
-          None -> pure this0
-          Some (sv, info) -> do
+          -- FIXME: cheeck if it's ok to only track this for operators
+          Some SvRightOwnerInfo{nodeOperatorInfo = Some info} -> do
             let offboardingInfo = OffboardedSvInfo with
-                  name = info.name
+                  name = newSvName
                   participantId = info.participantId
             pure $ this0 with
-              svs = Map.delete sv svs
-              offboardedSvs = Map.insert sv offboardingInfo offboardedSvs
+              offboardedSvs = Map.insert info.party offboardingInfo offboardedSvs
+          _ -> pure this0
       else do
         require "SV is not currently onboarded" (isNone $ lookupSvInfoByName newSvName this0)
         pure this0
