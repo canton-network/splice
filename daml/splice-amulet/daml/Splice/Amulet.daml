@@ -92,6 +92,9 @@ data ValidatorRight_ArchiveAsUserResult = ValidatorRight_ArchiveAsUserResult
 
 data FeaturedAppRight_WithdrawResult = FeaturedAppRight_WithdrawResult
 
+data FeaturedAppRight_UpdateResult = FeaturedAppRight_UpdateResult with
+  featuredAppRightCid : ContractId FeaturedAppRight
+
 data FeaturedAppRight_CancelResult = FeaturedAppRight_CancelResult
 
 data AppRewardCoupon_DsoExpireResult = AppRewardCoupon_DsoExpireResult with
@@ -271,14 +274,33 @@ template ValidatorRight with
 
     -- TODO(M3-90): cancellation, withdrawal
 
+defaultAppActivityWeight : Decimal
+defaultAppActivityWeight = 1.0
 
 -- | The right for an application provider to earn featured app rewards.
 template FeaturedAppRight with
     dso : Party
     provider : Party
+    activityWeight : Optional Decimal
+      -- ^ Weight of the this provider's app activity in the computation of traffic-based app rewards.
+      --
+      -- If not set, the default weight of 1.0 is used.
   where
     signatory dso
     observer provider
+    ensure 0.0 <= fromOptional defaultAppActivityWeight activityWeight
+
+    choice FeaturedAppRight_Update : FeaturedAppRight_UpdateResult
+      with
+        reason : Text
+        newActivityWeight : Decimal
+      controller dso
+      do
+        featuredAppRightCid <- create this with
+          -- use `None` for the default to maximize SCU compatibility
+          activityWeight = if newActivityWeight == defaultAppActivityWeight then None else Some newActivityWeight
+        return FeaturedAppRight_UpdateResult with
+          featuredAppRightCid
 
     choice FeaturedAppRight_Withdraw : FeaturedAppRight_WithdrawResult
       with
@@ -707,6 +729,12 @@ instance HasCheckedFetch ValidatorRewardCoupon ForDso where
 
 instance HasCheckedFetch UnclaimedReward ForDso where
   contractGroupId UnclaimedReward {..} = ForDso with dso
+
+instance HasCheckedFetch FeaturedAppRight ForDso where
+  contractGroupId FeaturedAppRight {..} = ForDso with dso
+
+instance HasCheckedFetch FeaturedAppRight ForOwner where
+  contractGroupId FeaturedAppRight {..} = ForOwner with dso; owner = provider
 
 instance HasCheckedFetch FeaturedAppActivityMarker ForOwner where
   contractGroupId FeaturedAppActivityMarker {..} = ForOwner with dso; owner = provider

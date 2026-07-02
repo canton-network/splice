@@ -119,6 +119,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Voted action to create an UnallocatedUnclaimedActivityRecord contract.
   | SRARC_CreateBootstrapExternalPartyConfigStateInstruction DsoRules_CreateBootstrapExternalPartyConfigStateInstruction
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
+  | SRARC_UpdateFeaturedAppRight DsoRules_UpdateFeaturedAppRight
+    -- ^ Update a specific featured app right.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -208,6 +210,9 @@ data DsoRules_GrantFeaturedAppRightResult = DsoRules_GrantFeaturedAppRightResult
     featuredAppRight : ContractId FeaturedAppRight
 
 data DsoRules_RevokeFeaturedAppRightResult = DsoRules_RevokeFeaturedAppRightResult
+
+data DsoRules_UpdateFeaturedAppRightResult = DsoRules_UpdateFeaturedAppRightResult with
+    result : FeaturedAppRight_UpdateResult
 
 data DsoRules_OnboardValidatorResult = DsoRules_OnboardValidatorResult with
     validatorLicense : ContractId ValidatorLicense
@@ -1009,11 +1014,13 @@ template DsoRules with
     nonconsuming choice DsoRules_GrantFeaturedAppRight : DsoRules_GrantFeaturedAppRightResult
       with
         provider : Party
+        activityWeight : Optional Decimal
       controller dso
       do
         featuredAppRight <- create FeaturedAppRight with
           dso
           provider
+          activityWeight
         return DsoRules_GrantFeaturedAppRightResult with ..
 
     nonconsuming choice DsoRules_RevokeFeaturedAppRight : DsoRules_RevokeFeaturedAppRightResult
@@ -1025,6 +1032,16 @@ template DsoRules with
         exercise rightCid FeaturedAppRight_Withdraw with
           reason = "revoked by governance decision"
         return DsoRules_RevokeFeaturedAppRightResult
+
+    nonconsuming choice DsoRules_UpdateFeaturedAppRight : DsoRules_UpdateFeaturedAppRightResult
+      with
+        rightCid : ContractId FeaturedAppRight
+        update : FeaturedAppRight_Update
+      controller dso
+      do
+        void $ fetchChecked (ForDso with dso) rightCid
+        result <- exercise rightCid update
+        return DsoRules_UpdateFeaturedAppRightResult with result
 
 
     -- Validator onboarding
@@ -1793,6 +1810,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_ConfirmSvOnboarding choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_GrantFeaturedAppRight choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RevokeFeaturedAppRight choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_UpdateFeaturedAppRight choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_SetConfig choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UpdateSvRewardWeight choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateExternalPartyAmuletRules choiceArg -> void $ exercise dsoRulesCid choiceArg
@@ -2012,9 +2030,6 @@ instance HasCheckedFetch ElectionRequest ForDso where
 
 instance HasCheckedFetch VoteRequest ForDso where
   contractGroupId VoteRequest {..} = ForDso with dso
-
-instance HasCheckedFetch FeaturedAppRight ForDso where
-  contractGroupId FeaturedAppRight {..} = ForDso with dso
 
 instance HasCheckedFetch UnallocatedUnclaimedActivityRecord ForDso where
   contractGroupId UnallocatedUnclaimedActivityRecord {..} = ForDso with dso
