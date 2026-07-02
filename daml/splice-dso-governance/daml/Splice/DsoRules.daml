@@ -429,6 +429,10 @@ template VoteRequest
     ensure all (voteBefore <=) targetEffectiveAt
     signatory dso
 
+-- FIXME: placeholder
+isGovernanceVote : ActionRequiringConfirmation -> Bool
+isGovernanceVote = \_ -> True
+
 data DsoRules_CloseVoteRequestResult = DsoRules_CloseVoteRequestResult with
     request : VoteRequest -- ^ The original vote request.
     completedAt : Time -- ^ When the vote request was completed.
@@ -664,7 +668,7 @@ template DsoRules with
         nodeStateCid : ContractId SvNodeState
       controller sv
       do
-        -- fixme: maybe add check that node is still a node operator
+        getAndValidateSvNodeOperatorParty this (Some sv)
         -- check that the synchronizer is known
         require "Synchronizer with this id is configured" (synchronizerId `Map.member` config.decentralizedSynchronizer.synchronizers)
         -- check validity of config and constraint on voting power
@@ -743,7 +747,6 @@ template DsoRules with
         sv : Optional Party
       controller sv
       do
-        -- FIXME: ensure only operators can call this
         _ <- getAndValidateSvNodeOperatorParty this sv
         let s = summarizeDso this
         let forDso = ForDso with dso
@@ -770,6 +773,7 @@ template DsoRules with
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
+          -- FIXME: don't make this a parameter but derive it based on the type of vote
       controller requester
       do
         requesterName <- case requester `Map.lookup` svs of
