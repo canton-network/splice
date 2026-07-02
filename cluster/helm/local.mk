@@ -56,9 +56,9 @@ cluster/helm/clean: $(foreach chart,$(app_charts),cluster/helm/$(chart)/helm-cle
 .PHONY: cluster/helm/test
 cluster/helm/test: cluster/helm/build $(foreach chart,$(app_charts),cluster/helm/$(chart)/helm-test)
 
-%/values.yaml: %/values-template.yaml
-  # We do not automatically run write-digests, as we do not want that for local dev, only for published artifacts
-	cp $< $@
+%/values.yaml: %/values-template.yaml cluster/helm/splice-util-lib/security-profiles.yaml
+    # We do not automatically run write-digests, as we do not want that for local dev, only for published artifacts
+	yq '(.. | select(type == "!!map" and has("security_context_profile"))) |= (load("cluster/helm/splice-util-lib/security-profiles.yaml").profiles[.security_context_profile] * .) | del(.. | select(type == "!!map" and has("security_context_profile")).security_context_profile)' $< > $@
 	if [ -f "$(IMAGE_DIGESTS)" ]; then \
 		cat "$(IMAGE_DIGESTS)" >> $@ ; \
 	fi
