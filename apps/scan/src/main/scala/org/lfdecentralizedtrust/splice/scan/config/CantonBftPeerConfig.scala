@@ -3,6 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.scan.config
 
-case class BftSequencerConfig(
+case class CantonBftPeerConfig(
     p2pUrl: String
 )

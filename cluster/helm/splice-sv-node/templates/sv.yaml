@@ -194,7 +194,7 @@ spec:
                 canton.sv-apps.sv.local-synchronizer-nodes.current {
                   sequencer {
                     {{- if .Values.domain.enableBftSequencer }}
-                    is-bft-sequencer = true
+                    is-canton-bft-sequencer = true
                     {{- end }}
                     admin-api {
                       address = {{ .Values.domain.sequencerAddress | quote }}
@@ -228,7 +228,7 @@ spec:
                 canton.sv-apps.sv.local-synchronizer-nodes.{{ $syncName }} {
                   sequencer {
                     {{- if (index $sync "enableBftSequencer") }}
-                    is-bft-sequencer = true
+                    is-canton-bft-sequencer = true
                     {{- end }}
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}
@@ -276,7 +276,7 @@ spec:
                 canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
                   sequencer {
                     {{- if (index $sync "enableBftSequencer") }}
-                    is-bft-sequencer = true
+                    is-canton-bft-sequencer = true
                     {{- end }}
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}

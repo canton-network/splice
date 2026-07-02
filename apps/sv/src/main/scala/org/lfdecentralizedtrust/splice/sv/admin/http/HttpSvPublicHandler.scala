@@ -548,7 +548,7 @@ class HttpSvPublicHandler(
             .activeSynchronizerNode()
             .flatMap(node =>
               getSequencerOnboardingState(
-                node.config.sequencer.isBftSequencer,
+                node.config.sequencer.isCantonBftSequencer,
                 node.sequencerAdminConnection,
                 sequencerId,
               )
@@ -674,7 +674,7 @@ class HttpSvPublicHandler(
   }
 
   private def getSequencerOnboardingState(
-      isBftSequencer: Boolean,
+      isCantonBftSequencer: Boolean,
       sequencerAdminConnection: SequencerAdminConnection,
       sequencerId: SequencerId,
   )(implicit traceContext: TraceContext): Future[ByteString] = {
@@ -683,7 +683,7 @@ class HttpSvPublicHandler(
     )
     for {
       _ <- waitForNewSequencerObservedByExistingSequencer(
-        isBftSequencer,
+        isCantonBftSequencer,
         sequencerAdminConnection,
         sequencerId,
       )

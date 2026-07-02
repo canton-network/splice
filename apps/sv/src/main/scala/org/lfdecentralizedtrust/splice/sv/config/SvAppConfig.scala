@@ -562,8 +562,8 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
-    isBftSequencer: Boolean = false,
-    dabftPruning: Option[PruningConfig] = Some(
+    isCantonBftSequencer: Boolean = false,
+    cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
         maxDuration = PositiveDurationSeconds.ofMinutes(5),

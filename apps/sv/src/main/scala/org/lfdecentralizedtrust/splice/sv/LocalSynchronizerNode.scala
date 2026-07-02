@@ -530,9 +530,9 @@ class LocalSynchronizerNode(
     )
 
   def ensureDABFTPruningSchedule()(implicit tc: TraceContext): Future[Unit] = {
-    if (config.sequencer.isBftSequencer) {
+    if (config.sequencer.isCantonBftSequencer) {
       sequencerAdminConnection.ensurePruningSchedule(
-        config.sequencer.dabftPruning
+        config.sequencer.cantonBftPruning
       )
     } else Future.unit
   }
