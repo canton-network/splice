@@ -40,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: "cometbft"
-          {{- with $.Values.securityContexts.cometbft }}
+          {{- with $.Values.securityContexts.containers.cometbft }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

@@ -109,9 +109,10 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        cometbft:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          cometbft:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment
@@ -125,8 +126,13 @@ tests:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - equal:
-          path: spec.template.spec.containers[0].securityContext.runAsUser
-          value: 5000
-      - equal:
-          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
-          value: true
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL

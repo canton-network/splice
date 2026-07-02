@@ -113,16 +113,8 @@ enableReloader: true
 
 securityContexts:
   pod:
-    fsGroup: 1001 # allows unprivileged user to write to /cometbft/config and /cometbft/data
-    seccompProfile:
-      type: RuntimeDefault
-  cometbft:
-    runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
-    allowPrivilegeEscalation: false
-    privileged: false
-    capabilities:
-      drop:
-        - ALL
-
+    security_context_profile: pod_security_context
+    fsGroup: 1001
+  containers:
+    cometbft:
+      security_context_profile: app_security_context

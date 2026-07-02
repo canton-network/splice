@@ -11,11 +11,17 @@
         "pod": {
           "type": "object"
         },
-        "cometbft": {
-          "type": "object"
+        "containers": {
+          "type": "object",
+          "properties": {
+            "cometbft": {
+              "type": "object"
+            }
+          },
+          "required": ["cometbft"]
         }
       },
-      "required": ["pod", "cometbft"]
+      "required": ["pod", "containers"]
     },
     "imageName": {
       "type": "string"
