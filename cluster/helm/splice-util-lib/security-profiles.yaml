@@ -1,0 +1,31 @@
+profiles:
+  common_pod:
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
+  common_container:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+
+  common_ui:
+    # runAsUser, runAsGroup, and runAsNonRoot are intentionally omitted
+    # to prevent entrypoint initialization script crashes (Exit Code 126)
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+
+  common_persistent:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
