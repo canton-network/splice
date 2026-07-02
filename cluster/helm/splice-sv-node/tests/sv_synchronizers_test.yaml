@@ -335,3 +335,31 @@ tests:
                 }
               }
             }
+
+  - it: "fails when an unknown key is set under synchronizers.current"
+    set:
+      synchronizers:
+        current:
+          sequencerPublicUrl: "https://sequencer1.test.com"
+          sequencerAddress: "sequencer1-address"
+          mediatorAddress: "mediator1-address"
+          notAValidKey: "boom"
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/synchronizers/current': additional properties 'notAValidKey' not allowed"
+
+  - it: "fails when an unknown key is set under synchronizers.successor"
+    set:
+      synchronizers:
+        current:
+          sequencerPublicUrl: "https://sequencer1.test.com"
+          sequencerAddress: "sequencer1-address"
+          mediatorAddress: "mediator1-address"
+        successor:
+          sequencerPublicUrl: "https://sequencer2.test.com"
+          sequencerAddress: "sequencer2-address"
+          mediatorAddress: "mediator2-address"
+          notAValidKey: "boom"
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/synchronizers/successor': additional properties 'notAValidKey' not allowed"

@@ -1,0 +1,244 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Utilities to implement token standard templates and choices.
+module Splice.TokenStandard.Utils (
+
+  -- * Utilities for both allocation and transfer workflows
+
+  -- ** Accounts
+  accountPrincipal,
+  accountParties,
+  isRegularAccount,
+  regularAccountParties,
+  regularAccountOwner,
+
+  basicAccount,
+  isBasicAccount,
+
+  ensureBasicAccount,
+  ensureNoAccountMeta,
+  accountFromMeta,
+  accountToMeta,
+  partiesFromMeta,
+  partiesToMeta,
+
+  -- ** Requirements checking
+  require,
+  require',
+  isMemberR,
+  isEqualR,
+  isEqualSetR,
+  isSubsetOfR,
+  oneOfR,
+  notR,
+  isGreaterOrEqualR,
+  isGreaterR,
+  isLessR,
+  isLessOrEqualR,
+
+  requireMatchExpected,
+  requireUnique,
+
+  expectOneElement,
+
+  -- ** Actors pattern
+  checkActor,
+  checkActors,
+  archiveAndCheckActors,
+
+  -- ** Public fetch implementation
+  publicFetchDefaultImpl,
+
+  -- * AnyContractId conversion
+  fromAnyContractId,
+  toAnyContractId,
+
+  -- * Metadata utilities
+
+  -- ** Extra metadata fields
+  extraExecutorsMetaKey,
+  expiresAtMetaKey,
+  expiresAtToMeta,
+
+  -- ** Transfer metadata
+  reasonMetaKey,
+  txKindMetaKey,
+  senderMetaKey,
+  receiverMetaKey,
+  reasonFromMeta,
+  reasonToMeta,
+  mkMetaTransferFrom,
+  v1HistoryTagAsUnlockV1,
+
+  -- * Missing Time utilities
+  -- TODO(#4865): upstream these to the Daml stdlib
+  maxTime,
+
+  -- * Missing TextMap utilities
+
+  -- TODO(#4865): upstream these to the Daml stdlib
+  textMapUnionWith,
+  textMapMergeWithDefault,
+  textMapSingleton,
+  textMapValues,
+  textMapKeys,
+  textMapZip,
+  textMapTraverseWithKey,
+
+  -- * API type conversions
+  BackwardCompatible(..),
+  ForwardCompatible(..),
+
+  -- * Events
+  eventLog_holdingsChangeDefaultImpl,
+
+  burnAccount,
+  mintAccount,
+
+  logMint,
+  logBurn,
+  logHoldingsChange,
+  logMergeSplit,
+  logTransfer,
+  logAllocationSettlement,
+
+
+  -- * Allocation workflows
+
+  -- ** Utilities for allocations
+  netAllocationCreditAmounts,
+  nonIteratedAllocation,
+
+  -- *** Working with transfer legs and their sides
+  senderSide,
+  receiverSide,
+  transferLegFromSide,
+  transferLegSidesWithAuthorizer,
+
+  -- *** Auto-creation of receipt allocations
+  ensureIsReceiptAllocation,
+
+  -- ** Allocation implementation
+
+  -- *** Ensures clauses
+  isValidSettlementInfoV1,
+  isValidAllocationSpecificationV1,
+
+  isValidSettlementInfoV2,
+  isValidAllocationSpecificationV2,
+
+  -- *** Available actions
+  allocationV1_availableActionsDefault,
+  allocationV2_availableActionsDefault,
+
+  -- ** Non-standard conversions
+  upcast_v1_v2_TransferLeg,
+  downcast_v2_v1_TransferLeg,
+  downcast_v2_v1_SettlementInfo,
+  upcast_v1_v2_AllocationView,
+  tryDowncast_v2_v1_AllocationView,
+
+  executorsFromSettlementInfoV1,
+
+  -- *** Choices
+  allocationV2_withdrawDefaultImplUsingV1,
+  allocationV2_cancelDefaultImpl,
+
+  validateNextIterationArgs,
+  ensureWithdrawIsAllowed,
+  cannotWithdrawCommittedAllocationFailure,
+
+  -- ** Settlement factory implementation
+  settlementFactoryV2_settleBatchDefaultImpl,
+
+  -- *** Extra observers
+  settlementFactoryV2_publicAsset_settleBatchExtraObserversDefaultImpl,
+  settlementFactoryV2_privateAsset_settleBatchExtraObserversDefaultImpl,
+
+  -- *** Support for custom batch settlement
+  fetchAndValidateAllocations,
+
+  -- *** V1 defaults using V2 implementations
+  viewAsAllocationV1,
+  canViewAsAllocationV1,
+
+  allocationV1_executeTransferDefaultImplUsingV2,
+  allocationV1_withdrawDefaultImplUsingV2,
+  allocationV1_cancelDefaultImplUsingV2,
+
+  allocationSettlementTxHistoryV1ToMeta,
+
+  -- * Allocation instruction template implementations
+
+  -- ** Non-standard conversions
+  upcast_v1_v2_AllocationInstructionView,
+  tryDowncast_v2_v1_AllocationInstructionView,
+
+  -- ** V1 defaults using V2 implementations
+  viewAsAllocationInstructionV1,
+  canViewAsAllocationInstructionV1,
+
+  allocationInstructionV1_withdrawDefaultImplUsingV2,
+  allocationInstructionV1_updateDefaultImplUsingV2,
+
+
+  -- * Allocation request implementation
+
+  -- ** Non-standard conversions
+  downcast_v2_v1_AllocationRequestView,
+
+  -- ** V1 defaults
+  allocationRequestV1_rejectDefaultImpl,
+  allocationRequestV1_withdrawDefaultImpl,
+
+  -- ** V2 defaults
+  allocationRequestV2_acceptDefaultImpl,
+
+  -- ** V2 for dual version templates
+  allocationRequestV2_rejectDefaultImplUsingV1,
+  allocationRequestV2_withdrawDefaultImplUsingV1,
+
+  -- * Allocation factory implementations
+
+  -- ** V2 Choice observers
+  allocationFactoryV2_privateAsset_allocateExtraObserversDefaultImpl,
+  allocationFactoryV2_publicAsset_allocateExtraObserversDefaultImpl,
+
+  -- ** V1 defaults using V2 implementations
+  allocationFactoryV1_allocateDefaultImplUsingV2,
+
+
+  -- * Transfer factory implementations
+
+  -- * Validation
+  isValidTransferV2,
+
+  -- ** Implementing V1 based on V2 for dual version templates
+  transferFactoryV1_transferDefaultImplUsingV2,
+  transferInstructionV1_acceptDefaultImplUsingV2,
+  transferInstructionV1_withdrawDefaultImplUsingV2,
+  transferInstructionV1_rejectDefaultImplUsingV2,
+  transferInstructionV1_updateDefaultImplUsingV2,
+
+  transferAcceptanceTxHistoryV1ToMeta,
+
+  -- ** Implementing V2 based on V1 for dual version templates
+  transferInstructionV2_receiverActor_acceptDefaultImplUsingV1,
+  transferInstructionV2_receiverActor_rejectDefaultImplUsingV1,
+  transferInstructionV2_senderActor_withdrawDefaultImplUsingV1,
+
+  transferFactoryV2_transferDefaultImplUsingV1,
+
+  -- *** TransferFactory extra observers
+  transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
+  transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
+
+) where
+
+
+import Splice.TokenStandard.Utils.Internal.Conversions
+import Splice.TokenStandard.Utils.Internal.Choices
+import Splice.TokenStandard.Utils.Internal.Events
+import Splice.TokenStandard.Utils.Internal.Transfers
+import Splice.TokenStandard.Utils.Internal.Allocations

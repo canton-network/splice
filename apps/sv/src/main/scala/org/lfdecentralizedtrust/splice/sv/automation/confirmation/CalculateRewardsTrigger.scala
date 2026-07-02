@@ -3,8 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
-import com.daml.metrics.api.MetricHandle.{Gauge, LabeledMetricsFactory, Meter, Timer}
-import com.daml.metrics.api.MetricQualification.{Errors, Latency, Saturation}
+import com.daml.metrics.api.MetricHandle.{LabeledMetricsFactory, Meter, Timer}
+import com.daml.metrics.api.MetricQualification.{Errors, Latency}
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
@@ -32,7 +32,6 @@ import org.lfdecentralizedtrust.splice.util.AssignedContract
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.metrics.api.MetricsContext.Implicits.empty
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -65,7 +64,6 @@ abstract class CalculateRewardsTriggerBase(
     // These are ordered by round, so we process the oldest first
     calculateRewards <- store.listCalculateRewardsV2()
     calculateRewardsForThisTrigger = calculateRewards.filter(_.payload.dryRun == isDryRun)
-    _ = rewardMetrics.calculateRewardsContractCount.updateValue(calculateRewardsForThisTrigger.size)
     confirmedCids <- listConfirmedCalculateRewardsCids()
   } yield calculateRewardsForThisTrigger
     .filterNot(c => confirmedCids.contains(c.contractId))
@@ -195,14 +193,6 @@ abstract class CalculateRewardsTriggerBase(
       )
     )
 
-  override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    Seq(
-      SyncCloseable(
-        "rewardMetrics",
-        rewardMetrics.close(),
-      )
-    )
-  }
 }
 
 class CalculateRewardsTrigger(
@@ -258,8 +248,7 @@ object CalculateRewardsTriggerBase {
       )
   }
 
-  class CalculateRewardsMetrics(metricsFactory: LabeledMetricsFactory, dryRun: Boolean)
-      extends AutoCloseable {
+  class CalculateRewardsMetrics(metricsFactory: LabeledMetricsFactory, dryRun: Boolean) {
 
     private val metricsContext = MetricsContext.Empty.withExtraLabels("dryRun" -> dryRun.toString)
 
@@ -286,20 +275,5 @@ object CalculateRewardsTriggerBase {
           qualification = Errors,
         )
       )(metricsContext)
-
-    val calculateRewardsContractCount: Gauge[Int] =
-      metricsFactory.gauge(
-        MetricInfo(
-          name = prefix :+ "calculate_rewards_v2" :+ "active_contracts",
-          summary =
-            "The number of active CalculateRewardsV2 contracts, as seen by the CalculateRewardsTrigger",
-          Saturation,
-        ),
-        initial = -1,
-      )(metricsContext)
-
-    override def close(): Unit = {
-      calculateRewardsContractCount.close()
-    }
   }
 }

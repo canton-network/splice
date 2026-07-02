@@ -102,6 +102,53 @@ tests:
                 port = 5007
               }
             }
+  - it: "fails when an unknown key is set under synchronizers.current"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      synchronizers:
+        current:
+          sequencer: "current-sequencer-address"
+          mediator: "current-mediator-address"
+          notAValidKey: "boom"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      maxDarVersion: 1.0.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/synchronizers/current': additional properties 'notAValidKey' not allowed"
+  - it: "fails when an unknown key is set under synchronizers.successor"
+    set:
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://mock.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      synchronizers:
+        current:
+          sequencer: "current-sequencer-address"
+          mediator: "current-mediator-address"
+        successor:
+          sequencer: "successor-sequencer-address"
+          mediator: "successor-mediator-address"
+          notAValidKey: "boom"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      maxDarVersion: 1.0.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/synchronizers/successor': additional properties 'notAValidKey' not allowed"
   - it: "sets legacy synchronizer"
     set:
       spliceInstanceNames:
@@ -160,7 +207,7 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
       participantAddress: "mock-address"
       persistence:
@@ -188,12 +235,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         successor:
           sequencer: "successor-sequencer-address"
           mediator: "successor-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-successor:5678"
       participantAddress: "mock-address"
       persistence:
@@ -224,12 +271,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:
@@ -260,12 +307,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:
@@ -297,12 +344,12 @@ tests:
         current:
           sequencer: "current-sequencer-address"
           mediator: "current-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-current:1234"
         legacy:
           sequencer: "legacy-sequencer-address"
           mediator: "legacy-mediator-address"
-          bftSequencerConfig:
+          cantonBft:
             p2pUrl: "http://bft-p2p-legacy:9012"
       participantAddress: "mock-address"
       persistence:

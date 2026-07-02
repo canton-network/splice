@@ -145,6 +145,9 @@ object ResourceTemplateDecoder {
       resource.path,
       { path =>
         val inputStream = getClass.getClassLoader.getResourceAsStream(path)
+        if (inputStream == null) {
+          throw new IllegalArgumentException("Resource not found: " + path)
+        }
         val dar: Dar[ArchivePayload] = DarReader
           .readArchive(resource.path, new ZipInputStream(inputStream))
           .valueOr(e =>

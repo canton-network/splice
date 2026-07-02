@@ -34,12 +34,13 @@ synchronizers:
       pruningInterval: "1 hour"
       # The retention period is the time for which the sequencer will retain the data.
       retentionPeriod: "30 days"
+    # Set to true when using CantonBFT
+    enableBftSequencer: false
   #DOCS_PRUNING_END
     sequencerAddress: "global-domain-SERIAL_ID-sequencer"
     mediatorAddress: "global-domain-SERIAL_ID-mediator"
     sequencerPublicUrl: "https://sequencer-SERIAL_ID.sv.YOUR_HOSTNAME"
     sequencerAvailabilityDelay: "60 seconds"
-    enableBftSequencer: false
     cometBFT:
       enabled: true
       connectionUri: "http://global-domain-SERIAL_ID-cometbft-cometbft-rpc:26657"

@@ -70,11 +70,7 @@ object DbAppActivityRecordStore {
       runningUser: Int,
       storedCode: Int,
       storedUser: Int,
-  ) extends MetaCheckResult {
-    def message: String =
-      s"Activity ingestion version downgrade detected: " +
-        s"running=($runningCode,$runningUser), stored=($storedCode,$storedUser)."
-  }
+  ) extends MetaCheckResult
 
   def checkMetaVersions(
       existing: Option[(Int, Int)],
@@ -353,12 +349,7 @@ class DbAppActivityRecordStore(
         case (Resume, Some(round)) => updateLastArchivedRoundDBIO(round)
         case _ => DBIO.successful(0)
       }
-    } yield ensureResult match {
-      case d: DowngradeDetected =>
-        logger.error(s"${d.message} Shutting down to prevent data corruption.")
-        sys.exit(1)
-      case _ => ()
-    }
+    } yield ()
   }
 
   /** Insert activity records only, without meta row management.
@@ -469,7 +460,8 @@ class DbAppActivityRecordStore(
   def ensureMetaDBIO(
       ingestionStart: (Long, Long),
       lastArchivedRoundO: Option[Long] = None,
-  ): DBIO[MetaCheckResult] = {
+      exitOnDowngrade: Boolean = true,
+  )(implicit tc: TraceContext): DBIO[MetaCheckResult] = {
     val codeVersion = ingestionVersions.code
     val userVersion = ingestionVersions.user
     val (firstRecordTimeMicros, earliestRound) = ingestionStart
@@ -496,16 +488,34 @@ class DbAppActivityRecordStore(
               earliestRound,
               lastArchivedRoundO,
             ).map { _ =>
+              logger.info(
+                s"App activity ingestion inserted new meta row for " +
+                  s"codeVersion=${ingestionVersions.code}, userVersion=${ingestionVersions.user}."
+              )
               metaChecked.set(true)
               InsertMeta: MetaCheckResult
             }
           case Resume =>
+            logger.info(
+              s"App activity ingestion resumed with existing meta row for " +
+                s"codeVersion=${ingestionVersions.code}, userVersion=${ingestionVersions.user}."
+            )
             DBIO.successful {
               metaChecked.set(true)
               Resume: MetaCheckResult
             }
           case d: DowngradeDetected =>
-            DBIO.successful(d: MetaCheckResult)
+            logger.error(
+              s"App activity ingestion version downgrade detected: " +
+                s"running=(${d.runningCode},${d.runningUser}), stored=(${d.storedCode},${d.storedUser}). " +
+                s"Make sure you did not accidentally remove or downgrade the 'activity-ingestion-user-version' field" +
+                s"in the scan app config. Shutting down to prevent data corruption."
+            )
+            if (exitOnDowngrade) {
+              sys.exit(1)
+            } else {
+              DBIO.successful(d: MetaCheckResult)
+            }
         }
       } yield result
     }

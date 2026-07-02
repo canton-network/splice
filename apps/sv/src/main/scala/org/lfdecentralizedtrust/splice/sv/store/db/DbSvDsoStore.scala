@@ -793,6 +793,43 @@ class DbSvDsoStore(
       assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
     )
 
+  override def listProcessRewardsV2Sample(dryRun: Boolean, limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+      splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+              "sample."
+            )}
+             from (
+               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               from #${DsoTables.acsTableName} acs
+               where acs.store_id = $acsStoreId
+                 and acs.migration_id = $domainMigrationId
+                 and acs.package_name = ${splice.amulet.rewardaccountingv2.ProcessRewardsV2.PACKAGE_NAME}
+                 and acs.template_id_qualified_name = ${QualifiedName(
+              splice.amulet.rewardaccountingv2.ProcessRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and acs.create_arguments->>'dryRun' = ${dryRun.toString}
+               limit 1000
+             ) sample
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+          "listProcessRewardsV2Sample",
+        )
+      limited = applyLimit("listProcessRewardsV2Sample", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
+    )
+
   override def listRewardCouponsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[
@@ -1103,11 +1140,13 @@ class DbSvDsoStore(
   override def listExpiredAmulets(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet] = {
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val filterClause: SQLActionBuilder = if (ignoredParties.nonEmpty) {
-      (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
-    } else {
-      sql""
+    val filterClause: () => SQLActionBuilder = () => {
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
+      } else {
+        sql""
+      }
     }
     listExpiredRoundBased(splice.amulet.Amulet.COMPANION, filterClause)
   }
@@ -1115,14 +1154,16 @@ class DbSvDsoStore(
   override def listLockedExpiredAmulets(
       ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet] = {
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val filterClause = if (ignoredParties.nonEmpty) {
-      (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
-        sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
-            .map(p => lengthLimited(p.toProtoPrimitive))
-            .toArray: Array[String2066]})").toActionBuilder
-    } else {
-      sql""
+    val filterClause: () => SQLActionBuilder = () => {
+      val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+      if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
+          sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
+              .map(p => lengthLimited(p.toProtoPrimitive))
+              .toArray: Array[String2066]})").toActionBuilder
+      } else {
+        sql""
+      }
     }
     listExpiredRoundBased(splice.amulet.LockedAmulet.COMPANION, filterClause)
   }
@@ -1168,6 +1209,52 @@ class DbSvDsoStore(
         } yield rows.map(
           assignedContractFromRow(
             splice.amuletallocation.AmuletAllocation.COMPANION
+          )(_)
+        )
+      }
+    }
+
+  override def listExpiredAmuletAllocationsV2(
+      ignoredParties: Set[PartyId]
+  ): ListExpiredContracts[
+    splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+    splice.amuletallocationv2.AmuletAllocationV2,
+  ] = (now, limit) =>
+    implicit tc => {
+      val _ = tc
+      // `not (json_array ?| string_array)` means "arrays do not overlap"
+      // the first ? is to escape the second
+      val filterClause = if (ignoredParties.nonEmpty) {
+        (sql" and " ++ notInClause(
+          "create_arguments->'allocation'->'authorizer'->>'owner'",
+          ignoredParties,
+        ) ++ sql" and not (create_arguments->'settlement'->'executors' ??| ${ignoredParties
+            .map(p => lengthLimited(p.toProtoPrimitive))
+            .toArray[String2066]})").toActionBuilder
+      } else {
+        sql""
+      }
+
+      waitUntilAcsIngested {
+        for {
+          synchronizerId <- getDsoRules().map(_.domain)
+          rows <- storage.query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
+              additionalWhere = (sql"""
+                and assigned_domain = $synchronizerId
+                and acs.contract_expires_at < ${now}
+              """ ++ filterClause).toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "listExpiredAmuletAllocationsV2",
+          )
+        } yield rows.map(
+          assignedContractFromRow(
+            splice.amuletallocationv2.AmuletAllocationV2.COMPANION
           )(_)
         )
       }
@@ -1221,7 +1308,7 @@ class DbSvDsoStore(
 
   private def listExpiredRoundBased[Id <: ContractId[T], T <: javab.Template](
       companion: Template[Id, T],
-      extraFilter: SQLActionBuilder,
+      extraFilter: () => SQLActionBuilder,
   ): ListExpiredContracts[Id, T] = (_, limit) =>
     implicit tc => {
       waitUntilAcsIngested {
@@ -1256,7 +1343,7 @@ class DbSvDsoStore(
                   splice.externalpartyconfigstate.ExternalPartyConfigState.TEMPLATE_ID_WITH_PACKAGE_ID
                 )}
                     and mining_round is not null
-                  order by mining_round asc limit 1), true)""" ++ extraFilter).toActionBuilder,
+                  order by mining_round asc limit 1), true)""" ++ extraFilter()).toActionBuilder,
               orderLimit = sql"""order by mining_round desc limit ${sqlLimit(limit)}""",
             ),
             "listExpiredRoundBased",
@@ -1382,6 +1469,40 @@ class DbSvDsoStore(
     } yield applyLimit("listNonObserverRewardCouponsV2ForProvider", limit, result).map(
       contractFromRow(RewardCouponV2.COMPANION)(_)
     )
+  }
+
+  override def listTopNonObserverRewardCouponV2Providers(
+      couponScanLimit: Int,
+      maxProviders: Int,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[(PartyId, Long)]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select reward_party, count(*) as coupon_count
+             from (
+               select reward_party
+               from #${DsoTables.acsTableName}
+               where store_id = $acsStoreId
+                 and migration_id = $domainMigrationId
+                 and package_name = ${RewardCouponV2.PACKAGE_NAME}
+                 and template_id_qualified_name = ${QualifiedName(
+              RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                 and reward_beneficiary_is_observer = false
+               limit $couponScanLimit
+             ) sub
+             group by reward_party
+             order by coupon_count desc
+             limit $maxProviders
+           """).as[(String, Long)],
+          "listTopNonObserverRewardCouponV2Providers",
+        )
+    } yield result.map { case (party, count) =>
+      PartyId.tryFromProtoPrimitive(party) -> count
+    }
   }
 
   override def listSvAmuletPriceVotes(limit: Limit = defaultLimit)(implicit

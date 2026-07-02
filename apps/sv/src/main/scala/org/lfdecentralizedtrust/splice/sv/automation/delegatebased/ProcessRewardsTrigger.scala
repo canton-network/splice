@@ -3,11 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
-import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
-import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.automation.{
-  OnAssignedContractTrigger,
+  PollingParallelTaskExecutionTrigger,
   TaskOutcome,
   TaskSuccess,
   TriggerContext,
@@ -28,9 +26,12 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.metrics.api.MetricsContext.Implicits.empty
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
@@ -50,7 +51,7 @@ import scala.util.{Failure, Success}
 
 private[delegatebased] abstract class ProcessRewardsTriggerBase(
     override protected val context: TriggerContext,
-    override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    protected val svTaskContext: SvTaskBasedTrigger.Context,
     getOwnScanConnection: () => Future[ScanConnection],
     getPeerBftScanConnection: () => Future[BftScanConnection],
     isDryRun: Boolean,
@@ -58,31 +59,27 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
-) extends OnAssignedContractTrigger.Template[
-      ProcessRewardsV2.ContractId,
-      ProcessRewardsV2,
-    ](
-      svTaskContext.dsoStore,
-      ProcessRewardsV2.COMPANION,
-    )
-    with SvTaskBasedTrigger[ProcessRewardsV2Contract] {
+) extends PollingParallelTaskExecutionTrigger[Task] {
 
   private val store = svTaskContext.dsoStore
   private val rewardMetrics = new ProcessRewardsMetrics(context.metricsFactory, isDryRun)
 
   override def extraMetricLabels: Seq[(String, String)] = Seq("dryRun" -> isDryRun.toString)
 
-  override protected def source(implicit
-      traceContext: TraceContext
-  ): Source[ProcessRewardsV2Contract, NotUsed] =
-    super.source.filter(_.payload.dryRun == isDryRun)
+  override def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] =
+    // This does a random sample from 1k contracts, which should distribute the
+    // work among SVs if we have more than 'parallelism' number of pending contracts.
+    store
+      .listProcessRewardsV2Sample(isDryRun, PageLimit.tryCreate(context.config.parallelism))
+      .map(_.map(Task(_)))
 
-  override def completeTaskAsDsoDelegate(
-      task: ProcessRewardsV2Contract,
-      controller: String,
+  override def completeTask(
+      task: Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val round = task.payload.round.number
-    val batchHash = task.payload.batchHash.value
+    val processRewards = task.processRewards
+    val controller = store.key.svParty.toProtoPrimitive
+    val round = processRewards.payload.round.number
+    val batchHash = processRewards.payload.batchHash.value
     val batchF = fetchBatch(round, batchHash)
     val dsoRulesF = store.getDsoRules()
     for {
@@ -96,7 +93,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       )
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ProcessRewardsV2_ProcessBatch(
-          task.contractId,
+          processRewards.contractId,
           choiceArg,
           controller,
         )
@@ -111,12 +108,19 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         .noDedup
         .yieldUnit()
       delay = java.time.Duration
-        .between(task.payload.roundClosedAt, context.clock.now.toInstant)
+        .between(processRewards.payload.roundClosedAt, context.clock.now.toInstant)
       _ = rewardMetrics.processRewardsProcessingDelay.update(delay)
     } yield TaskSuccess(
       s"Processed round $round, processingDelay=$delay, batchType=${batchTypeOf(batch)}"
     )
   }
+
+  override def isStaleTask(task: Task)(implicit
+      tc: TraceContext
+  ): Future[Boolean] =
+    store.multiDomainAcsStore
+      .lookupContractById(ProcessRewardsV2.COMPANION)(task.processRewards.contractId)
+      .map(_.isEmpty)
 
   private def batchTypeOf(response: GetRewardAccountingBatchResponse): String =
     response match {
@@ -209,7 +213,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
 
 class ProcessRewardsTrigger(
     override protected val context: TriggerContext,
-    override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    svTaskContext: SvTaskBasedTrigger.Context,
     getOwnScanConnection: () => Future[ScanConnection],
     getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
@@ -226,7 +230,7 @@ class ProcessRewardsTrigger(
 
 class ProcessRewardsDryRunTrigger(
     override protected val context: TriggerContext,
-    override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    svTaskContext: SvTaskBasedTrigger.Context,
     getOwnScanConnection: () => Future[ScanConnection],
     getPeerBftScanConnection: () => Future[BftScanConnection],
 )(implicit
@@ -246,6 +250,14 @@ object ProcessRewardsTriggerBase {
     ProcessRewardsV2.ContractId,
     ProcessRewardsV2,
   ]
+
+  final case class Task(processRewards: ProcessRewardsV2Contract) extends PrettyPrinting {
+    override def pretty: Pretty[this.type] =
+      prettyOfClass(
+        param("round", _.processRewards.payload.round.number),
+        param("dryRun", _.processRewards.payload.dryRun.toString.unquoted),
+      )
+  }
 
   class ProcessRewardsMetrics(metricsFactory: LabeledMetricsFactory, dryRun: Boolean) {
 
