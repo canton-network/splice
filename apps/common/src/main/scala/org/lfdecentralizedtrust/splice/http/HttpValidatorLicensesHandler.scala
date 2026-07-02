@@ -7,6 +7,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as v
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.ListValidatorLicensesResponse
 import org.lfdecentralizedtrust.splice.store.{AppStore, Limit, PageLimit, SortOrder}
+import com.digitalasset.daml.lf.data.Time.Timestamp
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import io.opentelemetry.api.trace.Tracer
@@ -27,7 +29,7 @@ trait HttpValidatorLicensesHandler extends Spanning with NamedLogging {
   )(implicit
       @annotation.unused tc: TraceContext,
       @annotation.unused ex: ExecutionContext,
-  ): Future[Map[vl.ValidatorLicense.ContractId, String]] = Future.successful(Map.empty)
+  ): Future[Map[vl.ValidatorLicense.ContractId, CantonTimestamp]] = Future.successful(Map.empty)
 
   def listValidatorLicenses(after: Option[Long], limit: Option[Int])(implicit
       tc: TraceContext,
@@ -49,7 +51,8 @@ trait HttpValidatorLicensesHandler extends Spanning with NamedLogging {
         overrides <- overrideValidatorLicenseCreatedAt(page.resultsInPage)
         contracts = page.resultsInPage.map { license =>
           overrides.get(license.contractId) match {
-            case Some(ts) => license.toHttp.copy(createdAt = ts)
+            case Some(ts) =>
+              license.toHttp.copy(createdAt = Timestamp.assertFromInstant(ts.toInstant).toString)
             case None => license.toHttp
           }
         }

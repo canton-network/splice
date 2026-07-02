@@ -533,7 +533,7 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext,
       ex: ExecutionContext,
-  ): Future[Map[ValidatorLicense.ContractId, String]] = {
+  ): Future[Map[ValidatorLicense.ContractId, CantonTimestamp]] = {
     val rounds = licenses
       .flatMap(_.payload.faucetState.toScala.map(_.firstReceivedFor.number.longValue))
       .distinct
@@ -542,7 +542,7 @@ class HttpScanHandler(
         for {
           fs <- l.payload.faucetState.toScala
           ts <- roundToTime.get(fs.firstReceivedFor.number.longValue)
-        } yield l.contractId -> Timestamp.assertFromInstant(ts.toInstant).toString
+        } yield l.contractId -> ts
       }.toMap
     }
   }

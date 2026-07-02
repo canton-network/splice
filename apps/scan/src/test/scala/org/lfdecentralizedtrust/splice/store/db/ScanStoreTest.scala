@@ -114,28 +114,34 @@ abstract class ScanStoreTest
         }
       }
 
-      "return record_time keyed by round for known rounds" in {
+      "return min(record_time) keyed by round for known rounds" in {
         val r2 = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
         val r3 = openMiningRound(dsoParty, round = 3, amuletPrice = 3.0)
+        val t2 = java.time.Instant.parse("2026-01-01T00:00:00Z")
+        val t3 = java.time.Instant.parse("2026-01-02T00:00:00Z")
 
         for {
           store <- mkStore()
-          _ <- dummyDomain.create(r2)(store.multiDomainAcsStore)
-          _ <- dummyDomain.create(r3)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(r2, recordTime = t2)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(r3, recordTime = t3)(store.multiDomainAcsStore)
         } yield {
           val result = store.getOpenMiningRoundCreatedAt(Seq(2L, 3L)).futureValue
-          result.keySet shouldBe Set(2L, 3L)
+          result shouldBe Map(
+            2L -> CantonTimestamp.assertFromInstant(t2),
+            3L -> CantonTimestamp.assertFromInstant(t3),
+          )
         }
       }
 
       "return only entries for rounds present, ignore unknown" in {
         val r2 = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
+        val t2 = java.time.Instant.parse("2024-01-01T00:00:00Z")
         for {
           store <- mkStore()
-          _ <- dummyDomain.create(r2)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(r2, recordTime = t2)(store.multiDomainAcsStore)
         } yield {
           val result = store.getOpenMiningRoundCreatedAt(Seq(2L, 999L)).futureValue
-          result.keySet shouldBe Set(2L)
+          result shouldBe Map(2L -> CantonTimestamp.assertFromInstant(t2))
         }
       }
 
