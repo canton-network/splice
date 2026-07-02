@@ -89,9 +89,10 @@ tests:
       securityContexts:
         pod:
           runAsNonRoot: true
-        svWebUi:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          svWebUi:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment

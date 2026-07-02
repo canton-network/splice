@@ -542,12 +542,13 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        sv:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
-        persistence:
-          runAsUser: 6000
-          privileged: true
+        containers:
+          sv:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            runAsUser: 6000
+            privileged: true
     documentSelector:
       path: kind
       value: Deployment
@@ -561,14 +562,22 @@ tests:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - equal:
-          path: spec.template.spec.containers[?(@.name=='sv-app')].securityContext.runAsUser
-          value: 5000
+          path: spec.template.spec.containers[?(@.name=='sv-app')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
       - equal:
-          path: spec.template.spec.containers[?(@.name=='sv-app')].securityContext.allowPrivilegeEscalation
-          value: true
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].securityContext.runAsUser
-          value: 6000
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].securityContext.privileged
-          value: true
+          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: true
+            runAsUser: 6000
+            capabilities:
+              drop:
+                - ALL

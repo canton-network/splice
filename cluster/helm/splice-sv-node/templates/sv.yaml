@@ -36,7 +36,7 @@ spec:
       {{- end }}
       containers:
         - name: sv-app
-          {{- with .Values.securityContexts.sv }}
+          {{- with .Values.securityContexts.containers.sv }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -593,7 +593,7 @@ spec:
           {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

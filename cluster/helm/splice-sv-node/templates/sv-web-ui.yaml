@@ -76,7 +76,7 @@ spec:
           imagePullPolicy: {{ . }}
           {{- end }}
           name: sv-web-ui
-          {{- with .Values.securityContexts.svWebUi }}
+          {{- with .Values.securityContexts.containers.svWebUi }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
