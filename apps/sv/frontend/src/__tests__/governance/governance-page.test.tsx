@@ -6,6 +6,7 @@ import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
+import { voteResultsAmuletRules, voteResultsDsoRules } from '../mocks/constants';
 
 type UserEvent = ReturnType<typeof userEvent.setup>;
 
@@ -93,6 +94,21 @@ describe('Governance Page', () => {
     expect(voteRequests.length).toBe(5);
 
     expect(true).toBe(true);
+  });
+
+  test('should display total vote history count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const expectedCount =
+      voteResultsAmuletRules.dso_rules_vote_results.length +
+      voteResultsDsoRules.dso_rules_vote_results.length;
+
+    const badge = await screen.findByTestId('vote-history-section-badge-count');
+    expect(badge).toHaveTextContent(`${expectedCount}`);
   });
 
   test('should display inflight votes count in the section badge', async () => {

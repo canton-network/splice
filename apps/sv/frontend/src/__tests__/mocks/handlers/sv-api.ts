@@ -8,6 +8,7 @@ import dayjs from 'dayjs';
 import { http, HttpHandler, HttpResponse, PathParams } from 'msw';
 import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/scan-openapi';
 import {
+  CountVoteResultsResponse,
   ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
@@ -158,6 +159,14 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
       });
     }
   ),
+
+  http.post(`${svUrl}/v0/admin/sv/voteresults/count`, () => {
+    return HttpResponse.json<CountVoteResultsResponse>({
+      count:
+        voteResultsAmuletRules.dso_rules_vote_results.length +
+        voteResultsDsoRules.dso_rules_vote_results.length,
+    });
+  }),
 
   http.post(`${svUrl}/v0/admin/sv/votes`, () => {
     return new HttpResponse(null, { status: 201 });
