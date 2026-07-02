@@ -22,3 +22,5 @@ Unregistered recipients.*::sv4SvReonboarding
 GrpcRequestRefusedByServer: UNAUTHENTICATED.*Authentication token for member .*sv4SvReonboarding.* has expired
 
 Member MED::sv4SvReonboarding.* access is disabled
+
+SEQUENCER_SUBMISSION_REQUEST_MALFORMED.*MED::sv4SvReonboarding.* is not part of the mediator group
