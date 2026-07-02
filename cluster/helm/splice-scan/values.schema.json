@@ -32,16 +32,23 @@
             "pod": {
               "type": "object"
             },
-            "scan": {
-              "type": "object"
-            },
-            "persistence": {
-              "type": "object"
-            },
-            "ui": {
-              "type": "object"
+            "containers": {
+              "type": "object",
+              "properties": {
+                "scan": {
+                  "type": "object"
+                },
+                "persistence": {
+                  "type": "object"
+                },
+                "ui": {
+                  "type": "object"
+                }
+              },
+              "required": ["scan", "persistence", "ui"]
             }
-          },"required": ["pod", "scan", "persistence", "ui"]
+          },
+          "required": ["pod", "containers"]
         },
         "serviceAccountName": {
           "type": "string"

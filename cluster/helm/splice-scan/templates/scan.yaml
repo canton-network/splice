@@ -36,7 +36,7 @@ spec:
       {{- end }}
       containers:
       - name: scan-app
-        {{- with .Values.securityContexts.scan }}
+        {{- with .Values.securityContexts.containers.scan }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -276,7 +276,7 @@ spec:
         {{- end }}
       initContainers:
         - name: {{ .Release.Name }}-init
-          {{- with .Values.securityContexts.persistence}}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -412,7 +412,7 @@ spec:
           value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
         - name: SPLICE_APP_UI_POLL_INTERVAL
           value: {{ .Values.uiPollInterval | default 90000 | quote }}
-        {{- with .Values.securityContexts.ui }}
+        {{- with .Values.securityContexts.containers.ui }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

@@ -658,6 +658,7 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             seccompProfile:
               type: RuntimeDefault
       - documentIndex: 0
@@ -685,6 +686,7 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             seccompProfile:
               type: RuntimeDefault
       - documentIndex: 2
@@ -721,43 +723,63 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        scan:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
-        persistence:
-          privileged: true
-        ui:
-          runAsUser: 6000
+        containers:
+          scan:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            privileged: true
+          ui:
+            runAsUser: 6000
     asserts:
       - documentIndex: 0
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             runAsNonRoot: true
             seccompProfile:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - documentIndex: 0
         equal:
-          path: spec.template.spec.containers[0].securityContext.runAsUser
-          value: 5000
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
       - documentIndex: 0
         equal:
-          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
-          value: true
-      - documentIndex: 0
-        equal:
-          path: spec.template.spec.initContainers[0].securityContext.privileged
-          value: true
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: true
+            capabilities:
+              drop:
+                - ALL
       - documentIndex: 2
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
             runAsNonRoot: true
             seccompProfile:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - documentIndex: 2
         equal:
-          path: spec.template.spec.containers[0].securityContext.runAsUser
-          value: 6000
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 101
+            capabilities:
+              drop:
+                - ALL
