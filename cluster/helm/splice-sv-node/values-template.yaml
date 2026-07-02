@@ -99,3 +99,30 @@ enableReloader: true
 #    clientSecret: ""
 #    scope: ""
 
+securityContexts:
+  pod:
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  sv:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  svWebUi:
+    # granted more priviledges to prevent [FATAL tini (7)] exec /custom-docker-entrypoint.sh failed: Permission denied
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  persistence:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL

@@ -5,6 +5,21 @@
     "networkName"
   ],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "docs": {
+          "type": "object"
+        },
+        "gcsProxy": {
+          "type": "object"
+        }
+      },
+      "required": ["pod", "docs", "gcsProxy"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

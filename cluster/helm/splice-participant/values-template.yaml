@@ -61,3 +61,23 @@ disableAuth: false
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 
+securityContexts:
+  pod:
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  participant:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  persistence:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL

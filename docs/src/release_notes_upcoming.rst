@@ -113,3 +113,11 @@
         wallet             0.1.22
         walletPayments     0.1.21
         ================== =======
+
+  - Deployment
+
+    - Helm
+
+      - Added security contexts for Helm based deployments.
+        This improves the security of Kubernetes based deployments by enforcing the principle of least privilege across all pods and containers.
+

@@ -195,3 +195,69 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-domain-sa"
+
+  - it: "sets default security contexts for pods and containers"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+
+  - it: "allows overriding security contexts via values"
+    set:
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        mediator:
+          runAsUser: 5000
+          allowPrivilegeEscalation: true
+        persistence:
+          privileged: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 1001
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 5000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+          value: true

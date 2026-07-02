@@ -28,12 +28,16 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" .Release.Name) | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: participant
+        {{- with .Values.securityContexts.participant }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_participant) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
@@ -151,6 +155,10 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: pg-init
+          {{- with .Values.securityContexts.persistence }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD

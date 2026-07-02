@@ -9,6 +9,20 @@
     "imageName"
   ],
   "properties": {
+    "securityContexts": {
+      "type": ["object"],
+      "properties": {
+        "pod": {
+          "type": ["object"]
+        },
+        "participant": {
+          "type": ["object"]
+        },
+        "persistence": {
+          "type": ["object"]
+        }
+      },"required": ["pod", "participant", "persistence"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

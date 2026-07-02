@@ -26,6 +26,23 @@
         "imageName"
       ],
       "properties": {
+        "securityContexts": {
+          "type": "object",
+          "properties": {
+            "pod": {
+              "type": "object"
+            },
+            "scan": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            },
+            "ui": {
+              "type": "object"
+            }
+          },"required": ["pod", "scan", "persistence", "ui"]
+        },
         "serviceAccountName": {
           "type": "string"
         },

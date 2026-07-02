@@ -111,3 +111,18 @@ mempool:
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 
+securityContexts:
+  pod:
+    fsGroup: 1001 # allows unprivileged user to write to /cometbft/config and /cometbft/data
+    seccompProfile:
+      type: RuntimeDefault
+  cometbft:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+
