@@ -12,6 +12,11 @@
     This release includes the Token Standard V2 APIs (`CIP-112 <https://github.com/canton-foundation/cips/blob/main/cip-0112/cip-0112.md>`__)
     and their implementation for Amulet.
 
+    **CC holders**: ensure your validator node (or your wallet provider's
+    validator node) is running a version of the validator that supports the
+    Token Standard V2 APIs, so that you and your counter-parties can use the new
+    allocation and transfer workflows when sending or receiving CC.
+
     **Wallet providers**: consider adding support for the Token Standard V2 APIs in your wallet.
     Adding support for the V2 allocation workflows unlocks valuable new functionality for
     your users. Using the V2 tx history events simplifies presenting the transaction
