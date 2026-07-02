@@ -61,7 +61,7 @@ trait ScanRewardsReferenceStore extends AppStore {
 
   def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]]
+  )(implicit tc: TraceContext): Future[Map[String, BigDecimal]]
 
   /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
     * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.

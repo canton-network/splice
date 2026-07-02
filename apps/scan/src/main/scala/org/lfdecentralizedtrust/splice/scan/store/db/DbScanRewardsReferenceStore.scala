@@ -37,6 +37,13 @@ import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnles
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.OptionConverters.*
+
+object DbScanRewardsReferenceStore {
+
+  // same as `defaultAppActivityWeight` in the daml.
+  val DefaultAppActivityWeight: BigDecimal = BigDecimal(1)
+}
 
 class DbScanRewardsReferenceStore(
     override val key: ScanRewardsReferenceStore.Key,
@@ -129,9 +136,14 @@ class DbScanRewardsReferenceStore(
 
   override def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
+  )(implicit tc: TraceContext): Future[Map[String, BigDecimal]] =
     lookupFeaturedAppRightsAsOf(asOf)
-      .map(_.map(_.contract.payload.provider).toSet)
+      .map(_.map { c =>
+        val payload = c.contract.payload
+        payload.provider -> payload.activityWeight.toScala
+          .map(BigDecimal(_))
+          .getOrElse(DbScanRewardsReferenceStore.DefaultAppActivityWeight)
+      }.toMap)
 
   override def lookupSvParticipantIdsAsOf(
       asOf: CantonTimestamp

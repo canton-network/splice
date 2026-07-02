@@ -8,7 +8,11 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbAppActivityRecordStore,
+  DbScanRewardsReferenceStore,
+  DbScanVerdictStore,
+}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -93,7 +97,9 @@ class AppActivityComputation(
             roundInfoByTime.get(summary.sequencingTime) match {
               case Some((roundNumber, roundOpensAt)) =>
                 for {
-                  providers <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(roundOpensAt)
+                  featuredAppWeights <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
+                    roundOpensAt
+                  )
                   svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
                     roundOpensAt
                   )
@@ -112,7 +118,7 @@ class AppActivityComputation(
                     (
                       summary,
                       verdict,
-                      computeForSingleVerdict(summary, verdict, roundNumber, providers),
+                      computeForSingleVerdict(summary, verdict, roundNumber, featuredAppWeights),
                     )
                   }
                 }
@@ -134,13 +140,13 @@ class AppActivityComputation(
       summary: DbScanVerdictStore.TrafficSummaryT,
       verdict: v30.Verdict,
       roundNumber: Long,
-      featuredAppProviders: Set[String],
+      featuredAppWeights: Map[String, BigDecimal],
   ): Option[DbAppActivityRecordStore.AppActivityRecordT] = {
     val envelopesWithFeaturedAppConfirmers =
       summary.envelopeTrafficSummarys.flatMap { envelope =>
         val envelopeConfirmers =
           computeEnvelopeConfirmers(envelope, verdict.getTransactionViews.views)
-        val featuredAppConfirmers = envelopeConfirmers.intersect(featuredAppProviders)
+        val featuredAppConfirmers = envelopeConfirmers.intersect(featuredAppWeights.keySet)
         Option.when(featuredAppConfirmers.nonEmpty)((envelope, featuredAppConfirmers))
       }
 
@@ -149,11 +155,17 @@ class AppActivityComputation(
 
     if (totalFeaturedAppEnvelopesTraffic == 0L) None
     else {
-      val aggregatedWeights = computeAggregatedWeights(
+      val aggregatedBurn = computeAggregatedBurn(
         envelopesWithFeaturedAppConfirmers,
         summary.totalTrafficCost,
         totalFeaturedAppEnvelopesTraffic,
       )
+
+      val aggregatedWeights = SortedMap.from(aggregatedBurn.map { case (party, burn) =>
+        val weight =
+          featuredAppWeights.getOrElse(party, DbScanRewardsReferenceStore.DefaultAppActivityWeight)
+        party -> (BigDecimal(burn) * weight).toLong
+      })
 
       Some(
         DbAppActivityRecordStore.AppActivityRecordT(
@@ -177,7 +189,7 @@ class AppActivityComputation(
   /** Here it is important to accumulate per-app numerators and then
     * divide by totalFeaturedAppEnvelopesTraffic once at the end to reduce rounding error.
     */
-  private def computeAggregatedWeights(
+  private def computeAggregatedBurn(
       envelopesWithFeaturedAppConfirmers: Seq[(DbScanVerdictStore.EnvelopeT, Set[String])],
       totalConfirmationRequestTraffic: Long,
       totalFeaturedAppEnvelopesTraffic: Long,
