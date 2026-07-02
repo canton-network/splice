@@ -29,7 +29,7 @@ spec:
       {{- end }}
       containers:
         - name: gcs-proxy
-          {{- with .Values.securityContexts.gcsProxy }}
+          {{- with .Values.securityContexts.containers.gcsProxy }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

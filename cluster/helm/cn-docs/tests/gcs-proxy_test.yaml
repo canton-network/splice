@@ -1,13 +1,14 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-suite: "docs values"
+suite: "gcs-proxy values"
 templates:
-  - docs.yaml
+  - gcs-proxy.yaml
 tests:
   - it: "sets default security contexts for pods and containers"
     set:
       networkName: "MockNet"
+      enableGcsProxy: true
     asserts:
       - documentIndex: 0
         equal:
@@ -19,17 +20,19 @@ tests:
         equal:
           path: spec.template.spec.containers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: false
             capabilities:
               drop:
                 - ALL
-              add:
-                - NET_BIND_SERVICE
 
-  - it: "allows overriding security contexts via values"
+  - it: "allows overriding security contexts completely via values"
     set:
       networkName: "MockNet"
+      enableGcsProxy: true
       securityContexts:
         pod:
           runAsNonRoot: true
@@ -37,7 +40,7 @@ tests:
             type: Localhost
             localhostProfile: profiles/hardened.json
         containers:
-          docs:
+          gcsProxy:
             runAsUser: 5000
             allowPrivilegeEscalation: true
     asserts:
@@ -53,11 +56,11 @@ tests:
         equal:
           path: spec.template.spec.containers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
             allowPrivilegeEscalation: true
             privileged: false
-            runAsUser: 5000
             capabilities:
               drop:
                 - ALL
-              add:
-                - NET_BIND_SERVICE

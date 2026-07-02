@@ -1,6 +1,5 @@
 profiles:
   pod_security_context:
-    fsGroup: 1001
     seccompProfile:
       type: RuntimeDefault
 

@@ -11,14 +11,20 @@
         "pod": {
           "type": "object"
         },
-        "docs": {
-          "type": "object"
-        },
-        "gcsProxy": {
-          "type": "object"
+        "containers": {
+          "type": "object",
+          "properties": {
+            "docs": {
+              "type": "object"
+            },
+            "gcsProxy": {
+              "type": "object"
+            }
+          },
+          "required": ["docs", "gcsProxy"]
         }
       },
-      "required": ["pod", "docs", "gcsProxy"]
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"

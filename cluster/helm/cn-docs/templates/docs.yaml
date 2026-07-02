@@ -33,7 +33,7 @@ spec:
       {{- end }}
       containers:
         - name: docs
-          {{- with .Values.securityContexts.docs }}
+          {{- with .Values.securityContexts.containers.docs }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
