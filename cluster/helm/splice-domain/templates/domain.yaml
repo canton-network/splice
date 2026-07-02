@@ -37,7 +37,7 @@ spec:
       containers:
       - name: {{ .Release.Name }}
         {{- if .Values.securityContexts }}
-        {{- with .Values.securityContexts.domain }}
+        {{- with .Values.securityContexts.containers.domain }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -111,7 +111,7 @@ spec:
       initContainers:
         - name: {{ .Release.Name }}-init-sequencer
           {{- if .Values.securityContexts }}
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -142,7 +142,7 @@ spec:
               done
         - name: {{ .Release.Name }}-init-mediator
           {{- if .Values.securityContexts }}
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

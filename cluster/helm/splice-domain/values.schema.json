@@ -8,13 +8,20 @@
         "pod": {
           "type": ["object", "null"]
         },
-        "domain": {
-          "type": ["object", "null"]
-        },
-        "persistence": {
-          "type": ["object", "null"]
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "domain": {
+              "type": ["object", "null"]
+            },
+            "persistence": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["domain", "persistence"]
         }
-      },"required": ["pod", "domain", "persistence"]
+      },
+      "required": ["pod", "containers"]
     }
   }
 }
