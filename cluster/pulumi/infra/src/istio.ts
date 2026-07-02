@@ -20,6 +20,7 @@ import {
   GCP_PROJECT,
   GCP_ZONE,
   getDnsNames,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
   isDevNet,
@@ -56,6 +57,7 @@ function configureIstioBase(
       chart: 'base',
       version: istioVersion.istio,
       namespace: ns.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://istio-release.storage.googleapis.com/charts',
       },
@@ -166,6 +168,7 @@ function configureIstiod(
       chart: 'istiod',
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://istio-release.storage.googleapis.com/charts',
       },
@@ -446,6 +449,7 @@ function configureGatewayService(
       chart: 'gateway',
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://istio-release.storage.googleapis.com/charts',
       },

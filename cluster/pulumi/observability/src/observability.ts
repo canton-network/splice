@@ -15,6 +15,7 @@ import {
   ExactNamespace,
   GCP_PROJECT,
   GrafanaKeys,
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
   infraPremiumStorageClassName,
@@ -114,6 +115,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
       chart: 'kube-prometheus-stack',
       version: stackVersion,
       namespace: namespaceName,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://prometheus-community.github.io/helm-charts',
       },
@@ -565,6 +567,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
       chart: 'prometheus-pushgateway',
       version: '3.4.1',
       namespace: namespaceName,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://prometheus-community.github.io/helm-charts',
       },
