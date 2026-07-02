@@ -95,15 +95,17 @@ tests:
         synchronizerSerialId: 101
       securityContexts:
         pod:
+          fsGroup: 1001
           runAsNonRoot: true
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        nginx:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
-        updater:
-          runAsUser: 6000
+        containers:
+          nginx:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          updater:
+            runAsUser: 6000
     documentSelector:
       path: kind
       value: Deployment
@@ -117,11 +119,24 @@ tests:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - equal:
-          path: spec.template.spec.containers[0].securityContext.runAsUser
-          value: 5000
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
       - equal:
-          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
-          value: true
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.runAsUser
-          value: 6000
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL

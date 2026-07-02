@@ -33,7 +33,7 @@ spec:
       {{- end }}
       containers:
       - name: nginx
-        {{- with .Values.securityContexts.nginx }}
+        {{- with .Values.securityContexts.containers.nginx }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -60,7 +60,7 @@ spec:
           {{ toYaml .Values.resources | nindent 12 }}
       {{- if .Values.runtimeDetails }}
       - name: updater
-        {{- with .Values.securityContexts.updater }}
+        {{- with .Values.securityContexts.containers.updater }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

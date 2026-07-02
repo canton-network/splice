@@ -47,13 +47,20 @@
         "pod": {
           "type": "object"
         },
-        "nginx": {
-          "type": "object"
-        },
-        "updater": {
-          "type": "object"
+        "containers": {
+          "type": "object",
+          "properties": {
+            "nginx": {
+              "type": "object"
+            },
+            "updater": {
+              "type": "object"
+            }
+          },
+          "required": ["nginx", "updater"]
         }
-      },"required": ["pod", "nginx", "updater"]
+      },
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"
