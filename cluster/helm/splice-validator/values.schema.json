@@ -6,12 +6,18 @@
       "type": "object",
       "properties": {
         "pod": { "type": "object" },
-        "validator": { "type": "object" },
-        "ansWebUi": { "type": "object" },
-        "walletWebUi": { "type": "object" },
-        "persistence": { "type": "object" }
+        "containers": {
+          "type": "object",
+          "properties": {
+            "validator": { "type": "object" },
+            "ansWebUi": { "type": "object" },
+            "walletWebUi": { "type": "object" },
+            "persistence": { "type": "object" }
+          },
+          "required": ["validator", "ansWebUi", "walletWebUi", "persistence"]
+        }
       },
-      "required": ["pod", "validator", "ansWebUi", "walletWebUi", "persistence"]
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"

@@ -90,7 +90,7 @@ spec:
         imagePullPolicy: {{ . }}
         {{- end }}
         name: wallet-web-ui
-        {{- with .Values.securityContexts.walletWebUi }}
+        {{- with .Values.securityContexts.containers.walletWebUi }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

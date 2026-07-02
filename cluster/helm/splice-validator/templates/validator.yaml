@@ -36,7 +36,7 @@ spec:
       {{- end }}
       containers:
       - name: validator-app
-        {{- with .Values.securityContexts.validator }}
+        {{- with .Values.securityContexts.containers.validator }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -418,7 +418,7 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: {{ .Release.Name }}-init
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

@@ -74,9 +74,10 @@ tests:
       securityContexts:
         pod:
           runAsNonRoot: true
-        ansWebUi:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          ansWebUi:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment

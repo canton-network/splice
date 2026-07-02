@@ -110,9 +110,10 @@ tests:
       securityContexts:
         pod:
           runAsNonRoot: true
-        walletWebUi:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          walletWebUi:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment
