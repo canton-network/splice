@@ -227,6 +227,7 @@ class SV1Initializer(
               loggerFactory,
               config.latestPackagesOnly,
               config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
+              ledgerConnection = Some(initConnection),
             )
             vetting
               .vetCurrentPackages(

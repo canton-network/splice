@@ -66,6 +66,8 @@ class WalletTxLogIntegrationTest
       // The wallet automation periodically merges amulets, which leads to non-deterministic balance changes.
       // We disable the automation for this suite.
       .withoutAutomaticRewardsCollectionAndAmuletMerging
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       // Set a non-unit amulet price to better test CC-USD conversion.
       .addConfigTransform((_, config) => ConfigTransforms.setAmuletPrice(amuletPrice)(config))
       .addConfigTransform((_, config) =>

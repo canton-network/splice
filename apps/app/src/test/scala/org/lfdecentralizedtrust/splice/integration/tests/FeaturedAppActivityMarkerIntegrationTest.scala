@@ -32,6 +32,8 @@ class FeaturedAppActivityMarkerIntegrationTest
     EnvironmentDefinition
       // Using 4Svs so that we see whether they manage to jointly complete all work
       .simpleTopology4Svs(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test exercises the FeaturedAppActivityMarker mechanism
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(

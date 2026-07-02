@@ -133,14 +133,16 @@ class UnsupportedPackageVettingIntegrationTest
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
 
+      // Downgrade targets bumped to >= 0.1.19 for TBAR default: versions below
+      // 0.1.19 lack the rewardConfig field and fail upgrade translation.
       val validatorDarsAbovePackageConfigVersion = Seq(
-        DarResources.wallet_0_1_18,
-        DarResources.walletPayments_0_1_17,
-        DarResources.amuletNameService_0_1_18,
-        DarResources.amulet_0_1_17,
+        DarResources.wallet_0_1_21,
+        DarResources.walletPayments_0_1_20,
+        DarResources.amuletNameService_0_1_21,
+        DarResources.amulet_0_1_20,
       )
       val svDarsAbovePackageConfigVersion = Seq(
-        DarResources.dsoGovernance_0_1_23
+        DarResources.dsoGovernance_0_1_26
       ) ++ validatorDarsAbovePackageConfigVersion
 
       clue("sv1 votes to downgrade to the previous package versions") {
@@ -149,12 +151,12 @@ class UnsupportedPackageVettingIntegrationTest
           AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
 
         val downgradedPackageConfig = new PackageConfig(
-          DarResources.amulet_0_1_16.metadata.version.toString(),
-          DarResources.amuletNameService_0_1_17.metadata.version.toString(),
-          DarResources.dsoGovernance_0_1_22.metadata.version.toString(),
+          DarResources.amulet_0_1_19.metadata.version.toString(),
+          DarResources.amuletNameService_0_1_20.metadata.version.toString(),
+          DarResources.dsoGovernance_0_1_25.metadata.version.toString(),
           currentConfig.packageConfig.validatorLifecycle,
-          DarResources.wallet_0_1_17.metadata.version.toString(),
-          DarResources.walletPayments_0_1_16.metadata.version.toString(),
+          DarResources.wallet_0_1_20.metadata.version.toString(),
+          DarResources.walletPayments_0_1_19.metadata.version.toString(),
         )
         val newAmuletConfig = new AmuletConfig(
           currentConfig.transferConfig,
@@ -198,7 +200,7 @@ class UnsupportedPackageVettingIntegrationTest
           ) should contain allElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
         }
         eventually(40.seconds) {
-          alicesTapsWithPackageId(DarResources.amulet_0_1_16.packageId)
+          alicesTapsWithPackageId(DarResources.amulet_0_1_19.packageId)
         }
       }
   }

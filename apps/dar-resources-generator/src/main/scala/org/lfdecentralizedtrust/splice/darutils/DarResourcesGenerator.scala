@@ -18,7 +18,7 @@ object DarResourcesGenerator {
 
   // TODO(tech-debt): consider moving this to a dedicated config file if it bugs us here
   private val minimumInitializations: Map[String, String] = Map(
-    "splice-amulet" -> "0.1.15",
+    "splice-amulet" -> "0.1.19",
     "splice-amulet-name-service" -> "0.1.16",
     "splice-dso-governance" -> "0.1.21",
     "splice-wallet" -> "0.1.15",

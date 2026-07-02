@@ -211,7 +211,7 @@ class JoiningNodeInitializer(
         if (!dsoPartyIsAuthorized) {
           // If the DSO party has already been authorized we should be far enough to not need this step and deliberately avoid it
           // to make sure we don't introduce a dependency on the sponsoring SV.
-          svConnection.flatMap { case (_, c) => vetThroughSponsor(c) }
+          svConnection.flatMap { case (_, c) => vetThroughSponsor(c, initConnection) }
         } else Future.unit
       }
       domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
@@ -404,7 +404,10 @@ class JoiningNodeInitializer(
     }
   }
 
-  private def vetThroughSponsor(svConnection: SvConnection): Future[Unit] = {
+  private def vetThroughSponsor(
+      svConnection: SvConnection,
+      ledgerConnection: BaseLedgerConnection,
+  ): Future[Unit] = {
     logger.info("Vetting packages based on state from sponsor")
     for {
       // This is not a BFT read: That's acceptable because
@@ -422,6 +425,7 @@ class JoiningNodeInitializer(
         loggerFactory,
         config.latestPackagesOnly,
         config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
+        ledgerConnection = Some(ledgerConnection),
       )
       _ <- vetting.vetCurrentPackages(
         synchronizerId,
