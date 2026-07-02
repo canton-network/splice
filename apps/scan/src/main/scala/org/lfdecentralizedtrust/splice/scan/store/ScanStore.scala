@@ -148,6 +148,10 @@ trait ScanStore
       tc: TraceContext
   ): Future[OpenMiningRoundTxLogEntry]
 
+  def getOpenMiningRoundCreatedAt(rounds: Seq[Long])(implicit
+      tc: TraceContext
+  ): Future[Map[Long, CantonTimestamp]]
+
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
       splice.validatorlicense.ValidatorLicense.ContractId,
