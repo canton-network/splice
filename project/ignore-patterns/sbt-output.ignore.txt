@@ -137,3 +137,7 @@ WARN: InvalidDefaultArgInFrom
 Resource.*logback-test.xml.*occurs
 Setting level of logger.*to WARN
 Propagating WARN level on Logger
+
+# rolldown/vite emits a PLUGIN_TIMINGS performance advisory (e.g. for the built-in
+# `rolldown:vite-resolve` resolver) on otherwise-successful builds. Not an error.
+.*\[PLUGIN_TIMINGS\] Warning:.*
