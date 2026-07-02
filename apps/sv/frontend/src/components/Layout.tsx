@@ -25,7 +25,10 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
   const config = useSvConfig();
   const { logout } = useUserState();
   const networkInstanceName = useNetworkInstanceName();
-  const networkInstanceNameColor = `colors.${networkInstanceName?.toLowerCase()}`;
+  const knownColors = ['mainnet', 'testnet', 'devnet', 'scratchnet'];
+  const networkInstanceNameColor = knownColors.includes(networkInstanceName.toLowerCase())
+    ? `colors.${networkInstanceName.toLowerCase()}`
+    : 'colors.neutral.30';
   const featureSupport = useFeatureSupport();
 
   const votesHooks = useVotesHooks();
@@ -49,28 +52,24 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
 
   return (
     <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
-      {networkInstanceName === undefined ? (
-        <></>
-      ) : (
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="center"
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1100,
-            backgroundColor: `${networkInstanceNameColor}`,
-            color: 'black',
-            height: '50px',
-            width: '100%',
-          }}
-        >
-          <Typography id="network-instance-name" data-testid="network-instance-name" variant="h6">
-            <b>You are on {networkInstanceName} </b>
-          </Typography>
-        </Stack>
-      )}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="center"
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          backgroundColor: networkInstanceNameColor,
+          color: 'black',
+          height: '50px',
+          width: '100%',
+        }}
+      >
+        <Typography id="network-instance-name" data-testid="network-instance-name" variant="h6">
+          <b>You are on {networkInstanceName} </b>
+        </Typography>
+      </Stack>
       <Container maxWidth="xl">
         <Header title="Super Validator Operations" navLinks={navLinks}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
