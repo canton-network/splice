@@ -329,6 +329,7 @@
     "inputs": {
       "chart": "flux2",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "flux",
       "namespace": "operator",
@@ -591,6 +592,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/pulumi/helm-charts/pulumi-kubernetes-operator",
       "compat": "true",
+      "forceUpdate": false,
       "name": "pulumi-kubernetes-operator",
       "namespace": "operator",
       "values": {
