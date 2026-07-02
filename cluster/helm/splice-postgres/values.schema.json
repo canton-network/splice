@@ -9,10 +9,17 @@
         "pod": {
           "type": "object"
         },
-        "postgres": {
-          "type": "object"
+        "containers": {
+          "type": "object",
+          "properties": {
+            "postgres": {
+              "type": "object"
+            }
+          },
+          "required": ["postgres"]
         }
-      },"required": ["pod", "postgres"]
+      },
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"

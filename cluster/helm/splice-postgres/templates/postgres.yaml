@@ -41,7 +41,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Release.Name }}
-        {{- with .Values.securityContexts.postgres }}
+        {{- with .Values.securityContexts.containers.postgres }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

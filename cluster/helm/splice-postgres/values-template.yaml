@@ -45,15 +45,10 @@ persistence:
 
 securityContexts:
   pod:
+    security_context_profile: pod_security_context
     fsGroup: 999
-    seccompProfile:
-      type: RuntimeDefault
-  postgres:
-    runAsNonRoot: true
-    runAsUser: 999
-    runAsGroup: 999
-    allowPrivilegeEscalation: false
-    privileged: false
-    capabilities:
-      drop:
-        - ALL
+  containers:
+    postgres:
+      security_context_profile: app_security_context
+      runAsUser: 999
+      runAsGroup: 999
