@@ -57,6 +57,14 @@ export interface ConfigChange {
    * If the field should be disabled for editing.
    */
   disabled?: boolean;
+  /**
+   * If set, render as a dropdown with these options instead of free text.
+   */
+  options?: { value: string; label: string }[];
+  /**
+   * Optional description shown as help text below the field.
+   */
+  description?: string;
 }
 
 export interface UpdateSvRewardWeightProposal {

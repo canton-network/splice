@@ -2,7 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Link as RouterLink } from 'react-router';
-import { Box, Divider, TextField as MuiTextField, Typography } from '@mui/material';
+import {
+  Box,
+  Divider,
+  FormControl,
+  MenuItem,
+  Select,
+  TextField as MuiTextField,
+  Typography,
+} from '@mui/material';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useFieldContext } from '../../hooks/formContext';
@@ -90,18 +98,47 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
         </Box>
 
         <Box sx={{ width: 250 }}>
-          <MuiTextField
-            {...textFieldProps}
-            // We choose empty string to represent fields that could be undefined because their values have not been set.
-            value={field.state.value?.value || ''}
-            onBlur={field.handleBlur}
-            onChange={e =>
-              field.handleChange({
-                fieldName: configChange.fieldName,
-                value: e.target.value,
-              })
-            }
-          />
+          {configChange.options ? (
+            <FormControl size="small" fullWidth disabled={isDisabled}>
+              <Select
+                value={field.state.value?.value || ''}
+                onBlur={field.handleBlur}
+                onChange={e =>
+                  field.handleChange({
+                    fieldName: configChange.fieldName,
+                    value: e.target.value,
+                  })
+                }
+                data-testid={`config-field-${configChange.fieldName}`}
+                color={field.state.meta.isDefaultValue ? 'primary' : 'secondary'}
+              >
+                {configChange.options.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <MuiTextField
+              {...textFieldProps}
+              // We choose empty string to represent fields that could be undefined because their values have not been set.
+              value={field.state.value?.value || ''}
+              onBlur={field.handleBlur}
+              onChange={e =>
+                field.handleChange({
+                  fieldName: configChange.fieldName,
+                  value: e.target.value,
+                })
+              }
+            />
+          )}
+
+          {configChange.description && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {configChange.description}
+            </Typography>
+          )}
 
           {!field.state.meta.isDefaultValue && (
             <Typography
