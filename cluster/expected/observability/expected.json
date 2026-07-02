@@ -914,6 +914,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "grafana-postgres",
       "namespace": "observability",
@@ -970,6 +971,7 @@
     "inputs": {
       "chart": "kube-prometheus-stack",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "prometheus-grafana-monitoring",
       "namespace": "observability",

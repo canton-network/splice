@@ -4869,6 +4869,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres-0",
       "namespace": "multi-validator",
@@ -4967,6 +4968,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres-1",
       "namespace": "multi-validator",
@@ -5065,6 +5067,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres-2",
       "namespace": "multi-validator",
@@ -5163,6 +5166,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres-3",
       "namespace": "multi-validator",
@@ -5261,6 +5265,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres-4",
       "namespace": "multi-validator",

@@ -1369,6 +1369,7 @@
     "inputs": {
       "chart": "base",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "istio-base",
       "namespace": "istio-system",
@@ -1392,6 +1393,7 @@
     "inputs": {
       "chart": "gateway",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "istio-ingress-cometbft",
       "namespace": "cluster-ingress",
@@ -1663,6 +1665,7 @@
     "inputs": {
       "chart": "gateway",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "istio-ingress",
       "namespace": "cluster-ingress",
@@ -1861,6 +1864,7 @@
     "inputs": {
       "chart": "istiod",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "istiod",
       "namespace": "cluster-ingress",
@@ -2137,6 +2141,7 @@
     "inputs": {
       "chart": "reloader",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "reloader",
       "namespace": "reloader",

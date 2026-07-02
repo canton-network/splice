@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
+  HELM_FORCE_UPDATE,
   HELM_MAX_HISTORY_SIZE,
   exactNamespace,
   infraAffinityAndTolerations,
@@ -17,6 +18,7 @@ export function configureReloader(): k8s.helm.v3.Release {
       chart: 'reloader',
       version: '2.2.8',
       namespace: ns.ns.metadata.name,
+      forceUpdate: HELM_FORCE_UPDATE,
       repositoryOpts: {
         repo: 'https://stakater.github.io/stakater-charts',
       },
