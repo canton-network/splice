@@ -35,7 +35,7 @@ spec:
       containers:
       - name: splitwell-app
         {{- if .Values.securityContexts }}
-        {{- with .Values.securityContexts.splitwell }}
+        {{- with .Values.securityContexts.containers.splitwell }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -105,7 +105,7 @@ spec:
       initContainers:
         - name: {{ .Release.Name }}-init
           {{- if .Values.securityContexts }}
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

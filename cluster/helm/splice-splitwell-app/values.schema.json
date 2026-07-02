@@ -8,13 +8,20 @@
         "pod": {
           "type": ["object", "null"]
         },
-        "splitwell": {
-          "type": ["object", "null"]
-        },
-        "persistence": {
-          "type": ["object", "null"]
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "splitwell": {
+              "type": ["object", "null"]
+            },
+            "persistence": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["splitwell", "persistence"]
         }
-      },"required": ["pod", "splitwell", "persistence"]
+      },
+      "required": ["pod", "containers"]
     }
   }
 }

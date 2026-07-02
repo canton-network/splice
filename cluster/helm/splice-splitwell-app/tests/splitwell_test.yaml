@@ -227,12 +227,13 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        splitwell:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
-        persistence:
-          runAsUser: 6000
-          privileged: true
+        containers:
+          splitwell:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            runAsUser: 6000
+            privileged: true
     documentSelector:
       path: kind
       value: Deployment
