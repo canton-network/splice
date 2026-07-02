@@ -245,6 +245,27 @@ class CachingScanStore(
       )
     )
 
+  override def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit tc: TraceContext): Future[Long] =
+    getCache(
+      "countVoteRequestResults",
+      cacheConfig.voteRequests,
+      store.countVoteRequestResults _ tupled,
+    ).get(
+      (
+        actionName,
+        accepted,
+        requester,
+        effectiveFrom,
+        effectiveTo,
+      )
+    )
+
   override def listVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId],
       limit: Limit,

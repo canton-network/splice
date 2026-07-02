@@ -162,6 +162,32 @@ class HttpSvOperatorHandler(
     }
   }
 
+  override def countVoteRequestResults(
+      respond: r0.CountVoteRequestResultsResponse.type
+  )(
+      body: definitions.CountVoteResultsRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CountVoteRequestResultsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        count <- scanConnection.countVoteRequestResults(
+          body.actionName,
+          body.accepted,
+          body.requester,
+          body.effectiveFrom,
+          body.effectiveTo,
+        )
+      } yield {
+        r0.CountVoteRequestResultsResponse.OK(
+          definitions.CountVoteResultsResponse(count)
+        )
+      }
+    }
+  }
+
   override def getPreviousSvRewardWeight(
       respond: r0.GetPreviousSvRewardWeightResponse.type
   )(

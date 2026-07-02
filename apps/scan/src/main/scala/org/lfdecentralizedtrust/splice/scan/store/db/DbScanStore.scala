@@ -668,6 +668,31 @@ class DbScanStore(
     } yield ResultsPage(recentVoteResults, afterToken)
   }
 
+  override def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit tc: TraceContext): Future[Long] = {
+    val query = countVoteRequestResultsQuery(
+      txLogTableName = ScanTables.txLogTableName,
+      txLogStoreId = txLogStoreId,
+      dbType = EntryType.VoteRequestTxLogEntry,
+      actionNameColumnName = "vote_action_name",
+      acceptedColumnName = "vote_accepted",
+      requesterNameColumnName = "vote_requester_name",
+      actionName = actionName,
+      accepted = accepted,
+      requester = requester,
+      effectiveFrom = effectiveFrom,
+      effectiveTo = effectiveTo,
+    )
+    storage
+      .query(query, "countVoteRequestResults")
+      .map(_.headOption.getOrElse(0L))
+  }
+
   override def lookupLatestSvRewardWeightChange(
       svParty: PartyId,
       effectiveBefore: Option[String],

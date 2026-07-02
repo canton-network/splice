@@ -590,6 +590,26 @@ class SingleScanConnection private[client] (
     ),
   )
 
+  override def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.CountVoteRequestResults(
+      actionName,
+      accepted,
+      requester,
+      effectiveFrom,
+      effectiveTo,
+    ),
+  )
+
   override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
       ec: ExecutionContext,
       tc: TraceContext,

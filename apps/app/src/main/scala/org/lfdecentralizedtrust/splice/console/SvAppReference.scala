@@ -220,6 +220,26 @@ abstract class SvAppReference(
     }
   }
 
+  def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  ): Long = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.CountVoteRequestResults(
+          actionName,
+          accepted,
+          requester,
+          effectiveFrom,
+          effectiveTo,
+        )
+      )
+    }
+  }
+
   @Help.Summary("Cast a vote")
   def castVote(
       trackingCid: VoteRequest.ContractId,

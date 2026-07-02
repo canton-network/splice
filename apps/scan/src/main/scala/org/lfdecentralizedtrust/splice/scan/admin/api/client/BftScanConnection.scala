@@ -509,6 +509,26 @@ class BftScanConnection(
     "listVoteRequestResults",
   )
 
+  override def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = bftCall(
+    _.countVoteRequestResults(
+      actionName,
+      accepted,
+      requester,
+      effectiveFrom,
+      effectiveTo,
+    ),
+    "countVoteRequestResults",
+  )
+
   override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
       ec: ExecutionContext,
       tc: TraceContext,

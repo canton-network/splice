@@ -69,6 +69,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
   DamlValueEncoding,
+  CountVoteResultsRequest,
   ErrorResponse,
   EventHistoryRequest,
   HoldingsStateRequest,
@@ -2146,6 +2147,27 @@ class HttpScanHandler(
           )
         )
       }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: ScanResource.CountVoteRequestResultsResponse.type
+  )(
+      body: CountVoteResultsRequest
+  )(extracted: TraceContext): Future[ScanResource.CountVoteRequestResultsResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        count <- votesStore.countVoteRequestResults(
+          body.actionName,
+          body.accepted,
+          body.requester,
+          body.effectiveFrom,
+          body.effectiveTo,
+        )
+      } yield ScanResource.CountVoteRequestResultsResponse.OK(
+        definitions.CountVoteResultsResponse(count)
+      )
     }
   }
 

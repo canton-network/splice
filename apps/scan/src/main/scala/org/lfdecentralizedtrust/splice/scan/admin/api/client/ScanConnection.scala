@@ -322,6 +322,17 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
 
+  def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long]
+
   def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
       ec: ExecutionContext,
       tc: TraceContext,

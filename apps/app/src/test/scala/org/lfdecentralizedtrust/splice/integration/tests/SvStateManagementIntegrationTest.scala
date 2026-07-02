@@ -123,6 +123,14 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           ._1
           .loneElement
           .outcome shouldBe a[VRO_Rejected]
+
+        sv1Backend.countVoteRequestResults(
+          None,
+          Some(false),
+          None,
+          None,
+          None,
+        ) shouldBe 1L withClue "vote result count"
       },
     )
   }

@@ -23,9 +23,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     with LimitHelpers
     with NamedLogging {
 
-  def listVoteRequestResultsQuery(
-      txLogTableName: String,
-      txLogStoreId: TxLogStoreId,
+  private def voteRequestResultsConditions(
       dbType: String3,
       actionNameColumnName: String,
       acceptedColumnName: String,
@@ -35,23 +33,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       requester: Option[String],
       effectiveFrom: Option[String],
       effectiveTo: Option[String],
-      limit: Limit,
-      after: Option[Long] = None,
-  ): SqlStreamingAction[Vector[
-    TxLogQueries.SelectFromTxLogTableResult
-  ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
-    // Sort key: the vote's effective date, falling back to the result's completedAt for non-accepted votes that have none.
-    val effectiveAtSortKey =
-      "coalesce(vote_effective_at, entry_data->'result'->>'completedAt')"
-    val afterCondition = after match {
-      case Some(a) =>
-        Some(
-          // Keyset pagination past the previous page's last entry_number `a`. Lexicographical row comparison,
-          // expands to: effectiveAt < cursorEffectiveAt OR (effectiveAt = cursorEffectiveAt AND entry_number < a).
-          sql"""(#$effectiveAtSortKey, entry_number) < ((select #$effectiveAtSortKey from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
-        )
-      case None => None
-    }
+  ) = {
     val actionNameCondition = actionName match {
       case Some(actionName) =>
         Some(sql"""#$actionNameColumnName like ${lengthLimited(
@@ -83,16 +65,57 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
           )}""")
       case None => None
     }
-    val conditions = NonEmptyList(
+    NonEmptyList(
       sql"""entry_type = ${dbType}""",
       List(
         actionNameCondition,
         executedCondition,
         requesterCondition,
         effectivenessCondition,
-        afterCondition,
       ).flatten,
     )
+  }
+
+  def listVoteRequestResultsQuery(
+      txLogTableName: String,
+      txLogStoreId: TxLogStoreId,
+      dbType: String3,
+      actionNameColumnName: String,
+      acceptedColumnName: String,
+      requesterNameColumnName: String,
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+      limit: Limit,
+      after: Option[Long] = None,
+  ): SqlStreamingAction[Vector[
+    TxLogQueries.SelectFromTxLogTableResult
+  ], TxLogQueries.SelectFromTxLogTableResult, Effect.Read] = {
+    // Sort key: the vote's effective date, falling back to the result's completedAt for non-accepted votes that have none.
+    val effectiveAtSortKey =
+      "coalesce(vote_effective_at, entry_data->'result'->>'completedAt')"
+    val afterCondition = after match {
+      case Some(a) =>
+        Some(
+          // Keyset pagination past the previous page's last entry_number `a`. Lexicographical row comparison,
+          // expands to: effectiveAt < cursorEffectiveAt OR (effectiveAt = cursorEffectiveAt AND entry_number < a).
+          sql"""(#$effectiveAtSortKey, entry_number) < ((select #$effectiveAtSortKey from #$txLogTableName where store_id = $txLogStoreId and entry_number = $a), $a)"""
+        )
+      case None => None
+    }
+    val conditions = voteRequestResultsConditions(
+      dbType,
+      actionNameColumnName,
+      acceptedColumnName,
+      requesterNameColumnName,
+      actionName,
+      accepted,
+      requester,
+      effectiveFrom,
+      effectiveTo,
+    ) ++ afterCondition.toList
     val whereClause = conditions.reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
 
     selectFromTxLogTable(
@@ -102,6 +125,34 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       orderLimit =
         sql"""order by #$effectiveAtSortKey desc, entry_number desc limit ${sqlLimit(limit)}""",
     )
+  }
+
+  def countVoteRequestResultsQuery(
+      txLogTableName: String,
+      txLogStoreId: TxLogStoreId,
+      dbType: String3,
+      actionNameColumnName: String,
+      acceptedColumnName: String,
+      requesterNameColumnName: String,
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  ): SqlStreamingAction[Vector[Long], Long, Effect.Read] = {
+    val whereClause = voteRequestResultsConditions(
+      dbType,
+      actionNameColumnName,
+      acceptedColumnName,
+      requesterNameColumnName,
+      actionName,
+      accepted,
+      requester,
+      effectiveFrom,
+      effectiveTo,
+    ).reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
+    (sql"""select count(*) from #$txLogTableName where store_id = $txLogStoreId and """ ++ whereClause).toActionBuilder
+      .as[Long]
   }
 }
 

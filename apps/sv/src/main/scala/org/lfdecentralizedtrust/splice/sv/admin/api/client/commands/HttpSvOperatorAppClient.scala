@@ -293,6 +293,39 @@ object HttpSvOperatorAppClient {
     }
   }
 
+  case class CountVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  ) extends BaseCommand[
+        http.CountVoteRequestResultsResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.CountVoteRequestResultsResponse] =
+      client.countVoteRequestResults(
+        body = definitions.CountVoteResultsRequest(
+          actionName,
+          accepted,
+          requester,
+          effectiveFrom,
+          effectiveTo,
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.CountVoteRequestResultsResponse.OK(response) =>
+      Right(response.count)
+    }
+  }
+
   case class CastVote(
       trackingCid: VoteRequest.ContractId,
       isAccepted: Boolean,

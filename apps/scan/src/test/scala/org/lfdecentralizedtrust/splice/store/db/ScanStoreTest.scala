@@ -610,6 +610,60 @@ abstract class ScanStoreTest
         }
       }
 
+      "countVoteRequestResults" should {
+
+        "count vote results matching the filters" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          def sortKeyAt(n: Int) = base.plusSeconds(n.toLong)
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- MonadUtil.sequentialTraverse(1 to 6)(closeVoteRequest(store, _))
+            total <- store.countVoteRequestResults(None, None, None, None, None)
+            acceptedCount <- store.countVoteRequestResults(None, Some(true), None, None, None)
+            rejectedCount <- store.countVoteRequestResults(None, Some(false), None, None, None)
+            requesterCount <- store.countVoteRequestResults(
+              None,
+              None,
+              Some(userParty(1).toProtoPrimitive),
+              None,
+              None,
+            )
+          } yield {
+            total shouldBe 6L
+            acceptedCount shouldBe 4L
+            rejectedCount shouldBe 2L
+            requesterCount shouldBe 1L
+          }
+        }
+      }
+
       "lookupLatestSvRewardWeightChange" should {
 
         "return the weight of the latest accepted UpdateSvRewardWeight before the given time" in {

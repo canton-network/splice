@@ -138,4 +138,14 @@ trait VotesStore extends ActiveVotesStore {
       tc: TraceContext
   ): Future[ResultsPage[DsoRules_CloseVoteRequestResult]]
 
+  def countVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  )(implicit
+      tc: TraceContext
+  ): Future[Long]
+
 }

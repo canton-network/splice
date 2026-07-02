@@ -3135,6 +3135,39 @@ object HttpScanAppClient {
     }
   }
 
+  case class CountVoteRequestResults(
+      actionName: Option[String],
+      accepted: Option[Boolean],
+      requester: Option[String],
+      effectiveFrom: Option[String],
+      effectiveTo: Option[String],
+  ) extends InternalBaseCommand[
+        http.CountVoteRequestResultsResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.CountVoteRequestResultsResponse] =
+      client.countVoteRequestResults(
+        body = definitions.CountVoteResultsRequest(
+          actionName,
+          accepted,
+          requester,
+          effectiveFrom,
+          effectiveTo,
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.CountVoteRequestResultsResponse.OK(response) =>
+      Right(response.count)
+    }
+  }
+
   case class GetPreviousSvRewardWeight(
       svParty: String,
       effectiveBefore: Option[String],
