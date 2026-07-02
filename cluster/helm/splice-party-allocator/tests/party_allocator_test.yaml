@@ -98,9 +98,10 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        partyAllocator:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          partyAllocator:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment

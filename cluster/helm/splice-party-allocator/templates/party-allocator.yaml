@@ -35,7 +35,7 @@ spec:
       containers:
         - name: party-allocator
           {{- if .Values.securityContexts }}
-          {{- with .Values.securityContexts.partyAllocator }}
+          {{- with .Values.securityContexts.containers.partyAllocator }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

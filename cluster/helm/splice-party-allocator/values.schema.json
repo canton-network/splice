@@ -8,10 +8,17 @@
         "pod": {
           "type": ["object", "null"]
         },
-        "partyAllocator": {
-          "type": ["object", "null"]
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "partyAllocator": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["partyAllocator"]
         }
-      },"required": ["pod", "partyAllocator"]
+      },
+      "required": ["pod", "containers"]
     }
   }
 }
