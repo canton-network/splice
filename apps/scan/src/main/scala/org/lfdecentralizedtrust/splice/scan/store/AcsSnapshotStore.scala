@@ -53,6 +53,10 @@ class AcsSnapshotStore(
   override val profile: JdbcProfile = storage.profile.jdbc
   import profile.api.jdbcActionExtensionMethods
 
+  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
+      row: DbStorage.RowsAltered[A]
+  ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
+
   private def historyId = updateHistory.historyId
 
   def lookupSnapshotAtOrBefore(
@@ -469,18 +473,18 @@ class AcsSnapshotStore(
       expectedState: Option[IncrementalAcsSnapshot],
   )(implicit
       tc: TraceContext
-  ): DBIOAction[Unit, NoStream, Effect.Transactional & Effect.Read & E] = {
+  ): DBIOAction[Option[R], NoStream, Effect.Transactional & Effect.Read & E] = {
     (for {
       actualState <- getIncrementalSnapshotAction(table)
       result <-
         if (actualState == expectedState) {
-          action.map(_ => ())
+          action.map(Option.apply)
         } else {
           logger.info(
             s"Skipping action because actual state $actualState != expected state $expectedState. " +
               "In production, this is expected only during retries after transient network failures."
           )
-          DBIOAction.unit
+          DBIOAction.successful(Option.empty)
         }
     } yield result).transactionally
   }
@@ -541,10 +545,12 @@ class AcsSnapshotStore(
       )
     }
 
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
-      "initializeIncrementalSnapshot",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        "initializeIncrementalSnapshot",
+      )
+      .map(_ => ())
   }
 
   /** Initializes an incremental snapshot that represents an empty ACS at the given record time.
@@ -602,10 +608,12 @@ class AcsSnapshotStore(
       )
     }
 
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
-      "initializeIncrementalSnapshotFromImportUpdates",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        "initializeIncrementalSnapshotFromImportUpdates",
+      )
+      .map(_ => ())
   }
 
   /** Copies an incremental snapshot to historical storage.
@@ -620,7 +628,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[Option[Int]] = {
     logger.debug(
       s"Saving incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime}"
     )
@@ -693,7 +701,7 @@ class AcsSnapshotStore(
         s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copied_rows rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
-      ()
+      copied_rows
     }
     storage.queryAndUpdate(
       withExclusiveSnapshotDataLock(
@@ -780,10 +788,12 @@ class AcsSnapshotStore(
       _ <- sqlu"""delete from #${table.tableName} where snapshot_id = ${snapshot.snapshotId}"""
       _ <- sqlu"""delete from acs_incremental_snapshot where snapshot_id = ${snapshot.snapshotId}"""
     } yield ()
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
-      "deleteIncrementalSnapshot",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
+        "deleteIncrementalSnapshot",
+      )
+      .map(_ => ())
   }
 }
 
