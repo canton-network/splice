@@ -113,3 +113,8 @@
         wallet             0.1.22
         walletPayments     0.1.21
         ================== =======
+  
+  - Scan app
+
+    - Add a new endpoint ``/v0/lsu`` to the internal API which exposes information like topology freeze time,
+      upgrade time and successor synchronizer ID for the most recent LSU
