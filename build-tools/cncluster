@@ -2487,4 +2487,16 @@ if [ ! ${subcommand_whitelist[${SUBCOMMAND_NAME}]+_} ]; then
     _error  "Unknown subcommand: ${SUBCOMMAND_NAME}"
 fi
 
+declare -a NEW_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--helm-force" ]]; then
+        _warning "You have passed --helm-force. This will force an update for all Pulumi Helm Releases, which is potentially destructive."
+        _prompt_to_confirm "Are you sure you want to proceed?"
+        export HELM_FORCE_UPDATE="true"
+    else
+        NEW_ARGS+=("$arg")
+    fi
+done
+set -- "${NEW_ARGS[@]}"
+
 "subcmd_${SUBCOMMAND_NAME}" "$@"
