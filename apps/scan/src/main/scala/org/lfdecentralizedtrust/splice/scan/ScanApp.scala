@@ -93,6 +93,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequiremen
 import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import cats.implicits.*
 
 import org.apache.pekko.stream.Materializer
 
@@ -257,7 +258,7 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = config.bulkStorage.s3.map(_ =>
+      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ =>
         BulkStorage(
           scanStorageConfigV1,
           config.bulkStorage,
@@ -419,7 +420,8 @@ class ScanApp(
         config.rollForwardLsu,
       )
       scanStreamHandler = new HttpScanStreamHandler(
-        config.bulkStorage.s3.map(S3BucketConnection(_, loggerFactory))
+        // TODO(#5884): consider whether this should be going through bulkStorageReader instead of directly to the bucket.
+        config.bulkStorage.committed.map(S3BucketConnection(_, loggerFactory))
       )
       contractFetcher = ChoiceContextContractFetcher.createStoreWithLedgerFallback(
         config.parameters.contractFetchLedgerFallbackConfig,

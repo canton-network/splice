@@ -11,11 +11,19 @@ import org.apache.pekko.Done
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.KillSwitches
 import org.apache.pekko.stream.scaladsl.{Keep, Sink, Source}
-import org.lfdecentralizedtrust.splice.automation.{ServiceWithShutdown, RetryingService}
+import org.lfdecentralizedtrust.splice.automation.{RetryingService, ServiceWithShutdown}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 
 import scala.concurrent.{ExecutionContext, Future}
+
+trait RetryableService[S] {
+  def asRetryableService(
+      automationConfig: AutomationConfig,
+      backoffClock: Clock,
+      retryProvider: RetryProvider,
+  )(implicit tracer: Tracer): PekkoRetryingService[S]
+}
 
 class PekkoRetryingService[S](
     source: Source[S, ?],

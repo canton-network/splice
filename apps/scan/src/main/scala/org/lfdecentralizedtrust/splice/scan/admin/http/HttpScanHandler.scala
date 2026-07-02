@@ -2572,7 +2572,7 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getAcsSnapshotAtOrBefore(recordTimeTs).map {
+        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
           case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
@@ -2604,7 +2604,7 @@ class HttpScanHandler(
         val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
         val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
         bulkStorage
-          .getUpdatesBetweenDates(
+          .getCommittedUpdatesBetweenDates(
             afterTs,
             upToTs,
             PageLimit.tryCreate(body.pageSize),

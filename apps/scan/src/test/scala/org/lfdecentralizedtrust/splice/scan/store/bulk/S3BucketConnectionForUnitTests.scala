@@ -5,7 +5,7 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.config.S3Config
 import org.lfdecentralizedtrust.splice.store.S3BucketConnectionForTests
-import software.amazon.awssdk.core.async.{AsyncResponseTransformer, AsyncRequestBody}
+import software.amazon.awssdk.core.async.{AsyncRequestBody, AsyncResponseTransformer}
 import software.amazon.awssdk.services.s3.model.{
   GetObjectRequest,
   GetObjectResponse,
@@ -14,6 +14,8 @@ import software.amazon.awssdk.services.s3.model.{
 
 import java.io.DataInputStream
 import java.nio.ByteBuffer
+import java.security.MessageDigest
+import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
@@ -53,14 +55,18 @@ class S3BucketConnectionForUnitTests(
     }
   }
 
-  def createObject(key: String)(implicit ec: ExecutionContext): Future[Unit] = {
+  def createObject(key: String, content: Array[Byte] = Array.emptyByteArray)(implicit
+      ec: ExecutionContext
+  ): Future[Unit] = {
+    val md = MessageDigest.getInstance("SHA-256")
+    md.update(content)
     val request = PutObjectRequest.builder
       .bucket(bucketName)
       .key(key)
-      .metadata(Map("splice-checksum" -> "fake").asJava)
+      .metadata(Map("splice-checksum" -> Base64.getEncoder.encodeToString(md.digest())).asJava)
       .build
     s3Client
-      .putObject(request, AsyncRequestBody.fromBytes(Array.emptyByteArray))
+      .putObject(request, AsyncRequestBody.fromBytes(content))
       .asScala
       .map(_ => ())
   }

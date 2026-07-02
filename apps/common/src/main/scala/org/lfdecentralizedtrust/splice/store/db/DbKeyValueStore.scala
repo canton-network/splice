@@ -50,6 +50,34 @@ class DbKeyValueStore private (
     updateAction.map(_ => ())
   }
 
+  override def setValueIfNotExists[T](key: String, value: T)(implicit
+      tc: TraceContext,
+      encoder: Encoder[T],
+  ): Future[Boolean] = {
+    val jsonValue: Json = value.asJson
+
+    val action = sql"""INSERT INTO key_value_store (key, value, store_id)
+        VALUES ($key, $jsonValue, $storeId)
+        ON CONFLICT (store_id, key) DO NOTHING""".asUpdate
+    val updateAction = storage.update(action, "set-key-value-if-not-exists")
+
+    logger.debug(
+      s"saving key '$key' and value '$jsonValue' if not exists"
+    )
+    updateAction.map {
+      case rowsAffected if rowsAffected > 0 =>
+        logger.debug(
+          s"key '$key' and value '$jsonValue' saved successfully"
+        )
+        true
+      case _ =>
+        logger.debug(
+          s"key '$key' already exists, value not saved"
+        )
+        false
+    }
+  }
+
   override def getValue[T](
       key: String
   )(implicit tc: TraceContext, decoder: Decoder[T]): OptionT[Future, Decoder.Result[T]] = {
