@@ -214,6 +214,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/cn-docs",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "docs",
       "namespace": "docs",
@@ -2297,6 +2298,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-info",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "info",
       "namespace": "sv-1",
@@ -2396,6 +2398,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cluster-ingress-runbook",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "ingress-sv",
       "namespace": "sv-1",
@@ -2765,6 +2768,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-scan",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "scan",
       "namespace": "sv-1",
@@ -2888,6 +2892,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-sv-node",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "sv-app",
       "namespace": "sv-1",
@@ -3182,6 +3187,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-validator",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "validator-sv-1",
       "namespace": "sv-1",
@@ -3550,6 +3556,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-info",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "info",
       "namespace": "sv-da-1",
@@ -3649,6 +3656,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cluster-ingress-runbook",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "ingress-sv",
       "namespace": "sv-da-1",
@@ -3878,6 +3886,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-scan",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "scan",
       "namespace": "sv-da-1",
@@ -4002,6 +4011,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-sv-node",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "sv-app",
       "namespace": "sv-da-1",
@@ -4249,6 +4259,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-validator",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "validator-sv-da-1",
       "namespace": "sv-da-1",

@@ -47,6 +47,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cluster-ingress-runbook",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "cluster-ingress-validator",
       "namespace": "validator",
@@ -419,6 +420,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "participant-2",
       "namespace": "validator",
@@ -513,6 +515,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-party-allocator",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "party-allocator",
       "namespace": "validator",
@@ -604,6 +607,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "postgres",
       "namespace": "validator",
@@ -684,6 +688,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-validator",
       "compat": "true",
+      "forceUpdate": false,
       "maxHistory": 10,
       "name": "validator",
       "namespace": "validator",
