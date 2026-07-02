@@ -46,7 +46,7 @@ spec:
       {{- end }}
       containers:
       - name: mediator
-        {{- with .Values.securityContexts.mediator }}
+        {{- with .Values.securityContexts.containers.mediator }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -121,7 +121,7 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

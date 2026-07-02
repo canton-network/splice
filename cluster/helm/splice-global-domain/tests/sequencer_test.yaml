@@ -460,15 +460,17 @@ tests:
             databaseName: custom_bft_db
       securityContexts:
         pod:
+          fsGroup: 1001
           runAsNonRoot: true
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        sequencer:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
-        persistence:
-          privileged: true
+        containers:
+          sequencer:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            privileged: true
     documentSelector:
       path: kind
       value: Deployment
@@ -482,15 +484,29 @@ tests:
               type: Localhost
               localhostProfile: profiles/hardened.json
       - equal:
-          path: spec.template.spec.containers[0].securityContext.runAsUser
-          value: 5000
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
       - equal:
-          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
-          value: true
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: true
+            capabilities:
+              drop:
+                - ALL
       - equal:
-          path: spec.template.spec.initContainers[0].securityContext.privileged
-          value: true
-      - equal:
-          path: spec.template.spec.initContainers[1].securityContext.privileged
-          value: true
-
+          path: spec.template.spec.initContainers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: true
+            capabilities:
+              drop:
+                - ALL

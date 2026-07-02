@@ -8,16 +8,23 @@
         "pod": {
           "type": "object"
         },
-        "mediator": {
-          "type": "object"
-        },
-        "sequencer": {
-          "type": "object"
-        },
-        "persistence": {
-          "type": "object"
+        "containers": {
+          "type": "object",
+          "properties": {
+            "mediator": {
+              "type": "object"
+            },
+            "sequencer": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            }
+          },
+          "required": ["mediator", "sequencer", "persistence"]
         }
-      },"required": ["pod", "mediator", "sequencer", "persistence"]
+      },
+      "required": ["pod", "containers"]
     }
   }
 }

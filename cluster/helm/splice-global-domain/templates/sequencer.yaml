@@ -38,7 +38,7 @@ spec:
       {{- end }}
       containers:
         - name: sequencer
-          {{- with .Values.securityContexts.sequencer }}
+          {{- with .Values.securityContexts.containers.sequencer }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -193,7 +193,7 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: pg-init
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -229,7 +229,7 @@ spec:
         {{- $dbName := $p.databaseName | default .Values.sequencer.persistence.databaseName }}
         {{- $dbSecret := $p.secretName | default .Values.sequencer.persistence.secretName }}
         - name: pg-init-bft-driver
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
