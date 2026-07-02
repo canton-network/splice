@@ -32,7 +32,7 @@ spec:
       containers:
       - name: splitwell-web-ui
         {{- if .Values.securityContexts }}
-        {{- with .Values.securityContexts.splitwellWebUi }}
+        {{- with .Values.securityContexts.containers.splitwellWebUi }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

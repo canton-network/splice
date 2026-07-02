@@ -9,10 +9,17 @@
         "pod": {
           "type": ["object", "null"]
         },
-        "splitwellWebUi": {
-          "type": ["object", "null"]
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "splitwellWebUi": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["splitwellWebUi"]
         }
-      },"required": ["pod", "splitwellWebUi"]
+      },
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"

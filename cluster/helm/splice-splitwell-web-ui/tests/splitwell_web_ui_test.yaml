@@ -160,9 +160,10 @@ tests:
           seccompProfile:
             type: Localhost
             localhostProfile: profiles/hardened.json
-        splitwellWebUi:
-          runAsUser: 5000
-          allowPrivilegeEscalation: true
+        containers:
+          splitwellWebUi:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
     documentSelector:
       path: kind
       value: Deployment
@@ -180,4 +181,3 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
           value: true
-
