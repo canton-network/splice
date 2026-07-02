@@ -63,21 +63,10 @@ enableReloader: true
 
 securityContexts:
   pod:
+    security_context_profile: pod_security_context
     fsGroup: 1001
-    seccompProfile:
-      type: RuntimeDefault
-  participant:
-    runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
-    allowPrivilegeEscalation: false
-    privileged: false
-    capabilities:
-      drop:
-        - ALL
-  persistence:
-    allowPrivilegeEscalation: false
-    privileged: false
-    capabilities:
-      drop:
-        - ALL
+  containers:
+    participant:
+      security_context_profile: app_security_context
+    persistence:
+      security_context_profile: persistent_security_context

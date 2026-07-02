@@ -15,13 +15,20 @@
         "pod": {
           "type": ["object"]
         },
-        "participant": {
-          "type": ["object"]
-        },
-        "persistence": {
-          "type": ["object"]
+        "containers": {
+          "type": ["object"],
+          "properties": {
+            "participant": {
+              "type": ["object"]
+            },
+            "persistence": {
+              "type": ["object"]
+            }
+          },
+          "required": ["participant", "persistence"]
         }
-      },"required": ["pod", "participant", "persistence"]
+      },
+      "required": ["pod", "containers"]
     },
     "serviceAccountName": {
       "type": "string"

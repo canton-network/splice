@@ -34,7 +34,7 @@ spec:
       {{- end }}
       containers:
       - name: participant
-        {{- with .Values.securityContexts.participant }}
+        {{- with .Values.securityContexts.containers.participant }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
@@ -155,7 +155,7 @@ spec:
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: pg-init
-          {{- with .Values.securityContexts.persistence }}
+          {{- with .Values.securityContexts.containers.persistence }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
