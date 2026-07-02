@@ -22,3 +22,5 @@ Unregistered recipients.*::sv4SvReonboarding
 GrpcRequestRefusedByServer: UNAUTHENTICATED.*Authentication token for member .*sv4SvReonboarding.* has expired
 
 Member MED::sv4SvReonboarding.* access is disabled
+
+Request failed for server-DefaultSequencer-0.*sv4
