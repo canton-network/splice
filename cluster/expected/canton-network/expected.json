@@ -287,9 +287,6 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
-          "cometbft": {
-            "volumeSize": "42Gi"
-          },
           "id": 9,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
@@ -303,7 +300,7 @@
           },
           "sequencer": {
             "dedicatedBftSequencerDb": true,
-            "enableBftSequencer": false
+            "enableBftSequencer": true
           },
           "version": {
             "type": "remote",
@@ -2853,6 +2850,9 @@
         },
         "synchronizers": {
           "current": {
+            "cantonBft": {
+              "p2pUrl": "https://sequencer-p2p-9.sv-2.mock.global.canton.network.digitalasset.com"
+            },
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
@@ -3107,10 +3107,7 @@
               }
             ],
             "current": {
-              "cometBFT": {
-                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
-                "enabled": true
-              },
+              "enableBftSequencer": true,
               "mediatorAddress": "global-domain-9-mediator",
               "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {
@@ -3967,6 +3964,9 @@
         "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
+            "cantonBft": {
+              "p2pUrl": "https://sequencer-p2p-9.sv-1.mock.global.canton.network.digitalasset.com"
+            },
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
@@ -4186,11 +4186,7 @@
               }
             ],
             "current": {
-              "cometBFT": {
-                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
-                "enabled": true,
-                "externalGovernanceKey": true
-              },
+              "enableBftSequencer": true,
               "mediatorAddress": "global-domain-9-mediator",
               "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {

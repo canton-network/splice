@@ -676,6 +676,9 @@
         "sponsorScanUrl": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
         "synchronizers": {
           "current": {
+            "cantonBft": {
+              "p2pUrl": "https://sequencer-p2p-9.sv.mock.global.canton.network.digitalasset.com"
+            },
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
@@ -1353,10 +1356,7 @@
             }
           ],
           "current": {
-            "cometBFT": {
-              "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
-              "enabled": true
-            },
+            "enableBftSequencer": true,
             "mediatorAddress": "global-domain-9-mediator",
             "sequencerAddress": "global-domain-9-sequencer",
             "sequencerPruningConfig": {
