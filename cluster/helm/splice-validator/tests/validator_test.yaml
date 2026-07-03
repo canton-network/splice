@@ -514,7 +514,7 @@ tests:
           runAsNonRoot: true
           seccompProfile:
             type: Localhost
-            localhostProfile: profiles/hardene.json
+            localhostProfile: profiles/harden.json
         containers:
           validator:
             runAsUser: 5000
@@ -533,7 +533,7 @@ tests:
             runAsNonRoot: true
             seccompProfile:
               type: Localhost
-              localhostProfile: profiles/hardene.json
+              localhostProfile: profiles/harden.json
       - equal:
           path: spec.template.spec.containers[?(@.name=='validator-app')].securityContext
           value:
