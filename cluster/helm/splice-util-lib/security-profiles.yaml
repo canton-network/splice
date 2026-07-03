@@ -17,8 +17,7 @@ profiles:
         - ALL
 
   ui_security_context:
-    # runAsUser, runAsGroup, and runAsNonRoot are intentionally omitted
-    # to prevent entrypoint initialization script crashes (Exit Code 126)
+    # TODO(DACH-NY/canton-network-internal#5948) Support runAsNonRoot
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:
