@@ -45,7 +45,7 @@ describe('SV user can', () => {
     userEvent.setup();
     render(<AppWithConfig />);
 
-    await screen.findByText('You are on Ecilps');
+    await screen.findByText('You are on ScratchNet');
   });
 
   test('browse to the validator onboarding tab', async () => {

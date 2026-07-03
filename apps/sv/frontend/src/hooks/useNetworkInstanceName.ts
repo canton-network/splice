@@ -1,16 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useDsoInfos } from '../contexts/SvContext';
-import { useSvConfig } from '../utils';
 
 export const useNetworkInstanceName: () => string = () => {
-  const config = useSvConfig();
   const dsoInfosQuery = useDsoInfos();
-
-  const configured = config.spliceInstanceNames.networkName;
-  if (configured && configured.length > 0) {
-    return configured;
-  }
 
   const scanUrls = dsoInfosQuery.data?.nodeStates.flatMap(nsContract => {
     return nsContract.payload.state.synchronizerNodes
@@ -25,6 +18,10 @@ export const useNetworkInstanceName: () => string = () => {
 
   const instances = scanUrls
     .map(url => {
+      if (/\/\/localhost(?::\d+)?(?:\/|$)/.test(url)) {
+        return 'local';
+      }
+
       const regex = /(?<=\/\/(?:scan\.)sv-\d+\.)([a-zA-Z0-9-]+)/;
 
       return url.match(regex)?.[1];
@@ -46,6 +43,8 @@ const getNetworkName = (network: string) => {
     return 'TestNet';
   } else if (network === 'dev') {
     return 'DevNet';
+  } else if (network === 'local') {
+    return 'LocalNet';
   } else if (network.startsWith('scratch')) {
     return 'ScratchNet';
   }
