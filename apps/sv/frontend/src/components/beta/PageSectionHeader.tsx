@@ -19,8 +19,10 @@ const PageSectionHeader: React.FC<PageSectionHeaderProps> = ({
     </Typography>
     <Badge
       badgeContent={badgeCount}
-      color="error"
-      sx={{ ml: 2 }}
+      sx={{
+        ml: 2,
+        '& .MuiBadge-badge': { bgcolor: 'colors.neutral.25', color: 'text.light' },
+      }}
       id={`${testId}-badge-count`}
       data-testid={`${testId}-badge-count`}
     />
