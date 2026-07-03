@@ -131,3 +131,5 @@ securityContexts:
       security_context_profile: ui_security_context
     persistence:
       security_context_profile: persistent_security_context
+
+# TODO(DACH-NY/canton-network-internal#5946) add static guards so that new charts don't forget to add security contexts.

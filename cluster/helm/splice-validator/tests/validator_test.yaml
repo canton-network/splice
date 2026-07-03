@@ -499,7 +499,7 @@ tests:
             capabilities:
               drop:
                 - ALL
-
+# TODO(DACH-NY/canton-network-internal#5946) Avoid test repetition
   - it: "allows overriding security contexts via values"
     set:
       persistence:
