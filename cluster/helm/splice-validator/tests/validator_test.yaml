@@ -494,12 +494,17 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: false
             capabilities:
               drop:
                 - ALL
-# TODO(DACH-NY/canton-network-internal#5946) Avoid test repetition
+
+# TODO(DACH-NY/canton-network-internal#5946) Avoid test repetition by refactoring test code
+
   - it: "allows overriding security contexts via values"
     set:
       persistence:
@@ -530,14 +535,24 @@ tests:
               type: Localhost
               localhostProfile: profiles/hardene.json
       - equal:
-          path: spec.template.spec.containers[?(@.name=='validator-app')].securityContext.runAsUser
-          value: 5000
+          path: spec.template.spec.containers[?(@.name=='validator-app')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
       - equal:
-          path: spec.template.spec.containers[?(@.name=='validator-app')].securityContext.allowPrivilegeEscalation
-          value: true
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].securityContext.runAsUser
-          value: 6000
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].securityContext.privileged
-          value: true
+          path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: true
+            capabilities:
+              drop:
+                - ALL

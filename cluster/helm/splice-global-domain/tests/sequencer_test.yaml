@@ -437,6 +437,9 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: false
             capabilities:
@@ -445,6 +448,9 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: false
             capabilities:
@@ -470,6 +476,7 @@ tests:
             runAsUser: 5000
             allowPrivilegeEscalation: true
           persistence:
+            runAsUser: 6000
             privileged: true
     documentSelector:
       path: kind
@@ -497,6 +504,9 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: true
             capabilities:
@@ -505,6 +515,9 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: true
             capabilities:

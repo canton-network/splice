@@ -25,6 +25,9 @@ profiles:
         - ALL
 
   persistent_security_context:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
     allowPrivilegeEscalation: false
     privileged: false
     capabilities:

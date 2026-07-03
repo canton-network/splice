@@ -401,6 +401,9 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: false
             capabilities:
@@ -450,9 +453,12 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].securityContext
           value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
             allowPrivilegeEscalation: false
             privileged: true
-            runAsUser: 6000
             capabilities:
               drop:
                 - ALL
+
