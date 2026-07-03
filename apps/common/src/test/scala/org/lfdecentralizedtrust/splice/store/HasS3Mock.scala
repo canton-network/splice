@@ -25,6 +25,7 @@ import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
+import cats.syntax.traverse.*
 
 trait HasS3Mock
     extends NamedLogging
@@ -79,29 +80,33 @@ trait HasS3Mock
 
   private def clearBuckets(): Unit = {
 
-    initialBuckets.foreach { bucket =>
-      val client = S3BucketConnection(s3ConfigMock(bucket), loggerFactory).s3Client
+    initialBuckets
+      .map { bucket =>
+        val client = S3BucketConnection(s3ConfigMock(bucket), loggerFactory).s3Client
 
-      val listRequest = ListObjectsRequest.builder().bucket(s3ConfigMock(bucket).bucketName).build()
-      (for {
-        list <- client.listObjects(listRequest).asScala
-        objs = list.contents().asScala.map { obj =>
-          ObjectIdentifier.builder().key(obj.key()).build()
-        }
-        deleteObjRequest = DeleteObjectsRequest
-          .builder()
-          .bucket(s3ConfigMock(bucket).bucketName)
-          .delete(
-            Delete.builder().objects(objs.asJava).build()
-          )
-          .build()
-        _ <-
-          if (list.contents().asScala.isEmpty) { Future.successful(()) }
-          else { client.deleteObjects(deleteObjRequest).asScala }
-      } yield {
-        ()
-      }).futureValue
-    }
+        val listRequest =
+          ListObjectsRequest.builder().bucket(s3ConfigMock(bucket).bucketName).build()
+        (for {
+          list <- client.listObjects(listRequest).asScala
+          objs = list.contents().asScala.map { obj =>
+            ObjectIdentifier.builder().key(obj.key()).build()
+          }
+          deleteObjRequest = DeleteObjectsRequest
+            .builder()
+            .bucket(s3ConfigMock(bucket).bucketName)
+            .delete(
+              Delete.builder().objects(objs.asJava).build()
+            )
+            .build()
+          _ <-
+            if (list.contents().asScala.isEmpty) { Future.successful(()) }
+            else { client.deleteObjects(deleteObjRequest).asScala }
+        } yield {
+          ()
+        })
+      }
+      .sequence
+      .futureValue
 
   }
 

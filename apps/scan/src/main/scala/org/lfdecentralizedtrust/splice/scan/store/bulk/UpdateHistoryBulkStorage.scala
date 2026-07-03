@@ -13,7 +13,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.pattern.after
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
-import org.lfdecentralizedtrust.splice.{PekkoRetryingService, RetryableService}
+import org.lfdecentralizedtrust.splice.{PekkoRetryingService, PekkoRetryableService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
@@ -81,7 +81,7 @@ class UpdateHistoryBulkStorage(
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning
-    with RetryableService[UpdatesSegment] {
+    with PekkoRetryableService[UpdatesSegment] {
 
   private def getUpdatesSegmentsAfter(
       afterO: Option[UpdatesSegment]
@@ -130,18 +130,6 @@ class UpdateHistoryBulkStorage(
       tc: TraceContext,
   ): Source[UpdatesSegment, Cancellable] = {
 
-//    // Wait for update history to initialize and for history backfilling to complete before starting bulk storage dumps
-//    val backfillingCompleteGate =
-//      Source
-//        .tick(0.seconds, appConfig.updatesPollingInterval.underlying, ())
-//        .mapAsync(1)(_ =>
-//          if (updateHistory.isReady)
-//            updateHistory.isHistoryBackfilled(currentMigrationId)
-//          else Future.successful(false)
-//        )
-//        .filter(identity)
-//        .take(1)
-
     backfillingCompleteGate.flatMap { _ =>
       Source
         .future(persistentProgress.readLatestProcessedSegment)
@@ -153,7 +141,7 @@ class UpdateHistoryBulkStorage(
     }
   }
 
-  override def asRetryableService(
+  override def asPekkoRetryingService(
       automationConfig: AutomationConfig,
       backoffClock: Clock,
       retryProvider: RetryProvider,

@@ -239,7 +239,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
       ex.getMessage should include("no snapshot in committed bulk storage yet")
 
-      val svc = bulkStorage.asRetryableService(
+      val svc = bulkStorage.asPekkoRetryingService(
         AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
         new WallClock(timeouts, loggerFactory),
         retryProvider,

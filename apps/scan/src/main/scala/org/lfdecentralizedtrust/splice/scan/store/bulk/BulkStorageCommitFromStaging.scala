@@ -14,6 +14,8 @@ import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChec
 
 import scala.concurrent.{ExecutionContext, Future}
 
+// TODO(#5884): review parallelism here. We use parallelism = 1 all over, but unsure whether that's actually necessary.
+
 class BulkStorageCommitFromStaging[T](
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,

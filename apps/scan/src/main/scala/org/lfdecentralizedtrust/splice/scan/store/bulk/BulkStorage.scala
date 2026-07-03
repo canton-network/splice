@@ -20,7 +20,7 @@ import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection
 import scala.concurrent.{ExecutionContext, Future}
 import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.RetryableService
+import org.lfdecentralizedtrust.splice.PekkoRetryableService
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   acsCommittedKvStoreKey,
   acsStagingKvStoreKey,
@@ -172,8 +172,8 @@ class BulkStorage(
   )
 
   private val services =
-    Seq[RetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
-      .map(_.asRetryableService(automationConfig, backoffClock, retryProvider))
+    Seq[PekkoRetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
+      .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
     services.flatMap(_.closeAsync())

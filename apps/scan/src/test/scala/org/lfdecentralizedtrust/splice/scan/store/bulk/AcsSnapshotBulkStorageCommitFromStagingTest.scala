@@ -114,7 +114,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
             appConfig,
             Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
             loggerFactory,
-          ).asRetryableService(
+          ).asPekkoRetryingService(
             AutomationConfig(pollingInterval =
               NonNegativeFiniteDuration.ofSeconds(1)
             ), // Fast retries

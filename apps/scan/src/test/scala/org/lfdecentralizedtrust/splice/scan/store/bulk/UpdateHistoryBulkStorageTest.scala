@@ -250,7 +250,7 @@ class UpdateHistoryBulkStorageTest
           loggerFactory,
         )
 
-        val svc = bulkStorage.asRetryableService(
+        val svc = bulkStorage.asPekkoRetryingService(
           AutomationConfig(pollingInterval =
             NonNegativeFiniteDuration.ofSeconds(1)
           ), // Fast retries

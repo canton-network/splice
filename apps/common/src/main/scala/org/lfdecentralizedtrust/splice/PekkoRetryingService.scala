@@ -17,8 +17,8 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 
 import scala.concurrent.{ExecutionContext, Future}
 
-trait RetryableService[S] {
-  def asRetryableService(
+trait PekkoRetryableService[S] {
+  def asPekkoRetryingService(
       automationConfig: AutomationConfig,
       backoffClock: Clock,
       retryProvider: RetryProvider,

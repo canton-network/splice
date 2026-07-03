@@ -13,7 +13,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
 import org.apache.pekko.pattern.after
-import org.lfdecentralizedtrust.splice.{PekkoRetryingService, RetryableService}
+import org.lfdecentralizedtrust.splice.{PekkoRetryingService, PekkoRetryableService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
@@ -109,7 +109,7 @@ class AcsSnapshotBulkStorage(
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning
-    with RetryableService[TimestampWithMigrationId] {
+    with PekkoRetryableService[TimestampWithMigrationId] {
 
   private def getAcsSnapshotTimestampsAfter(
       start: TimestampWithMigrationId
@@ -170,7 +170,7 @@ class AcsSnapshotBulkStorage(
     }
   }
 
-  override def asRetryableService(
+  override def asPekkoRetryingService(
       automationConfig: AutomationConfig,
       backoffClock: Clock,
       retryProvider: RetryProvider,
