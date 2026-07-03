@@ -9,6 +9,6 @@
 
     - SV app
 
-        - The "You are on <network>" banner now displays on all deployments, including
-          clusters where it was previously hidden. Banner text is sourced from the
-          configured ``spliceInstanceNames.networkName`` value
+        - Network banner now always shows. The network name is derived from the scan node's public URL:
+          MainNet/TestNet/DevNet/ScratchNet from the cluster subdomain, LocalNet for localhost, and a
+          capitalized fallback otherwise (Unknown Network when no scan URL is available).
