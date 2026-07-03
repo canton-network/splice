@@ -15,6 +15,7 @@ const PulumiProjectConfigSchema = z.object({
   cloudSql: CloudSqlConfigSchema,
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),
+  helmForceUpdate: z.boolean().default(true),
 });
 export type PulumiProjectConfig = z.infer<typeof PulumiProjectConfigSchema>;
 export const ConfigSchema = z.object({

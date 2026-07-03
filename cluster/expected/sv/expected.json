@@ -384,7 +384,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv-1",
@@ -685,7 +685,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv-da-1",
@@ -1023,7 +1023,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "participant",
       "namespace": "sv",

@@ -1533,7 +1533,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-7",
       "namespace": "sv-1",
@@ -1646,7 +1646,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-8",
       "namespace": "sv-1",
@@ -1907,7 +1907,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-10",
       "namespace": "sv-1",
@@ -2044,7 +2044,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-7",
       "namespace": "sv-1",
@@ -2177,7 +2177,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-8",
       "namespace": "sv-1",
@@ -2310,7 +2310,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-9",
       "namespace": "sv-1",
@@ -4897,7 +4897,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-7",
       "namespace": "sv",
@@ -5007,7 +5007,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-8",
       "namespace": "sv",
@@ -5117,7 +5117,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-7",
       "namespace": "sv-da-1",
@@ -5231,7 +5231,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-cometbft",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "cometbft-global-domain-8",
       "namespace": "sv-da-1",
@@ -5493,7 +5493,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-10",
       "namespace": "sv-da-1",
@@ -5630,7 +5630,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-7",
       "namespace": "sv-da-1",
@@ -5763,7 +5763,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-8",
       "namespace": "sv-da-1",
@@ -5896,7 +5896,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-9",
       "namespace": "sv-da-1",
@@ -8361,7 +8361,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-10",
       "namespace": "sv",
@@ -8498,7 +8498,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-7",
       "namespace": "sv",
@@ -8631,7 +8631,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-8",
       "namespace": "sv",
@@ -8764,7 +8764,7 @@
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-global-domain",
       "compat": "true",
-      "forceUpdate": false,
+      "forceUpdate": true,
       "maxHistory": 10,
       "name": "global-domain-9",
       "namespace": "sv",
