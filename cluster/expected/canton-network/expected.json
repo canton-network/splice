@@ -2905,6 +2905,10 @@
               "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.mediator.pruning {\n                    cron = \"0 0 * * *\"\n                    max-duration = \"30m\"\n                    retention = \"7d\"\n                  }"
             },
             {
+              "name": "ADDITIONAL_CONFIG_CANTON_BFT_PRUNING",
+              "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.canton-bft-pruning {\n                    cron = \"0 /10 * * * ?\"\n                    max-duration = \"5m\"\n                    retention = \"15 days\"\n                  }"
+            },
+            {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
               "value": "canton.sv-apps.sv.additional-packages-to-unvet.\"splice-wallet-payments\" = [\"0.1.15\", \"0.1.16\"]\ncanton.sv-apps.sv.additional-packages-to-unvet.\"splice-amulet\" = [\"0.1.15\"]"
             }
@@ -4021,6 +4025,10 @@
             {
               "name": "ADDITIONAL_CONFIG_MEDIATOR_PRUNING",
               "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.mediator.pruning {\n                    cron = \"0 0 * * *\"\n                    max-duration = \"30m\"\n                    retention = \"7d\"\n                  }"
+            },
+            {
+              "name": "ADDITIONAL_CONFIG_CANTON_BFT_PRUNING",
+              "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.canton-bft-pruning {\n                    cron = \"0 /10 * * * ?\"\n                    max-duration = \"5m\"\n                    retention = \"15 days\"\n                  }"
             },
             {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
