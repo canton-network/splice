@@ -108,6 +108,8 @@ monitoring:
         rejectionRateThreshold: 0
       trafficBasedRewards:
         featuredAppRightsLimit: 10000
+        verdictIngestionBatchSizePendingPeriodMinutes: 60
+        verdictIngestionBatchSizeThreshold: 40
       trafficWaste:
         kilobytes: 1
         overMinutes: 5
