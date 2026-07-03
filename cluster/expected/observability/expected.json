@@ -893,6 +893,135 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "alertStrategy": {
+        "autoClose": "3600s",
+        "notificationChannelStrategies": [
+          {
+            "notificationChannelNames": [
+              null
+            ],
+            "renotifyInterval": "14400s"
+          }
+        ]
+      },
+      "combiner": "OR",
+      "conditions": [
+        {
+          "conditionPrometheusQueryLanguage": {
+            "duration": "0s",
+            "evaluationInterval": "30s",
+            "query": "sum by (nat_gateway_name) (router_googleapis_com:nat_nat_allocation_failed{monitored_resource=\"nat_gateway\"}) > 0"
+          },
+          "displayName": "NAT allocation failed in mock"
+        }
+      ],
+      "displayName": "NAT allocation failed in mock",
+      "documentation": {
+        "content": "Cloud NAT failed to allocate IPs or ports for at least one VM in cluster mock. This typically indicates NAT IP or port exhaustion.",
+        "mimeType": "text/markdown",
+        "subject": "NAT allocation failed in mock"
+      },
+      "notificationChannels": [
+        null
+      ],
+      "userLabels": {
+        "cluster": "mock"
+      }
+    },
+    "name": "natAllocationFailedAlert",
+    "provider": "",
+    "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "alertStrategy": {
+        "autoClose": "3600s",
+        "notificationChannelStrategies": [
+          {
+            "notificationChannelNames": [
+              null
+            ],
+            "renotifyInterval": "14400s"
+          }
+        ]
+      },
+      "combiner": "OR",
+      "conditions": [
+        {
+          "conditionPrometheusQueryLanguage": {
+            "duration": "0s",
+            "evaluationInterval": "30s",
+            "query": "sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource=\"nat_gateway\"}) > 0"
+          },
+          "displayName": "NAT dropped sent packets in mock"
+        }
+      ],
+      "displayName": "NAT dropped sent packets in mock",
+      "documentation": {
+        "content": "Cloud NAT is dropping outbound packets in cluster mock. This can be caused by NAT IP/port exhaustion (OUT_OF_RESOURCES) or endpoint independence conflicts (ENDPOINT_INDEPENDENCE_CONFLICT).",
+        "mimeType": "text/markdown",
+        "subject": "NAT dropped sent packets in mock"
+      },
+      "notificationChannels": [
+        null
+      ],
+      "userLabels": {
+        "cluster": "mock"
+      }
+    },
+    "name": "natDroppedSentPacketsAlert",
+    "provider": "",
+    "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "alertStrategy": {
+        "autoClose": "3600s",
+        "notificationChannelStrategies": [
+          {
+            "notificationChannelNames": [
+              null
+            ],
+            "renotifyInterval": "14400s"
+          }
+        ]
+      },
+      "combiner": "OR",
+      "conditions": [
+        {
+          "conditionPrometheusQueryLanguage": {
+            "duration": "0s",
+            "evaluationInterval": "30s",
+            "query": "sum by (nat_gateway_name) ((router_googleapis_com:nat_port_usage{monitored_resource=\"nat_gateway\"} / 64512) * 100) > 80"
+          },
+          "displayName": "NAT port usage high in mock"
+        }
+      ],
+      "displayName": "NAT port usage high in mock",
+      "documentation": {
+        "content": "Cloud NAT port usage exceeded 80% of the maximum for at least one NAT gateway in cluster mock. Consider increasing NAT IPs or ports per VM.",
+        "mimeType": "text/markdown",
+        "subject": "NAT port usage high in mock"
+      },
+      "notificationChannels": [
+        null
+      ],
+      "userLabels": {
+        "cluster": "mock"
+      }
+    },
+    "name": "natPortUsageAlert",
+    "provider": "",
+    "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "length": 16,
       "overrideSpecial": "_%@",
       "special": true

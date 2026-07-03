@@ -121,6 +121,11 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        natPortUsage: z
+          .object({
+            thresholdPercent: z.number().min(0).max(100),
+          })
+          .default({ thresholdPercent: 80 }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
         }),
@@ -145,6 +150,12 @@ const MonitoringConfigSchema = z
 export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('monitoring'));
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
+
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
 const PrometheusConfigSchema = z.object({
   prometheus: z.object({

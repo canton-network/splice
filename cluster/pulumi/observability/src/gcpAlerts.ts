@@ -10,7 +10,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 
 import { slackAlertNotificationChannel, slackToken } from './alertings';
-import { type GcpQuotaAlertsConfig, monitoringConfig } from './config';
+import { type GcpQuotaAlertsConfig, monitoringConfig, type NatPortUsageConfig } from './config';
 
 const enableChaosMesh = config.envFlag('ENABLE_CHAOS_MESH');
 
@@ -434,6 +434,90 @@ export function installGcpQuotaAlerts(
             > ${quotaUsageThreshold}
           `,
           ...windowSettings,
+        },
+      },
+    ],
+  });
+}
+
+export function installNatAllocationFailedAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  new gcp.monitoring.AlertPolicy('natAllocationFailedAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    displayName: `NAT allocation failed in ${CLUSTER_BASENAME}`,
+    userLabels: { cluster: CLUSTER_BASENAME },
+    documentation: {
+      subject: `NAT allocation failed in ${CLUSTER_BASENAME}`,
+      content: `Cloud NAT failed to allocate IPs or ports for at least one VM in cluster ${CLUSTER_BASENAME}. This typically indicates NAT IP or port exhaustion.`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName: `NAT allocation failed in ${CLUSTER_BASENAME}`,
+        conditionPrometheusQueryLanguage: {
+          query: `sum by (nat_gateway_name) (router_googleapis_com:nat_nat_allocation_failed{monitored_resource="nat_gateway"}) > 0`,
+          duration: '0s',
+          evaluationInterval: '30s',
+        },
+      },
+    ],
+  });
+}
+
+export function installNatDroppedSentPacketsAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  new gcp.monitoring.AlertPolicy('natDroppedSentPacketsAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    displayName: `NAT dropped sent packets in ${CLUSTER_BASENAME}`,
+    userLabels: { cluster: CLUSTER_BASENAME },
+    documentation: {
+      subject: `NAT dropped sent packets in ${CLUSTER_BASENAME}`,
+      content: `Cloud NAT is dropping outbound packets in cluster ${CLUSTER_BASENAME}. This can be caused by NAT IP/port exhaustion (OUT_OF_RESOURCES) or endpoint independence conflicts (ENDPOINT_INDEPENDENCE_CONFLICT).`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName: `NAT dropped sent packets in ${CLUSTER_BASENAME}`,
+        conditionPrometheusQueryLanguage: {
+          query: `sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway"}) > 0`,
+          duration: '0s',
+          evaluationInterval: '30s',
+        },
+      },
+    ],
+  });
+}
+
+export function installNatPortUsageAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel,
+  natPortUsageConfig: NatPortUsageConfig
+): void {
+  const portUsageThresholdPercent = natPortUsageConfig.thresholdPercent;
+
+  new gcp.monitoring.AlertPolicy('natPortUsageAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    displayName: `NAT port usage high in ${CLUSTER_BASENAME}`,
+    userLabels: { cluster: CLUSTER_BASENAME },
+    documentation: {
+      subject: `NAT port usage high in ${CLUSTER_BASENAME}`,
+      content: `Cloud NAT port usage exceeded ${portUsageThresholdPercent}% of the maximum for at least one NAT gateway in cluster ${CLUSTER_BASENAME}. Consider increasing NAT IPs or ports per VM.`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName: `NAT port usage high in ${CLUSTER_BASENAME}`,
+        conditionPrometheusQueryLanguage: {
+          query: `sum by (nat_gateway_name) ((router_googleapis_com:nat_port_usage{monitored_resource="nat_gateway"} / 64512) * 100) > ${portUsageThresholdPercent}`,
+          duration: '0s',
+          evaluationInterval: '30s',
         },
       },
     ],
