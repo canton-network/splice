@@ -37,5 +37,5 @@ enableReloader: true
 
 // TODO(#6221): Add missing Helm Chart Security Contexts
 
-#TODO(#6221): Add missing Helm Chart Security Contexts
+#TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
 
