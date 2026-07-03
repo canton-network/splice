@@ -16,6 +16,8 @@ function component_to_deployments() {
   local -r namespace=$3
   if [[ "$component" == "sequencer" ]]; then
     echo "global-domain-$migration_id-sequencer"
+  elif [[ "$component" == "cantonBft" ]]; then
+    echo "global-domain-$migration_id-sequencer"
   elif [[ "$component" == "mediator" ]]; then
     echo "global-domain-$migration_id-mediator"
   elif [[ "$component" == "participant" && "$namespace" == sv* ]]; then
