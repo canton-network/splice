@@ -65,6 +65,7 @@ securityContexts:
   pod:
     security_context_profile: pod_security_context
     fsGroup: 1001
+    fsGroupChangePolicy: "OnRootMismatch"
   containers:
     participant:
       security_context_profile: app_security_context

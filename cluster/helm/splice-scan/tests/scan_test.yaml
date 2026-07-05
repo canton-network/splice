@@ -658,6 +658,8 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             seccompProfile:
               type: RuntimeDefault
       - documentIndex: 0
@@ -688,6 +690,8 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             seccompProfile:
               type: RuntimeDefault
       - documentIndex: 2
@@ -737,6 +741,8 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             runAsNonRoot: true
             seccompProfile:
               type: Localhost
@@ -769,6 +775,8 @@ tests:
         equal:
           path: spec.template.spec.securityContext
           value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             runAsNonRoot: true
             seccompProfile:
               type: Localhost

@@ -478,6 +478,7 @@ tests:
           path: spec.template.spec.securityContext
           value:
             fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             seccompProfile:
               type: RuntimeDefault
       - equal:
@@ -530,6 +531,7 @@ tests:
           path: spec.template.spec.securityContext
           value:
             fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
             runAsNonRoot: true
             seccompProfile:
               type: Localhost
