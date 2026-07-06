@@ -118,7 +118,7 @@ scan_get_status() {
 
   local scan_svnames_and_urls; IFS=$'\n' read -r -d '' -a scan_svnames_and_urls < <(
     echo "$scan_info" |
-      jq -r '.scans[].scans[] | [.svName, .publicUrl] | join(" ")' && printf '\0'
+      jq -r '.scans?[].scans[] | [.svName, .publicUrl] | join(" ")' && printf '\0'
   )
 
   local scan_data; scan_data=$(
