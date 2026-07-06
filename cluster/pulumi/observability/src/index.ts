@@ -10,9 +10,7 @@ import {
   installCloudSQLMaintenanceUpdateAlerts,
   installCloudSqlTxIdUtilizationAlert,
   installClusterMaintenanceUpdateAlerts,
-  installNatAllocationFailedAlert,
-  installNatDroppedSentPacketsAlert,
-  installNatPortUsageAlert,
+  installNatAlerts,
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
@@ -56,8 +54,6 @@ if (enableAlerts && !clusterIsResetPeriodically) {
     }
     installGcpQuotaAlerts(notificationChannel, monitoringConfig.alerting.alerts.gcpQuotas);
     installCloudSqlTxIdUtilizationAlert(notificationChannel);
-    installNatAllocationFailedAlert(notificationChannel);
-    installNatDroppedSentPacketsAlert(notificationChannel);
-    installNatPortUsageAlert(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
+    installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
   }
 }
