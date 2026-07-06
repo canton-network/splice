@@ -41,6 +41,7 @@ export const ActionRequiredSection: React.FC<ActionRequiredProps> = (
       <PageSectionHeader
         title="Action Required"
         badgeCount={sortedRequests.length}
+        badgeColor="error"
         data-testid="action-required"
       />
 

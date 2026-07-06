@@ -5,12 +5,14 @@ import { Badge, Box, Typography } from '@mui/material';
 interface PageSectionHeaderProps {
   title: string;
   badgeCount?: number;
+  badgeColor?: 'error' | 'neutral';
   'data-testid': string;
 }
 
 const PageSectionHeader: React.FC<PageSectionHeaderProps> = ({
   title,
   badgeCount,
+  badgeColor = 'neutral',
   'data-testid': testId,
 }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -19,9 +21,18 @@ const PageSectionHeader: React.FC<PageSectionHeaderProps> = ({
     </Typography>
     <Badge
       badgeContent={badgeCount}
+      max={Number.MAX_SAFE_INTEGER}
+      color={badgeColor === 'error' ? 'error' : undefined}
       sx={{
-        ml: 2,
-        '& .MuiBadge-badge': { bgcolor: 'colors.neutral.25', color: 'text.light' },
+        ml: 1,
+        '& .MuiBadge-badge': {
+          position: 'static',
+          transform: 'none',
+          ...(badgeColor === 'neutral'
+            ? { bgcolor: 'colors.neutral.25', color: 'text.light' }
+            : {}),
+        },
+        '& .MuiBadge-invisible': { display: 'none' },
       }}
       id={`${testId}-badge-count`}
       data-testid={`${testId}-badge-count`}
