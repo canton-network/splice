@@ -12,7 +12,7 @@ SV_THRESHOLD="${SV_THRESHOLD:-600}"
 MEDIATOR_THRESHOLD="${MEDIATOR_THRESHOLD:-900}"
 SCAN_THRESHOLD_ROUNDS="${SCAN_THRESHOLD_ROUNDS:-900}"
 SCAN_THRESHOLD_SNAPSHOT="${SCAN_THRESHOLD_SNAPSHOT:-14400}" # 4 hours
-SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-1800}" # Sequencer acknowledgments are irregular, so we use a higher threshold here
+SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-2520}" # 42 minutes, Sequencer acknowledgments are irregular, so we use a higher threshold here
 
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 
