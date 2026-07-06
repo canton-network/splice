@@ -126,8 +126,7 @@ jobs:
     with:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-resource-intensive.log'
-      start_canton_options: -we
-      pre_sbt_cmd: "export SPLICE_USE_CANTON_BFT_SEQUENCER=1"
+      start_canton_options: -w
       parallelism: 2
       test_name: resource-intensive
       commit_sha: ${{ inputs.commit_sha }}
