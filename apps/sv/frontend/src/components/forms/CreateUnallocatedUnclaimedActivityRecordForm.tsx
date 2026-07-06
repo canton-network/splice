@@ -185,7 +185,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="create-unallocated-unclaimed-activity-record-expiry-date"
                 />

@@ -306,7 +306,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id={`${testIdPrefix}-expiry-date`}
                 />

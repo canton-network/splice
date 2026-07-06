@@ -328,7 +328,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Threshold Deadline"
+            label="Quorum Threshold Deadline"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-voting-closes-duration">

@@ -38,7 +38,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -102,7 +102,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -142,7 +142,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -186,7 +186,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -302,7 +302,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -374,7 +374,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');

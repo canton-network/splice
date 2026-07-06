@@ -137,7 +137,7 @@ export const OffboardSvForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="offboard-sv-expiry-date"
                 />
