@@ -60,7 +60,10 @@ class DsoPartyHosting(
       .recover {
         case ex: StatusRuntimeException
             if tolerateUninitializedStore &&
-              ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreNotInitialized) =>
+              (ErrorDetails.matches(
+                ex,
+                TopologyManagerError.TopologyStoreNotInitialized,
+              ) || ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreUnknown)) =>
           logger.info(
             s"Topology store for $synchronizerId is not yet initialized and the synchronizer is " +
               "registered with manualConnect=true, treating the DSO party as not authorized."
