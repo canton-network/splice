@@ -194,10 +194,13 @@ class NodeInitializer(
         connection.getIdOption(),
         logger,
       )
+      status <- connection.getStatus
       _ <- nodeId.uniqueIdentifier match {
-        case Some(id) =>
-          // rotate existing OTK if needed
+        case Some(id) if status.isInitialized =>
+          logger.info(s"Node is initialized with identity $id, checking if OTK rotation is needed")
           rotateOwnerToKeyMappingNotSignedByKeys(id, nodeIdentity, synchronizerId)
+        case Some(_) =>
+          Future.unit
         case None =>
           logger.info(s"Node has no identity, generating a new one")
           initializeWithNewIdentity(identifierName, nodeIdentity)
