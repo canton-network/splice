@@ -183,7 +183,8 @@ export const voteResultsAmuletRules: ListDsoRulesVoteResultsResponse = {
             },
           ],
         ],
-        trackingCid: null,
+        trackingCid:
+          '004402af5a75151516cb29ab0d8fa87e5b734fe4e330cc76fee2a682f4dcccdbe8ca101220a3151aef1bd6c1c1a49ce6d78419b0e3225b446da4b6b4bb6f54e30de1a49913',
       },
       completedAt: '2024-04-20T08:21:26.130819Z',
       offboardedVoters: [],
@@ -218,7 +219,8 @@ export const voteResultsAmuletRules: ListDsoRulesVoteResultsResponse = {
             },
           ],
         ],
-        trackingCid: null,
+        trackingCid:
+          '0056cf5f76a52254db2a1257c531b08cca3e07b74a1f9f8c2086c445b09b21d908ca101220d59a29b0891bfb22a3e0af0eff43e0a91768a1c50448f4285e11a0efa32e390d',
       },
       completedAt: '2024-04-20T08:21:26.130819Z',
       offboardedVoters: [],

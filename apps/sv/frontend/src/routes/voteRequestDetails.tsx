@@ -115,9 +115,13 @@ export const VoteRequestDetails: React.FC = () => {
     requester: request.requester,
     requesterIsYou: request.requester === svPartyId,
     votingThresholdDeadline: dayjs(request.voteBefore).format(dateTimeFormatISO),
-    voteTakesEffect: request.targetEffectiveAt
-      ? dayjs(request.targetEffectiveAt).format(dateTimeFormatISO)
-      : 'Threshold',
+    voteTakesEffect: hasVoteRequest
+      ? request.targetEffectiveAt
+        ? dayjs(request.targetEffectiveAt).format(dateTimeFormatISO)
+        : 'Threshold'
+      : (voteResult?.outcome.tag === 'VRO_Accepted' &&
+          dayjs(voteResult.outcome.value.effectiveAt).format(dateTimeFormatISO)) ||
+        dayjs(voteResult?.completedAt).format(dateTimeFormatISO),
     status: hasVoteRequest ? 'In Progress' : getVoteResultStatus(voteResult?.outcome),
   };
 
