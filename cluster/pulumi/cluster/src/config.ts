@@ -12,8 +12,12 @@ const GkeNodePoolConfigSchema = z.object({
 const GkeClusterConfigSchema = z.object({
   nodePools: z.object({
     infra: GkeNodePoolConfigSchema,
-    apps: GkeNodePoolConfigSchema,
-    hyperdiskApps: GkeNodePoolConfigSchema.optional(),
+    apps: z
+      .array(GkeNodePoolConfigSchema)
+      .nonempty()
+      // Single value config is for backwards compatibility. If we stop using it we may remove it.
+      .or(GkeNodePoolConfigSchema)
+      .transform(value => (Array.isArray(value) ? value : [value])),
   }),
 });
 
