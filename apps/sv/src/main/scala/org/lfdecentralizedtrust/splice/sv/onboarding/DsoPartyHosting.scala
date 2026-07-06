@@ -37,13 +37,19 @@ class DsoPartyHosting(
       participantId: ParticipantId,
   )(implicit traceContext: TraceContext): Future[Boolean] =
     for {
-      mappings <- participantAdminConnection
-        .listPartyToParticipant(
-          store = TopologyStoreId.Synchronizer(synchronizerId).some,
-          operation = Some(TopologyChangeOp.Replace),
-          filterParticipant = participantId.toProtoPrimitive,
-          filterParty = dsoParty.toProtoPrimitive,
-        )
+      mappings <- retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "list_party_to_participant_dso",
+        "Check if the dso party is authorized",
+        participantAdminConnection
+          .listPartyToParticipant(
+            store = TopologyStoreId.Synchronizer(synchronizerId).some,
+            operation = Some(TopologyChangeOp.Replace),
+            filterParticipant = participantId.toProtoPrimitive,
+            filterParty = dsoParty.toProtoPrimitive,
+          ),
+        logger,
+      )
     } yield {
       logger.info("DSO party mappings to our participant: " + mappings.map(_.mapping))
       mappings.nonEmpty
