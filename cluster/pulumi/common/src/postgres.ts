@@ -413,7 +413,20 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     const supportsHyperdisk = useInfraAffinityAndTolerations
       ? hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
       : hyperdiskSupportConfig.hyperdiskSupport.enabled;
+    const migratingToHyperdisk = useInfraAffinityAndTolerations
+      ? hyperdiskSupportConfig.hyperdiskSupport.migratingInfra
+      : hyperdiskSupportConfig.hyperdiskSupport.migrating;
 
+    let hyperdiskMigrationValues = {};
+    if (supportsHyperdisk && migratingToHyperdisk) {
+      const { dataSource } = createVolumeSnapshot({
+        resourceName: `pg-data-${xns.logicalName}-${instanceName}-snapshot`,
+        snapshotName: `pg-data-${instanceName}-snapshot`,
+        namespace: xns.logicalName,
+        pvcName: `pg-data-${instanceName}-0`,
+      });
+      hyperdiskMigrationValues = { dataSource };
+    }
     const pg = installSpliceHelmChart(
       xns,
       instanceName,
@@ -427,6 +440,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
             ? {
                 volumeStorageClass: standardStorageClassName,
                 pvcTemplateName: 'pg-data-hd',
+                ...hyperdiskMigrationValues,
               }
             : {}),
         },
@@ -438,7 +452,11 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       {
         aliases: [{ name: logicalNameAlias, type: 'kubernetes:helm.sh/v3:Release' }],
         dependsOn: [passwordSecret],
-        ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
+        ...((supportsHyperdisk &&
+          // during the migration we first delete the stateful set, which keeps the old pvcs (stateful sets always keep the pvcs), and then recreate with the new pvcs
+          // the stateful sets are immutable so they need to be recreated to force the change of the pvcs
+          migratingToHyperdisk) ||
+        spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
           ? {
               replaceOnChanges: ['*'],
               deleteBeforeReplace: true,

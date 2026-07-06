@@ -109,6 +109,18 @@ export function installCometBftNode(
       pvcName: `cometbft-migration-${migrationId}-hd-pvc`,
       volumeStorageClass: standardStorageClassName,
     };
+    if (hyperdiskSupportConfig.hyperdiskSupport.migrating) {
+      const { dataSource } = createVolumeSnapshot({
+        resourceName: `cometbft-${xns.logicalName}-migration-${migrationId}-snapshot`,
+        snapshotName: `cometbft-migration-${migrationId}-pd-snapshot`,
+        namespace: xns.logicalName,
+        pvcName: `global-domain-${migrationId}-cometbft-cometbft-data`,
+      });
+      hyperdiskDbValues = {
+        ...hyperdiskDbValues,
+        dataSource,
+      };
+    }
   }
 
   const cometbftChartValues = _.mergeWith(cometBftValues, {
