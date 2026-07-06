@@ -46,6 +46,7 @@ const SvNavigationShell: React.FC<SvNavigationShellProps> = ({ navLinks, onLogou
           position: 'sticky',
           top: 0,
           zIndex: 1100,
+          pointerEvents: 'none',
           backgroundColor: networkInstanceNameColor,
           color: 'black',
           height: '50px',
