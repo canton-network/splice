@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -160,16 +161,35 @@ class BootstrapPackageConfigIntegrationTest
       // before the SVs do so. Topology aware package selection will then force the old splice-amulet and old splitwell versions
       // for composed transactions. Note that for this to work splitwell contracts must be downgradeable.
 
-      // Split into batches to avoid gRPC message size limit (10 MB)
-      val batchSize = 12
-      val versionBatches =
-        DarResources.splitwell.all.map(_.metadata.version).distinct.grouped(batchSize).toSeq
+      // Split into batches by file size to avoid the gRPC message size limit (10 MB).
+      // A fixed item count doesn't work here as dar files grow in size across versions.
+      val maxBatchBytes = 9 * 1024 * 1024L
+      def darPath(v: PackageVersion) = s"daml/dars/splitwell-$v.dar"
+      val versionBatches: Seq[Seq[PackageVersion]] = {
+        val (completedBatches, lastBatch, _) = DarResources.splitwell.all
+          .map(_.metadata.version)
+          .distinct
+          .foldLeft((Vector.empty[Seq[PackageVersion]], Vector.empty[PackageVersion], 0L)) {
+            case ((completed, current, currentBytes), version) =>
+              val fileSize = java.nio.file.Files.size(java.nio.file.Paths.get(darPath(version)))
+              if (current.isEmpty)
+                (completed, Vector(version), fileSize)
+              else if (currentBytes + fileSize > maxBatchBytes)
+                (completed :+ current, Vector(version), fileSize)
+              else
+                (completed, current :+ version, currentBytes + fileSize)
+          }
+        if (lastBatch.nonEmpty) completedBatches :+ lastBatch else completedBatches
+      }
 
       Seq(aliceValidatorBackend, bobValidatorBackend, splitwellValidatorBackend).foreach { p =>
+        val splitwellSynchronizerId =
+          p.participantClient.synchronizers.id_of(SynchronizerAlias.tryCreate("splitwell"))
         versionBatches.foreach { batch =>
-          p.participantClient.dars.upload_many(
-            batch.map((v: PackageVersion) => s"daml/dars/splitwell-$v.dar")
-          )
+          val paths = batch.map(darPath)
+          Seq(decentralizedSynchronizerId, splitwellSynchronizerId).foreach { synchronizerId =>
+            p.participantClient.dars.upload_many(paths, synchronizerId = Some(synchronizerId))
+          }
         }
       }
     }
