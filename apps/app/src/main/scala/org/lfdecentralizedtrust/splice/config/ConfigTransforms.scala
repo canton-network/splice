@@ -44,7 +44,7 @@ import scala.io.Source
 
 object ConfigTransforms {
 
-  val IsTheCantonSequencerBFTEnabled: Boolean = sys.env.contains("SPLICE_USE_BFT_SEQUENCER")
+  val IsTheCantonSequencerBFTEnabled: Boolean = sys.env.contains("SPLICE_USE_CANTON_BFT_SEQUENCER")
 
   sealed abstract class ConfigurableApp extends Product with Serializable
 
