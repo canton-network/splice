@@ -169,14 +169,14 @@ class JoiningNodeInitializer(
       )
     )
     for {
-      (dsoPartyId, _) <- (
+      (dsoPartyId, registeredGlobalSync) <- (
         // If we're not onboarded yet, this waits for the sponsoring SV
         getDsoPartyId(initConnection),
         // Register domain with manualConnect=true. Confusingly, this still connects the first time.
         // However, it won't connect if we crash and get here again which is what we're really after.
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
-        domainConfigO.traverse_(
+        domainConfigO.traverse(
           participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
@@ -189,6 +189,7 @@ class JoiningNodeInitializer(
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
         decentralizedSynchronizerId,
+        registeredGlobalSync,
         participantId,
       )
       _ <-
