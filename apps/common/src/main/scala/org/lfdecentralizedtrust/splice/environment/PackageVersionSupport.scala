@@ -145,6 +145,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.dsoGovernance,
       DarResources.dsoGovernance_0_1_23,
+      ignoreRedundantCheck = true,
     )
   }
 
@@ -158,6 +159,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.dsoGovernance,
       DarResources.dsoGovernance_0_1_24,
+      ignoreRedundantCheck = true,
     )
   }
 
@@ -182,6 +184,7 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.wallet,
       DarResources.wallet_0_1_16,
+      ignoreRedundantCheck = true,
     )
 
   private def isDarSupported(
@@ -190,7 +193,7 @@ trait PackageVersionSupport extends NamedLogging {
       at: CantonTimestamp,
       packageResource: PackageResource,
       dar: DarResource,
-      ignoreRedundantCheck: Boolean = false,
+      ignoreRedundantCheck: Boolean,
   )(implicit tc: TraceContext): Future[FeatureSupport] =
     isDarSupported(Seq(packageId -> parties), at, packageResource, dar, ignoreRedundantCheck)
 
