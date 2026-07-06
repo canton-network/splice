@@ -5,7 +5,7 @@ import { Badge, Box, Typography } from '@mui/material';
 interface PageSectionHeaderProps {
   title: string;
   badgeCount?: number;
-  badgeColor?: 'error' | 'neutral';
+  badgeColor?: 'warning' | 'neutral';
   'data-testid': string;
 }
 
@@ -22,15 +22,12 @@ const PageSectionHeader: React.FC<PageSectionHeaderProps> = ({
     <Badge
       badgeContent={badgeCount}
       max={Number.MAX_SAFE_INTEGER}
-      color={badgeColor === 'error' ? 'error' : undefined}
+      color={badgeColor}
       sx={{
         ml: 1,
         '& .MuiBadge-badge': {
           position: 'static',
           transform: 'none',
-          ...(badgeColor === 'neutral'
-            ? { bgcolor: 'colors.neutral.25', color: 'text.light' }
-            : {}),
         },
         '& .MuiBadge-invisible': { display: 'none' },
       }}
