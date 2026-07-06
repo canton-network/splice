@@ -263,7 +263,9 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       id={`${testIdPrefix}-partyId`}
                       scrollableIdentifier
                       subtitle={
-                        field.state.meta.isValidating ? 'Loading featured app rights...' : undefined
+                        field.state.meta.isValidating
+                          ? 'Loading Featured Application Contract IDs...'
+                          : undefined
                       }
                       onChange={() => {
                         picker.resetOptions();
@@ -288,7 +290,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       disabled={picker.rightOptions.length === 0}
                       placeholder={
                         providerHasNoRights
-                          ? 'No featured application rights found for this provider'
+                          ? 'No Featured Application Contract IDs found for this provider'
                           : undefined
                       }
                     />
