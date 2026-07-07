@@ -8,12 +8,13 @@ const GkeNodePoolConfigSchema = z.object({
   maxNodes: z.number(),
   nodeType: z.string(),
   bootDiskSizeGb: z.number().optional(),
+  zones: z.literal('*').or(z.array(z.string())).optional(),
 });
 const GkeClusterConfigSchema = z.object({
   nodePools: z.object({
     infra: GkeNodePoolConfigSchema,
     apps: GkeNodePoolConfigSchema,
-    hyperdiskApps: GkeNodePoolConfigSchema.optional(),
+    additionalApps: z.array(GkeNodePoolConfigSchema).default([]),
   }),
 });
 

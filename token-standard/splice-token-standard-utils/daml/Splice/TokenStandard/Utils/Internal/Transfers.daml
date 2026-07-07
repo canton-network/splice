@@ -1,0 +1,331 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Internal module of utilities to implement V2 transfer workflows
+--
+-- Import 'Splice.TokenStandard.Utils' to get access to the public ones.
+module Splice.TokenStandard.Utils.Internal.Transfers (
+
+  -- * Validation
+  isValidTransferV2,
+
+  -- * Default implementations for V2
+  transferInstructionV2_receiverActor_acceptDefaultImplUsingV1,
+  transferInstructionV2_receiverActor_rejectDefaultImplUsingV1,
+  transferInstructionV2_senderActor_withdrawDefaultImplUsingV1,
+
+  transferFactoryV2_transferDefaultImplUsingV1,
+
+  -- ** TransferFactory extra observers
+  transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
+  transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
+
+  -- * Default implementations for V1
+  transferFactoryV1_transferDefaultImplUsingV2,
+  transferInstructionV1_acceptDefaultImplUsingV2,
+  transferInstructionV1_withdrawDefaultImplUsingV2,
+  transferInstructionV1_rejectDefaultImplUsingV2,
+  transferInstructionV1_updateDefaultImplUsingV2,
+
+  transferAcceptanceTxHistoryV1ToMeta,
+) where
+
+
+import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 qualified as TransferInstructionV1
+import Splice.Api.Token.TransferInstructionV2 qualified as TransferInstructionV2
+
+import Splice.TokenStandard.Utils.Internal.Conversions
+import Splice.TokenStandard.Utils.Internal.Choices
+
+
+-- Validation
+-------------
+
+-- | Check basic invariants of a `V2.Transfer`.
+isValidTransferV2 : TransferInstructionV2.Transfer -> Bool
+isValidTransferV2 TransferInstructionV2.Transfer{..} =
+    amount > 0.0 &&
+    requestedAt <= executeBefore &&
+    -- No account meta allowed on the leg for sender or receiver to avoid confusion
+    validateNoAccountMeta "sender" meta &&
+    validateNoAccountMeta "receiver" meta
+
+
+-- TransferInstruction
+----------------------
+
+instance ForwardCompatible (ContractId TransferInstructionV1.TransferInstruction) (ContractId TransferInstructionV2.TransferInstruction) where
+  downcast = coerceInterfaceContractId
+
+instance BackwardCompatible (ContractId TransferInstructionV1.TransferInstruction) (ContractId TransferInstructionV2.TransferInstruction) where
+  upcast = coerceInterfaceContractId
+
+instance ForwardCompatible TransferInstructionV1.Transfer TransferInstructionV2.Transfer where
+  downcast v2 = TransferInstructionV1.Transfer with
+    sender = accountOwnerForV1 v2.sender
+    receiver = accountOwnerForV1 v2.receiver
+    amount = v2.amount
+    instrumentId = downcast v2.instrumentId
+    requestedAt = v2.requestedAt
+    executeBefore = v2.executeBefore
+    inputHoldingCids = map coerceInterfaceContractId v2.inputHoldingCids
+    meta =
+      accountToMeta "sender" v2.sender $
+      accountToMeta "receiver" v2.receiver $
+      v2.meta
+
+instance BackwardCompatible TransferInstructionV1.Transfer TransferInstructionV2.Transfer where
+  upcast v1 = TransferInstructionV2.Transfer with
+    sender = accountFromMeta v1.sender "sender" v1.meta
+    receiver = accountFromMeta v1.receiver "receiver" v1.meta
+    amount = v1.amount
+    instrumentId = upcast v1.instrumentId
+    requestedAt = v1.requestedAt
+    executeBefore = v1.executeBefore
+    inputHoldingCids = map coerceInterfaceContractId v1.inputHoldingCids
+    meta =
+      dropAccountMeta "sender" $
+      dropAccountMeta "receiver" $
+      v1.meta
+
+instance ForwardCompatible TransferInstructionV1.TransferInstructionView TransferInstructionV2.TransferInstructionView where
+  downcast v2 = TransferInstructionV1.TransferInstructionView with
+      originalInstructionCid = fmap downcast v2.originalInstructionCid
+      transfer = v1Transfer
+      status
+      meta = expiresAtToMeta v2.expiresAt v2.meta
+    where
+      v1Transfer = downcast v2.transfer
+      status = case Map.lookup TransferInstructionV2.TIA_Accept (v2.availableActions) of
+        Some possibleActors | [v1Transfer.receiver] `elem` possibleActors -> TransferInstructionV1.TransferPendingReceiverAcceptance
+        _ -> TransferInstructionV1.TransferPendingInternalWorkflow with
+          pendingActions =
+            let actionName a = case a of
+                  TransferInstructionV2.TIA_Accept -> "accept"
+                  TransferInstructionV2.TIA_Reject -> "reject"
+                  TransferInstructionV2.TIA_Withdraw -> "withdraw"
+                  TransferInstructionV2.TIA_Custom name -> name
+            in availableToPendingActions actionName $ v2.availableActions
+
+instance ForwardCompatible TransferInstructionV1.TransferInstructionResult_Output TransferInstructionV2.TransferInstructionResult_Output where
+  downcast tio = case tio of
+    TransferInstructionV2.TransferInstructionResult_Pending cid ->
+      TransferInstructionV1.TransferInstructionResult_Pending (downcast cid)
+    TransferInstructionV2.TransferInstructionResult_Completed receiverHoldingCids ->
+      TransferInstructionV1.TransferInstructionResult_Completed (map downcast receiverHoldingCids)
+    TransferInstructionV2.TransferInstructionResult_Failed ->
+      TransferInstructionV1.TransferInstructionResult_Failed
+
+instance BackwardCompatible TransferInstructionV1.TransferInstructionResult_Output TransferInstructionV2.TransferInstructionResult_Output where
+  upcast tio = case tio of
+    TransferInstructionV1.TransferInstructionResult_Pending cid ->
+      TransferInstructionV2.TransferInstructionResult_Pending (upcast cid)
+    TransferInstructionV1.TransferInstructionResult_Completed receiverHoldingCids ->
+      TransferInstructionV2.TransferInstructionResult_Completed (map upcast receiverHoldingCids)
+    TransferInstructionV1.TransferInstructionResult_Failed ->
+      TransferInstructionV2.TransferInstructionResult_Failed
+
+instance ForwardCompatible TransferInstructionV1.TransferInstructionResult TransferInstructionV2.TransferInstructionResult where
+  downcast tir = TransferInstructionV1.TransferInstructionResult with
+    output = downcast tir.output
+    senderChangeCids = map downcast tir.senderChangeCids
+    meta = tir.meta
+
+instance BackwardCompatible TransferInstructionV1.TransferInstructionResult TransferInstructionV2.TransferInstructionResult where
+  upcast TransferInstructionV1.TransferInstructionResult{..} =
+    TransferInstructionV2.TransferInstructionResult with
+      output = upcast output
+      senderChangeCids = map upcast senderChangeCids
+      meta
+
+-- Choices
+
+-- | Accept implementation based on V1, which can and should be used whenever the receiver is the actor.
+transferInstructionV2_receiverActor_acceptDefaultImplUsingV1
+  : Party
+  -> ContractId TransferInstructionV2.TransferInstruction
+  -> TransferInstructionV2.TransferInstruction_Accept
+  -> Update TransferInstructionV2.TransferInstructionResult
+transferInstructionV2_receiverActor_acceptDefaultImplUsingV1 receiver self arg = do
+  checkActors arg.actors [[receiver]]
+  -- no archival required as the V1 choice is consuming
+  upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferInstruction) self)
+    TransferInstructionV1.TransferInstruction_Accept with
+      extraArgs = arg.extraArgs
+
+-- | Reject implementation based on V1, which can and should be used whenever the receiver is the actor.
+transferInstructionV2_receiverActor_rejectDefaultImplUsingV1
+  : Party
+  -> ContractId TransferInstructionV2.TransferInstruction
+  -> TransferInstructionV2.TransferInstruction_Reject
+  -> Update TransferInstructionV2.TransferInstructionResult
+transferInstructionV2_receiverActor_rejectDefaultImplUsingV1 receiver self arg = do
+  checkActors arg.actors [[receiver]]
+  -- no archival required as the V1 choice is consuming
+  upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferInstruction) self)
+    TransferInstructionV1.TransferInstruction_Reject with
+      extraArgs = arg.extraArgs
+
+-- | Withdraw implementation based on V1, which can and should be used whenever the sender is the actor.
+transferInstructionV2_senderActor_withdrawDefaultImplUsingV1
+  : Party
+  -> ContractId TransferInstructionV2.TransferInstruction
+  -> TransferInstructionV2.TransferInstruction_Withdraw
+  -> Update TransferInstructionV2.TransferInstructionResult
+transferInstructionV2_senderActor_withdrawDefaultImplUsingV1 sender self arg = do
+  checkActors arg.actors [[sender]]
+  -- no archival required as the V1 choice is consuming
+  upcast <$> exercise (downcast @(ContractId TransferInstructionV1.TransferInstruction) self)
+    TransferInstructionV1.TransferInstruction_Withdraw with
+      extraArgs = arg.extraArgs
+
+
+-- TransferFactory
+------------------
+
+instance ForwardCompatible TransferInstructionV1.TransferFactoryView TransferInstructionV2.TransferFactoryView where
+  downcast (TransferInstructionV2.TransferFactoryView with ..) = TransferInstructionV1.TransferFactoryView with ..
+
+instance BackwardCompatible TransferInstructionV1.TransferFactoryView TransferInstructionV2.TransferFactoryView where
+  upcast (TransferInstructionV1.TransferFactoryView with ..) = TransferInstructionV2.TransferFactoryView with ..
+
+instance ForwardCompatible (ContractId TransferInstructionV1.TransferFactory) (ContractId TransferInstructionV2.TransferFactory) where
+  downcast = coerceInterfaceContractId
+
+
+-- | Transfer factory implementation based on calling the V1 body.
+transferFactoryV2_transferDefaultImplUsingV1
+  : ([Party] -> TransferInstructionV1.TransferFactory_Transfer -> Update TransferInstructionV1.TransferInstructionResult)
+     -- ^ Body of the V1 implementation to call with information about the actors.
+     -- MUST check the actors.
+  -> ContractId TransferInstructionV2.TransferFactory
+  -> TransferInstructionV2.TransferFactory_Transfer
+  -> Update TransferInstructionV2.TransferInstructionResult
+transferFactoryV2_transferDefaultImplUsingV1 v1BodyWithActors self arg = do
+  ensureNoAccountMeta "transfer" "sender" arg.transfer.meta
+  ensureNoAccountMeta "transfer" "receiver" arg.transfer.meta
+  let admin = arg.transfer.instrumentId.admin
+  let argV1 = TransferInstructionV1.TransferFactory_Transfer with
+        expectedAdmin = arg.transfer.instrumentId.admin
+        transfer = downcast arg.transfer
+        extraArgs = arg.extraArgs
+  result <- upcast <$> v1BodyWithActors arg.actors argV1
+  -- add metadata for V1 tx history parsing
+  let addTransferInfo
+        | arg.transfer.sender == arg.transfer.receiver =
+            TextMap.insert txKindMetaKey "merge-split"
+        | otherwise =
+            TextMap.insert txKindMetaKey "transfer" .
+            TextMap.insert senderMetaKey (partyToText argV1.transfer.sender)
+  pure result with
+    meta = Metadata (addTransferInfo result.meta.values)
+
+-- | For public assets the receivers should be observers as well.
+transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl : TransferInstructionV2.TransferFactory_Transfer -> [Party]
+transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl arg =
+    accountParties admin arg.transfer.sender <> accountParties admin arg.transfer.receiver
+  where
+    admin = arg.transfer.instrumentId.admin
+
+-- | Default for private assets, where the only observers are the account
+-- parties of the sender.
+transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl : TransferInstructionV2.TransferFactory_Transfer -> [Party]
+transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl arg =
+    accountParties admin arg.transfer.sender
+  where
+    admin = arg.transfer.instrumentId.admin
+
+
+-- V1 implementations based on V2
+---------------------------------
+
+-- | Adapter to implement `V1.TransferInstruction_Withdraw` using the body of the V2 choice.
+--
+-- Built as an adapter, as calling the V2 interface method directly is not possible, as that will
+-- archive the transfer instruction again.
+transferInstructionV1_withdrawDefaultImplUsingV2
+  : TransferInstructionV2.TransferInstruction
+  -> (ContractId TransferInstructionV2.TransferInstruction -> TransferInstructionV2.TransferInstruction_Withdraw -> Update TransferInstructionV2.TransferInstructionResult)
+  -> ContractId TransferInstructionV1.TransferInstruction -> TransferInstructionV1.TransferInstruction_Withdraw -> Update TransferInstructionV1.TransferInstructionResult
+transferInstructionV1_withdrawDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) TransferInstructionV2.TransferInstruction_Withdraw with
+    actors = [regularAccountOwner thisView.transfer.sender]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+-- | Adapter to implement `V1.TransferInstruction_Accept` using the body of the V2 choice.
+--
+-- Built as an adapter, as calling the V2 interface method directly is not possible, as that will
+-- archive the transfer instruction again.
+transferInstructionV1_acceptDefaultImplUsingV2
+  : TransferInstructionV2.TransferInstruction
+  -> (ContractId TransferInstructionV2.TransferInstruction -> TransferInstructionV2.TransferInstruction_Accept -> Update TransferInstructionV2.TransferInstructionResult)
+  -> ContractId TransferInstructionV1.TransferInstruction -> TransferInstructionV1.TransferInstruction_Accept -> Update TransferInstructionV1.TransferInstructionResult
+transferInstructionV1_acceptDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) TransferInstructionV2.TransferInstruction_Accept with
+    actors = [regularAccountOwner thisView.transfer.receiver]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+-- | Adapter to implement `V1.TransferInstruction_Reject` using the body of the V2 choice.
+--
+-- Built as an adapter, as calling the V2 interface method directly is not possible, as that will
+-- archive the transfer instruction again.
+transferInstructionV1_rejectDefaultImplUsingV2
+  : TransferInstructionV2.TransferInstruction
+  -> (ContractId TransferInstructionV2.TransferInstruction -> TransferInstructionV2.TransferInstruction_Reject -> Update TransferInstructionV2.TransferInstructionResult)
+  -> ContractId TransferInstructionV1.TransferInstruction -> TransferInstructionV1.TransferInstruction_Reject -> Update TransferInstructionV1.TransferInstructionResult
+transferInstructionV1_rejectDefaultImplUsingV2 this v2Impl self arg = do
+  let thisView = view this
+  result <- v2Impl (coerceInterfaceContractId self) TransferInstructionV2.TransferInstruction_Reject with
+    actors = [regularAccountOwner thisView.transfer.receiver]
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+-- | Default implementation for `V1.TransferInstruction_Update` for a V1
+-- allocation instruction based on its V2 counterpart.
+--
+-- Always aborts, as the update choice is not required to be called in this case.
+transferInstructionV1_updateDefaultImplUsingV2
+  : ContractId TransferInstructionV1.TransferInstruction -> TransferInstructionV1.TransferInstruction_Update -> Update TransferInstructionV1.TransferInstructionResult
+transferInstructionV1_updateDefaultImplUsingV2 _self _arg =
+  abort "transferInstruction_updateImpl: update is not used on transfer instruction compatibility wrappers"
+
+-- | Default method for `V1.TransferFactory_Transfer` that uses the V2 transfer implementation under the hood.
+transferFactoryV1_transferDefaultImplUsingV2
+  : TransferInstructionV2.TransferFactory
+  -> ContractId TransferInstructionV1.TransferFactory -> TransferInstructionV1.TransferFactory_Transfer -> Update TransferInstructionV1.TransferInstructionResult
+transferFactoryV1_transferDefaultImplUsingV2 this self arg = do
+  let transfer = arg.transfer
+  let thisView = view this
+  requireMatchExpected ("arg.expectedAdmin", arg.expectedAdmin) thisView.admin
+  result <- TransferInstructionV2.transferFactory_transferImpl this (coerceInterfaceContractId self) TransferInstructionV2.TransferFactory_Transfer with
+    actors = [arg.transfer.sender]
+    transfer = upcast transfer
+    extraArgs = arg.extraArgs
+  pure (downcast result)
+
+-- | Add the metadata from a V1 transfer acceptance to the result metadata of the V2 accept choice.
+--
+-- Note that we only need to add metadata for the accept choice, as that's the only one where
+-- an actual transfer happens.
+transferAcceptanceTxHistoryV1ToMeta : TransferInstructionV2.Transfer -> Metadata -> Metadata
+transferAcceptanceTxHistoryV1ToMeta transfer meta =
+    Metadata $ transferTxMeta <> transfer.meta.values <> meta.values
+  where
+    transferTxMeta = case (transfer.sender.owner , transfer.receiver.owner) of
+      (Some sender, Some receiver) ->
+        TextMap.fromList
+          [ (txKindMetaKey, "transfer")
+          , (senderMetaKey, partyToText sender)
+          , (receiverMetaKey, partyToText receiver)
+          ]
+      (None , _) -> TextMap.fromList [(txKindMetaKey, "mint")]
+      (_, None) -> TextMap.fromList [(txKindMetaKey, "burn")]
+

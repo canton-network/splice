@@ -3,6 +3,24 @@
   "type": "object",
   "required": ["imageName"],
   "properties": {
+    "securityContexts": {
+      "type": ["object", "null"],
+      "properties": {
+        "pod": {
+          "type": ["object", "null"]
+        },
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "splitwellWebUi": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["splitwellWebUi"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

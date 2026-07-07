@@ -240,11 +240,11 @@ If you wish to extend our testing topology please also consult [this README](/ap
 
 If you want to run the integration tests locally with the new Canton bft, canton must be started with the `-e` flag.
 This can be done by running `./start-canton.sh -we`.
-Furthermore the integration test must run with the `SPLICE_USE_BFT_SEQUENCER` environment variable set to `true`.
+Furthermore the integration test must run with the `SPLICE_USE_CANTON_BFT_SEQUENCER` environment variable set to `true`.
 Eg of test run:
 
 ```bash
- SPLICE_USE_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
+ SPLICE_USE_CANTON_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
 ```
 
 ### Testing App Behaviour Outside of Tests Without Running Bundle

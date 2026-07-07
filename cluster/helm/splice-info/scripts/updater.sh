@@ -5,6 +5,19 @@
 
 set -eu
 
+trap cleanup TERM
+
+cleanup() {
+  trap '' TERM # ignore TERM
+  kill -- -$$ # send TERM to all processes in the group
+  wait # wait for all processes to exit
+}
+
+interruptible_run() {
+  "$@" &
+  wait "$!"
+}
+
 period=60
 
 html_dir=/usr/share/nginx/html
@@ -32,7 +45,7 @@ jq -n \
   ' > "$runtime_index_file"
 
 while true; do
-  start_time=$(date +%s);
+  start_time=$(interruptible_run date +%s);
 
   if result=$(/scripts/get-dso.sh); then
     dest="$dso_json_file"
@@ -54,6 +67,9 @@ while true; do
 
   wait
 
-  end_time=$(date +%s);
-  sleep "$((period - (end_time - start_time)))"
+  end_time=$(interruptible_run date +%s);
+
+  sleep_time=$(( period - (end_time - start_time) ))
+  sleep_time=$(( sleep_time > 0 ? sleep_time : 0 ))
+  interruptible_run sleep "$sleep_time"
 done

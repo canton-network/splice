@@ -12,8 +12,8 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVetting
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
-  BftSequencerConfig,
   BulkStorageConfig,
+  CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
   ScanAppBackendConfig,
   ScanAppClientConfig,
@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanRollForwardLsuConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
 import org.lfdecentralizedtrust.splice.splitwell.config.{
@@ -30,7 +31,7 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
   SplitwellSynchronizerConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
-import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
+import org.lfdecentralizedtrust.splice.sv.{SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
@@ -465,15 +466,18 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigReader[ScanSynchronizerConfig] =
       deriveReader[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigReader: ConfigReader[BftSequencerConfig] =
+    implicit val bftSequencerConfigReader: ConfigReader[CantonBftPeerConfig] =
       ConfigReader.forProduct1("p2p-url")(
-        BftSequencerConfig(_)
+        CantonBftPeerConfig(_)
       )
     implicit val scanCacheConfigReader: ConfigReader[ScanCacheConfig] =
       deriveReader[ScanCacheConfig]
     implicit val mediatorVerdictIngestionConfigReader
         : ConfigReader[MediatorVerdictIngestionConfig] =
       deriveReader[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigReader
+        : ConfigReader[TokenStandardConfig.SettlementConfig] =
+      deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
@@ -970,7 +974,7 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigWriter[ScanSynchronizerConfig] =
       deriveWriter[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigWriter: ConfigWriter[BftSequencerConfig] =
+    implicit val bftSequencerConfigWriter: ConfigWriter[CantonBftPeerConfig] =
       ConfigWriter.forProduct1("p2p-url")(c => c.p2pUrl)
     implicit val scanSynchronizerNodes: ConfigWriter[ScanSynchronizerNodesConfig] =
       deriveWriter[ScanSynchronizerNodesConfig]
@@ -983,6 +987,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigWriter
         : ConfigWriter[MediatorVerdictIngestionConfig] =
       deriveWriter[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigWriter
+        : ConfigWriter[TokenStandardConfig.SettlementConfig] =
+      deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =

@@ -20,18 +20,6 @@ export function installPartyAllocator(
   config: PartyAllocatorConfig,
   dependsOn: CnInput<pulumi.Resource>[]
 ): InstalledHelmChart {
-  const dataSource =
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    hyperdiskSupportConfig.hyperdiskSupport.migrating
-      ? {
-          dataSource: createVolumeSnapshot({
-            resourceName: `party-allocator-keys-migration-snapshot`,
-            snapshotName: `party-allocator-keys-snapshot`,
-            namespace: xns.logicalName,
-            pvcName: `party-allocator-keys`,
-          }).dataSource,
-        }
-      : {};
   return installSpliceHelmChart(
     xns,
     'party-allocator',
@@ -55,7 +43,6 @@ export function installPartyAllocator(
         name: hyperdiskSupportConfig.hyperdiskSupport.enabled
           ? 'party-allocator-keys-hd-pvc'
           : 'party-allocator-keys',
-        ...dataSource,
       },
     },
     activeVersion,

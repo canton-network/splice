@@ -42,7 +42,9 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 
@@ -164,7 +166,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
       clue("All SVs report zero totals for rounds after bootstrap") {
         Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
-          assertZeroTotals(scan, 1L to 2L)
+          assertZeroTotals(scan, 1L to 2L, timeout = 40.seconds)
         }
       }
     }
@@ -479,7 +481,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         .map(_.payload.round.number)
 
     clue("CalculateRewards and ProcessRewards triggers consume contracts for rounds < 11") {
-      eventually() {
+      eventually(40.seconds) {
         val remainingCalculate = sv1Backend.appState.dsoStore
           .listCalculateRewardsV2()
           .futureValue
@@ -658,9 +660,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def assertZeroTotals(
       scan: ScanAppBackendReference,
       rounds: Seq[Long],
+      timeout: FiniteDuration = 20.seconds,
   ): Unit =
     rounds.foreach { round =>
-      eventually() {
+      eventually(timeout) {
         inside(scan.getRewardAccountingActivityTotals(round)) {
           case GetRewardAccountingActivityTotalsResponse.members
                 .RewardAccountingActivityTotalsOk(t) =>
@@ -790,12 +793,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     )(
       show"There exists an allocation from $senderParty",
       _ => {
-        val allocations = walletClient.listAmuletAllocations()
-        allocations should have size 1 withClue "AmuletAllocations"
-        allocations.head
+        inside(walletClient.listAmuletAllocations()) {
+          case (allocationRequest: HttpWalletAppClient.TokenStandard.V1AmuletAllocation) +: Nil =>
+            allocationRequest
+        }
       },
     )
-    new allocationv1.Allocation.ContractId(allocation.contractId.contractId)
+    new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
 }
 

@@ -334,54 +334,25 @@ class HttpValidatorAdminHandler(
           .mapping
         val partyId = partyToParticipant.partyId
         for {
+          synchronizerId <- getAmuletRulesDomain()(tracedContext)
           _ <- participantAdminConnection.addTopologyTransactions(
-            store = TopologyStoreId.Authorized,
+            store = TopologyStoreId.Synchronizer(synchronizerId),
             txs = body.signedTopologyTxs.map(decodeSignedTopologyTx(publicKey, _)),
           )
-          // Check the authorized store first
-          _ <- participantAdminConnection
-            .listPartyToKey(
-              filterParty = Some(partyId),
-              filterStore = TopologyStoreId.Authorized,
-            )
-            .map { txs =>
-              txs.headOption.getOrElse(
-                throw Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"No PartyToKey mapping in Authorized Store for $partyId, check the Canton logs to find why the transactions got rejected"
-                  )
-                  .asRuntimeException
-              )
-            }
           // The PartyToParticipant mapping requires both the external signature from the party namespace but also one from the participant which we create here
           participantId <- participantAdminConnection.getParticipantId()
           _ <- participantAdminConnection.proposeMapping(
-            TopologyStoreId.Authorized,
+            TopologyStoreId.Synchronizer(synchronizerId),
             partyToParticipant,
             serial = PositiveInt.one,
             isProposal = true,
             change = TopologyChangeOp.Replace,
           )
-          _ <- participantAdminConnection
-            .listPartyToParticipant(
-              store = TopologyStoreId.Authorized.some,
-              filterParty = partyId.filterString,
-            )
-            .map { txs =>
-              txs.headOption.getOrElse(
-                throw Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"No PartyToParticipant state in Authorized Store for $partyId, check the Canton logs to find why the transactions got rejected"
-                  )
-                  .asRuntimeException
-              )
-            }
           // now wait for the topology transactions to be broadcast to the domain.
-          synchronizerId <- getAmuletRulesDomain()(tracedContext)
           _ <- retryProvider.retry(
             RetryFor.Automation,
             "broadcast_party_to_key_mapping",
-            "PartyToKeyMapping is visible in domain store",
+            "PartyToKeyMapping is visible in synchronizer store",
             participantAdminConnection
               .listPartyToKey(
                 filterParty = Some(partyId),
@@ -401,7 +372,7 @@ class HttpValidatorAdminHandler(
           _ <- retryProvider.retry(
             RetryFor.Automation,
             "broadcast_party_to_participant",
-            "PartyToParticipant is visible in domain store",
+            "PartyToParticipant is visible in synchronizer store",
             participantAdminConnection
               .listPartyToParticipant(
                 filterParty = partyId.filterString,
@@ -411,7 +382,7 @@ class HttpValidatorAdminHandler(
                 txs.headOption.getOrElse(
                   throw Status.FAILED_PRECONDITION
                     .withDescription(
-                      s"No PartyToParticipant mapping in domain store for $partyId"
+                      s"No PartyToParticipant mapping in synchronizer store for $partyId"
                     )
                     .asRuntimeException
                 )

@@ -106,11 +106,9 @@ const MonitoringConfigSchema = z
         }),
         scanConnectionDisagreement: z.object({
           // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
-          // disagree with the consensus result before the warning alert fires.
-          disagreementRateThreshold: z.number(),
-          // Number of successful (2xx) responses that disagree with BFT consensus that
-          // may occur before the critical alert fires.
-          successfulDisagreementThreshold: z.number(),
+          // return a response (successful or failed) disagreeing with the consensus
+          // result before the success/failure alerts fire.
+          alertThreshold: z.number(),
           // Requests (by their `request` label) to exclude from the scan connection
           // disagreement alerts. Matched as a regex against the `request` label.
           excludedRequests: z.array(z.string()).default([]),
@@ -123,6 +121,11 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        natPortUsage: z
+          .object({
+            thresholdPercent: z.number().min(0).max(100),
+          })
+          .default({ thresholdPercent: 80 }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
         }),
@@ -147,6 +150,12 @@ const MonitoringConfigSchema = z
 export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('monitoring'));
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
+
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
 const PrometheusConfigSchema = z.object({
   prometheus: z.object({

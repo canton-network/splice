@@ -486,6 +486,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       42,
       42,
       42,
+      java.util.Optional.empty(),
     )
 
     val newAmuletConfig = new AmuletConfig[USD](

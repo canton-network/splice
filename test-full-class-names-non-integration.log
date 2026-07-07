@@ -20,6 +20,7 @@ org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringCompl
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
+org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfigTest
 org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputationTest
 org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputsTest
 org.lfdecentralizedtrust.splice.scan.store.DbAppActivityRecordStoreTest

@@ -1,0 +1,221 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for Splice.TokenStandard.Utils.Internal.Conversions
+module Splice.Tests.UnitTest_Conversions where
+
+import DA.Date
+import DA.TextMap as TextMap
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.HoldingV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+import Splice.TokenStandard.Utils.Internal.Conversions qualified as Internal
+
+import Splice.Tests.TokenStandard.UnitTestUtils
+
+alice : Party
+Some alice = partyFromText "alice"
+
+custodian : Party
+Some custodian = partyFromText "custodian"
+
+admin : Party
+Some admin = partyFromText "admin"
+
+noOwner : Party
+Some noOwner = partyFromText "cip-112_no-owner::1220000000000000000000000000000000000000000000000000000000000000abcd"
+
+aliceBasic : V2.Account
+aliceBasic = V2.Account with
+  owner = Some alice
+  id = ""
+  provider = None
+
+aliceSelf : V2.Account
+aliceSelf = V2.Account with
+  owner = Some alice
+  id = "id1"
+  provider = None
+
+aliceCustodied : V2.Account
+aliceCustodied = V2.Account with
+  owner = Some alice
+  id = "id2"
+  provider = Some custodian
+
+burn : V2.Account
+burn = V2.Account with
+  owner = None
+  id = "cip-112/burn"
+  provider = None
+
+
+
+test_accounts : Script ()
+test_accounts = do
+  checkEq' "isBasicAccount"
+    [ (TSU.isBasicAccount aliceBasic, True)
+    , (TSU.isBasicAccount aliceSelf, False)
+    , (TSU.isBasicAccount aliceCustodied, False)
+    , (TSU.isBasicAccount burn, False)
+    ]
+  checkEq' "isRegularAccount"
+    [ (TSU.isRegularAccount aliceBasic, True)
+    , (TSU.isRegularAccount aliceSelf, True)
+    , (TSU.isRegularAccount aliceCustodied, True)
+    , (TSU.isRegularAccount burn, False)
+    ]
+  checkEq' "accountPrincipal"
+    [ (TSU.accountPrincipal admin aliceBasic, alice)
+    , (TSU.accountPrincipal admin aliceSelf, alice)
+    , (TSU.accountPrincipal admin aliceCustodied, alice)
+    , (TSU.accountPrincipal admin burn, admin)
+    ]
+  checkEq' "accountParties"
+    [ (TSU.accountParties admin aliceBasic, [alice])
+    , (TSU.accountParties admin aliceSelf, [alice])
+    , (TSU.accountParties admin aliceCustodied, [alice, custodian])
+    , (TSU.accountParties admin burn, [admin])
+    ]
+  checkEq' "regularAccountParties"
+    [ (TSU.regularAccountParties aliceBasic, [alice])
+    , (TSU.regularAccountParties aliceSelf, [alice])
+    , (TSU.regularAccountParties aliceCustodied, [alice, custodian])
+    -- , (TSU.regularAccountParties burn, []) -- fails as expected
+    ]
+  checkEq' "regularAccountOwner"
+    [ (TSU.regularAccountOwner aliceBasic, alice)
+    , (TSU.regularAccountOwner aliceSelf, alice)
+    , (TSU.regularAccountOwner aliceCustodied, alice)
+    -- , (TSU.regularAccountOwner burn, admin) -- fails as expected
+    ]
+  checkEq' "accountOwnerForV1"
+    [ (Internal.accountOwnerForV1 aliceBasic, alice)
+    , (Internal.accountOwnerForV1 aliceSelf, alice)
+    , (Internal.accountOwnerForV1 aliceCustodied, alice)
+    , (Internal.accountOwnerForV1 burn, noOwner)
+    ]
+
+
+test_metaConversions : Script ()
+test_metaConversions = do
+  let testAccountToMeta acc vs = (TSU.accountToMeta "xyz" acc emptyMetadata, mkMeta vs)
+  checkEq' "accountToMeta"
+    [ testAccountToMeta aliceBasic []
+    , testAccountToMeta aliceSelf [("cip-112/xyz.id", "id1")]
+    , testAccountToMeta aliceCustodied [("cip-112/xyz.id", "id2"), ("cip-112/xyz.provider", "custodian")]
+    , testAccountToMeta burn [("cip-112/xyz.id", "cip-112/burn")]
+    ]
+
+  let testAccountFromMeta expectedAccount owner vs =
+        (TSU.accountFromMeta owner "xyz" (mkMeta (dummyMeta <> vs)), expectedAccount)
+  checkEq' "accountFromMeta"
+    [ testAccountFromMeta aliceBasic alice []
+    , testAccountFromMeta aliceSelf alice [("cip-112/xyz.id", "id1")]
+    , testAccountFromMeta aliceCustodied alice [("cip-112/xyz.id", "id2"), ("cip-112/xyz.provider", "custodian")]
+    , testAccountFromMeta burn noOwner [("cip-112/xyz.id", "cip-112/burn")]
+    ]
+
+  checkEq' "dropMeta"
+    [ (Internal.dropMeta "cip-112/xyz.dummyKey" (mkMeta dummyMeta), mkMeta [])
+    , (Internal.dropMeta "cip-112/" (mkMeta dummyMeta), mkMeta dummyMeta) -- keys are matched by equality not by prefix
+    ]
+
+
+  let testDropAccountMeta testMeta =
+        (Internal.dropAccountMeta "xyz" (mkMeta $ dummyMeta <> testMeta), mkMeta dummyMeta)
+  checkEq' "dropAccountMeta"
+    [ testDropAccountMeta []
+    , testDropAccountMeta [("cip-112/xyz.id", "id1")]
+    , testDropAccountMeta [("cip-112/xyz.id", "id2"), ("cip-112/xyz.provider", "custodian")]
+    , testDropAccountMeta [("cip-112/xyz.id", "cip-112/burn")]
+    ]
+
+  let testValidateNoAccountMeta testMeta expected =
+        (Internal.validateNoAccountMeta "xyz" (mkMeta $ dummyMeta <> testMeta), expected)
+  checkEq' "validateNoAccountMeta"
+    [ testValidateNoAccountMeta [] True
+    , testValidateNoAccountMeta [("cip-112/xyz.owner", "id1")] True  -- .owner is not reserved for account metadata
+    , testValidateNoAccountMeta [("cip-112/xyz.id", "id1")] False
+    , testValidateNoAccountMeta [("cip-112/xyz.provider", "custodian")] False
+    , testValidateNoAccountMeta [("cip-112/xyz.id", "id1"), ("cip-112/xyz.provider", "custodian")] False
+    ]
+
+  -- not testing ensureNoAccountMeta, ensureBasicAccount, as they are in the Update Monad and tested
+  -- indirectly via the negative tests for Amulet and TestTokenV2
+  let testPartiesToMeta ps =
+        let meta = TSU.partiesToMeta "xyz" ps emptyMetadata in
+        (TSU.partiesFromMeta "xyz" (mkMeta $ dummyMeta <> TextMap.toList meta.values), ps)
+  checkEq' "partiesToMeta and partiesFromMeta"
+    [ testPartiesToMeta []
+    , testPartiesToMeta [alice]
+    , testPartiesToMeta [alice, custodian]
+    ]
+
+  checkEq "partiesToMeta"
+    (TSU.partiesToMeta "xyz" [alice, custodian] emptyMetadata)
+    (mkMeta [("xyz", "alice,custodian")])
+
+  let testExpiresAt t v = (TSU.expiresAtToMeta (Some t) emptyMetadata, mkMeta [("cip-112/expiresAt", v)])
+  checkEq' "expiresAtToMeta"
+    [ testExpiresAt (time (date 9999 Dec 31) 23 59 59) "253402300799000000"
+    , testExpiresAt TSU.maxTime "253402300799999999"
+    , testExpiresAt (time (date 1970 Jan 1) 0 0 0) "0"
+    , testExpiresAt (time (date 1000 Jan 1) 0 0 0) "-30610224000000000"
+    ]
+  checkEq "expiresAtToMeta None"
+    (TSU.expiresAtToMeta None emptyMetadata)
+    (mkMeta [])
+
+  checkEq "v1HistoryTagAsUnlockV1"
+    (TSU.v1HistoryTagAsUnlockV1 (mkMeta []))
+    (mkMeta [("splice.lfdecentralizedtrust.org/tx-kind", "unlock")])
+
+  pure ()
+
+
+test_HoldingConversion : Script ()
+test_HoldingConversion = do
+  let h1 = V1.HoldingView with
+        owner = alice
+        amount = 100.0
+        instrumentId = V1.InstrumentId with
+          admin
+          id = "X"
+        lock = Some V1.Lock with
+          holders = [alice, custodian]
+          context = Some "alloc-xyz"
+          expiresAt = Some TSU.maxTime
+          expiresAfter = Some (days 100)
+        meta = mkMeta dummyMeta
+
+  test_v1_roundtrips @V2.HoldingView "HoldingView"
+    [ h1
+    , h1 with owner = noOwner
+    , h1 with meta = TSU.accountToMeta "account" aliceCustodied emptyMetadata
+    ]
+
+  let h2 = V2.HoldingView with
+        account = aliceCustodied
+        amount = 100.0
+        instrumentId = V2.InstrumentId with
+          admin
+          id = "X"
+        lock = Some V2.Lock with
+          holders = [alice, admin, custodian]
+          context = Some "alloc-xyz"
+          expiresAt = Some TSU.maxTime
+          expiresAfter = Some (days 100)
+        meta = mkMeta dummyMeta
+
+  test_v2_roundtrips @V1.HoldingView "HoldingView"
+    [ h2
+    , h2 with account = aliceSelf
+    , h2 with account = burn
+    ]

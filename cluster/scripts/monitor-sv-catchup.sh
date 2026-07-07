@@ -37,7 +37,7 @@ fi
 outcome="timed_out"
 poll_interval=60
 start=$(date +%s)
-start_time=$(date -u -d @"$start" '+%Y-%m-%dT%H:%M:%SZ')
+start_time=$(date -u -d @"$start" '+%Y-%m-%dT%H:%M:%S.%3NZ')
 timeout_hours="8"
 timeout_secs=$(( timeout_hours * 3600 ))
 
@@ -75,9 +75,10 @@ function query_med_rate() {
 }
 
 # Accumulators inside the loop
-seq_rate_max=0
-part_rate_max=0
-med_rate_max=0
+seq_rate_sum=0
+part_rate_sum=0
+med_rate_sum=0
+rate_sample_count=0
 
 _info "Monitoring catchup for ${namespace}"
 _info "Thresholds: seq>=${seq_min_eps} eps, participant>=${part_min_eps} eps, mediator>=${med_min_eps} eps"
@@ -113,22 +114,32 @@ while true; do
   part_rate=$(query_part_rate)
   med_rate=$(query_med_rate)
 
-  seq_rate_max=$(echo "if ($seq_rate > $seq_rate_max) $seq_rate else $seq_rate_max" | bc -l)
-  part_rate_max=$(echo "if ($part_rate > $part_rate_max) $part_rate else $part_rate_max" | bc -l)
-  med_rate_max=$(echo "if ($med_rate > $med_rate_max) $med_rate else $med_rate_max" | bc -l)
+  seq_rate_sum=$(echo "$seq_rate_sum + $seq_rate" | bc -l)
+  part_rate_sum=$(echo "$part_rate_sum + $part_rate" | bc -l)
+  med_rate_sum=$(echo "$med_rate_sum + $med_rate" | bc -l)
+  rate_sample_count=$((rate_sample_count + 1))
 
-  _info "Peak rates — seq: ${seq_rate_max} eps, participant: ${part_rate_max} eps, mediator: ${med_rate_max} eps"
-
+  _info "Mean rates so far> seq: $(echo "scale=1; $seq_rate_sum / $rate_sample_count" | bc) eps, participant: $(echo "scale=1; $part_rate_sum / $rate_sample_count" | bc) eps, mediator: $(echo "scale=1; $med_rate_sum / $rate_sample_count" | bc) eps"
   sleep "$poll_interval"
 done
 
 elapsed=$(( $(date +%s) - start ))
 elapsed_mins=$(( elapsed / 60 ))
-end_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+end_time=$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')
 
-seq_ok=$(echo  "$seq_rate_max  >= $seq_min_eps"| bc -l)
-part_ok=$(echo "$part_rate_max >= $part_min_eps" | bc -l)
-med_ok=$(echo  "$med_rate_max  >= $med_min_eps"  | bc -l)
+if [ "$rate_sample_count" -gt 0 ]; then
+  seq_rate_mean=$(echo "$seq_rate_sum / $rate_sample_count" | bc -l)
+  part_rate_mean=$(echo "$part_rate_sum / $rate_sample_count" | bc -l)
+  med_rate_mean=$(echo "$med_rate_sum / $rate_sample_count" | bc -l)
+else
+  seq_rate_mean=0
+  part_rate_mean=0
+  med_rate_mean=0
+fi
+
+seq_ok=$(echo  "$seq_rate_mean  >= $seq_min_eps"| bc -l)
+part_ok=$(echo "$part_rate_mean >= $part_min_eps" | bc -l)
+med_ok=$(echo  "$med_rate_mean  >= $med_min_eps"  | bc -l)
 
 if [ "$outcome" = "success" ]; then
   icon="✅"
@@ -139,16 +150,16 @@ else
 fi
 
 grafana_base="https://grafana.${GCP_CLUSTER_BASENAME}.global.canton.network.digitalasset.com"
-grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/global-domain-catchup?orgId=1&timezone=UTC&var-DS=prometheus&var-namespace=${namespace}&var-migration=All&viewPanel=panel-11"
-grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13"
+grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/global-domain-catchup?orgId=1&timezone=UTC&var-DS=prometheus&var-namespace=${namespace}&var-migration=All&viewPanel=panel-11&from=${start_time}&to=${end_time}"
+grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13&from=${start_time}&to=${end_time}"
 
 message="${icon} *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
 Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
 
-*Per-component peak rates over catchup window:*
-• Sequencer: \`$(printf "%.1f" "$seq_rate_max")\` events/s  (expected ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
-• Participant: \`$(printf "%.1f" "$part_rate_max")\` events/s  (expected ≥ ${part_min_eps})  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
-• Mediator: \`$(printf "%.1f" "$med_rate_max")\` events/s  (expected ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
+*Per-component mean rates over catchup window (${rate_sample_count} samples):*
+• Sequencer: \`$(printf "%.1f" "$seq_rate_mean")\` events/s  (expected ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")
+• Participant: \`$(printf "%.1f" "$part_rate_mean")\` events/s  (expected ≥ ${part_min_eps})  $([ "$part_ok" = "1" ] && echo "✅" || echo "❌")
+• Mediator: \`$(printf "%.1f" "$med_rate_mean")\` events/s  (expected ≥ ${med_min_eps})  $([ "$med_ok" = "1" ] && echo "✅" || echo "❌")
 
 *Dashboards:*
 • <${grafana_domain_link}|Sequencer>

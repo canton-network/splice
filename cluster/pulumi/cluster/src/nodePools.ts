@@ -6,27 +6,19 @@ import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-export function installNodePools(): void {
+export async function installNodePools(): Promise<void> {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
+  const zones = await gcp.compute.getZones({
+    region: config.requireEnv('CLOUDSDK_COMPUTE_REGION'),
+  });
 
-  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
-
-  if (gkeClusterConfig.nodePools.hyperdiskApps) {
-    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation);
-  }
-  const appsNodePoolConfig = gkeClusterConfig.nodePools.apps;
-
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    !hyperdiskSupportConfig.hyperdiskSupport.migrating
-  ) {
-    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation);
-  } else {
-    appsNodePool(cluster, appsNodePoolConfig);
-  }
+  installAppsNodePools(cluster, zones.names, [
+    gkeClusterConfig.nodePools.apps,
+    ...gkeClusterConfig.nodePools.additionalApps,
+  ]);
 
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
   new gcp.container.NodePool(
@@ -80,8 +72,37 @@ export function installNodePools(): void {
     },
   });
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string) {
-  new gcp.container.NodePool('cn-apps-node-pool-hd', {
+
+function installAppsNodePools(
+  cluster: string,
+  allZones: string[],
+  configs: Array<GkeNodePoolConfig>
+): Array<gcp.container.NodePool> {
+  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
+  return configs.map((config, index) => {
+    const zones =
+      config.zones === '*'
+        ? allZones
+        : (config.zones ?? (nodepoolLocation !== undefined ? [nodepoolLocation] : undefined));
+    if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
+      return hyperdiskNodePool(index, cluster, zones, config);
+    } else {
+      return appsNodePool(index, cluster, zones, config);
+    }
+  });
+}
+
+function hyperdiskNodePool(
+  index: number,
+  cluster: string,
+  zones: string[] | undefined,
+  config: GkeNodePoolConfig
+): gcp.container.NodePool {
+  const name =
+    index === 0
+      ? 'cn-apps-node-pool-hd' // for backwards compat
+      : `cn-apps-node-pool-${index}-hd`;
+  return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
       machineType: config.nodeType,
@@ -101,16 +122,26 @@ function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?
       },
       loggingVariant: 'DEFAULT',
     },
-    nodeLocations: location ? [location] : undefined,
+    nodeLocations: zones,
     initialNodeCount: 0,
     autoscaling: {
+      locationPolicy: 'ANY',
       minNodeCount: config.minNodes,
       maxNodeCount: config.maxNodes,
     },
   });
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
-  new gcp.container.NodePool('cn-apps-node-pool', {
+function appsNodePool(
+  index: number,
+  cluster: string,
+  zones: string[] | undefined,
+  appsNodePoolConfig: GkeNodePoolConfig
+): gcp.container.NodePool {
+  const name =
+    index === 0
+      ? 'cn-apps-node-pool' // for backwards compat
+      : `cn-apps-node-pool-${index}`;
+  return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
       machineType: appsNodePoolConfig.nodeType,
@@ -128,6 +159,7 @@ function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
     },
     initialNodeCount: 0,
     autoscaling: {
+      locationPolicy: 'ANY',
       minNodeCount: appsNodePoolConfig.minNodes,
       maxNodeCount: appsNodePoolConfig.maxNodes,
     },

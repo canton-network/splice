@@ -157,8 +157,7 @@ monitoring:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
       scanConnectionDisagreement:
-        disagreementRateThreshold: 0.1
-        successfulDisagreementThreshold: 5
+        alertThreshold: 0.1
         excludedRequests:
           - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
           - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
