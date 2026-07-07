@@ -6,13 +6,16 @@ import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-export function installNodePools(): void {
+export async function installNodePools(): Promise<void> {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
+  const zones = await gcp.compute.getZones({
+    region: config.requireEnv('CLOUDSDK_COMPUTE_REGION'),
+  });
 
-  installAppsNodePools(cluster, [
+  installAppsNodePools(cluster, zones.names, [
     gkeClusterConfig.nodePools.apps,
     ...gkeClusterConfig.nodePools.additionalApps,
   ]);
@@ -72,14 +75,19 @@ export function installNodePools(): void {
 
 function installAppsNodePools(
   cluster: string,
+  allZones: string[],
   configs: Array<GkeNodePoolConfig>
 ): Array<gcp.container.NodePool> {
   const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
+    const zones =
+      config.zones === '*'
+        ? allZones
+        : (config.zones ?? (nodepoolLocation !== undefined ? [nodepoolLocation] : undefined));
     if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
-      return hyperdiskNodePool(index, cluster, config, nodepoolLocation);
+      return hyperdiskNodePool(index, cluster, zones, config);
     } else {
-      return appsNodePool(index, cluster, config);
+      return appsNodePool(index, cluster, zones, config);
     }
   });
 }
@@ -87,8 +95,8 @@ function installAppsNodePools(
 function hyperdiskNodePool(
   index: number,
   cluster: string,
-  config: GkeNodePoolConfig,
-  location?: string
+  zones: string[] | undefined,
+  config: GkeNodePoolConfig
 ): gcp.container.NodePool {
   const name =
     index === 0
@@ -114,9 +122,10 @@ function hyperdiskNodePool(
       },
       loggingVariant: 'DEFAULT',
     },
-    nodeLocations: location ? [location] : undefined,
+    nodeLocations: zones,
     initialNodeCount: 0,
     autoscaling: {
+      locationPolicy: 'ANY',
       minNodeCount: config.minNodes,
       maxNodeCount: config.maxNodes,
     },
@@ -125,6 +134,7 @@ function hyperdiskNodePool(
 function appsNodePool(
   index: number,
   cluster: string,
+  zones: string[] | undefined,
   appsNodePoolConfig: GkeNodePoolConfig
 ): gcp.container.NodePool {
   const name =
@@ -149,6 +159,7 @@ function appsNodePool(
     },
     initialNodeCount: 0,
     autoscaling: {
+      locationPolicy: 'ANY',
       minNodeCount: appsNodePoolConfig.minNodes,
       maxNodeCount: appsNodePoolConfig.maxNodes,
     },

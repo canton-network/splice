@@ -18,10 +18,12 @@ cluster:
       - maxNodes: 20
         minNodes: 0
         nodeType: 'n4-standard-16'
+        zones: '*'
     apps:
       maxNodes: 20
       minNodes: 0
       nodeType: 'n4d-standard-16'
+      zones: '*'
     infra:
       maxNodes: 3
       minNodes: 1
