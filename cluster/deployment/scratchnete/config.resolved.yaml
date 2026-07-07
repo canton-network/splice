@@ -14,6 +14,10 @@ cluster:
     enabled: true
     enabledForInfra: true
   nodePools:
+    additionalApps:
+      - maxNodes: 20
+        minNodes: 0
+        nodeType: 'n4-standard-16'
     apps:
       maxNodes: 20
       minNodes: 0

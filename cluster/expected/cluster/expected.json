@@ -18,7 +18,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "c4-standard-16",
+        "machineType": "n4d-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -40,7 +40,7 @@
     "id": "",
     "inputs": {
       "autoscaling": {
-        "maxNodeCount": 20,
+        "maxNodeCount": 1,
         "minNodeCount": 0
       },
       "cluster": "cn-mocknet",
@@ -54,7 +54,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "n2-standard-16",
+        "machineType": "n4-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -67,7 +67,7 @@
         "europe-west6-z"
       ]
     },
-    "name": "cn-apps-node-pool-hd",
+    "name": "cn-apps-node-pool-n4-standard-16-hd",
     "provider": "",
     "type": "gcp:container/nodePool:NodePool"
   },
