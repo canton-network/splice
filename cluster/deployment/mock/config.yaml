@@ -290,10 +290,12 @@ cluster:
       nodeType: n4d-standard-16
       minNodes: 0
       maxNodes: 1
+      zones: '*'
     additionalApps:
     - nodeType: n4-standard-16
       minNodes: 0
       maxNodes: 1
+      zones: '*'
 gha:
   githubRepo: "https://github.com/canton-network/splice"
   runnerVersion: "0.5.10"
