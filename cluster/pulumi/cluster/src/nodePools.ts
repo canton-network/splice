@@ -12,21 +12,10 @@ export function installNodePools(): void {
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
 
-  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
-
-  if (gkeClusterConfig.nodePools.hyperdiskApps) {
-    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation);
-  }
-  const appsNodePoolConfig = gkeClusterConfig.nodePools.apps;
-
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    !hyperdiskSupportConfig.hyperdiskSupport.migrating
-  ) {
-    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation);
-  } else {
-    appsNodePool(cluster, appsNodePoolConfig);
-  }
+  installAppsNodePools(cluster, [
+    gkeClusterConfig.nodePools.apps,
+    ...gkeClusterConfig.nodePools.additionalApps,
+  ]);
 
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
   new gcp.container.NodePool(
@@ -80,8 +69,32 @@ export function installNodePools(): void {
     },
   });
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string) {
-  new gcp.container.NodePool('cn-apps-node-pool-hd', {
+
+function installAppsNodePools(
+  cluster: string,
+  configs: Array<GkeNodePoolConfig>
+): Array<gcp.container.NodePool> {
+  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
+  return configs.map((config, index) => {
+    if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
+      return hyperdiskNodePool(index, cluster, config, nodepoolLocation);
+    } else {
+      return appsNodePool(index, cluster, config);
+    }
+  });
+}
+
+function hyperdiskNodePool(
+  index: number,
+  cluster: string,
+  config: GkeNodePoolConfig,
+  location?: string
+): gcp.container.NodePool {
+  const name =
+    index === 0
+      ? 'cn-apps-node-pool-hd' // for backwards compat
+      : `cn-apps-node-pool-${config.nodeType}-hd`;
+  return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
       machineType: config.nodeType,
@@ -109,8 +122,16 @@ function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?
     },
   });
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
-  new gcp.container.NodePool('cn-apps-node-pool', {
+function appsNodePool(
+  index: number,
+  cluster: string,
+  appsNodePoolConfig: GkeNodePoolConfig
+): gcp.container.NodePool {
+  const name =
+    index === 0
+      ? 'cn-apps-node-pool' // for backwards compat
+      : `cn-apps-node-pool-${appsNodePoolConfig.nodeType}`;
+  return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
       machineType: appsNodePoolConfig.nodeType,
