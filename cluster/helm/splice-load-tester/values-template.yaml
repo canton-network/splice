@@ -24,4 +24,6 @@ resources:
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 
+#TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
+
 

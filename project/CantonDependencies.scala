@@ -69,7 +69,7 @@ object CantonDependencies {
   lazy val hikaricp = "com.zaxxer" % "HikariCP" % "3.2.0"
   lazy val h2 = "com.h2database" % "h2" % "2.1.210"
   lazy val postgres = "org.postgresql" % "postgresql" % "42.7.3"
-  private val flyway_version = "10.22.0"
+  private val flyway_version = "12.0.2"
   lazy val flyway = "org.flywaydb" % "flyway-core" % flyway_version
   lazy val flyway_postgresql = "org.flywaydb" % "flyway-database-postgresql" % flyway_version
   lazy val oracle = "com.oracle.database.jdbc" % "ojdbc8" % "19.13.0.0.1"
@@ -284,7 +284,7 @@ object CantonDependencies {
 
   lazy val scalaz_scalacheck =
     "org.scalaz" %% "scalaz-scalacheck-binding" % "7.2.33-scalacheck-1.15"
-  lazy val fasterjackson_core = "com.fasterxml.jackson.core" % "jackson-core" % "2.14.3"
+  lazy val fasterjackson_core = "com.fasterxml.jackson.core" % "jackson-core" % "2.19.1"
   lazy val scalapb_json4s = "com.thesamet.scalapb" %% "scalapb-json4s" % "0.11.1"
 
   lazy val junit_jupiter_api = "org.junit.jupiter" % "junit-jupiter-api" % "5.9.2"

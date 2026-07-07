@@ -192,4 +192,10 @@ Missing successor information for the following sequencers.*participant=alicePar
 # TODO(DACH-NY/cn-test-failures#7920) Remove once Canton is fixed
 loadVettedPackages.*mismatch between reference and current state.*Map\(\)
 
+# can happen during start-up
+Mempool received client request but this node is currently blacklisted, rejecting
+
+# This should go away with latest Canton bump
+Flyway upgrade recommended: PostgreSQL 18.4 is newer than this version of Flyway and support has not been tested. The latest supported version of PostgreSQL is 17
+
 # Make sure to have a trailing newline

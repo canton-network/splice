@@ -43,3 +43,13 @@ persistence:
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+securityContexts:
+  pod:
+    security_context_profile: pod_security_context
+    fsGroup: 999
+    fsGroupChangePolicy: "OnRootMismatch"
+  containers:
+    postgres:
+      security_context_profile: app_security_context
+      runAsUser: 999
+      runAsGroup: 999

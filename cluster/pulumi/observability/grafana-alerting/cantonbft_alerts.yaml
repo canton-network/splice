@@ -1,0 +1,60 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: canton-bft-blacklisted-members
+    folder: canton
+    interval: 1m
+    rules:
+      - uid: c7d1e9f4a6b2
+        title: CantonBft Blacklisted Member
+        condition: blacklisted_threshold
+        data:
+          - refId: blacklisted_epochs
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: max by (blacklist_sequencer)(daml_sequencer_bftordering_blacklist_sequencer)
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: blacklisted_epochs
+          - refId: blacklisted_threshold
+            datasourceUid: __expr__
+            model:
+              conditions:
+                  - evaluator:
+                      params:
+                          - 0
+                      type: gt
+                    operator:
+                      type: and
+                    query:
+                      params: []
+                    reducer:
+                      params: []
+                      type: last
+                    type: query
+              datasource:
+                  name: Expression
+                  type: __expr__
+                  uid: __expr__
+              expression: blacklisted_epochs
+              hide: false
+              refId: blacklisted_threshold
+              type: threshold
+        dashboardUid: ""
+        panelId: 0
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: The CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted.
+          severity: warning
+          summary: CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted for {{ index $values "blacklisted_epochs" }} epochs
+        labels: {}
+        isPaused: false

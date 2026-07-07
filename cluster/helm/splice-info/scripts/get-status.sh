@@ -10,8 +10,9 @@ SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
 SV_THRESHOLD="${SV_THRESHOLD:-600}"
 MEDIATOR_THRESHOLD="${MEDIATOR_THRESHOLD:-900}"
-SCAN_THRESHOLD="${SCAN_THRESHOLD:-900}"
-SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-1800}" # Sequencer acknowledgments are irregular, so we use a higher threshold here
+SCAN_THRESHOLD_ROUNDS="${SCAN_THRESHOLD_ROUNDS:-900}"
+SCAN_THRESHOLD_EVENT="${SCAN_THRESHOLD_EVENT:-300}"
+SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-2520}" # 42 minutes, Sequencer acknowledgments are irregular, so we use a higher threshold here
 
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 
@@ -117,7 +118,7 @@ scan_get_status() {
 
   local scan_svnames_and_urls; IFS=$'\n' read -r -d '' -a scan_svnames_and_urls < <(
     echo "$scan_info" |
-      jq -r '.scans[].scans[] | [.svName, .publicUrl + "/api/scan/v0/open-and-issuing-mining-rounds"] | join(" ")' && printf '\0'
+      jq -r '.scans?[].scans[] | [.svName, .publicUrl] | join(" ")' && printf '\0'
   )
 
   local scan_data; scan_data=$(
@@ -136,34 +137,75 @@ scan_get_status() {
       fi
 
       (
-        scan_response=$(
+        scan_response_rounds=$(
           "${CURL_CMD[@]}" \
              --compressed \
              --json '{"cached_open_mining_round_contract_ids":[],"cached_issuing_round_contract_ids":[]}' \
-             "$url" | jq -e .
+             "$url/api/scan/v0/open-and-issuing-mining-rounds" | jq -e .
         ) && exit_code=$? || exit_code=$?
 
-        [[ $exit_code -ne 0 ]] && scan_response='{}'
+        [[ $exit_code -ne 0 ]] && scan_response_rounds='{}'
+
+        scan_event_is_fetched_successfully=$(
+          if
+            migration_id=$(
+              "${CURL_CMD[@]}" "$url/api/scan/v0/migrations/last" |
+              jq -er '.migration_id'
+            ) &&
+
+            after=$(TZ=UTC0 printf '%(%FT%TZ)T' "$((EPOCHSECONDS - SCAN_THRESHOLD_EVENT))") &&
+
+            events=$(
+              "${CURL_CMD[@]}" \
+                  --compressed \
+                  --json '{"page_size": 1, "after": {"after_migration_id": '"$migration_id"', "after_record_time": "'"$after"'"}}' \
+                  "$url/api/scan/v0/events"
+            ) &&
+
+            echo "$events" | jq -e '.events | length > 0' > /dev/null
+          then
+            echo true
+          else
+            echo false
+          fi
+        )
 
         scan_status=$(
-          echo "$scan_response" |
+          echo "$scan_response_rounds" |
           jq \
-            --arg threshold "$SCAN_THRESHOLD" \
             --arg svname "$svname" \
+            --argjson threshold_rounds "$SCAN_THRESHOLD_ROUNDS" \
+            --argjson threshold_event "$SCAN_THRESHOLD_EVENT" \
+            --argjson event_is_fetched "$scan_event_is_fetched_successfully" \
             '
-              def get_delay(field; $now):
-                  [ field[]?.contract.created_at ]
-                  | sort[-1]
-                  | (try(.[0:19] + "Z" | ($now - fromdate) | round) // null)
+              def get_delay($timestamp; $now):
+                  (try($timestamp[0:19] + "Z" | ($now - fromdate) | round) // null)
               ;
 
-              ($threshold | tonumber) as $threshold |
+              def get_round_delay(field; $now):
+                  [ field[]?.contract.created_at ]
+                  | sort[-1]
+                  | get_delay(.; $now)
+              ;
+
               now as $now |
-              get_delay(.open_mining_rounds; $now) as $open_delay |
-              get_delay(.issuing_mining_rounds; $now) as $issuing_delay |
-              [$open_delay, $issuing_delay] as $delays |
+              get_round_delay(.open_mining_rounds; $now) as $open_delay |
+              get_round_delay(.issuing_mining_rounds; $now) as $issuing_delay |
+              [$open_delay, $issuing_delay] as $round_delays |
+
               {
-                ($svname): if ($delays | all) and ($delays | max < $threshold) then 0 else 1 end
+                ($svname): if
+                  ($round_delays | all | not)
+                then
+                  2 # unreachable
+                elif
+                  ($event_is_fetched | not) or
+                  ($round_delays | max > $threshold_rounds)
+                then
+                  1 # lagging
+                else
+                  0
+                end
               }
             '
         )
@@ -225,7 +267,8 @@ main() {
     --argjson mediator "$mediator_status" \
     --argjson mediator_threshold "$MEDIATOR_THRESHOLD" \
     --argjson scan "$scan_status" \
-    --argjson scan_threshold "$SCAN_THRESHOLD" \
+    --argjson scan_threshold_rounds "$SCAN_THRESHOLD_ROUNDS" \
+    --argjson scan_threshold_event "$SCAN_THRESHOLD_EVENT" \
     --argjson sequencer "$sequencer_status" \
     --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
     '
@@ -233,7 +276,7 @@ main() {
         status: {
           sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
           mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
-          scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold) seconds"},
+          scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold_rounds) seconds and recent event is within \($scan_threshold_event) seconds"},
           sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
         },
         generatedAt: (now | todate),

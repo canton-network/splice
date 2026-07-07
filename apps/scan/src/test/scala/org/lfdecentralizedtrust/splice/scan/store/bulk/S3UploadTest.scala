@@ -19,7 +19,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
   "S3 multipart uploads" should {
     "work" in {
 
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val o = bucketConnection.newAppendWriteObject("test")
       val part1 = ByteBuffer.wrap("hello".getBytes("UTF-8"))
       val part2 = ByteBuffer.wrap("world".getBytes("UTF-8"))
@@ -42,7 +42,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
     "just work" in {
 
       val data = ByteString(Random.nextBytes(100))
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
 
       val (pub, sub) = TestSource
         .probe[ByteString]
@@ -88,7 +88,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
     "handle errors correctly" in {
 
       val data = ByteString(Random.nextBytes(100))
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
 
       val (pub, sub) = TestSource
         .probe[ByteString]

@@ -19,7 +19,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "n4d-standard-16",
+        "machineType": "n4-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -29,7 +29,7 @@
         ]
       }
     },
-    "name": "cn-apps-node-pool-hd",
+    "name": "cn-apps-node-pool-1-hd",
     "provider": "",
     "type": "gcp:container/nodePool:NodePool"
   },
@@ -53,7 +53,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "n4-standard-16",
+        "machineType": "n4d-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -63,7 +63,7 @@
         ]
       }
     },
-    "name": "cn-apps-node-pool-n4-standard-16-hd",
+    "name": "cn-apps-node-pool-hd",
     "provider": "",
     "type": "gcp:container/nodePool:NodePool"
   },

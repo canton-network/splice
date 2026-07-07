@@ -163,22 +163,21 @@ trait ParticipantAdminSynchronizerConnection {
   def ensureSynchronizerRegisteredWithManualConnect(
       config: SynchronizerConnectionConfig,
       retryFor: RetryFor,
-  )(implicit traceContext: TraceContext): Future[Unit] = {
+  )(implicit traceContext: TraceContext): Future[RegisteredSynchronizer] = {
     require(
       config.manualConnect,
       "manualConnect must be true when trying to register only",
     )
-    for {
-      _ <- retryProvider
-        .ensureThat(
-          retryFor,
-          "synchronizer_registered_no_handshake",
-          s"participant registered ${config.synchronizerAlias}",
-          isSynchronizerRegistered(config.synchronizerAlias).map(Either.cond(_, (), ())),
-          (_: Unit) => registerSynchronizer(config),
-          logger,
-        )
-    } yield ()
+    retryProvider
+      .ensureThat(
+        retryFor,
+        "synchronizer_registered_no_handshake",
+        s"participant registered ${config.synchronizerAlias}",
+        isSynchronizerRegistered(config.synchronizerAlias).map(Either.cond(_, (), ())),
+        (_: Unit) => registerSynchronizer(config),
+        logger,
+      )
+      .flatMap(_ => getRegisteredSynchronizer(config.synchronizerAlias))
   }
 
   def ensureSynchronizerRegisteredAndConnected(

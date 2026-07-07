@@ -502,3 +502,89 @@ tests:
             name: sv-app-volume
             persistentVolumeClaim:
               claimName: mock-sv-sv-app-pvc
+
+  - it: "sets default security contexts for pod, sv-app, and init container"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+
+  - it: "allows overriding security contexts via values"
+    set:
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        containers:
+          sv:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            runAsUser: 6000
+            privileged: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 5000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: true
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 6000
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            privileged: true
+            capabilities:
+              drop:
+                - ALL

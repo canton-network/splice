@@ -27,8 +27,20 @@ spec:
         {{- end }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- if .Values.securityContexts }}
+      {{- with .Values.securityContexts.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       containers:
       - name: nginx
+        {{- if .Values.securityContexts }}
+        {{- with .Values.securityContexts.containers.nginx }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
         image: {{ .Values.nginxImage }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
@@ -52,6 +64,12 @@ spec:
           {{ toYaml .Values.resources | nindent 12 }}
       {{- if .Values.runtimeDetails }}
       - name: updater
+        {{- if .Values.securityContexts }}
+        {{- with .Values.securityContexts.containers.updater }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
         image: {{ .Values.updaterImage }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
