@@ -1542,7 +1542,7 @@
                         {
                           "request_headers": {
                             "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                            "header_name": "x-envoy-external-address"
                           }
                         }
                       ]
