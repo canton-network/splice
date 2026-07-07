@@ -78,8 +78,12 @@ function installAppsNodePools(
   allZones: string[],
   configs: Array<GkeNodePoolConfig>
 ): Array<gcp.container.NodePool> {
+  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
-    const zones = config.zones === '*' ? allZones : config.zones;
+    const zones =
+      config.zones === '*'
+        ? allZones
+        : (config.zones ?? (nodepoolLocation !== undefined ? [nodepoolLocation] : undefined));
     if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
       return hyperdiskNodePool(index, cluster, zones, config);
     } else {
@@ -153,7 +157,6 @@ function appsNodePool(
       },
       loggingVariant: 'DEFAULT',
     },
-    nodeLocations: zones,
     initialNodeCount: 0,
     autoscaling: {
       locationPolicy: 'ANY',
