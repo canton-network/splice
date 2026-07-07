@@ -63,6 +63,7 @@ class DbMigrations(
       .locations(dbConfig.buildMigrationsPaths(alphaVersionSupport)*)
       .dataSource(dataSource)
       .cleanDisabled(!dbConfig.parameters.unsafeCleanOnValidationError)
+      .cleanOnValidationError(dbConfig.parameters.unsafeCleanOnValidationError)
       .baselineOnMigrate(dbConfig.parameters.unsafeBaselineOnMigrate)
       .lockRetryCount(60)
       .load()

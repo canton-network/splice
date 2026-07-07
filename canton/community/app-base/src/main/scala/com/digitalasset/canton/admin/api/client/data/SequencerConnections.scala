@@ -119,7 +119,9 @@ final case class SequencerConnections(
       param("sequencer connection pool delays", _.sequencerConnectionPoolDelays),
     )
 
-  private[canton] def toInternal: SequencerConnectionsInternal =
+  private[canton] def toInternal(implicit
+      consoleEnvironment: ConsoleEnvironment
+  ): SequencerConnectionsInternal =
     SequencerConnectionsInternal
       .many(
         aliasToConnection.toSeq.map { case (_, connection) => connection.toInternal },
@@ -128,15 +130,17 @@ final case class SequencerConnections(
         submissionRequestAmplification.toInternal,
         sequencerConnectionPoolDelays.toInternal,
       )
-      .valueOr(err => throw new IllegalArgumentException(s"Invariants not respected: $err"))
+      .valueOr(consoleEnvironment.raiseError)
 }
 
 object SequencerConnections {
-  implicit private[data] def sequencerConnectionsToInternalTransformer
-      : Transformer[SequencerConnections, SequencerConnectionsInternal] = _.toInternal
+  implicit private[data] def sequencerConnectionsToInternalTransformer(implicit
+      consoleEnvironment: ConsoleEnvironment
+  ): Transformer[SequencerConnections, SequencerConnectionsInternal] = _.toInternal
 
-  implicit private[data] def sequencerConnectionsFromInternalTransformer
-      : Transformer[SequencerConnectionsInternal, SequencerConnections] = fromInternal(_)
+  implicit private[data] def sequencerConnectionsFromInternalTransformer(implicit
+      consoleEnvironment: ConsoleEnvironment
+  ): Transformer[SequencerConnectionsInternal, SequencerConnections] = fromInternal(_)
 
   def single(
       connection: SequencerConnection
@@ -179,14 +183,14 @@ object SequencerConnections {
     } yield sequencerConnections
   }
 
-  def many(
+  def tryMany(
       connections: Seq[SequencerConnection],
       sequencerTrustThreshold: PositiveInt,
       sequencerLivenessMargin: NonNegativeInt,
       submissionRequestAmplification: SubmissionRequestAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
-  ): Either[String, SequencerConnections] =
-    for {
+  )(implicit consoleEnvironment: ConsoleEnvironment): SequencerConnections = {
+    val resultE = for {
       connectionsNE <- NonEmpty.from(connections).toRight("connections should not be empty")
       result <- many(
         connectionsNE,
@@ -197,24 +201,14 @@ object SequencerConnections {
       )
     } yield result
 
-  def tryMany(
-      connections: Seq[SequencerConnection],
-      sequencerTrustThreshold: PositiveInt,
-      sequencerLivenessMargin: NonNegativeInt,
-      submissionRequestAmplification: SubmissionRequestAmplification,
-      sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
-  )(implicit consoleEnvironment: ConsoleEnvironment): SequencerConnections =
-    many(
-      connections,
-      sequencerTrustThreshold,
-      sequencerLivenessMargin,
-      submissionRequestAmplification,
-      sequencerConnectionPoolDelays,
-    ).valueOr(consoleEnvironment.raiseError)
+    resultE.valueOr(consoleEnvironment.raiseError)
+  }
 
-  private[canton] def fromInternal(internal: SequencerConnectionsInternal): SequencerConnections =
+  private[canton] def fromInternal(internal: SequencerConnectionsInternal)(implicit
+      consoleEnvironment: ConsoleEnvironment
+  ): SequencerConnections =
     SequencerConnections
-      .many(
+      .tryMany(
         internal.aliasToConnection.toSeq.map { case (_, connection) =>
           SequencerConnection.fromInternal(connection)
         },
@@ -222,11 +216,6 @@ object SequencerConnections {
         internal.sequencerLivenessMargin,
         SubmissionRequestAmplification.fromInternal(internal.submissionRequestAmplification),
         SequencerConnectionPoolDelays.fromInternal(internal.sequencerConnectionPoolDelays),
-      )
-      .valueOr(err =>
-        throw new IllegalStateException(
-          s"Invariants of the sequencers connections don't hold: $err"
-        )
       )
 }
 
@@ -270,7 +259,7 @@ final case class SubmissionRequestAmplification(
     paramIfDefined("confirmationResponsePatience", _.confirmationResponsePatienceO),
   )
 
-  def toInternal: SubmissionRequestAmplificationInternal =
+  private[canton] def toInternal: SubmissionRequestAmplificationInternal =
     this.transformInto[SubmissionRequestAmplificationInternal]
 }
 
@@ -310,7 +299,7 @@ final case class SequencerConnectionPoolDelays(
     param("subscriptionRequestDelay", _.subscriptionRequestDelay),
   )
 
-  def toInternal: SequencerConnectionPoolDelaysInternal =
+  private[canton] def toInternal: SequencerConnectionPoolDelaysInternal =
     this.transformInto[SequencerConnectionPoolDelaysInternal]
 }
 

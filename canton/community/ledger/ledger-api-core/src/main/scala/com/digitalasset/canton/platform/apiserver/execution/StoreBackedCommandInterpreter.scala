@@ -336,25 +336,11 @@ final class StoreBackedCommandInterpreter(
 
         case ResultNeedKey(key, limit, continuationToken, resume) =>
           disclosedOrStoreNKeyLookup(key, limit, continuationToken)
-            .flatMap { case (fcis, token) =>
-              val entries: Vector[ResultNeedKey.Response.ContractEntry] = fcis.map { fci =>
-                CantonContractIdVersion.extractCantonContractIdVersion(fci.contractId) match {
-                  case Right(version) =>
-                    ResultNeedKey.Response.AuthenticableFatContractInstance(
-                      fci,
-                      version.contractHashingMethod,
-                      hash => contractAuthenticator(fci, hash).isRight,
-                    )
-                  case Left(_) =>
-                    ResultNeedKey.Response.UnsupportedContractIdVersion(fci.contractId)
-                }
-              }
+            .flatMap { case (cids, token) =>
               resolveStep(
                 Tracked.value(
                   metrics.execution.engineRunning,
-                  trackSyncExecution(interpretationTimeNanos)(
-                    resume(ResultNeedKey.Response(entries, token))
-                  ),
+                  trackSyncExecution(interpretationTimeNanos)(resume(cids, token)),
                 )
               )
             }

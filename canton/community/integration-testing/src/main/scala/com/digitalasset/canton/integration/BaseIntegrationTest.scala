@@ -13,8 +13,6 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
-import com.digitalasset.canton.config.SharedCantonConfig
-import com.digitalasset.canton.environment.Environment
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
@@ -26,9 +24,9 @@ import scala.jdk.CollectionConverters.*
 /** A highly opinionated base trait for writing integration tests interacting with a canton
   * environment using console commands. Tests must mixin a further [[EnvironmentSetup]]
   * implementation to define when the canton environment is setup around the individual tests:
-  *   - [[BaseIsolatedEnvironments]] will construct a fresh environment for each test.
-  *   - [[BaseSharedEnvironment]] will construct only a single environment and reuse this for each
-  *     test executed in the test class.
+  *   - [[IsolatedEnvironments]] will construct a fresh environment for each test.
+  *   - [[SharedEnvironment]] will construct only a single environment and reuse this for each test
+  *     executed in the test class.
   *
   * Test classes must override [[HasEnvironmentDefinition.environmentDefinition]] to describe how
   * they would like their environment configured.
@@ -55,17 +53,22 @@ import scala.jdk.CollectionConverters.*
   * All integration tests must be located in package [[com.digitalasset.canton.integration.tests]]
   * or a subpackage thereof. This is required to correctly compute unit test coverage.
   */
-trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
+private[integration] trait BaseIntegrationTest
     extends FixtureAnyWordSpec
     with BaseTest
     with RepeatableTestSuiteTest
     with PartyTopologyUtils
     with TestPredicateFiltersFixtureAnyWordSpec {
-  this: EnvironmentSetup[C, E] =>
+  self: EnvironmentSetup =>
 
-  type FixtureParam = BaseTestConsoleEnvironment[C, E]
+  type FixtureParam = TestConsoleEnvironment
 
   override protected def withFixture(test: OneArgTest): Outcome = {
+    val integrationTestPackage = "com.digitalasset.canton.integration.tests"
+    getClass.getName should startWith(
+      integrationTestPackage
+    ) withClue s"\nAll integration tests must be located in $integrationTestPackage or a subpackage thereof."
+
     super[RepeatableTestSuiteTest].withFixture(new TestWithSetup(test))
   }
 
@@ -92,13 +95,9 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
       within,
       assertions.map { assertion => (entry: LogEntry) =>
         assertion(entry)
-        // `commandFailureMessage` forces the loggerName to be one of Canton's,
-        // but we use our custom one from splice... so we have to hack around that
-        entry
-          .copy(loggerName = "com.digitalasset.canton.integration.EnvironmentDefinition")
-          .commandFailureMessage
+        entry.commandFailureMessage
         succeed
-      }*
+      } *,
     )
 
   /** Version of [[com.digitalasset.canton.logging.SuppressingLogger.assertThrowsAndLogs]] that is
@@ -116,7 +115,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
         assertion(entry)
         entry.commandFailureMessage
         succeed
-      }*
+      } *,
     )
 
   /** Similar to [[com.digitalasset.canton.console.commands.ParticipantAdministration#ping]] But
@@ -147,10 +146,10 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     override val pos: Option[Position] = test.pos
 
     override def apply(): Outcome = {
-      val environment = provideEnvironment(test.name)
+      val environment = provideEnvironment
       val testOutcome =
         try test.toNoArgTest(environment)()
-        finally testFinished(test.name, environment)
+        finally testFinished(environment)
       testOutcome
     }
   }

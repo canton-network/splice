@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 8,
+  "id": 5,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -94,7 +94,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
+        "h": 7,
         "w": 12,
         "x": 0,
         "y": 1
@@ -105,10 +105,10 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -119,8 +119,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_global_requests_ordering_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
-          "legendFormat": "{{namespace}}.{{node}}",
+          "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_global_requests_ordering_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
@@ -187,7 +187,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
+        "h": 7,
         "w": 12,
         "x": 12,
         "y": 1
@@ -198,10 +198,10 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -212,8 +212,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile($percentile, sum by (namespace, job, node, ordering_stage) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"batch-availability-total\"}[$__rate_interval])))",
-          "legendFormat": "{{namespace}}.{{node}}",
+          "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"batch-availability-total\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
@@ -281,10 +281,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 17,
+        "h": 7,
         "w": 8,
         "x": 0,
-        "y": 13
+        "y": 8
       },
       "id": 107,
       "options": {
@@ -299,7 +299,7 @@
           "showLegend": true
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -310,10 +310,22 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace, job, node, is_block_empty) (irate(daml_sequencer_bftordering_global_ordered_blocks_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}}.{{node}} (empty: {{is_block_empty}})",
+          "expr": "sum(irate(daml_sequencer_bftordering_global_ordered_blocks_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval]))",
+          "legendFormat": "All blocks -",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "irate(daml_sequencer_bftordering_global_ordered_blocks_total{reporting_sequencer=\"$reporting_sequencer\", is_block_empty=\"true\"}[$__rate_interval])",
+          "hide": false,
+          "legendFormat": "Empty blocks -",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "Throughput - blocks/s",
@@ -379,10 +391,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 17,
+        "h": 7,
         "w": 8,
         "x": 8,
-        "y": 13
+        "y": 8
       },
       "id": 108,
       "options": {
@@ -397,7 +409,7 @@
           "showLegend": true
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -408,9 +420,9 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "irate(daml_sequencer_bftordering_global_ordered_batches_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
+          "expr": "irate(daml_sequencer_bftordering_global_ordered_batches_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "{{namespace}}.{{node}}",
+          "legendFormat": "Batches/s",
           "range": true,
           "refId": "A"
         }
@@ -477,10 +489,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 17,
+        "h": 7,
         "w": 8,
         "x": 16,
-        "y": 13
+        "y": 8
       },
       "id": 109,
       "options": {
@@ -495,7 +507,7 @@
           "showLegend": true
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -507,8 +519,8 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (namespace, job, node) (irate(daml_sequencer_bftordering_global_ordered_requests_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}}.{{node}}",
+          "expr": "sum(irate(daml_sequencer_bftordering_global_ordered_requests_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval]))",
+          "legendFormat": "Requests/s -",
           "range": true,
           "refId": "A"
         }
@@ -522,7 +534,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 15
       },
       "id": 12,
       "panels": [
@@ -571,8 +583,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -588,7 +599,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 10
           },
           "id": 11,
           "options": {
@@ -596,10 +607,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -610,8 +621,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by(namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-PekkoP2PGrpcConnectionManagingActor\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-PekkoP2PGrpcConnectionManagingActor\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -664,8 +675,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               }
@@ -676,7 +686,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 10
           },
           "id": 103,
           "options": {
@@ -684,10 +694,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -698,8 +708,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace, job, node) (daml_sequencer_bftordering_performance_moduleQueueSize_PekkoP2PGrpcConnectionManagingActor{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"})",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_PekkoP2PGrpcConnectionManagingActor{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -753,8 +763,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -770,7 +779,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 39
+            "y": 18
           },
           "id": 13,
           "options": {
@@ -778,10 +787,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -792,8 +801,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node, source_sequencer) (rate(daml_sequencer_bftordering_p2p_send_grpc_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
-              "legendFormat": "(reporter: {{namespace}}.{{node}}) {{source_sequencer}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_p2p_send_grpc_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -846,8 +855,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -863,7 +871,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 26
           },
           "id": 17,
           "options": {
@@ -871,7 +879,7 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
               "mode": "single",
@@ -885,8 +893,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_p2p_send_network_write_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_p2p_send_network_write_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -939,8 +947,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -956,7 +963,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 26
           },
           "id": 15,
           "options": {
@@ -964,7 +971,7 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
               "mode": "single",
@@ -978,8 +985,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by(namespace, job, node) (rate(daml_sequencer_bftordering_p2p_receive_processing_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_p2p_receive_processing_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -997,7 +1004,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 16
       },
       "id": 7,
       "panels": [
@@ -1046,8 +1053,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1063,7 +1069,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 32
+            "y": 11
           },
           "id": 18,
           "options": {
@@ -1071,10 +1077,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1085,8 +1091,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-mempool\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-mempool\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1139,8 +1145,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1155,7 +1160,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 32
+            "y": 11
           },
           "id": 101,
           "options": {
@@ -1163,10 +1168,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1177,8 +1182,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_mempool{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_mempool{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1231,8 +1236,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1248,7 +1252,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 17
           },
           "id": 10,
           "options": {
@@ -1256,10 +1260,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1270,8 +1274,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-availability\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-availability\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1324,8 +1328,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1340,7 +1343,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 17
           },
           "id": 102,
           "options": {
@@ -1348,10 +1351,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1362,8 +1365,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_availability{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_availability{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1417,8 +1420,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1434,7 +1436,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 44
+            "y": 23
           },
           "id": 24,
           "options": {
@@ -1442,10 +1444,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1456,8 +1458,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"batch-wait\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"batch-wait\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1511,8 +1513,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1528,7 +1529,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 44
+            "y": 23
           },
           "id": 21,
           "options": {
@@ -1536,10 +1537,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1550,8 +1551,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"batch-dissemination-total\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"batch-dissemination-total\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1605,8 +1606,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1622,7 +1622,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 50
+            "y": 29
           },
           "id": 23,
           "options": {
@@ -1630,10 +1630,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1644,8 +1644,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"batch-queued-for-block-inclusion\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"batch-queued-for-block-inclusion\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1699,8 +1699,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1716,7 +1715,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 50
+            "y": 29
           },
           "id": 3,
           "options": {
@@ -1724,10 +1723,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1738,8 +1737,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_availability_batch_regressions{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}, {{stage}}",
+              "expr": "irate(daml_sequencer_bftordering_availability_batch_regressions{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1792,8 +1791,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1809,7 +1807,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 35
           },
           "id": 4,
           "options": {
@@ -1817,10 +1815,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1831,8 +1829,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"availability-hash-batchId\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"availability-hash-batchId\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1885,8 +1883,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1902,7 +1899,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 35
           },
           "id": 5,
           "options": {
@@ -1910,10 +1907,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -1924,8 +1921,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"availability-sign-local-batchId\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"availability-sign-local-batchId\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -1979,8 +1976,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1996,7 +1992,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 41
           },
           "id": 9,
           "options": {
@@ -2004,10 +2000,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2018,8 +2014,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"request-queued-for-batch-inclusion\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"request-queued-for-batch-inclusion\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2072,8 +2068,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2089,7 +2084,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 62
+            "y": 41
           },
           "id": 6,
           "options": {
@@ -2097,10 +2092,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2111,8 +2106,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"availability-sign-remote-batchId\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"availability-sign-remote-batchId\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2165,8 +2160,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2182,7 +2176,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 68
+            "y": 47
           },
           "id": 26,
           "options": {
@@ -2190,10 +2184,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2204,8 +2198,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"availability-sign-local-batches\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"availability-sign-local-batches\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2258,8 +2252,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2275,7 +2268,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 68
+            "y": 47
           },
           "id": 8,
           "options": {
@@ -2283,10 +2276,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2297,8 +2290,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"availability-signature-verify-ack\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"availability-signature-verify-ack\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2351,8 +2344,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2368,7 +2360,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 74
+            "y": 53
           },
           "id": 82,
           "options": {
@@ -2376,10 +2368,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2390,8 +2382,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.addBatch\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.addBatch\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2444,8 +2436,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2461,7 +2452,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 74
+            "y": 53
           },
           "id": 28,
           "options": {
@@ -2469,10 +2460,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2483,8 +2474,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.fetchBatches\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.fetchBatches\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2537,8 +2528,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2554,7 +2544,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 80
+            "y": 59
           },
           "id": 22,
           "options": {
@@ -2562,10 +2552,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2576,8 +2566,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"batch-validation\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"batch-validation\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2588,7 +2578,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$DS"
           },
           "description": "Summary of cache hits, misses, and evictions for the Availability store's batch data cache",
           "fieldConfig": {
@@ -2634,8 +2624,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               },
@@ -2678,7 +2667,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 80
+            "y": 65
           },
           "hideTimeOverride": false,
           "id": 110,
@@ -2690,7 +2679,7 @@
               ],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
               "mode": "multi",
@@ -2701,43 +2690,43 @@
           "targets": [
             {
               "datasource": {
-                "uid": "prometheus"
+                "uid": "$DS"
               },
-              "editorMode": "code",
-              "expr": "sum by (namespace, job, node) (irate(daml_cache_hits{namespace=~\"$namespace\", job=~\"$job\", node=~\"$node\", cache=\"batch-cache\"}[$__rate_interval]))",
+              "editorMode": "builder",
+              "expr": "sum(irate(daml_cache_hits{cache=\"batch-cache\"}[$__rate_interval]))",
               "format": "time_series",
               "instant": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}.{{node}} Cache Hits",
+              "legendFormat": "Cache Hits",
               "refId": "A"
             },
             {
               "datasource": {
-                "uid": "prometheus"
+                "uid": "$DS"
               },
-              "editorMode": "code",
-              "expr": "sum by (namespace, job, node) (irate(daml_cache_misses{namespace=~\"$namespace\", job=~\"$job\", node=~\"$node\", cache=\"batch-cache\"}[$__rate_interval]))",
+              "editorMode": "builder",
+              "expr": "sum(irate(daml_cache_misses{cache=\"batch-cache\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "instant": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}.{{node}} Cache Misses",
+              "legendFormat": "Cache Misses",
               "refId": "B"
             },
             {
               "datasource": {
-                "uid": "prometheus"
+                "uid": "$DS"
               },
-              "editorMode": "code",
-              "expr": "sum by (namespace, job, node) (irate(daml_cache_evictions{namespace=~\"$namespace\", job=~\"$job\", node=~\"$node\", cache=\"batch-cache\"}[$__rate_interval]))",
+              "editorMode": "builder",
+              "expr": "sum(irate(daml_cache_evictions{cache=\"batch-cache\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "instant": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}.{{node}} Cache Evictions",
+              "legendFormat": "Cache Evictions",
               "refId": "C"
             }
           ],
@@ -2754,7 +2743,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 17
       },
       "id": 45,
       "panels": [
@@ -2820,7 +2809,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 18
           },
           "id": 80,
           "options": {
@@ -2828,10 +2817,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2842,8 +2831,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-consensus\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-consensus\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -2912,7 +2901,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 33
+            "y": 18
           },
           "id": 104,
           "options": {
@@ -2920,10 +2909,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -2934,8 +2923,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_consensus{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_consensus{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3005,7 +2994,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 25
           },
           "id": 81,
           "options": {
@@ -3013,10 +3002,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3027,8 +3016,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-segment-module\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-segment-module\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3097,7 +3086,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 25
           },
           "id": 105,
           "options": {
@@ -3105,10 +3094,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3119,8 +3108,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_segment_module{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_segment_module{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3131,7 +3120,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$DS"
           },
           "description": "Block commit time at the consensus (PBFT) level.",
           "fieldConfig": {
@@ -3185,8 +3174,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3202,7 +3190,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 32
           },
           "hideTimeOverride": true,
           "id": 39,
@@ -3211,10 +3199,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3222,16 +3210,16 @@
           "targets": [
             {
               "datasource": {
-                "uid": "prometheus"
+                "uid": "$DS"
               },
               "editorMode": "code",
               "exemplar": false,
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_consensus_commit_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_consensus_commit_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
               "format": "time_series",
               "instant": false,
               "interval": "30s",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}.{{node}}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3285,8 +3273,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3302,7 +3289,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 32
           },
           "id": 46,
           "options": {
@@ -3310,10 +3297,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3324,8 +3311,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-segment-proposal-to-commit-latency\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-segment-proposal-to-commit-latency\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3395,7 +3382,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 39
           },
           "id": 88,
           "options": {
@@ -3403,10 +3390,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3417,8 +3404,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-segment-block-commit-latency\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-segment-block-commit-latency\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3488,7 +3475,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 39
           },
           "id": 87,
           "options": {
@@ -3496,10 +3483,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3510,8 +3497,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-block-proposal-wait\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-block-proposal-wait\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3581,7 +3568,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 60
+            "y": 45
           },
           "id": 86,
           "options": {
@@ -3589,10 +3576,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3603,8 +3590,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-epoch-start-wait\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-epoch-start-wait\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3674,7 +3661,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 60
+            "y": 45
           },
           "id": 83,
           "options": {
@@ -3682,10 +3669,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3696,8 +3683,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-epoch-completion-wait\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-epoch-completion-wait\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3766,7 +3753,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 67
+            "y": 52
           },
           "id": 63,
           "options": {
@@ -3774,10 +3761,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3788,8 +3775,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.startEpoch\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.startEpoch\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3858,7 +3845,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 67
+            "y": 52
           },
           "id": 47,
           "options": {
@@ -3866,10 +3853,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3880,8 +3867,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.completeEpoch\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.completeEpoch\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -3950,7 +3937,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 58
           },
           "id": 64,
           "options": {
@@ -3958,10 +3945,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -3972,8 +3959,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addPrePrepare\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addPrePrepare\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4042,7 +4029,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 58
           },
           "id": 50,
           "options": {
@@ -4050,10 +4037,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4064,8 +4051,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addPreparesAtomically\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addPrepares\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4134,7 +4121,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 80
+            "y": 65
           },
           "id": 52,
           "options": {
@@ -4142,10 +4129,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4156,8 +4143,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addOrderedBlockAtomically\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addOrderedBlock\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4226,7 +4213,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 80
+            "y": 65
           },
           "id": 66,
           "options": {
@@ -4234,10 +4221,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4248,8 +4235,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-signature-verify-poa-ack\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-signature-verify-poa-ack\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4318,7 +4305,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 86
+            "y": 71
           },
           "id": 68,
           "options": {
@@ -4326,10 +4313,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4340,8 +4327,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-validate-signed-message\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-validate-signed-message\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4410,7 +4397,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 86
+            "y": 71
           },
           "id": 76,
           "options": {
@@ -4418,10 +4405,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4432,8 +4419,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"sign-BftSignedConsensusMessage\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"sign-BftSignedConsensusMessage\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4451,7 +4438,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 18
       },
       "id": 89,
       "panels": [
@@ -4500,8 +4487,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -4517,7 +4503,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 34
+            "y": 134
           },
           "id": 51,
           "options": {
@@ -4525,10 +4511,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4539,8 +4525,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_epoch_view_changes{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_epoch_view_changes{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4593,8 +4579,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -4610,7 +4595,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 141
           },
           "id": 84,
           "options": {
@@ -4618,10 +4603,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4632,8 +4617,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addViewChangeMessage\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.addViewChangeMessage\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4686,8 +4671,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -4703,7 +4687,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 141
           },
           "id": 77,
           "options": {
@@ -4711,10 +4695,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4725,8 +4709,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-postponed-view-messages-queue-latency\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-postponed-view-messages-queue-latency\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4794,7 +4778,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 148
           },
           "id": 97,
           "options": {
@@ -4805,7 +4789,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4816,8 +4800,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_queue_size{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_queue_size{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4885,7 +4869,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 148
           },
           "id": 95,
           "options": {
@@ -4896,7 +4880,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4907,8 +4891,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_consensus_postponed_view_messages_queue_max_size{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_consensus_postponed_view_messages_queue_max_size{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -4976,7 +4960,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 55
+            "y": 155
           },
           "id": 94,
           "options": {
@@ -4987,7 +4971,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -4998,8 +4982,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_dropped_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_dropped_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5067,7 +5051,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 55
+            "y": 155
           },
           "id": 100,
           "options": {
@@ -5078,7 +5062,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5089,111 +5073,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_duplicates_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_postponed_view_messages_duplicates_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Postponed view messages duplicated (rate)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 62
-          },
-          "id": 112,
-          "options": {
-            "legend": {
-              "calcs": [
-                "min",
-                "mean",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, daml_sequencer_bftordering_consensus_view_change_progress_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"})",
-              "interval": "",
-              "legendFormat": "(reporter: {{namespace}}.{{node}}) {{Leader}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Time until progress in view",
           "type": "timeseries"
         }
       ],
@@ -5206,7 +5092,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 19
       },
       "id": 90,
       "panels": [
@@ -5255,8 +5141,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -5270,105 +5155,11 @@
           },
           "gridPos": {
             "h": 7,
-            "w": 12,
+            "w": 24,
             "x": 0,
-            "y": 35
+            "y": 135
           },
           "id": 72,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"consensus-validate-consensus-certificate\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Validate state transfer consensus certificate",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "description": "Time to transfer a given epoch from peer(s)",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 80
-          },
-          "id": 111,
           "options": {
             "legend": {
               "calcs": [],
@@ -5388,42 +5179,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"state-transfer-total-epoch-transfer-latency\"}[$__rate_interval])))",
-              "legendFormat": "Data transfer",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"consensus-validate-consensus-certificate\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"state-transfer-store-epochs\"}[$__rate_interval])))",
-              "hide": false,
-              "legendFormat": "Complete + start DB query",
-              "range": true,
-              "refId": "B"
             }
           ],
-          "title": "Epoch Transfer Duration",
-          "transformations": [
-            {
-              "id": "calculateField",
-              "options": {
-                "alias": "Total epoch transfer duration",
-                "binary": {
-                  "left": "Data transfer",
-                  "reducer": "sum",
-                  "right": "Complete + start DB query"
-                },
-                "mode": "binary",
-                "reduce": {
-                  "reducer": "sum"
-                }
-              }
-            }
-          ],
+          "title": "Validate state transfer consensus certificate",
           "type": "timeseries"
         },
         {
@@ -5471,8 +5233,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -5488,7 +5249,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 142
           },
           "id": 91,
           "options": {
@@ -5496,10 +5257,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5510,8 +5271,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"state-transfer-postponed-consensus-messages-queue-latency\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"state-transfer-postponed-consensus-messages-queue-latency\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5564,8 +5325,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -5580,7 +5340,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 142
           },
           "id": 96,
           "options": {
@@ -5591,7 +5351,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5602,8 +5362,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_queue_size{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_queue_size{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5671,7 +5431,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 149
           },
           "id": 98,
           "options": {
@@ -5682,7 +5442,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5693,8 +5453,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_queue_max_size{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_queue_max_size{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5762,7 +5522,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 149
           },
           "id": 99,
           "options": {
@@ -5773,7 +5533,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5784,8 +5544,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_dropped{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_state_transfer_postponed_consensus_messages_dropped{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5803,7 +5563,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 20
       },
       "id": 38,
       "panels": [
@@ -5852,8 +5612,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -5868,7 +5627,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 36
+            "y": 136
           },
           "id": 85,
           "options": {
@@ -5879,7 +5638,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5890,8 +5649,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_incoming_retransmission_requests_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_incoming_retransmission_requests_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -5944,8 +5703,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -5960,7 +5718,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 36
+            "y": 136
           },
           "id": 40,
           "options": {
@@ -5971,7 +5729,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -5982,8 +5740,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_outgoing_retransmission_requests_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_outgoing_retransmission_requests_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6036,8 +5794,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6052,7 +5809,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 142
           },
           "id": 41,
           "options": {
@@ -6063,7 +5820,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6074,8 +5831,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_retransmitted_messages_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_retransmitted_messages_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6128,8 +5885,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6144,7 +5900,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 142
           },
           "id": 42,
           "options": {
@@ -6155,7 +5911,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6166,8 +5922,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_retransmitted_commit_certificates_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_retransmitted_commit_certificates_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6236,7 +5992,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 148
           },
           "id": 78,
           "options": {
@@ -6244,10 +6000,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6258,8 +6014,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"sign-BftSignedRetransmissionMessage\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"sign-BftSignedRetransmissionMessage\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6328,7 +6084,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 148
           },
           "id": 79,
           "options": {
@@ -6336,10 +6092,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6350,8 +6106,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"verify-signature-BftSignedRetransmissionMessage\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"verify-signature-BftSignedRetransmissionMessage\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6419,7 +6175,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 154
           },
           "id": 43,
           "options": {
@@ -6430,7 +6186,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6441,8 +6197,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_discarded_wrong_epoch_retransmission_responses_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_discarded_wrong_epoch_retransmission_responses_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6510,7 +6266,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 154
           },
           "id": 44,
           "options": {
@@ -6521,7 +6277,7 @@
               "showLegend": true
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6532,8 +6288,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "irate(daml_sequencer_bftordering_consensus_discarded_rate_limited_retransmission_requests_total{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "irate(daml_sequencer_bftordering_consensus_discarded_rate_limited_retransmission_requests_total{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6551,7 +6307,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 21
       },
       "id": 59,
       "panels": [
@@ -6600,8 +6356,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6617,7 +6372,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 37
+            "y": 46
           },
           "id": 48,
           "options": {
@@ -6625,10 +6380,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6639,8 +6394,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.latestEpoch\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.latestEpoch\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6693,8 +6448,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6710,7 +6464,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 37
+            "y": 46
           },
           "id": 53,
           "options": {
@@ -6718,10 +6472,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6732,8 +6486,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadEpochProgress\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadEpochProgress\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6786,8 +6540,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6803,7 +6556,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 45
+            "y": 54
           },
           "id": 54,
           "options": {
@@ -6811,10 +6564,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6825,8 +6578,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadCompleteBlocks\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadCompleteBlocks\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6844,7 +6597,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 22
       },
       "id": 29,
       "panels": [
@@ -6893,8 +6646,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -6910,7 +6662,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 17
           },
           "id": 55,
           "options": {
@@ -6918,10 +6670,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -6932,8 +6684,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"module-queue-output\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"module-queue-output\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -6986,8 +6738,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7002,7 +6753,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 17
           },
           "id": 106,
           "options": {
@@ -7010,10 +6761,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7024,8 +6775,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_output{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "daml_sequencer_bftordering_performance_moduleQueueSize_output{reporting_sequencer=\"$reporting_sequencer\"}",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7079,8 +6830,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7096,7 +6846,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 24
           },
           "id": 36,
           "options": {
@@ -7104,10 +6854,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7118,8 +6868,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"output-block-inspection\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"output-block-inspection\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7172,8 +6922,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7189,7 +6938,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 24
           },
           "id": 30,
           "options": {
@@ -7197,10 +6946,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7211,8 +6960,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"output-block-fetch-batches\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"output-block-fetch-batches\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7281,7 +7030,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 52
+            "y": 31
           },
           "id": 37,
           "options": {
@@ -7289,10 +7038,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7303,8 +7052,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.insertBlockIfMissing\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.insertBlockIfMissing\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7373,7 +7122,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 52
+            "y": 31
           },
           "id": 34,
           "options": {
@@ -7384,7 +7133,7 @@
               "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7395,8 +7144,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_topology_query_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_topology_query_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7465,7 +7214,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 59
+            "y": 38
           },
           "id": 31,
           "options": {
@@ -7473,10 +7222,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7487,8 +7236,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.insertLeaderSelectionPolicyState\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"insertLeaderSelectionPolicyState\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7557,7 +7306,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 59
+            "y": 38
           },
           "id": 32,
           "options": {
@@ -7565,10 +7314,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7579,106 +7328,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.insertEpochIfMissing\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.insertEpochIfMissing\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Insert epoch metadata",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 66
-          },
-          "id": 113,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"output-backpressure\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Sequencer core backpressure duration",
           "type": "timeseries"
         }
       ],
@@ -7691,7 +7347,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 23
       },
       "id": 60,
       "panels": [
@@ -7740,8 +7396,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7757,7 +7412,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 39
+            "y": 18
           },
           "id": 35,
           "options": {
@@ -7765,10 +7420,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7779,8 +7434,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadEpochInfo\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadEpochInfo\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7833,8 +7488,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7850,7 +7504,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 47
+            "y": 26
           },
           "id": 56,
           "options": {
@@ -7858,10 +7512,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7872,8 +7526,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadOrderedBlocks\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.loadOrderedBlocks\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -7891,7 +7545,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 24
       },
       "id": 62,
       "panels": [
@@ -7900,7 +7554,6 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Time to compute the pruning point, based on retention factors and current time",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -7941,8 +7594,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -7958,7 +7610,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 19
           },
           "id": 25,
           "options": {
@@ -7966,10 +7618,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -7980,13 +7632,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"pruning-compute-pruning-point\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.prune\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Compute pruning point",
+          "title": "Availability DB pruning",
           "type": "timeseries"
         },
         {
@@ -7994,7 +7646,6 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Time to evict unordered, but expired, batches in the availability DB",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -8035,8 +7686,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -8052,7 +7702,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 19
           },
           "id": 27,
           "options": {
@@ -8060,10 +7710,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -8074,8 +7724,8 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.gc\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.db.DbAvailabilityStore.gc\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
@@ -8088,7 +7738,6 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Time to create new table partitions, when necessary",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -8129,8 +7778,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -8146,7 +7794,99 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 26
+          },
+          "id": 57,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.db.DbEpochStore.prune\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Consensus DB pruning",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 26
           },
           "id": 61,
           "options": {
@@ -8154,10 +7894,10 @@
               "calcs": [],
               "displayMode": "list",
               "placement": "bottom",
-              "showLegend": true
+              "showLegend": false
             },
             "tooltip": {
-              "mode": "multi",
+              "mode": "single",
               "sort": "none"
             }
           },
@@ -8168,201 +7908,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.pruning.PartitionManager.PartitionCreatorImpl.createPartitionsIfNeeded\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
+              "expr": "histogram_quantile($percentile, sum(rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{reporting_sequencer=\"$reporting_sequencer\", ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.output.data.db.DbOutputMetadataStore.prune\"}[$__rate_interval])))",
+              "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Create partitions",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "description": "Time to drop table partitions that can be pruned",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 47
-          },
-          "id": 67,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.pruning.PartitionManager.PartitionPrunerImpl.prune\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Prune (Delete partitions)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "description": "Time to start the Partition Manager, which may include creating new partitions",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 47
-          },
-          "id": 69,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile($percentile, sum by (namespace, job, node) (rate(daml_sequencer_bftordering_performance_ordering_stage_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\",ordering_stage=~\"com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.pruning.PartitionManager.create\"}[$__rate_interval])))",
-              "legendFormat": "{{namespace}}.{{node}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Partition manager startup",
+          "title": "Output DB pruning",
           "type": "timeseries"
         }
       ],
@@ -8377,98 +7929,49 @@
   "templating": {
     "list": [
       {
-        "allValue": ".*",
         "current": {
           "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "text": "Prometheus",
+          "value": "Prometheus"
         },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "definition": "label_values(daml_health_status,namespace}",
         "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "name": "namespace",
-        "label": "Namespace",
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS",
         "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(daml_health_status,namespace)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 2,
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 7,
-        "type": "query"
+        "type": "datasource"
       },
       {
-        "allValue": ".*",
         "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "selected": false,
+          "text": "None",
+          "value": ""
         },
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(daml_health_status{namespace=~\"$namespace\"},job)",
+        "definition": "label_values(reporting_sequencer)",
         "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "name": "job",
-        "label": "Job",
+        "includeAll": false,
+        "label": " Reporting sequencer",
+        "multi": false,
+        "name": "reporting_sequencer",
         "options": [],
         "query": {
-          "qryType": 1,
-          "query": "label_values(daml_health_status{namespace=~\"$namespace\"},job)",
+          "query": "label_values(reporting_sequencer)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 7,
-        "type": "query"
-      },
-      {
-        "allValue": ".*",
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "definition": "label_values(daml_health_status{namespace=~\"$namespace\", job=~\"$job\"},node)",
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "name": "node",
-        "label": "Node",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(daml_health_status{namespace=~\"$namespace\", job=~\"$job\"},node)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 7,
+        "sort": 0,
         "type": "query"
       },
       {

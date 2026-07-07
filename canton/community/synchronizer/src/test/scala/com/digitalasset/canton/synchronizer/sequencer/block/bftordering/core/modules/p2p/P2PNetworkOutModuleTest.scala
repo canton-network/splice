@@ -370,8 +370,7 @@ class P2PNetworkOutModuleTest extends AnyWordSpec with BftSequencerBaseTest {
           context.runPipedMessagesThenVerifyAndReceiveOnModule(module) { message =>
             message shouldBe P2PNetworkOut.Internal.Connect(anotherEndpoint)
           }
-          module.p2pEndpointsStore
-            .listEndpoints()
+          module.p2pEndpointsStore.listEndpoints
             .apply() should contain theSameElementsInOrderAs otherInitialEndpoints :+ anotherEndpoint
 
           endpointAdded shouldBe true
@@ -439,8 +438,7 @@ class P2PNetworkOutModuleTest extends AnyWordSpec with BftSequencerBaseTest {
         )
 
         context.runPipedMessages() shouldBe empty
-        module.p2pEndpointsStore
-          .listEndpoints()
+        module.p2pEndpointsStore.listEndpoints
           .apply() should contain theSameElementsInOrderAs otherInitialEndpoints
 
         endpointAdded shouldBe false
@@ -477,8 +475,7 @@ class P2PNetworkOutModuleTest extends AnyWordSpec with BftSequencerBaseTest {
 
           val remainingEndpoints =
             Seq(otherInitialEndpointsTupled._2, otherInitialEndpointsTupled._3)
-          module.p2pEndpointsStore
-            .listEndpoints()
+          module.p2pEndpointsStore.listEndpoints
             .apply() should contain theSameElementsInOrderAs remainingEndpoints
           context.extractSelfMessages().foreach(module.receive) // Disconnect endpoint
           endpointRemoved shouldBe true
@@ -542,8 +539,7 @@ class P2PNetworkOutModuleTest extends AnyWordSpec with BftSequencerBaseTest {
         )
 
         context.runPipedMessages() shouldBe empty
-        module.p2pEndpointsStore
-          .listEndpoints()
+        module.p2pEndpointsStore.listEndpoints
           .apply() should contain theSameElementsInOrderAs otherInitialEndpoints
 
         import state.*
@@ -553,28 +549,6 @@ class P2PNetworkOutModuleTest extends AnyWordSpec with BftSequencerBaseTest {
 
         verify(mempoolSpy, never).asyncSend(Mempool.P2PConnectivityUpdate(aMembership, 2))
         verify(mempoolSpy, never).asyncSend(Mempool.P2PConnectivityUpdate(aMembership, 1))
-      }
-    }
-
-    "it is queried about configured endpoints" should {
-      "return them" in {
-        val mempoolSpy =
-          spy(fakeIgnoringModule[Mempool.Message])
-        val (context, _, module, _) =
-          setupWithIgnoringDefaultDeps(mempool = mempoolSpy)
-
-        otherInitialEndpoints.foreach(module.p2pEndpointsStore.addEndpoint(_).apply())
-
-        implicit val ctx: ProgrammableUnitTestContext[P2PNetworkOut.Message] = context
-
-        var endpoints: Option[Seq[P2PEndpoint]] = None
-        module.receive(
-          P2PNetworkOut.Admin.ListConfiguredEndpoints(e => endpoints = Some(e))
-        )
-
-        context.runPipedMessages() shouldBe empty
-
-        endpoints should contain(otherInitialEndpoints)
       }
     }
 

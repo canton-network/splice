@@ -9,10 +9,7 @@ import cats.syntax.either.*
 import cats.syntax.parallel.*
 import com.daml.nonempty.NonEmpty
 import com.daml.nonempty.catsinstances.*
-import com.digitalasset.canton.admin.api.client.data.{
-  KnownPhysicalSynchronizerId,
-  ListPartiesResult,
-}
+import com.digitalasset.canton.admin.api.client.data.ListPartiesResult
 import com.digitalasset.canton.config.ConsoleCommandTimeout
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.{
@@ -39,6 +36,7 @@ import com.digitalasset.canton.topology.transaction.{
 }
 import com.digitalasset.canton.topology.{
   ExternalParty,
+  KnownPhysicalSynchronizerId,
   Namespace,
   ParticipantId,
   PartyId,

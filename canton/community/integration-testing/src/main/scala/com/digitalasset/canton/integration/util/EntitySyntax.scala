@@ -58,9 +58,7 @@ trait EntitySyntax {
     }
   }
 
-  implicit class PartyIdSyntax(partyId: PartyId)(implicit
-      env: TestConsoleEnvironment
-  ) {
+  implicit class PartyIdSyntax(partyId: PartyId)(implicit env: TestConsoleEnvironment) {
     def participants(
         requestingParticipant: LocalParticipantReference,
         synchronizerId: Option[SynchronizerId] = None,
@@ -71,9 +69,7 @@ trait EntitySyntax {
         .toSet
   }
 
-  implicit class StringConversions(name: String)(implicit
-      env: TestConsoleEnvironment
-  ) {
+  implicit class StringConversions(name: String)(implicit env: TestConsoleEnvironment) {
     import env.*
 
     def toPartyId(

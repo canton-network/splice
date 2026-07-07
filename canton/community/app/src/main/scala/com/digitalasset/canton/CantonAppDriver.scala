@@ -19,15 +19,15 @@ import com.digitalasset.canton.config.{
   DefaultPorts,
   GCLoggingConfig,
   Generate,
-  SharedCantonConfig,
 }
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.environment.{Environment, EnvironmentFactory}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.{NoTracing, TraceContext}
 import com.digitalasset.canton.util.JarResourceUtils
+import com.digitalasset.canton.version.ReleaseVersion
 import com.sun.management.GarbageCollectionNotificationInfo
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.slf4j.LoggerFactory
 
 import java.lang.management.ManagementFactory
@@ -44,12 +44,10 @@ import scala.util.control.NonFatal
   */
 abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
 
-  type Config <: SharedCantonConfig[Config]
-  type E <: Environment[Config]
+  protected def environmentFactory: EnvironmentFactory
 
-  protected def environmentFactory: EnvironmentFactory[Config, E]
-
-  protected def withManualStart(config: Config): Config
+  protected def withManualStart(config: CantonConfig): CantonConfig =
+    config.copy(parameters = config.parameters.copy(manualStart = true))
 
   protected def additionalVersions: Map[String, String] = Map.empty
 
@@ -62,8 +60,6 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
     ) ++ additionalVersions) foreach { case (name, version) =>
       Console.out.println(s"$name: $version")
     }
-
-  protected def logAppVersion(): Unit = logger.info(s"Starting Canton version ${BuildInfo.version}")
 
   // BE CAREFUL: Set the environment variables before you touch anything related to
   // logback as otherwise, the logback configuration will be read without these
@@ -101,8 +97,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
       case (None, _) =>
     }
 
-  logAppVersion()
-
+  logger.info(s"Starting Canton version ${ReleaseVersion.current}")
   if (cliOptions.logTruncate) {
     cliOptions.logFileAppender match {
       case LogFileAppender.Rolling =>
@@ -118,7 +113,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
   // Canton does not die on a warning status.
   logbackStatusManager.remove(killingStatusListener)
 
-  private val environmentRef: AtomicReference[Option[E]] = new AtomicReference(None)
+  private val environmentRef: AtomicReference[Option[Environment]] = new AtomicReference(None)
   sys.runtime.addShutdownHook(new Thread(() => {
     try {
       logger.info("Shutting down...")
@@ -172,7 +167,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
 
     def loadConfigFromFiles(
         loggingString: String = "Starting up with resolved config"
-    )(implicit traceContext: TraceContext): Either[CantonConfigError, Config] = {
+    )(implicit traceContext: TraceContext): Either[CantonConfigError, CantonConfig] = {
       val mergedUserConfigsE = NonEmpty.from(configFiles) match {
         case None if cliOptions.configMap.isEmpty =>
           Left(ConfigErrors.NoConfigFiles.Error())
@@ -217,7 +212,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
       sys.exit(1)
     }
 
-    private def writeConfigToTmpFile(mergedUserConfigs: com.typesafe.config.Config) = {
+    private def writeConfigToTmpFile(mergedUserConfigs: Config) = {
       val tmp = File.newTemporaryFile("canton-config-error-", ".conf")
       logger.error(
         s"An error occurred after parsing a config file that was obtained by merging multiple config " +
@@ -294,11 +289,11 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
   }
 
   def loadConfig(
-      config: com.typesafe.config.Config,
+      config: Config,
       defaultPorts: Option[DefaultPorts],
-  ): Either[CantonConfigError, Config]
+  ): Either[CantonConfigError, CantonConfig]
 
-  protected[this] def startupConfigFileMonitoring(environment: E): Unit =
+  private def startupConfigFileMonitoring(environment: Environment): Unit =
     TraceContext.withNewTraceContext("config_file_monitoring") { implicit traceContext =>
       def modificationTimestamp(): Long =
         Config.configFiles.map(_.lastModified()).foldLeft(0L) { case (acc, item) =>
