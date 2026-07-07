@@ -11,7 +11,7 @@ SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 SV_THRESHOLD="${SV_THRESHOLD:-600}"
 MEDIATOR_THRESHOLD="${MEDIATOR_THRESHOLD:-900}"
 SCAN_THRESHOLD_ROUNDS="${SCAN_THRESHOLD_ROUNDS:-900}"
-SCAN_THRESHOLD_SNAPSHOT="${SCAN_THRESHOLD_SNAPSHOT:-14400}" # 4 hours
+SCAN_THRESHOLD_EVENT="${SCAN_THRESHOLD_EVENT:-300}"
 SEQUENCER_THRESHOLD="${SEQUENCER_THRESHOLD:-2520}" # 42 minutes, Sequencer acknowledgments are irregular, so we use a higher threshold here
 
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
@@ -118,7 +118,7 @@ scan_get_status() {
 
   local scan_svnames_and_urls; IFS=$'\n' read -r -d '' -a scan_svnames_and_urls < <(
     echo "$scan_info" |
-      jq -r '.scans[].scans[] | [.svName, .publicUrl] | join(" ")' && printf '\0'
+      jq -r '.scans?[].scans[] | [.svName, .publicUrl] | join(" ")' && printf '\0'
   )
 
   local scan_data; scan_data=$(
@@ -146,28 +146,37 @@ scan_get_status() {
 
         [[ $exit_code -ne 0 ]] && scan_response_rounds='{}'
 
-        scan_last_snapshot_timestamp_json=$(
-          migration_id=$(
-            "${CURL_CMD[@]}" "$url/api/scan/v0/migrations/last" |
-            jq -er '.migration_id'
-          ) &&
-          before="2999-01-01T00:00:00Z" &&
-          snapshot_timestamp_json=$(
-            "${CURL_CMD[@]}" "$url/api/scan/v0/state/acs/snapshot-timestamp?before=$before&migration_id=$migration_id" |
-            jq -e '.record_time'
-          ) &&
-          echo "$snapshot_timestamp_json"
-        ) && exit_code=$? || exit_code=$?
+        scan_event_is_fetched_successfully=$(
+          if
+            migration_id=$(
+              "${CURL_CMD[@]}" "$url/api/scan/v0/migrations/last" |
+              jq -er '.migration_id'
+            ) &&
 
-        [[ $exit_code -ne 0 ]] && scan_last_snapshot_timestamp_json='null'
+            after=$(TZ=UTC0 printf '%(%FT%TZ)T' "$((EPOCHSECONDS - SCAN_THRESHOLD_EVENT))") &&
+
+            events=$(
+              "${CURL_CMD[@]}" \
+                  --compressed \
+                  --json '{"page_size": 1, "after": {"after_migration_id": '"$migration_id"', "after_record_time": "'"$after"'"}}' \
+                  "$url/api/scan/v0/events"
+            ) &&
+
+            echo "$events" | jq -e '.events | length > 0' > /dev/null
+          then
+            echo true
+          else
+            echo false
+          fi
+        )
 
         scan_status=$(
           echo "$scan_response_rounds" |
           jq \
-            --argjson threshold_rounds "$SCAN_THRESHOLD_ROUNDS" \
-            --argjson threshold_snapshot "$SCAN_THRESHOLD_SNAPSHOT" \
             --arg svname "$svname" \
-            --argjson last_snapshot_timestamp "$scan_last_snapshot_timestamp_json" \
+            --argjson threshold_rounds "$SCAN_THRESHOLD_ROUNDS" \
+            --argjson threshold_event "$SCAN_THRESHOLD_EVENT" \
+            --argjson event_is_fetched "$scan_event_is_fetched_successfully" \
             '
               def get_delay($timestamp; $now):
                   (try($timestamp[0:19] + "Z" | ($now - fromdate) | round) // null)
@@ -182,7 +191,6 @@ scan_get_status() {
               now as $now |
               get_round_delay(.open_mining_rounds; $now) as $open_delay |
               get_round_delay(.issuing_mining_rounds; $now) as $issuing_delay |
-              get_delay($last_snapshot_timestamp; $now) as $snapshot_delay |
               [$open_delay, $issuing_delay] as $round_delays |
 
               {
@@ -191,8 +199,7 @@ scan_get_status() {
                 then
                   2 # unreachable
                 elif
-                  $snapshot_delay == null or
-                  $snapshot_delay > $threshold_snapshot or
+                  ($event_is_fetched | not) or
                   ($round_delays | max > $threshold_rounds)
                 then
                   1 # lagging
@@ -261,7 +268,7 @@ main() {
     --argjson mediator_threshold "$MEDIATOR_THRESHOLD" \
     --argjson scan "$scan_status" \
     --argjson scan_threshold_rounds "$SCAN_THRESHOLD_ROUNDS" \
-    --argjson scan_threshold_snapshot "$SCAN_THRESHOLD_SNAPSHOT" \
+    --argjson scan_threshold_event "$SCAN_THRESHOLD_EVENT" \
     --argjson sequencer "$sequencer_status" \
     --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
     '
@@ -269,7 +276,7 @@ main() {
         status: {
           sv:        {nodes: $sv,        description: "Last status report within \($sv_threshold) seconds"},
           mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
-          scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold_rounds) seconds and last snapshot is within \($scan_threshold_snapshot) seconds"},
+          scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold_rounds) seconds and recent event is within \($scan_threshold_event) seconds"},
           sequencer: {nodes: $sequencer, description: "Last acknowledgment within \($sequencer_threshold) seconds"},
         },
         generatedAt: (now | todate),

@@ -36,19 +36,6 @@ export function installPostgres(
   }
   const config = multiValidatorConfig!;
 
-  let hyperdiskMigrationValues = {};
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    hyperdiskSupportConfig.hyperdiskSupport.migrating
-  ) {
-    const { dataSource } = createVolumeSnapshot({
-      resourceName: `pg-data-${xns.logicalName}-${name}-snapshot`,
-      snapshotName: `pg-data-${name}-snapshot`,
-      namespace: xns.logicalName,
-      pvcName: `pg-data-${name}-0`,
-    });
-    hyperdiskMigrationValues = { dataSource };
-  }
   return installSpliceRunbookHelmChart(
     xns,
     name,
@@ -62,7 +49,6 @@ export function installPostgres(
           ? {
               volumeStorageClass: standardStorageClassName,
               pvcTemplateName: 'pg-data-hd',
-              ...hyperdiskMigrationValues,
             }
           : {}),
       },
@@ -72,11 +58,7 @@ export function installPostgres(
     activeVersion,
     {
       dependsOn: [passwordSecret, ...dependsOn],
-      ...((hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-        // during the migration we first delete the stateful set, which keeps the old pvcs, and the recreate with the new pvcs
-        // the stateful sets are immutable so they need to be recreated to force the change of the pvcs
-        hyperdiskSupportConfig.hyperdiskSupport.migrating) ||
-      spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
+      ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
         ? {
             replaceOnChanges: ['*'],
             deleteBeforeReplace: true,
