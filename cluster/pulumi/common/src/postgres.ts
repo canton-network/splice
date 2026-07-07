@@ -118,7 +118,7 @@ export class CloudPostgres
     const databaseInstance = new gcp.sql.DatabaseInstance(
       name,
       {
-        databaseVersion: 'POSTGRES_14',
+        databaseVersion: cloudSqlConfig.databaseVersion,
         // keep always false as this is the terraform provider and cannot be manually removed
         // https://github.com/pulumi/pulumi-gcp/issues/1209
         deletionProtection: false,
@@ -482,6 +482,7 @@ export async function installPostgres(
     existingInstanceName?: string;
     existingSecretName?: string;
     retainDbResourcesOnDelete?: boolean;
+    databaseVersion?: string;
   } = {}
 ): Promise<Postgres> {
   const o = { isActive: true, ...opts };
