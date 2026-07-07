@@ -5,6 +5,24 @@
     "imageName"
   ],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "cometbft": {
+              "type": "object"
+            }
+          },
+          "required": ["cometbft"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "imageName": {
       "type": "string"
     },

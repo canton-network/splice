@@ -13,13 +13,13 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
 import org.apache.pekko.pattern.after
-import org.lfdecentralizedtrust.splice.PekkoRetryingService
+import org.lfdecentralizedtrust.splice.{PekkoRetryingService, PekkoRetryableService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider}
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
-import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
@@ -48,13 +48,15 @@ trait AcsSnapshotBulkStorageWriter {
     * The Flow must emit back the same timestamps as its output on every processed snapshot.
     */
   def processSnapshotsFlow(implicit
-      tc: TraceContext
+      tc: TraceContext,
+      actorSystem: ActorSystem,
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed]
 
 }
 
 class AcsSnapshotBulkStoragePersistentProgress(
-    kvStoreKey: String,
+    latestSnapshotKvStoreKey: String,
+    firstSnapshotKvStoreKey: String,
     kvProvider: ScanKeyValueProvider,
     metric: MetricHandle.Gauge[CantonTimestamp],
     override val loggerFactory: NamedLoggerFactory,
@@ -67,21 +69,33 @@ class AcsSnapshotBulkStoragePersistentProgress(
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Option[TimestampWithMigrationId]] = {
-    kvProvider.store.readValueAndLogOnDecodingFailure(kvStoreKey).value
+    kvProvider.store.readValueAndLogOnDecodingFailure(latestSnapshotKvStoreKey).value
+  }
+
+  def readFirstSnapshotTimestamp(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Option[TimestampWithMigrationId]] = {
+    kvProvider.store.readValueAndLogOnDecodingFailure(firstSnapshotKvStoreKey).value
   }
 
   def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] = {
+
     metric.updateValue(ts.timestamp)
-    kvProvider.store
-      .setValue(kvStoreKey, ts)
-      .map(_ => {
-        logger.info(
-          s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
-        )
-      })
+    for {
+      _ <- kvProvider.store
+        .setValueIfNotExists(firstSnapshotKvStoreKey, ts)
+      _ <- kvProvider.store
+        .setValue(latestSnapshotKvStoreKey, ts)
+        .map(_ => {
+          logger.info(
+            s"Successfully completed processing snapshots from migration ${ts.migrationId}, timestamp ${ts.timestamp}"
+          )
+        })
+    } yield {}
   }
 }
 
@@ -90,12 +104,12 @@ class AcsSnapshotBulkStorage(
     writer: AcsSnapshotBulkStorageWriter,
     val persistentProgress: AcsSnapshotBulkStoragePersistentProgress,
     appConfig: BulkStorageConfig,
-    acsSnapshotStore: AcsSnapshotStore,
-    updateHistory: UpdateHistory,
+    backfillingCompleteGate: Source[Boolean, Cancellable],
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
-    with Spanning {
+    with Spanning
+    with PekkoRetryableService[TimestampWithMigrationId] {
 
   private def getAcsSnapshotTimestampsAfter(
       start: TimestampWithMigrationId
@@ -135,18 +149,6 @@ class AcsSnapshotBulkStorage(
     */
   private def mksrc()(implicit tc: TraceContext): Source[TimestampWithMigrationId, Cancellable] = {
 
-    // Wait for update history to initialize and for history backfilling to complete before starting bulk storage dumps
-    val backfillingCompleteGate =
-      Source
-        .tick(0.seconds, appConfig.snapshotPollingInterval.underlying, ())
-        .mapAsync(1)(_ =>
-          if (updateHistory.isReady)
-            updateHistory.isHistoryBackfilled(acsSnapshotStore.currentMigrationId)
-          else Future.successful(false)
-        )
-        .filter(identity)
-        .take(1)
-
     backfillingCompleteGate.flatMap { _ =>
       Source
         .future(persistentProgress.readLatestProcessedSnapshotTimestamp)
@@ -168,12 +170,12 @@ class AcsSnapshotBulkStorage(
     }
   }
 
-  def asRetryableService(
+  override def asPekkoRetryingService(
       automationConfig: AutomationConfig,
       backoffClock: Clock,
       retryProvider: RetryProvider,
   )(implicit tracer: Tracer): PekkoRetryingService[TimestampWithMigrationId] = {
-    withNewTrace(this.getClass.getSimpleName) { implicit traceContext => _ =>
+    withNewTrace(description) { implicit traceContext => _ =>
       val src = mksrc()
       new PekkoRetryingService(
         src,

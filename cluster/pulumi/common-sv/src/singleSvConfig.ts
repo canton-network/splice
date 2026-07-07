@@ -156,6 +156,7 @@ const SingleSvConfigSchema = z
             retentionPeriod: z.string().optional(),
           })
           .optional(),
+        cantonBft: CantonPruningSchema,
         mediator: CantonPruningSchema,
         participant: CantonPruningSchema,
       })

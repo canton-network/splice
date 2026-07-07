@@ -40,7 +40,6 @@ synchronizers:
     sequencerAddress: "global-domain-SERIAL_ID-sequencer"
     mediatorAddress: "global-domain-SERIAL_ID-mediator"
     sequencerPublicUrl: "https://sequencer-SERIAL_ID.sv.YOUR_HOSTNAME"
-    sequencerAvailabilityDelay: "60 seconds"
     cometBFT:
       enabled: true
       connectionUri: "http://global-domain-SERIAL_ID-cometbft-cometbft-rpc:26657"

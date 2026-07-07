@@ -3,6 +3,30 @@
   "type": "object",
   "required": ["imageName"],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "sv": {
+              "type": "object"
+            },
+            "svWebUi": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            }
+          },
+          "required": ["sv", "svWebUi", "persistence"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

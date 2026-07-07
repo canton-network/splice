@@ -57,3 +57,5 @@ enableReloader: true
 #    clientSecret: ""
 #    scope: ""
 
+#TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
+

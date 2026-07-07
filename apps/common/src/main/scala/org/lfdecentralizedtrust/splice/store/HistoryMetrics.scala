@@ -343,25 +343,49 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
   object BulkStorage {
     private val bulkStoragePrefix: MetricName = prefix :+ "bulk-storage"
 
-    val latestUpdatesSegment: Gauge[CantonTimestamp] =
+    val latestUpdatesSegmentStaging: Gauge[CantonTimestamp] =
       SpliceMetrics.cantonTimestampGauge(
         metricsFactory,
         MetricInfo(
-          name = bulkStoragePrefix :+ "latest-updates-segment",
+          name = bulkStoragePrefix :+ "latest-updates-segment-staging",
           summary =
-            "The end timestamp of the latest segment for which all updates have been dumped to bulk storage",
+            "The end timestamp of the latest segment for which all updates have been dumped to the staging bucket of bulk storage",
           Traffic,
         ),
         initial = CantonTimestamp.MinValue,
       )(metricsContext)
 
-    val latestAcsSnapshot: Gauge[CantonTimestamp] =
+    val latestUpdatesSegmentCommitted: Gauge[CantonTimestamp] =
       SpliceMetrics.cantonTimestampGauge(
         metricsFactory,
         MetricInfo(
-          name = bulkStoragePrefix :+ "latest-acs-snapshot",
+          name = bulkStoragePrefix :+ "latest-updates-segment-committed",
           summary =
-            "The timestamp of the latest ACS snapshot which has been fully dumped to bulk storage",
+            "The end timestamp of the latest segment for which all updates have been dumped to the committed bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latestAcsSnapshotStaging: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-acs-snapshot-staging",
+          summary =
+            "The timestamp of the latest ACS snapshot which has been fully dumped to the staging bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latestAcsSnapshotCommitted: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-acs-snapshot-committed",
+          summary =
+            "The timestamp of the latest ACS snapshot which has been fully dumped to the committed bucket of bulk storage",
           Traffic,
         ),
         initial = CantonTimestamp.MinValue,

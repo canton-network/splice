@@ -2,6 +2,23 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": { "type": "object" },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "validator": { "type": "object" },
+            "ansWebUi": { "type": "object" },
+            "walletWebUi": { "type": "object" },
+            "persistence": { "type": "object" }
+          },
+          "required": ["validator", "ansWebUi", "walletWebUi", "persistence"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

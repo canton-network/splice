@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
 import cats.implicits.catsSyntaxTuple2Semigroupal
+import com.google.protobuf.ByteString
 import cats.syntax.either.*
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.SequencingParameters as ConsoleSequencingParameters
@@ -46,7 +47,11 @@ class ReconcileSequencingParametersTrigger(
       parametersO = configParametersO.map(_.toInternal(synchronizerId.protocolVersion))
       stateO <- participantAdminConnection.lookupSequencingParametersState(synchronizerId.logical)
     } yield {
-      if (stateO.map(_.mapping) != parametersO.map(_.toByteString)) {
+      if (
+        (stateO.flatMap(_.mapping.parameters.payload): Option[ByteString]) != (parametersO.map(
+          _.toByteString
+        ): Option[ByteString])
+      ) {
         Seq(Task(synchronizerId, parametersO))
       } else {
         Seq.empty

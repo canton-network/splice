@@ -23,8 +23,20 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" "splitwell-web-ui") | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- if .Values.securityContexts }}
+      {{- with .Values.securityContexts.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       containers:
       - name: splitwell-web-ui
+        {{- if .Values.securityContexts }}
+        {{- with .Values.securityContexts.containers.splitwellWebUi }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
         image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).splitwell_web_ui) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}

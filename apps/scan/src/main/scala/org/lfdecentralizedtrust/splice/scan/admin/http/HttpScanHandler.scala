@@ -87,7 +87,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{BftSequencerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
@@ -158,7 +158,7 @@ class HttpScanHandler(
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
-    bftSequencers: Seq[(SequencerAdminConnection, BftSequencerConfig)],
+    bftSequencers: Seq[(SequencerAdminConnection, CantonBftPeerConfig)],
     initialRound: String,
     externalTransactionHashThresholdTime: Option[Instant] = None,
     updateHistoryMaxPageSize: Int,
@@ -2572,7 +2572,7 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getAcsSnapshotAtOrBefore(recordTimeTs).map {
+        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
           case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
@@ -2604,7 +2604,7 @@ class HttpScanHandler(
         val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
         val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
         bulkStorage
-          .getUpdatesBetweenDates(
+          .getCommittedUpdatesBetweenDates(
             afterTs,
             upToTs,
             PageLimit.tryCreate(body.pageSize),

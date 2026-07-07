@@ -41,6 +41,27 @@
   "type": "object",
   "required": [ "resources", "nginxImage", "contentType" ],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "nginx": {
+              "type": "object"
+            },
+            "updater": {
+              "type": "object"
+            }
+          },
+          "required": ["nginx", "updater"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

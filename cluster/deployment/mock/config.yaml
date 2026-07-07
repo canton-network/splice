@@ -9,6 +9,10 @@ validator1:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
     retention: "30d"
+  validatorApp:
+    additionalEnvVars:
+      - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+        value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing
@@ -84,8 +88,8 @@ synchronizerMigration:
   active:
     id: 9
     version: 0.3.20
-    cometbft:
-      volumeSize: "42Gi"
+    sequencer:
+      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/release-line-0.3.20"
       repoUrl: https://github.com/canton-network/splice
@@ -283,9 +287,11 @@ infra:
 cluster:
   nodePools:
     apps:
-      nodeType: n2-standard-16
-    hyperdiskApps:
-      nodeType: c4-standard-16
+      nodeType: n4d-standard-16
+      minNodes: 0
+      maxNodes: 1
+    additionalApps:
+    - nodeType: n4-standard-16
       minNodes: 0
       maxNodes: 1
 gha:

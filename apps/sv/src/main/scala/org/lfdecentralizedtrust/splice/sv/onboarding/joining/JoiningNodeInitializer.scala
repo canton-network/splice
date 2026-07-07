@@ -17,12 +17,18 @@ import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionCo
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.sequencing.{GrpcSequencerConnection, SequencerConnections}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{
+  ParticipantId,
+  PartyId,
+  SynchronizerId,
+  TopologyManagerError,
+}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.{HostingParticipant, ParticipantPermission}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
-import io.grpc.Status
+import com.digitalasset.base.error.utils.ErrorDetails
+import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
@@ -169,14 +175,14 @@ class JoiningNodeInitializer(
       )
     )
     for {
-      (dsoPartyId, _) <- (
+      (dsoPartyId, registeredGlobalSync) <- (
         // If we're not onboarded yet, this waits for the sponsoring SV
         getDsoPartyId(initConnection),
         // Register domain with manualConnect=true. Confusingly, this still connects the first time.
         // However, it won't connect if we crash and get here again which is what we're really after.
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
-        domainConfigO.traverse_(
+        domainConfigO.traverse(
           participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
@@ -189,6 +195,7 @@ class JoiningNodeInitializer(
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
         decentralizedSynchronizerId,
+        registeredGlobalSync,
         participantId,
       )
       _ <-
@@ -197,6 +204,7 @@ class JoiningNodeInitializer(
           reconnectSynchronizersIfDsoPartyMigrationSafe(
             decentralizedSynchronizerId,
             dsoPartyId,
+            tolerateUninitializedStore = registeredGlobalSync.exists(_.config.manualConnect),
           )
         } else Future.unit
       svParty <- SetupUtil.setupSvParty(
@@ -301,6 +309,7 @@ class JoiningNodeInitializer(
             _ <- reconnectSynchronizersIfDsoPartyMigrationSafe(
               decentralizedSynchronizerId,
               dsoPartyId,
+              tolerateUninitializedStore = false,
             )
             _ <- svStore.domains.waitForDomainConnection(config.domains.global.alias)
             _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
@@ -547,7 +556,23 @@ class JoiningNodeInitializer(
   private def reconnectSynchronizersIfDsoPartyMigrationSafe(
       decentralizedSynchronizerId: SynchronizerId,
       dsoParty: PartyId,
+      tolerateUninitializedStore: Boolean,
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
+    // When the synchronizer is registered with manualConnect = true, the participant may not yet
+    // have initialized its topology store for that synchronizer. In that case listing the
+    // party-to-participant mappings fails with a TOPOLOGY_STORE_NOT_INITIALIZED / TOPOLOGY_STORE_UNKNOWN
+    // error, which we treat as an empty list instead of failing.
+    def recoverEmptyIfStoreNotInitialized[T]: PartialFunction[Throwable, Seq[T]] = {
+      case ex: StatusRuntimeException
+          if tolerateUninitializedStore &&
+            (ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreNotInitialized) ||
+              ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreUnknown)) =>
+        logger.info(
+          s"Topology store for $decentralizedSynchronizerId is not yet initialized, " +
+            "treating the party-to-participant mappings as empty."
+        )
+        Seq.empty
+    }
     retryProvider.retry(
       RetryFor.ClientCalls,
       "reconnect_all_domains",
@@ -556,12 +581,14 @@ class JoiningNodeInitializer(
         participantId <- participantAdminConnection.getParticipantId()
         // Check if the participant hosts the DSO party. If so,
         // the dsoParty is hosted on the participant we can proceed to all domains reconnect
-        dsoPartyToParticipantMapping <- participantAdminConnection.listPartyToParticipant(
-          store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId).some,
-          filterParty = dsoParty.filterString,
-          filterParticipant = participantId.filterString,
-          topologyTransactionType = TopologyTransactionType.AuthorizedState,
-        )
+        dsoPartyToParticipantMapping <- participantAdminConnection
+          .listPartyToParticipant(
+            store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId).some,
+            filterParty = dsoParty.filterString,
+            filterParticipant = participantId.filterString,
+            topologyTransactionType = TopologyTransactionType.AuthorizedState,
+          )
+          .recover(recoverEmptyIfStoreNotInitialized)
         // Check if he participant has a proposal for hosting the DSO party. If so,
         // we are in the middle of an DSO party migration so don't reconnect to the domain.
         activeDsoPartyToParticipantProposals <- participantAdminConnection
@@ -571,6 +598,7 @@ class JoiningNodeInitializer(
             filterParticipant = participantId.filterString,
             topologyTransactionType = TopologyTransactionType.AllProposals,
           )
+          .recover(recoverEmptyIfStoreNotInitialized)
         _ <-
           if (
             dsoPartyToParticipantMapping.nonEmpty || activeDsoPartyToParticipantProposals.isEmpty
