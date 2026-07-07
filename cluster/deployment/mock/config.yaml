@@ -9,6 +9,10 @@ validator1:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
     retention: "30d"
+  validatorApp:
+    additionalEnvVars:
+      - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+        value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing
