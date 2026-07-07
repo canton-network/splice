@@ -66,7 +66,7 @@ on:
         description: "The image to use for PostgreSQL"
         required: false
         type: string
-        default: "postgres:17"
+        default: "postgres:18"
       postgres_init_args:
         description: "Additional arguments to pass to Postgres on initialization via POSTGRES_INITDB_ARGS"
         required: false

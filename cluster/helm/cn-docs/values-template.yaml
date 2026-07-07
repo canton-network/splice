@@ -24,3 +24,17 @@ service:
   http:
     port: 80
 
+
+securityContexts:
+  pod:
+    security_context_profile: pod_security_context
+  containers:
+    docs:
+      security_context_profile: ui_security_context
+      capabilities:
+        drop:
+          - ALL
+        add:
+          - NET_BIND_SERVICE # Added so the application can bind to 443
+    gcsProxy:
+      security_context_profile: app_security_context

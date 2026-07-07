@@ -699,6 +699,124 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v2/wallet/token-standard/transfers:
+    # get is in v0
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "createTokenStandardTransferV2"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateTokenStandardTransferRequest"
+      responses:
+        "200":
+          description: The transfer has been created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "400":
+          description: |
+            Invalid request, check the error response for details.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            The submitter’s wallet could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "409":
+          description:
+            A transfer with the same tracking id has been created.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "429":
+          description:
+            A transfer with the same tracking id is currently being processed,
+            which may or may not succeed. Retry submitting the request with exponential
+            back-off.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/reject:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "rejectTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/accept:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "acceptTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v2/wallet/token-standard/transfers/{contract_id}/withdraw:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "withdrawTokenStandardTransferV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferInstructionResultResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/wallet/token-standard/allocation-requests:
     get:
       tags: [ wallet ]
@@ -722,6 +840,42 @@ paths:
       tags: [ wallet ]
       x-jvm-package: wallet
       operationId: "rejectAllocationRequest"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The AllocationRequest has been rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChoiceExecutionMetadata"
+        "404":
+          description: |
+            The AllocationRequest or the submitter’s wallet could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "429":
+          description:
+            A reject for the AllocationRequest is currently being processed, which may or may not succeed.
+            Retry submitting the request with exponential back-off.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v2/wallet/token-standard/allocation-requests/{contract_id}/reject:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "rejectAllocationRequestV2"
       parameters:
         - in: path
           name: contract_id
@@ -835,6 +989,57 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v2/allocations: # skipping v1 on purpose to mirror Token Standard version
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "allocateAmuletV2"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AllocateAmuletV2Request"
+      responses:
+        "200":
+          description: The AmuletAllocation has been created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllocateAmuletV2Response"
+        "400":
+          description: |
+            Invalid request, check the error response for details.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            The submitter’s wallet could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "409":
+          description:
+            An allocation with the same tracking id has been created.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "429":
+          description:
+            An allocation with the same tracking id is currently being processed,
+            which may or may not succeed. Retry submitting the request with exponential
+            back-off.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/allocations/{contract_id}/withdraw:
     post:
       tags: [ wallet ]
@@ -853,6 +1058,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AmuletAllocationWithdrawResult"
+        "404":
+          description: |
+            The allocation or the submitter’s wallet could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "429":
+          description:
+            A withdraw for the allocation is currently being processed, which may or may not succeed.
+            Retry submitting the request with exponential back-off.
+          content:
+            application/json:
+              schema:
+                $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v2/allocations/{contract_id}/withdraw:
+    post:
+      tags: [ wallet ]
+      x-jvm-package: wallet
+      operationId: "withdrawAmuletAllocationV2"
+      parameters:
+        - in: path
+          name: contract_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The AmuletAllocation has been withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AmuletAllocationV2WithdrawResult"
         "404":
           description: |
             The allocation or the submitter’s wallet could not be found.
@@ -1732,7 +1973,98 @@ components:
               additionalProperties:
                 type: string
 
+    AllocateAmuletV2Request:
+      type: object
+      required:
+        - settlement
+        - transfer_leg_sides
+        - committed
+      properties:
+        settlement:
+          type: object
+          required:
+            - executors
+            - settlement_ref
+          properties:
+            executors:
+              type: array
+              items:
+                type: string
+            settlement_ref:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                cid:
+                  type: string
+            settlement_deadline:
+              type: integer
+              format: int64
+            meta:
+              type: object
+              additionalProperties:
+                type: string
+        transfer_leg_sides:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransferLegSide"
+        next_iteration_funding:
+          type: object
+          additionalProperties:
+            description: "BigDecimal amount, encoded as string to prevent precision loss"
+            type: string
+        committed:
+          type: boolean
+          default: false
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+
+    TransferLegSide:
+      type: object
+      required:
+        - transfer_leg_id
+        - side
+        - otherside
+        - amount
+      properties:
+        transfer_leg_id:
+          type: string
+        side:
+          type: string
+          enum: [ SENDERSIDE, RECEIVERSIDE ]
+        otherside:
+          description: A party id
+          type: string
+        amount:
+          type: string
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+
     AllocateAmuletResponse:
+      type: object
+      required:
+        - output
+        - sender_change_cids
+        - meta
+      properties:
+        output:
+          "$ref": "#/components/schemas/AllocationInstructionResultOutput"
+        sender_change_cids:
+          type: array
+          items:
+            type: string
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+
+    AllocateAmuletV2Response:
       type: object
       required:
         - output
@@ -1781,7 +2113,8 @@ components:
     ListAllocationsResponse:
       type: object
       description:
-        Includes all Allocation views where the user is a sender of one of the transferLegs and where
+        Includes all AmuletAllocation views (for both Token Standard v1 and v2)
+        where the user is a sender of one of the transferLegs and where
         the involved instrument's admin is the DSO party.
       required:
         - allocations
@@ -1789,10 +2122,13 @@ components:
         allocations:
           type: array
           items:
-            $ref: "#/components/schemas/Allocation"
+            $ref: "#/components/schemas/AmuletAllocation"
 
-    Allocation:
+    AmuletAllocation:
       type: object
+      description:
+        An AmuletAllocation contract, either V1 or V2.
+        You can distinguish the type of the contract by checking the template_id field.
       required:
         - contract
       properties:
@@ -1814,6 +2150,10 @@ components:
 
     AllocationRequest:
       type: object
+      description:
+        A contract implementing the Token Standard (V1 or V2) interface AllocationRequest.
+        You can distinguish the type of the contract by checking the template_id field,
+        which will contain the template_id of the corresponding (v1,v2) AllocationRequest interface.
       required:
         - contract
       properties:
@@ -1830,6 +2170,24 @@ components:
           type: array
           items:
             type: string
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+
+    AmuletAllocationV2WithdrawResult:
+      type: object
+      required:
+        - authorizer_holding_cids
+        - meta
+      properties:
+        authorizer_holding_cids:
+          description: New holdings created for the authorizer as part of the settlement keyed by their `instrumentId.id`.
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
         meta:
           type: object
           additionalProperties:

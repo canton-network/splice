@@ -778,7 +778,12 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMetaForTesting(2, 0, 1000000L, 10L, None)
-        result <- runEnsureMeta(store, (2000000L, 20L))
+        result <- loggerFactory.assertLogs(
+          runEnsureMeta(store, (2000000L, 20L)),
+          _.errorMessage should include(
+            "App activity ingestion version downgrade detected"
+          ),
+        )
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe DowngradeDetected(1, 0, 2, 0)
@@ -1000,7 +1005,7 @@ class DbAppActivityRecordStoreTest
   ): Future[MetaCheckResult] =
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(
-        store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO),
+        store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO, exitOnDowngrade = false),
         "test.ensureMeta",
       )(implicitly, implicitly, _ => false)
     )

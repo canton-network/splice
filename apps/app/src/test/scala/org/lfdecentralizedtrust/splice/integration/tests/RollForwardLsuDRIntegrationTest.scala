@@ -140,7 +140,7 @@ class RollForwardLsuDRIntegrationTest
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v34,
+                          ProtocolVersion.v35,
                           exportTimes = Some(
                             SvOnboardingConfig.RollForwardLsuTimestampConfig(
                               topologyExportTime = LsuRollForwardTimestamp.TimestampFromFile(

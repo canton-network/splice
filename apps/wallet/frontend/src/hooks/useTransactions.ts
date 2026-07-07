@@ -4,12 +4,14 @@ import { InfiniteData, useInfiniteQuery, UseInfiniteQueryResult } from '@tanstac
 
 import { useWalletClient } from '../contexts/WalletServiceContext';
 import { Transaction } from '../models/models';
+import { usePrimaryParty } from './usePrimaryParty';
 
 export const useTransactions: () => UseInfiniteQueryResult<InfiniteData<Transaction[]>> = () => {
   const { listTransactions } = useWalletClient();
+  const primaryPartyId = usePrimaryParty();
 
   return useInfiniteQuery({
-    queryKey: ['transactions'],
+    queryKey: ['transactions', primaryPartyId],
     queryFn: async ({ pageParam }) => {
       const txs = await listTransactions(pageParam === '' ? undefined : pageParam);
       // react-query requires us to return undefined here to show that no more data is available

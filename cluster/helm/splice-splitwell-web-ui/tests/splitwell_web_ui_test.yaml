@@ -124,3 +124,60 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-splitwell-ui-sa"
+
+  - it: "omits security contexts by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    set:
+      auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
+      auth.audience: "mock_audience"
+      spliceInstanceNames.networkName: "MockNet"
+      spliceInstanceNames.networkFaviconUrl: "https://mock.net/favicon.ico"
+      spliceInstanceNames.amuletName: "Mocklet"
+      spliceInstanceNames.amuletNameAcronym: "MCK"
+      spliceInstanceNames.nameServiceName: "Mock Name Service"
+      spliceInstanceNames.nameServiceNameAcronym: "MNS"
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: "allows overriding security contexts via values"
+    set:
+      auth.jwksUrl: "https://mock.com/.well-known/jwks.json"
+      auth.audience: "mock_audience"
+      spliceInstanceNames.networkName: "MockNet"
+      spliceInstanceNames.networkFaviconUrl: "https://mock.net/favicon.ico"
+      spliceInstanceNames.amuletName: "Mocklet"
+      spliceInstanceNames.amuletNameAcronym: "MCK"
+      spliceInstanceNames.nameServiceName: "Mock Name Service"
+      spliceInstanceNames.nameServiceNameAcronym: "MNS"
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        containers:
+          splitwellWebUi:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 5000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: true

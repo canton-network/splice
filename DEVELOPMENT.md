@@ -463,20 +463,24 @@ interfaces. Therefore, a released package that contains interfaces cannot
 be further developed like we do for other Daml code. Development guidelines
 are thus:
 
-1. Develop the API on a separate branch, or if it's a small one, on main is
+1. Develop the API on a separate branch, or if it's a small one, on `main` is
    ok, as long as you are certain that all your changes will land before
    the coming release. Until the code is released, you can use the standard
    daml build tooling in sbt, etc.
-1. Once a release is cut, the Daml interface is now fixed, and it should be
+2. Once a release is cut, the Daml interface is now fixed, and it should be
    excluded from compilation, so that e.g. a Daml compiler version bump would not
    introduce new Dar versions. To do so:
 
-    a. In build.sbt, exclude your package from compilation by setting `Compile / damlPrebuiltDar`
+    a. Generate the docs (`docs/gen-daml-docs.sh`) and commit the `.rst` files into
+       the `docs/` subdirectory of the package. The generated `.rst` files do not
+       include a license header, so prepend the standard `.rst` copyright header to
+       each or `headerCheck` will fail.
+
+    b. In `build.sbt`, exclude your package from compilation by setting `Compile / damlPrebuiltDar`
        to the committed dar (typically under daml/dars).
 
-    b. Commit the generated docs for your package in a `docs` subdirectory in the package directory
+    c. Add your package to NON_COMPILED_DAML_PROJECTS in `gen-daml-docs.sh`
 
-    c. Add your package to NON_COMPILED_DAML_PROJECTS in gen-daml-docs.sh
 
 # Troubleshooting
 

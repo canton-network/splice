@@ -1,7 +1,7 @@
-sdk-version: 3.4.11
+sdk-version: 3.5.2
 name: splice-amulet-name-service-test
 source: daml
-version: 0.1.25
+version: 0.1.26
 dependencies:
   - daml-prim
   - daml-stdlib
@@ -13,6 +13,8 @@ data-dependencies:
 - ../splice-util/.daml/dist/splice-util-current.dar
 - ../splice-wallet-payments/.daml/dist/splice-wallet-payments-current.dar
 - ../dars/splice-api-featured-app-v1-1.0.0.dar
+- ../../token-standard/splice-token-standard-utils/.daml/dist/splice-token-standard-utils-current.dar
+- ../../token-standard/splice-token-standard-v2-test/.daml/dist/splice-token-standard-v2-test-current.dar
 build-options:
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches

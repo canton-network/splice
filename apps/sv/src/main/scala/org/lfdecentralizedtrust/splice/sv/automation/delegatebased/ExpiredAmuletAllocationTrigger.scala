@@ -161,7 +161,6 @@ class ExpiredAmuletAllocationTrigger(
     )
   ] = {
     val sender = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.sender)
-    val receiver = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.receiver)
     val executor = PartyId.tryFromProtoPrimitive(contract.payload.allocation.settlement.executor)
 
     for {
@@ -176,7 +175,7 @@ class ExpiredAmuletAllocationTrigger(
           ),
           java.lang.Boolean.valueOf(lockedAmuletExists.isDefined),
         )
-      (input, Set(sender, receiver, executor))
+      (input, Set(sender, executor))
     }
   }
 }

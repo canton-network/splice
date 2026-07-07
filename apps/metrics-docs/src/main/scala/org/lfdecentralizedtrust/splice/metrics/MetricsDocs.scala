@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SequencerPruningMe
 import org.lfdecentralizedtrust.splice.sv.automation.{
   AmuletPriceMetricsTrigger,
   ReportSvStatusMetricsExportTrigger,
+  RewardMetricsTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreMetrics}
@@ -110,6 +111,7 @@ object MetricsDocs {
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
+    new RewardMetricsTrigger.RewardMetrics(generator)
     new ProcessRewardsTriggerBase.ProcessRewardsMetrics(generator, true)
     new CalculateRewardsTriggerBase.CalculateRewardsMetrics(generator, true)
     new SummarizingMiningRoundTrigger.SummarizingMiningRoundMetrics(generator)

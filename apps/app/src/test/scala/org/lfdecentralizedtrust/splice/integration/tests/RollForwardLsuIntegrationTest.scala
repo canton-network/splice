@@ -107,7 +107,7 @@ class RollForwardLsuIntegrationTest
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v34,
+                          ProtocolVersion.v35,
                           exportTimes = None,
                         )
                         .some
@@ -201,7 +201,7 @@ class RollForwardLsuIntegrationTest
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
     val successorPsid = decentralizedSynchronizerPSId.copy(
       serial = newSynchronizerSerial,
-      protocolVersion = ProtocolVersion.v34,
+      protocolVersion = ProtocolVersion.v35,
     )
     val topologyFreezeTime = CantonTimestamp.now()
     val upgradeTime = CantonTimestamp.now().plusSeconds(60)

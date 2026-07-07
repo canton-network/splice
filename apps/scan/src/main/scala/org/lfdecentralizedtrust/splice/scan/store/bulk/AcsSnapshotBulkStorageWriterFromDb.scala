@@ -17,6 +17,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import cats.data.OptionT
 import cats.implicits.*
 import org.apache.pekko.NotUsed
+import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
 
 class AcsSnapshotBulkStorageWriterFromDb(
@@ -53,7 +54,8 @@ class AcsSnapshotBulkStorageWriterFromDb(
   }
 
   override def processSnapshotsFlow(implicit
-      tc: TraceContext
+      tc: TraceContext,
+      actorSystem: ActorSystem,
   ): Flow[TimestampWithMigrationId, TimestampWithMigrationId, NotUsed] = {
     SingleAcsSnapshotBulkStorage
       .asFlow(

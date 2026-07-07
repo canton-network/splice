@@ -3,7 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.sv.config
 
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.BlacklistLeaderSelectionPolicyConfig
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
+  BlacklistLeaderSelectionPolicyConfig,
+  SequencingParameters,
+}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
@@ -455,7 +458,14 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
-    bftSequencingParameters: Option[BftSequencingParameters],
+    cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
+      BftSequencingParameters(
+        pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+        segmentLength = SequencingParameters.DefaultSegmentLength.length,
+        blacklistLeaderSelectionPolicyConfig =
+          SequencingParameters.DefaultLeaderSelectionPolicyConfig,
+      )
+    ),
     // Set to false to disable the DB-level exclusive lock that prevents two SV instances
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
@@ -552,8 +562,8 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
-    isBftSequencer: Boolean = false,
-    dabftPruning: Option[PruningConfig] = Some(
+    isCantonBftSequencer: Boolean = false,
+    cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
         maxDuration = PositiveDurationSeconds.ofMinutes(5),
@@ -599,7 +609,7 @@ final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
     cometBftConfig: Option[SvCometBftConfig] = None,
-    protocolVersion: ProtocolVersion = ProtocolVersion.v34,
+    protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),

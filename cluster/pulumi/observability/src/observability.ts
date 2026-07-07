@@ -12,6 +12,7 @@ import {
   clusterProdLike,
   commandScriptPath,
   createVolumeSnapshot,
+  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
   GrafanaKeys,
@@ -106,7 +107,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   const namespaceName = namespace.logicalName;
   const postgres = installPostgres(namespace);
   const adminPassword = grafanaKeysFromSecret().adminPassword;
-  const migrationSnapshots = getVolumeSnapshotsForHyperdiskMigration(namespaceName);
   const prometheusStack = new k8s.helm.v3.Release(
     'observability-metrics',
     {
@@ -206,7 +206,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: '5Gi',
                     },
                   },
-                  ...(migrationSnapshots.alertManager ? migrationSnapshots.alertManager : {}),
                 },
               },
             },
@@ -268,7 +267,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: prometheusConfig.storageSize,
                     },
                   },
-                  ...(migrationSnapshots.prometheus ? migrationSnapshots.prometheus : {}),
                 },
               },
             },
@@ -394,7 +392,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             type: 'Recreate',
           },
           persistence: {
-            enabled: !hyperdiskSupportConfig.hyperdiskSupport.migratingInfra,
+            enabled: true,
             type: 'pvc',
             accessModes: ['ReadWriteOnce'],
             size: '5Gi',
@@ -747,22 +745,22 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   }
   const bareFilter = matchers.join(', ');
   const filter = bareFilter ? `, ${bareFilter}` : '';
-  return (
-    alert
-      // Replace the `_BARE` placeholder first since `$SCAN_DISAGREEMENT_FILTER`
-      // is a prefix of `$SCAN_DISAGREEMENT_FILTER_BARE`.
-      .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
-      .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
-      .replaceAll(
-        '$SCAN_DISAGREEMENT_RATE_THRESHOLD_PERCENT',
-        (config.disagreementRateThreshold * 100).toString()
-      )
-      .replaceAll('$SCAN_DISAGREEMENT_RATE_THRESHOLD', config.disagreementRateThreshold.toString())
-      .replaceAll(
-        '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD',
-        config.successfulDisagreementThreshold.toString()
-      )
-  );
+  const connectionMatchers: string[] = [];
+  if (config.excludedConnections.length > 0) {
+    connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const connectionBareFilter = connectionMatchers.join(', ');
+  const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
+  return alert
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER_BARE', connectionBareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER', connectionFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+    .replaceAll(
+      '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD_PERCENT',
+      (config.alertThreshold * 100).toString()
+    )
+    .replaceAll('$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD', config.alertThreshold.toString());
 }
 
 function substituteDsoMissedConfirmationsAlerts(alert: string): string {
@@ -791,6 +789,8 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .concat(standardSvConfigsBasic)
     .map(sv => sv.sweep!)
     .filter(e => e != undefined);
+  const cantonBftEnabled =
+    DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
   const cometbftPruningHighestBlockRetain = allSvsConfiguration
     .map(sv => sv.pruning?.cometbft?.retainBlocks)
     .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
@@ -871,19 +871,25 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
               .replaceAll('$NODATA', loadTesterConfig?.enable ? 'Alerting' : 'OK'),
-            'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
-              .replaceAll(
-                '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
-                monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
-              )
-              .replaceAll(
-                '$COMETBFT_PRUNING_DISABLED',
-                (cometbftPruningHighestBlockRetain === undefined).toString()
-              )
-              .replaceAll(
-                '$COMETBFT_RETAIN_BLOCKS',
-                String((cometbftPruningHighestBlockRetain || 0) * 1.05)
-              ),
+            ...(cantonBftEnabled
+              ? {
+                  'cometbft_deleted_alerts.yaml': readGrafanaAlertingFile('cometbft_deleted.yaml'),
+                }
+              : {
+                  'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
+                    .replaceAll(
+                      '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
+                      monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_PRUNING_DISABLED',
+                      (cometbftPruningHighestBlockRetain === undefined).toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_RETAIN_BLOCKS',
+                      String((cometbftPruningHighestBlockRetain || 0) * 1.05)
+                    ),
+                }),
             'automation_alerts.yaml': readGrafanaAlertingFile('automation_alerts.yaml')
               .replaceAll(
                 '$CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
@@ -983,6 +989,11 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
+            ...(cantonBftEnabled
+              ? {
+                  'cantonbft_alerts.yaml': readGrafanaAlertingFile('cantonbft_alerts.yaml'),
+                }
+              : {}),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
             'templates.yaml': substituteSlackNotificationTemplate(
               readGrafanaAlertingFile('templates.yaml')
@@ -1173,34 +1184,4 @@ function installPostgres(namespace: ExactNamespace): SplicePostgres {
     undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
-}
-
-function getVolumeSnapshotsForHyperdiskMigration(namespaceName: string) {
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra &&
-    hyperdiskSupportConfig.hyperdiskSupport.migratingInfra
-  ) {
-    const { dataSource: prometheusDataSource } = createVolumeSnapshot({
-      resourceName: `prometheus-hd-migration-snapshot`,
-      snapshotName: `prometheus-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `prometheus-prometheus-prometheus-db-prometheus-prometheus-prometheus-0`,
-    });
-    const { dataSource: alertManagerDataSource } = createVolumeSnapshot({
-      resourceName: `alertmanager-hd-migration-snapshot`,
-      snapshotName: `alertmanager-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `alertmanager-prometheus-alertmanager-db-alertmanager-prometheus-alertmanager-0`,
-    });
-    return {
-      prometheus: {
-        dataSource: prometheusDataSource,
-      },
-      alertManager: {
-        dataSource: alertManagerDataSource,
-      },
-    };
-  } else {
-    return {};
-  }
 }

@@ -287,9 +287,6 @@
       "auth0Client": {},
       "decentralizedSynchronizerUpgradeConfig": {
         "active": {
-          "cometbft": {
-            "volumeSize": "42Gi"
-          },
           "id": 9,
           "releaseReference": {
             "deploymentDir": "cluster/deployment",
@@ -303,7 +300,7 @@
           },
           "sequencer": {
             "dedicatedBftSequencerDb": true,
-            "enableBftSequencer": false
+            "enableBftSequencer": true
           },
           "version": {
             "type": "remote",
@@ -2853,6 +2850,9 @@
         },
         "synchronizers": {
           "current": {
+            "cantonBft": {
+              "p2pUrl": "https://sequencer-p2p-9.sv-2.mock.global.canton.network.digitalasset.com"
+            },
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
@@ -2861,7 +2861,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
@@ -2903,6 +2903,10 @@
             {
               "name": "ADDITIONAL_CONFIG_MEDIATOR_PRUNING",
               "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.mediator.pruning {\n                    cron = \"0 0 * * *\"\n                    max-duration = \"30m\"\n                    retention = \"7d\"\n                  }"
+            },
+            {
+              "name": "ADDITIONAL_CONFIG_CANTON_BFT_PRUNING",
+              "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.canton-bft-pruning {\n                    cron = \"0 /10 * * * ?\"\n                    max-duration = \"5m\"\n                    retention = \"15 days\"\n                  }"
             },
             {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
@@ -3107,10 +3111,7 @@
               }
             ],
             "current": {
-              "cometBFT": {
-                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
-                "enabled": true
-              },
+              "enableBftSequencer": true,
               "mediatorAddress": "global-domain-9-mediator",
               "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {
@@ -3967,6 +3968,9 @@
         "sponsorScanUrl": "http://scan-app.sv-1:5012",
         "synchronizers": {
           "current": {
+            "cantonBft": {
+              "p2pUrl": "https://sequencer-p2p-9.sv-1.mock.global.canton.network.digitalasset.com"
+            },
             "mediator": "global-domain-9-mediator",
             "sequencer": "global-domain-9-sequencer"
           },
@@ -3975,7 +3979,7 @@
             "sequencer": "global-domain-8-sequencer"
           },
           "successor": {
-            "bftSequencerConfig": {
+            "cantonBft": {
               "p2pUrl": "https://sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com"
             },
             "mediator": "global-domain-10-mediator",
@@ -4021,6 +4025,10 @@
             {
               "name": "ADDITIONAL_CONFIG_MEDIATOR_PRUNING",
               "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.mediator.pruning {\n                    cron = \"0 0 * * *\"\n                    max-duration = \"30m\"\n                    retention = \"7d\"\n                  }"
+            },
+            {
+              "name": "ADDITIONAL_CONFIG_CANTON_BFT_PRUNING",
+              "value": "canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.canton-bft-pruning {\n                    cron = \"0 /10 * * * ?\"\n                    max-duration = \"5m\"\n                    retention = \"15 days\"\n                  }"
             },
             {
               "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
@@ -4186,11 +4194,7 @@
               }
             ],
             "current": {
-              "cometBFT": {
-                "connectionUri": "http://global-domain-9-cometbft-cometbft-rpc:26657",
-                "enabled": true,
-                "externalGovernanceKey": true
-              },
+              "enableBftSequencer": true,
               "mediatorAddress": "global-domain-9-mediator",
               "sequencerAddress": "global-domain-9-sequencer",
               "sequencerPruningConfig": {

@@ -108,9 +108,15 @@ createExternalPartySetupProposal app validator user expiry inputs = do
   -- initial pre-approval contract to enable receiving amulets for the external party.
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
   context <- getPaymentTransferContext app validator
+  let reason = "create ExternalPartySetupProposal"
+  let (reasons, txKind) = if null inputs then ([], None) else
+        ( [(validator.primaryParty, ["split for " <> reason, reason])]
+        , Some TxKind_Burn
+        )
   AmuletRules_CreateExternalPartySetupProposalResult{..} <-
-    (if null inputs then identity else checkTxMetadata app TxKind_Burn validator.primaryParty) $
-    submit (actAs validator.primaryParty <> readAs app.dso) $ exerciseCmd amuletRulesCid AmuletRules_CreateExternalPartySetupProposal with
+    checkTxHistoryV2Reasons reasons $
+    checkTxMetadataOpt app txKind validator.primaryParty $
+    submitResultAndTree (actAs validator.primaryParty <> readAs app.dso) $ exerciseCmd amuletRulesCid AmuletRules_CreateExternalPartySetupProposal with
       context = context
       inputs = map InputAmulet inputs
       user

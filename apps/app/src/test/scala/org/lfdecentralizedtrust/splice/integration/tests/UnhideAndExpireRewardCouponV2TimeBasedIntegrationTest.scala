@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
@@ -20,6 +21,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources, RetryFor}
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -181,6 +183,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           aliceCoupons.filter(_.payload.providerIsObserver) shouldBe empty
           bobUnassignedCoupons.filter(_.payload.providerIsObserver) should not be empty
           bobUnassignedCoupons.filterNot(_.payload.providerIsObserver) shouldBe empty
+          hiddenCouponsMetricValue(aliceParty) shouldBe 1L
         }
       }
 
@@ -471,6 +474,18 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         Some(decentralizedSynchronizerId),
       )
       .flatMap(_.packageReference.map(ref => PackageVersion.assertFromString(ref.packageVersion)))
+
+  private def hiddenCouponsMetricValue(
+      party: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Long = {
+    val name = s"$MetricsPrefix.reward_coupons_v2.hidden_coupons"
+    val attributes = Map("party" -> party.toProtoPrimitive)
+    sv1Backend.metrics.list(name, attributes).get(name) match {
+      case None => 0L
+      case Some(_) =>
+        sv1Backend.metrics.get(name, attributes).select[MetricValue.LongPoint].value.value
+    }
+  }
 
   private def assertOldestOpenRound(
       expected: Long

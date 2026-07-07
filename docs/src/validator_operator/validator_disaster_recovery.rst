@@ -400,7 +400,7 @@ then submit it through the synchronizer.
      topologyTransaction,
      NonEmpty(Set, SingleTransactionSignature(topologyTransaction.hash, signature): TopologyTransactionSignature),
      isProposal = false,
-     ProtocolVersion.v34,
+     ProtocolVersion.v35,
    )
    val topologyTxSignedByBoth = participant.topology.transactions.sign(
      topologyTxSignedByParty,

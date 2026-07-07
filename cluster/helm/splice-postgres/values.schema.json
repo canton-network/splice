@@ -3,6 +3,24 @@
   "type": "object",
   "required": ["db", "persistence", "imageName"],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "postgres": {
+              "type": "object"
+            }
+          },
+          "required": ["postgres"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
     "serviceAccountName": {
       "type": "string"
     },

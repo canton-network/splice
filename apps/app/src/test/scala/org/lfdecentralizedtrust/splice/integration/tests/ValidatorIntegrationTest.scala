@@ -28,6 +28,7 @@ import org.slf4j.event.Level
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.{Random, Try}
+import scala.jdk.CollectionConverters.*
 
 class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment with WalletTestUtil {
 
@@ -702,6 +703,23 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     val relevantHeaders = response.headers.filter(h => h.is("traceparent"))
     // ...and SHOULD send the header name in lowercase.
     relevantHeaders.loneElement shouldBe RawHeader("traceparent", traceparentValue)
+  }
+
+  "upload splice-util-token-standard-wallet by default" in { implicit env =>
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    Seq(sv1ValidatorBackend, aliceValidatorBackend).foreach { validatorBackend =>
+      val party = validatorBackend.getValidatorPartyId()
+      // would throw an exception if not uploaded
+      validatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitJava(
+          Seq(party),
+          new org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.BatchingUtility(
+            party.toProtoPrimitive
+          ).create().commands().asScala.toSeq,
+        )
+    }
   }
 
 }

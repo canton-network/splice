@@ -4,10 +4,20 @@ sequencer:
     port: 5432
     secretName: sequencer-pg-secret
     databaseName: sequencer_SERIAL_ID
+  # Disable when using CantonBFT instead of CometBFT
   driver:
     type: "cometbft"
     host: "global-domain-SERIAL_ID-cometbft-cometbft-rpc"
     port: 26657
+  # Enable when using CantonBFT instead of CometBFT
+  # driver:
+  #   type: "cantonbft"
+  #   externalAddress: "sequencer-p2p-15.SERIAL_ID.sv.YOUR_HOSTNAME"
+  #   externalPort: 443
+  #   persistence:
+  #     databaseName: sequencer_SERIAL_ID_cantonbft
+  #     host: sequencer-cantonbft-pg
+  #     secretName: sequencer-cantonbft-secret
 mediator:
   persistence:
     # replace SERIAL_ID with the current serial ID of the global synchronizer
