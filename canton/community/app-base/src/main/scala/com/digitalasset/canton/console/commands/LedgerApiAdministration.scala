@@ -133,7 +133,7 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
   implicit protected[canton] lazy val executionContext: ExecutionContext =
     consoleEnvironment.environment.executionContext
 
-  implicit protected val consoleEnvironment: ConsoleEnvironment
+  implicit val consoleEnvironment: ConsoleEnvironment
 
   protected val name: String
 
@@ -164,14 +164,14 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
       )
     )
 
-  private[canton] def optionallyAwait[Tx](
+  def optionallyAwait[Tx](
       tx: Tx,
       txId: String,
       txSynchronizerId: String,
       optTimeout: Option[config.NonNegativeDuration],
   ): Tx
 
-  private def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
+  def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
 
   protected def defaultLimit: PositiveInt =
     consoleEnvironment.environment.config.parameters.console.defaultLimit
@@ -3643,7 +3643,7 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
 trait LedgerApiAdministration extends BaseLedgerApiAdministration {
   this: LedgerApiCommandRunner & AdminCommandRunner & NamedLogging & FeatureFlagFilter =>
 
-  implicit protected val consoleEnvironment: ConsoleEnvironment
+  implicit val consoleEnvironment: ConsoleEnvironment
   protected val name: String
 
   import com.digitalasset.canton.util.ShowUtil.*
@@ -3778,7 +3778,7 @@ trait LedgerApiAdministration extends BaseLedgerApiAdministration {
     }
   }
 
-  override private[canton] def optionallyAwait[T](
+  override def optionallyAwait[T](
       update: T,
       updateId: String,
       txSynchronizerId: String,

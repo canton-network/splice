@@ -21,9 +21,7 @@ class ShortCircuitBindingSpec extends AnyWordSpec with BaseTest with Matchers {
         .resources("bftbenchmark-shortcircuit.conf")
         .load[BftBenchmarkConfig]
         .getOrElse(throw new RuntimeException("Invalid configuration"))
-      val metricReport =
-        new BftBenchmarkTool(new ShortCircuitBindingFactory(loggerFactory), loggerFactory)
-          .run(config)
+      val metricReport = new BftBenchmarkTool(ShortCircuitBindingFactory, loggerFactory).run(config)
 
       val globalWritesCount =
         metricReport("global.writes.successful.meter.count").asInstanceOf[Long]

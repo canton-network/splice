@@ -60,7 +60,7 @@ final class BftBenchmarkTool(
     logger.info(
       ConfigWriter[BftBenchmarkConfig]
         .to(config)
-        .render(renderOptions)
+        .render(renderOptions.setFormatted(false))
     )
 
     val metrics = new MetricRegistry()
@@ -139,9 +139,7 @@ final class BftBenchmarkTool(
 
     // This is compatible with Jackson and also preserves the intended metric names order (i.e., insertion order).
     val unifiedReport: SeqMap[MetricName, AnyVal] =
-      ListMap.newBuilder
-        .addAll((meterReport ++ histogramReport).sortBy { case (statName, _) => statName })
-        .result()
+      ListMap.newBuilder.addAll((meterReport ++ histogramReport).sortBy(_._1)).result()
 
     val reportString = toJson(unifiedReport.asJava)
     logger.info(reportString)

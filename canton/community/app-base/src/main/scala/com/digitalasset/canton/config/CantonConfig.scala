@@ -231,12 +231,15 @@ object ConsoleCommandTimeout {
     config.NonNegativeDuration.tryFromDuration(30.seconds)
   val defaultTestingBongTimeout: config.NonNegativeDuration =
     config.NonNegativeDuration.tryFromDuration(1.minute)
+  val defaultRequestTimeout: NonNegativeDuration =
+    config.NonNegativeDuration.tryFromDuration(20.seconds)
 }
 
 /** Timeout settings configuration */
 final case class TimeoutSettings(
     console: ConsoleCommandTimeout = ConsoleCommandTimeout(),
     processing: ProcessingTimeout = ProcessingTimeout(),
+    requestTimeout: NonNegativeDuration = NonNegativeDuration.tryFromDuration(40.seconds),
 )
 
 sealed trait ClockConfig extends Product with Serializable
@@ -2456,7 +2459,7 @@ object CantonConfig {
     * @return
     *   [[scala.Right]] [[com.typesafe.config.Config]] if parsing was successful.
     */
-  private def parseAndMergeConfigs(
+  def parseAndMergeConfigs(
       files: NonEmpty[Seq[File]]
   )(implicit elc: ErrorLoggingContext): Either[CantonConfigError, Config] = {
     val baseConfig = ConfigFactory.load()

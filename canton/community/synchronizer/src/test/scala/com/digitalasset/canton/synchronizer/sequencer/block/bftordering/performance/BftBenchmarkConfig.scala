@@ -3,12 +3,10 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance
 
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
-
 import scala.concurrent.duration.Duration
 
 final case class BftBenchmarkConfig(
-    transactionSizesAndWeights: Seq[BftBenchmarkConfig.TransactionSizeAndWeight],
+    transactionBytes: Int,
     runDuration: Duration,
     perNodeWritePeriod: Duration,
     nodes: Seq[BftBenchmarkConfig.Node],
@@ -48,8 +46,4 @@ object BftBenchmarkConfig {
       override val readPort: Int,
   ) extends WriteNode[Int]
       with ReadNode[Int]
-
-  final case class TransactionSizeAndWeight(sizeBytes: NonNegativeInt, weight: PositiveInt)
-
-  final case class TransactionSizesAndWeights(payloads: Seq[TransactionSizeAndWeight])
 }

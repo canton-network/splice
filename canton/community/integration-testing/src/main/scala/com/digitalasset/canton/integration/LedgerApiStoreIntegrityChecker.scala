@@ -156,7 +156,7 @@ class LedgerApiStoreIntegrityChecker(
           participantLoggingName = s"not running local participant ${notRunningParticipant.name}",
           storageConfig = actualConfig.participants
             .getOrElse(
-              notRunningParticipant.name,
+              InstanceName.tryCreate(notRunningParticipant.name),
               throw new IllegalStateException(
                 s"No configuration found for a not running participant $notRunningParticipant."
               ),

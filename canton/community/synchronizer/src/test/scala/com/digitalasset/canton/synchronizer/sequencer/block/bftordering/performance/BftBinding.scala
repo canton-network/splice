@@ -3,19 +3,13 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance
 
-import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.logging.NamedLogging
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.BftBenchmarkConfig
-
 import java.io.Closeable
 import java.util.concurrent.CompletionStage
 
-trait BftBindingFactory extends NamedLogging {
+trait BftBindingFactory {
   type T <: BftBinding
 
-  def create(
-      transactionSizesAndWeights: NonEmpty[Seq[BftBenchmarkConfig.TransactionSizeAndWeight]]
-  ): T
+  def create(config: BftBenchmarkConfig): T
 }
 
 /** All the operations must be idempotent.

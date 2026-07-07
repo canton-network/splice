@@ -9,7 +9,6 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.Bft
   BftBlockOrderingStandaloneNetworkConfig,
   BftBlockOrderingStandalonePeerConfig,
 }
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters.DefaultSegmentLength
 import com.digitalasset.canton.topology.{Namespace, SequencerId}
 import pureconfig.ConfigWriter
 
@@ -60,7 +59,6 @@ object GenStandaloneConfig extends App {
       thisSequencerId = sequencerId(i),
       signingPrivateKeyProtoFile = privKeyFile.toJava,
       signingPublicKeyProtoFile = pubKeyFile.toJava,
-      segmentLength = DefaultSegmentLength.length.value,
       peers = (1 to numNodes)
         .filter(_ != i)
         .map { j =>

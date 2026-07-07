@@ -3,8 +3,6 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.shortcircuit
 
-import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.BftBinding.TxConsumer
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.{
   BftBenchmarkConfig,
@@ -15,14 +13,11 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performa
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap}
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 
-class ShortCircuitBindingFactory(override val loggerFactory: NamedLoggerFactory)
-    extends BftBindingFactory {
+object ShortCircuitBindingFactory extends BftBindingFactory {
 
   override type T = ShortCircuitBinding
 
-  override def create(
-      transactionSizesAndWeights: NonEmpty[Seq[BftBenchmarkConfig.TransactionSizeAndWeight]]
-  ): ShortCircuitBinding =
+  override def create(config: BftBenchmarkConfig): ShortCircuitBinding =
     new ShortCircuitBinding
 }
 

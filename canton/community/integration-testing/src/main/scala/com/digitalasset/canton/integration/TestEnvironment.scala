@@ -26,6 +26,7 @@ import com.digitalasset.canton.console.{
   InstanceReference,
   LocalInstanceReference,
 }
+import com.digitalasset.canton.console.commands.GlobalSecretKeyAdministration
 import com.digitalasset.canton.crypto.Crypto
 import com.digitalasset.canton.integration.bootstrap.InitializedSynchronizer
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown

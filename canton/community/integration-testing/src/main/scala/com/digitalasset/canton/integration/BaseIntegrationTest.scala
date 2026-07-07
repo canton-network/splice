@@ -15,6 +15,8 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
+import com.digitalasset.canton.config.SharedCantonConfig
+import com.digitalasset.canton.environment.Environment
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
@@ -97,9 +99,13 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
       within,
       assertions.map { assertion => (entry: LogEntry) =>
         assertion(entry)
-        entry.commandFailureMessage
+        // `commandFailureMessage` forces the loggerName to be one of Canton's,
+        // but we use our custom one from splice... so we have to hack around that
+        entry
+          .copy(loggerName = "com.digitalasset.canton.integration.EnvironmentDefinition")
+          .commandFailureMessage
         succeed
-      } *,
+      }*
     )
 
   /** Version of [[com.digitalasset.canton.logging.SuppressingLogger.assertThrowsAndLogs]] that is
@@ -117,7 +123,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
         assertion(entry)
         entry.commandFailureMessage
         succeed
-      } *,
+      }*
     )
 
   /** Similar to [[com.digitalasset.canton.console.commands.ParticipantAdministration#ping]] But
@@ -148,10 +154,10 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     override val pos: Option[Position] = test.pos
 
     override def apply(): Outcome = {
-      val environment = provideEnvironment
+      val environment = provideEnvironment(test.name)
       val testOutcome =
         try test.toNoArgTest(environment)()
-        finally testFinished(environment)
+        finally testFinished(test.name, environment)
       testOutcome
     }
   }
