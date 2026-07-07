@@ -93,7 +93,7 @@ function hyperdiskNodePool(
   const name =
     index === 0
       ? 'cn-apps-node-pool-hd' // for backwards compat
-      : `cn-apps-node-pool-${config.nodeType}-hd`;
+      : `cn-apps-node-pool-${index}-hd`;
   return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
@@ -130,7 +130,7 @@ function appsNodePool(
   const name =
     index === 0
       ? 'cn-apps-node-pool' // for backwards compat
-      : `cn-apps-node-pool-${appsNodePoolConfig.nodeType}`;
+      : `cn-apps-node-pool-${index}`;
   return new gcp.container.NodePool(name, {
     cluster,
     nodeConfig: {
