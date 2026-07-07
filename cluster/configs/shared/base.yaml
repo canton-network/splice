@@ -10,6 +10,7 @@ cluster:
       # Should be set to a lower number (currently 8) on CI clusters that do neither of those.
       maxNodes: 20
       nodeType: n4d-standard-16
+      zones: '*'
     additionalApps:
     # Second, Intel based, pool is supposed to address GCloud compute resource issues.
     - minNodes: 0
@@ -17,6 +18,7 @@ cluster:
       # Should be set to a lower number (currently 8) on CI clusters that do neither of those.
       maxNodes: 20
       nodeType: n4-standard-16
+      zones: '*'
     infra:
       minNodes: 1
       maxNodes: 3

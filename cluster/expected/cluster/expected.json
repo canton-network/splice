@@ -4,6 +4,7 @@
     "id": "",
     "inputs": {
       "autoscaling": {
+        "locationPolicy": "ANY",
         "maxNodeCount": 1,
         "minNodeCount": 0
       },
@@ -26,10 +27,7 @@
             "value": "true"
           }
         ]
-      },
-      "nodeLocations": [
-        "europe-west6-z"
-      ]
+      }
     },
     "name": "cn-apps-node-pool-1-hd",
     "provider": "",
@@ -40,6 +38,7 @@
     "id": "",
     "inputs": {
       "autoscaling": {
+        "locationPolicy": "ANY",
         "maxNodeCount": 1,
         "minNodeCount": 0
       },
@@ -62,10 +61,7 @@
             "value": "true"
           }
         ]
-      },
-      "nodeLocations": [
-        "europe-west6-z"
-      ]
+      }
     },
     "name": "cn-apps-node-pool-hd",
     "provider": "",
