@@ -2096,6 +2096,7 @@
       "active": true,
       "alias": "cn-apps-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
@@ -3384,6 +3385,7 @@
       "active": true,
       "alias": "cn-apps-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
