@@ -40,10 +40,19 @@ data RewardState = RewardState with
     numCouponsIssued : Int -- ^ Number of SV reward coupons issued by them for their beneficiaries.
   deriving (Eq, Show)
 
+-- FIXME: Deprecate once all hosted SVs have been migrated
 -- | State of reward collection for a sv identified by their sv name.
 template SvRewardState with
     dso : Party
     svName : Text
+    state : RewardState
+  where
+    signatory dso
+
+-- | State of reward collection for a hosted SV.
+template HostedSvRewardState with
+    dso : Party
+    hostedSv : Party
     state : RewardState
   where
     signatory dso
@@ -115,6 +124,12 @@ template SvStatusReport with
 
 instance HasCheckedFetch SvRewardState ForSv where
   contractGroupId SvRewardState {..} = ForSv with dso; svName
+
+instance HasCheckedFetch SvRewardState ForDso where
+  contractGroupId SvRewardState {..} = ForDso with dso
+
+instance HasCheckedFetch HostedSvRewardState ForDso where
+  contractGroupId HostedSvRewardState {..} = ForDso with dso
 
 instance HasCheckedFetch SvNodeState ForSvNode where
   contractGroupId SvNodeState {..} = ForSvNode with dso; sv; svName

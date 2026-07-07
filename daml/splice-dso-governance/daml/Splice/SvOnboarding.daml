@@ -11,6 +11,11 @@ data SvOnboardingRequest_ExpireResult = SvOnboardingRequest_ExpireResult
 
 data SvOnboardingConfirmed_ExpireResult = SvOnboardingConfirmed_ExpireResult
 
+data SvNodeOnboardingConfirmed_ExpireResult = SvNodeOnboardingConfirmed_ExpireResult
+
+data SvNodeOnboardingRequest_ExpireResult = SvNodeOnboardingRequest_ExpireResult
+
+
 -- | Template used by the SVs to collect confirmations for the onboarding of an SV candidate.
 -- The existence of this contract triggers SV automation that creates confirmation contracts for
 -- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
@@ -34,6 +39,8 @@ template SvOnboardingRequest with
         require "Onboarding has expired" (now >= expiresAt)
         pure SvOnboardingRequest_ExpireResult
 
+
+-- FIXME: Deprecate
 -- | A confirmation for approval of a candidate SV.
 --
 -- Once this contract is created, the workflows to onboard that SVs node starts.
@@ -58,6 +65,58 @@ template SvOnboardingConfirmed with
         pure SvOnboardingConfirmed_ExpireResult
 
 
+-- | A confirmation for approval of a candidate SV node.
+--
+-- Once this contract is created, the workflows to onboard that SVs node starts.
+template SvNodeOnboardingConfirmed with
+    svOperatorParty : Party
+    svNodeName : Text
+    svNodeParticipantId: Text
+    reason : Text
+    dso : Party
+    expiresAt : Time -- ^ When this contract can be archived.
+  where
+    signatory dso
+    observer svOperatorParty
+
+    -- Archive if we are past the `expiresAt`.
+    choice SvNodeOnboardingConfirmed_Expire : SvNodeOnboardingConfirmed_ExpireResult
+      controller dso
+      do
+        now <- getTime
+        require "SV candidate confirmation has expired" (now >= expiresAt)
+        pure SvNodeOnboardingConfirmed_ExpireResult
+
+
+-- | Instruction created by the DSO to update the SV operator of a hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV and the new SV operator, and the hosted SV entry and its
+-- 'HostedSvRewardBeneficiaries' contract are updated when the instruction is consumed by
+-- 'DsoRules_UpdateSvOperatorForHostedSv'.
+template UpdateSvOperatorForHostedSvInstruction with
+    hostedSv : Party
+      -- ^ The hosted SV party whose SV operator should be updated.
+    newSvOperator : Party
+      -- ^ The new SV operator party for the hosted SV.
+    dso : Party
+  where
+    signatory dso
+
+
+-- | Instruction created by the DSO to authorize the offboarding of a hosted SV.
+--
+-- This follows the instruction pattern used for two-step operations: the DSO first
+-- records the hosted SV to offboard, and the hosted SV's associated contracts are
+-- archived when the instruction is consumed by 'DsoRules_OffboardHostedSv'.
+template OffboardHostedSvInstruction with
+    hostedSv : Party
+      -- ^ The hosted SV party to offboard.
+    dso : Party
+  where
+    signatory dso
+
+
 -- instances
 ------------
 
@@ -67,6 +126,17 @@ instance HasCheckedFetch SvOnboardingConfirmed ForOwner where
 instance HasCheckedFetch SvOnboardingConfirmed ForDso where
   contractGroupId SvOnboardingConfirmed {..} = ForDso with dso
 
+instance HasCheckedFetch SvNodeOnboardingConfirmed ForOwner where
+  contractGroupId SvNodeOnboardingConfirmed {..} = ForOwner with dso; owner = svOperatorParty
+
+instance HasCheckedFetch SvNodeOnboardingConfirmed ForDso where
+  contractGroupId SvNodeOnboardingConfirmed {..} = ForDso with dso
 
 instance HasCheckedFetch SvOnboardingRequest ForDso where
   contractGroupId SvOnboardingRequest {..} = ForDso with dso
+
+instance HasCheckedFetch UpdateSvOperatorForHostedSvInstruction ForDso where
+  contractGroupId UpdateSvOperatorForHostedSvInstruction {..} = ForDso with dso
+
+instance HasCheckedFetch OffboardHostedSvInstruction ForDso where
+  contractGroupId OffboardHostedSvInstruction {..} = ForDso with dso
