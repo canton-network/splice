@@ -68,6 +68,7 @@ import com.digitalasset.canton.topology.{
   PartyId,
   PhysicalSynchronizerId,
   SequencerId,
+  Synchronizer,
   SynchronizerId,
 }
 import com.digitalasset.canton.tracing.TraceContext

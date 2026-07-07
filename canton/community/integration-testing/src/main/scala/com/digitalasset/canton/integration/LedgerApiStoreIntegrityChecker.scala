@@ -5,6 +5,7 @@ package com.digitalasset.canton.integration
 
 import com.digitalasset.canton.LedgerParticipantId
 import com.digitalasset.canton.config.{SharedCantonConfig, StorageConfig}
+import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.console.FeatureFlag
 import com.digitalasset.canton.integration.plugins.UseExternalProcess
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
