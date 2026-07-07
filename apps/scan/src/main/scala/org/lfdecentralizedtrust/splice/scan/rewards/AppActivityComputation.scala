@@ -8,11 +8,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbAppActivityRecordStore,
-  DbScanRewardsReferenceStore,
-  DbScanVerdictStore,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -163,7 +159,12 @@ class AppActivityComputation(
 
       val aggregatedWeights = SortedMap.from(aggregatedBurn.map { case (party, burn) =>
         val weight =
-          featuredAppWeights.getOrElse(party, DbScanRewardsReferenceStore.DefaultAppActivityWeight)
+          featuredAppWeights.getOrElse(
+            party,
+            throw new IllegalStateException(
+              s"No featured app weight found for party=$party"
+            ),
+          )
         party -> (BigDecimal(burn) * weight).toLong
       })
 
