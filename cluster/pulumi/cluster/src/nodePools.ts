@@ -1,21 +1,23 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
+import * as pulumi from '@pulumi/pulumi';
 import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 
 import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-export function installNodePools(): void {
+export function installNodePools(clusterDep?: gcp.container.Cluster): void {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
 
   const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
+  const opts = clusterDep ? { dependsOn: [clusterDep] } : {};
 
   if (gkeClusterConfig.nodePools.hyperdiskApps) {
-    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation);
+    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation, opts);
   }
   const appsNodePoolConfig = gkeClusterConfig.nodePools.apps;
 
@@ -23,9 +25,9 @@ export function installNodePools(): void {
     hyperdiskSupportConfig.hyperdiskSupport.enabled &&
     !hyperdiskSupportConfig.hyperdiskSupport.migrating
   ) {
-    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation);
+    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation, opts);
   } else {
-    appsNodePool(cluster, appsNodePoolConfig);
+    appsNodePool(cluster, appsNodePoolConfig, opts);
   }
 
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
@@ -56,80 +58,102 @@ export function installNodePools(): void {
     },
     {
       replaceOnChanges: ['nodeConfig.machineType'],
+      ...opts,
     }
   );
 
-  new gcp.container.NodePool('gke-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: 'e2-standard-4',
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'components.gke.io/gke-managed-components',
-          value: 'true',
-        },
-      ],
-      loggingVariant: 'DEFAULT',
+  new gcp.container.NodePool(
+    'gke-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: 'e2-standard-4',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'components.gke.io/gke-managed-components',
+            value: 'true',
+          },
+        ],
+        loggingVariant: 'DEFAULT',
+      },
+      nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
+      initialNodeCount: 1,
+      autoscaling: {
+        minNodeCount: 1,
+        maxNodeCount: 3,
+      },
     },
-    nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
-    initialNodeCount: 1,
-    autoscaling: {
-      minNodeCount: 1,
-      maxNodeCount: 3,
-    },
-  });
+    opts
+  );
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string) {
-  new gcp.container.NodePool('cn-apps-node-pool-hd', {
-    cluster,
-    nodeConfig: {
-      machineType: config.nodeType,
-      bootDisk: {
-        diskType: 'hyperdisk-balanced',
-        sizeGb: config.bootDiskSizeGb || 100,
-      },
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+function hyperdiskNodePool(
+  cluster: string,
+  config: GkeNodePoolConfig,
+  location?: string,
+  opts?: pulumi.CustomResourceOptions
+) {
+  new gcp.container.NodePool(
+    'cn-apps-node-pool-hd',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: config.nodeType,
+        bootDisk: {
+          diskType: 'hyperdisk-balanced',
+          sizeGb: config.bootDiskSizeGb || 100,
         },
-      ],
-      labels: {
-        cn_apps: 'hyperdisk',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'cn_apps',
+            value: 'true',
+          },
+        ],
+        labels: {
+          cn_apps: 'hyperdisk',
+        },
+        loggingVariant: 'DEFAULT',
       },
-      loggingVariant: 'DEFAULT',
+      nodeLocations: location ? [location] : undefined,
+      initialNodeCount: 0,
+      autoscaling: {
+        minNodeCount: config.minNodes,
+        maxNodeCount: config.maxNodes,
+      },
     },
-    nodeLocations: location ? [location] : undefined,
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: config.minNodes,
-      maxNodeCount: config.maxNodes,
-    },
-  });
+    opts
+  );
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
-  new gcp.container.NodePool('cn-apps-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: appsNodePoolConfig.nodeType,
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+function appsNodePool(
+  cluster: string,
+  appsNodePoolConfig: GkeNodePoolConfig,
+  opts?: pulumi.CustomResourceOptions
+) {
+  new gcp.container.NodePool(
+    'cn-apps-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: appsNodePoolConfig.nodeType,
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'cn_apps',
+            value: 'true',
+          },
+        ],
+        labels: {
+          cn_apps: 'standard',
         },
-      ],
-      labels: {
-        cn_apps: 'standard',
+        loggingVariant: 'DEFAULT',
       },
-      loggingVariant: 'DEFAULT',
+      initialNodeCount: 0,
+      autoscaling: {
+        minNodeCount: appsNodePoolConfig.minNodes,
+        maxNodeCount: appsNodePoolConfig.maxNodes,
+      },
     },
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: appsNodePoolConfig.minNodes,
-      maxNodeCount: appsNodePoolConfig.maxNodes,
-    },
-  });
+    opts
+  );
 }

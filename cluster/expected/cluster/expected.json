@@ -102,6 +102,45 @@
   },
   {
     "custom": true,
+    "id": "projects/da-cn-devnet/locations/europe-west6/clusters/cn-mocknet",
+    "inputs": {
+      "addonsConfig": {
+        "gcePersistentDiskCsiDriverConfig": {
+          "enabled": true
+        },
+        "httpLoadBalancing": {
+          "disabled": false
+        }
+      },
+      "datapathProvider": "ADVANCED_DATAPATH",
+      "initialNodeCount": 1,
+      "ipAllocationPolicy": {
+        "clusterIpv4CidrBlock": "",
+        "servicesIpv4CidrBlock": ""
+      },
+      "location": "europe-west6",
+      "name": "cn-mocknet",
+      "network": "projects/da-cn-devnet/global/networks/default",
+      "networkingMode": "VPC_NATIVE",
+      "nodeLocations": [
+        "europe-west6-a"
+      ],
+      "privateClusterConfig": {
+        "enablePrivateNodes": true,
+        "masterIpv4CidrBlock": "1.2.3.4/28"
+      },
+      "removeDefaultNodePool": true,
+      "subnetwork": "projects/da-cn-devnet/regions/europe-west6/subnetworks/cn-mocknet-subnet",
+      "workloadIdentityConfig": {
+        "workloadPool": "da-cn-devnet.svc.id.goog"
+      }
+    },
+    "name": "cn-mocknet",
+    "provider": "",
+    "type": "gcp:container/cluster:Cluster"
+  },
+  {
+    "custom": true,
     "id": "",
     "inputs": {
       "autoscaling": {
